@@ -75,6 +75,71 @@ export type AppBootstrap = {
   payment_methods: PaymentMethod[];
 };
 
+type ServiceCategoryRow = {
+  id: number | string;
+  slug: string;
+  name_ar: string;
+  name_en: string;
+  icon: string | null;
+};
+
+function isBookstoreSlug(
+  slug: string,
+): boolean {
+  const normalizedSlug =
+    slug.trim().toLowerCase();
+
+  return (
+    normalizedSlug === 'bookstore' ||
+    normalizedSlug === 'bookstores'
+  );
+}
+
+async function getBookstoreCategory():
+  Promise<StoreCategory | null> {
+  const { data, error } = await supabase
+    .from('service_categories')
+    .select(`
+      id,
+      slug,
+      name_ar,
+      name_en,
+      icon
+    `)
+    .in('slug', [
+      'bookstore',
+      'bookstores',
+    ])
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+    })
+    .limit(1)
+    .maybeSingle<ServiceCategoryRow>();
+
+  if (error) {
+    console.warn(
+      'Could not load bookstore category:',
+      error.message,
+    );
+
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: String(data.id),
+    slug: data.slug,
+    name_ar: data.name_ar,
+    name_en: data.name_en,
+    icon: data.icon,
+    image_url: null,
+  };
+}
+
 async function getAppBootstrap():
   Promise<AppBootstrap> {
   const { data, error } =
@@ -94,7 +159,52 @@ async function getAppBootstrap():
     );
   }
 
-  return data as AppBootstrap;
+  const bootstrap = data as AppBootstrap;
+
+  const currentCategories =
+    Array.isArray(
+      bootstrap.store_categories,
+    )
+      ? bootstrap.store_categories
+      : [];
+
+  const bookstoreExists =
+    currentCategories.some((category) => {
+      const slug =
+        category.slug
+          .trim()
+          .toLowerCase();
+
+      return (
+        slug === 'bookstore' ||
+        slug === 'bookstores'
+      );
+    });
+
+  if (bookstoreExists) {
+    return {
+      ...bootstrap,
+      store_categories:
+        currentCategories,
+    };
+  }
+
+  const bookstoreCategory: StoreCategory = {
+    id: 'bookstores',
+    slug: 'bookstores',
+    name_ar: 'المكتبات',
+    name_en: 'Bookstores',
+    icon: 'bookstore',
+    image_url: null,
+  };
+
+  return {
+    ...bootstrap,
+    store_categories: [
+      ...currentCategories,
+      bookstoreCategory,
+    ],
+  };
 }
 
 export { getAppBootstrap };

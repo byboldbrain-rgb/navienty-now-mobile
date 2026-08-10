@@ -1,44 +1,147 @@
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import {
-    useEffect,
-    useState,
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+import {
+  useEffect,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  type ImageSourcePropType,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 
 import getAppBootstrap, {
-    type AppBootstrap,
+  type AppBootstrap,
 } from '../services/bootstrap-service';
+
 import {
-    cancelPendingWhatsAppOrder,
-    createWhatsAppOrder,
+  getStoreCatalog,
+} from '../services/catalog-service';
+
+import {
+  cancelPendingWhatsAppOrder,
+  createWhatsAppOrder,
 } from '../services/order-service';
+
 import {
-    selectCartItemCount,
-    selectCartSubtotal,
-    selectCartTotal,
-    useCartStore,
+  useCartStore,
 } from '../store/cart-store';
+
 import {
-    useCustomerStore,
+  useCustomerStore,
 } from '../store/customer-store';
-import { useOrdersStore } from '../store/orders-store';
-import { openOrderInWhatsApp } from '../utils/order-whatsapp';
+
+import {
+  useOrdersStore,
+} from '../store/orders-store';
+
+import {
+  openOrderInWhatsApp,
+} from '../utils/order-whatsapp';
+
+/* ---------------------------------- */
+/* BRAND                              */
+/* ---------------------------------- */
+
+const BRAND_GREEN = '#00B14F';
+const BRAND_GREEN_DARK = '#009B45';
+const BRAND_GREEN_SOFT = '#EAF8F0';
+
+/* ---------------------------------- */
+/* LOCAL PAYMENT METHOD IMAGES        */
+/* ---------------------------------- */
+
+/**
+ * These images are bundled with the app.
+ *
+ * Expected project structure:
+ *
+ * assets/
+ *   payment-methods/
+ *     vodafone-cash.png
+ *     orange-cash.png
+ *     etisalat-cash.png
+ *     instapay.png
+ *
+ * checkout.tsx is expected to live in:
+ * src/app/checkout.tsx
+ */
+const PAYMENT_METHOD_IMAGES:
+  Record<string, ImageSourcePropType> = {
+    'vodafone-cash': require(
+      '../../assets/payment-methods/vodafone-cash.png',
+    ),
+
+    'orange-cash': require(
+      '../../assets/payment-methods/orange-cash.png',
+    ),
+
+    'etisalat-cash': require(
+      '../../assets/payment-methods/etisalat-cash.png',
+    ),
+
+    instapay: require(
+      '../../assets/payment-methods/instapay.png',
+    ),
+  };
+
+/* ---------------------------------- */
+/* FIXED FEES                         */
+/* ---------------------------------- */
+
+const FIXED_DELIVERY_FEE = 25;
+const PAYMENT_PROCESSING_FEE = 10;
+
+/* ---------------------------------- */
+/* TYPES                              */
+/* ---------------------------------- */
 
 type DefaultArea = {
   id: string;
   name: string;
 };
+
+function getSingleParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string | undefined {
+  return Array.isArray(value)
+    ? value[0]
+    : value;
+}
+
+/* ---------------------------------- */
+/* HELPERS                            */
+/* ---------------------------------- */
+
+function isImageUri(
+  value: string | null | undefined,
+) {
+  if (!value) {
+    return false;
+  }
+
+  return (
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('file://') ||
+    value.startsWith('data:image/')
+  );
+}
 
 function getDefaultArea(
   bootstrap: AppBootstrap,
@@ -47,7 +150,9 @@ function getDefaultArea(
     bootstrap.settings
       .default_service_area_id;
 
-  for (const city of bootstrap.cities) {
+  for (
+    const city of bootstrap.cities
+  ) {
     const area = city.areas.find(
       (currentArea) =>
         currentArea.id ===
@@ -57,6 +162,7 @@ function getDefaultArea(
     if (area) {
       return {
         id: area.id,
+
         name:
           `${area.name_ar}، ${city.name_ar}`,
       };
@@ -75,106 +181,282 @@ function getDefaultArea(
 
   return {
     id: firstArea.id,
+
     name: firstCity
       ? `${firstArea.name_ar}، ${firstCity.name_ar}`
       : firstArea.name_ar,
   };
 }
 
+/* ---------------------------------- */
+/* SCREEN                             */
+/* ---------------------------------- */
 
 export default function CheckoutScreen() {
   const router = useRouter();
 
-  const [bootstrap, setBootstrap] =
-    useState<AppBootstrap | null>(null);
+  const params =
+    useLocalSearchParams<{
+      storeId?:
+        | string
+        | string[];
+    }>();
 
-  const [isLoadingBootstrap, setIsLoadingBootstrap] =
-    useState(true);
+  const requestedStoreId =
+    getSingleParam(
+      params.storeId,
+    );
 
-  const [bootstrapError, setBootstrapError] =
-    useState<string | null>(null);
+  /* -------------------------------- */
+  /* BOOTSTRAP                        */
+  /* -------------------------------- */
 
-  const items = useCartStore((state) => state.items);
-  const storeId = useCartStore((state) => state.storeId);
-  const storeName = useCartStore((state) => state.storeName);
-  const storeIcon = useCartStore((state) => state.storeIcon);
-  const deliveryFee = useCartStore((state) => state.deliveryFee);
+  const [
+    bootstrap,
+    setBootstrap,
+  ] =
+    useState<AppBootstrap | null>(
+      null,
+    );
 
-  const itemCount = useCartStore(selectCartItemCount);
-  const subtotal = useCartStore(selectCartSubtotal);
-  const total = useCartStore(selectCartTotal);
+  const [
+    isLoadingBootstrap,
+    setIsLoadingBootstrap,
+  ] = useState(true);
 
-  const pendingOrder = useOrdersStore(
-    (state) => state.pendingOrder,
-  );
-
-  const setPendingOrder = useOrdersStore(
-    (state) => state.setPendingOrder,
-  );
-
-  const discardPendingOrder = useOrdersStore(
-    (state) => state.discardPendingOrder,
-  );
-
-  const customerName = useCustomerStore(
-    (state) => state.customerName,
-  );
-  const phoneNumber = useCustomerStore(
-    (state) => state.phoneNumber,
-  );
-  const address = useCustomerStore(
-    (state) => state.address,
-  );
-  const landmark = useCustomerStore(
-    (state) => state.landmark,
-  );
-  const paymentMethod = useCustomerStore(
-    (state) => state.paymentMethod,
+  const [
+    bootstrapError,
+    setBootstrapError,
+  ] = useState<string | null>(
+    null,
   );
 
-  const setCustomerName = useCustomerStore(
-    (state) => state.setCustomerName,
-  );
-  const setPhoneNumber = useCustomerStore(
-    (state) => state.setPhoneNumber,
-  );
-  const setAddress = useCustomerStore(
-    (state) => state.setAddress,
-  );
-  const setLandmark = useCustomerStore(
-    (state) => state.setLandmark,
-  );
-  const setPaymentMethod = useCustomerStore(
-    (state) => state.setPaymentMethod,
+  /* -------------------------------- */
+  /* CART                             */
+  /*
+   * الـCheckout يعمل على Cart واحدة فقط.
+   * storeId القادم من Route هو المصدر الأساسي،
+   * مع fallback للسلة النشطة للتوافق مع الشاشات القديمة.
+   */
+  /* -------------------------------- */
+
+  const carts = useCartStore(
+    (state) => state.carts,
   );
 
-  const [notes, setNotes] =
-    useState('');
+  const activeStoreId =
+    useCartStore(
+      (state) =>
+        state.activeStoreId,
+    );
 
-  const [submitted, setSubmitted] =
-    useState(false);
+  const setActiveCart =
+    useCartStore(
+      (state) =>
+        state.setActiveCart,
+    );
+
+  const checkoutStoreId =
+    requestedStoreId ??
+    activeStoreId;
+
+  const checkoutCart =
+    checkoutStoreId
+      ? carts[
+          checkoutStoreId
+        ] ?? null
+      : null;
+
+  const items =
+    checkoutCart?.items ??
+    [];
+
+  const storeId =
+    checkoutCart?.storeId ??
+    null;
+
+  const storeName =
+    checkoutCart?.storeName ??
+    null;
+
+  const storeIcon =
+    checkoutCart?.storeIcon ??
+    null;
+
+  const itemCount =
+    items.reduce(
+      (totalCount, item) =>
+        totalCount +
+        item.quantity,
+      0,
+    );
+
+  const subtotal =
+    items.reduce(
+      (currentTotal, item) =>
+        currentTotal +
+        item.price *
+          item.quantity,
+      0,
+    );
+
+  /*
+   * Navienty Now fixed fees
+   *
+   * Delivery = EGP 25
+   * Electronic payment fee = EGP 10
+   */
+  const deliveryFee =
+    FIXED_DELIVERY_FEE;
+
+  const paymentProcessingFee =
+    PAYMENT_PROCESSING_FEE;
+
+  const total =
+    Number(subtotal ?? 0) +
+    deliveryFee +
+    paymentProcessingFee;
+
+  /* -------------------------------- */
+  /* ORDERS                           */
+  /* -------------------------------- */
+
+  const pendingOrder =
+    useOrdersStore(
+      (state) =>
+        state.pendingOrder,
+    );
+
+  const setPendingOrder =
+    useOrdersStore(
+      (state) =>
+        state.setPendingOrder,
+    );
+
+  const discardPendingOrder =
+    useOrdersStore(
+      (state) =>
+        state.discardPendingOrder,
+    );
+
+  /* -------------------------------- */
+  /* CUSTOMER                         */
+  /* -------------------------------- */
+
+  const customerName =
+    useCustomerStore(
+      (state) =>
+        state.customerName,
+    );
+
+  const phoneNumber =
+    useCustomerStore(
+      (state) =>
+        state.phoneNumber,
+    );
+
+  const address =
+    useCustomerStore(
+      (state) =>
+        state.address,
+    );
+
+  const landmark =
+    useCustomerStore(
+      (state) =>
+        state.landmark,
+    );
+
+  const paymentMethod =
+    useCustomerStore(
+      (state) =>
+        state.paymentMethod,
+    );
+
+  const setCustomerName =
+    useCustomerStore(
+      (state) =>
+        state.setCustomerName,
+    );
+
+  const setPhoneNumber =
+    useCustomerStore(
+      (state) =>
+        state.setPhoneNumber,
+    );
+
+  const setAddress =
+    useCustomerStore(
+      (state) =>
+        state.setAddress,
+    );
+
+  const setLandmark =
+    useCustomerStore(
+      (state) =>
+        state.setLandmark,
+    );
+
+  const setPaymentMethod =
+    useCustomerStore(
+      (state) =>
+        state.setPaymentMethod,
+    );
+
+  /* -------------------------------- */
+  /* LOCAL STATE                      */
+  /* -------------------------------- */
+
+  const [
+    notes,
+    setNotes,
+  ] = useState('');
+
+  const [
+    submitted,
+    setSubmitted,
+  ] = useState(false);
 
   const [
     isOpeningWhatsApp,
     setIsOpeningWhatsApp,
   ] = useState(false);
 
+  const [
+    storeImageUrl,
+    setStoreImageUrl,
+  ] = useState<string | null>(null);
+
+  const [
+    storeImageFailed,
+    setStoreImageFailed,
+  ] = useState(false);
+
+  /* -------------------------------- */
+  /* LOAD CHECKOUT DATA               */
+  /* -------------------------------- */
+
   async function loadCheckoutData() {
     try {
       setIsLoadingBootstrap(true);
+
       setBootstrapError(null);
 
       const loadedBootstrap =
         await getAppBootstrap();
 
-      setBootstrap(loadedBootstrap);
+      setBootstrap(
+        loadedBootstrap,
+      );
 
       const paymentMethodExists =
-        loadedBootstrap.payment_methods.some(
-          (method) =>
-            method.id ===
-            paymentMethod,
-        );
+        loadedBootstrap
+          .payment_methods
+          .some(
+            (method) =>
+              method.id ===
+              paymentMethod,
+          );
 
       if (
         paymentMethod &&
@@ -189,9 +471,14 @@ export default function CheckoutScreen() {
           : 'تعذر تحميل إعدادات الطلب من Supabase.';
 
       setBootstrap(null);
-      setBootstrapError(message);
+
+      setBootstrapError(
+        message,
+      );
     } finally {
-      setIsLoadingBootstrap(false);
+      setIsLoadingBootstrap(
+        false,
+      );
     }
   }
 
@@ -199,11 +486,76 @@ export default function CheckoutScreen() {
     void loadCheckoutData();
   }, []);
 
+  useEffect(() => {
+    if (
+      checkoutStoreId &&
+      carts[checkoutStoreId]
+    ) {
+      setActiveCart(
+        checkoutStoreId,
+      );
+    }
+  }, [
+    checkoutStoreId,
+    carts,
+    setActiveCart,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStoreImage() {
+      setStoreImageFailed(false);
+
+      if (!storeId) {
+        setStoreImageUrl(null);
+
+        return;
+      }
+
+      try {
+        const loadedCatalog =
+          await getStoreCatalog(storeId);
+
+        const imageUrl =
+          loadedCatalog.store.logoUrl ??
+          loadedCatalog.store.coverImageUrl ??
+          null;
+
+        if (!cancelled) {
+          setStoreImageUrl(
+            isImageUri(imageUrl)
+              ? imageUrl
+              : null,
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setStoreImageUrl(null);
+        }
+      }
+    }
+
+    void loadStoreImage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
+
+  /* -------------------------------- */
+  /* DERIVED DATA                     */
+  /* -------------------------------- */
+
   const normalizedPhone =
-    phoneNumber.replace(/\D/g, '');
+    phoneNumber.replace(
+      /\D/g,
+      '',
+    );
 
   const paymentMethods =
-    bootstrap?.payment_methods ?? [];
+    bootstrap?.payment_methods ??
+    [];
 
   const selectedPaymentMethod =
     paymentMethods.find(
@@ -214,20 +566,65 @@ export default function CheckoutScreen() {
 
   const defaultArea =
     bootstrap
-      ? getDefaultArea(bootstrap)
+      ? getDefaultArea(
+          bootstrap,
+        )
       : null;
 
-  const currencySymbol =
+  const currencyCode =
     bootstrap?.settings
-      .currency_symbol ?? '';
+      .currency_code ??
+    'EGP';
 
   const appName =
-    bootstrap?.settings.app_name ??
-    '';
+    bootstrap?.settings
+      .app_name ??
+    'Navienty Now';
+
+  const displayStoreImage =
+    !storeImageFailed
+      ? storeImageUrl ??
+        (isImageUri(storeIcon)
+          ? storeIcon
+          : null)
+      : null;
+
+  /* -------------------------------- */
+  /* FORMAT PRICE                     */
+  /* -------------------------------- */
+
+  function formatPrice(
+    value:
+      | number
+      | string
+      | null
+      | undefined,
+  ) {
+    const numericValue =
+      Number(value ?? 0);
+
+    if (
+      Number.isInteger(
+        numericValue,
+      )
+    ) {
+      return `${currencyCode} ${numericValue}`;
+    }
+
+    return `${currencyCode} ${numericValue.toFixed(
+      2,
+    )}`;
+  }
+
+  /* -------------------------------- */
+  /* VALIDATION                       */
+  /* -------------------------------- */
 
   const validation = {
     customerName:
-      customerName.trim().length >= 2,
+      customerName
+        .trim()
+        .length >= 2,
 
     phoneNumber:
       /^01[0125]\d{8}$/.test(
@@ -235,68 +632,150 @@ export default function CheckoutScreen() {
       ),
 
     address:
-      address.trim().length >= 8,
+      address
+        .trim()
+        .length >= 8,
 
     paymentMethod:
       paymentMethod !== null,
   };
 
   const formIsValid =
-    Object.values(validation).every(
-      Boolean,
-    );
+    Object.values(
+      validation,
+    ).every(Boolean);
 
-
+  /* -------------------------------- */
+  /* EMPTY CART                       */
+  /* -------------------------------- */
 
   if (items.length === 0) {
     return (
-      <View style={styles.emptyScreen}>
-        <View style={styles.emptyIconContainer}>
-          <Text style={styles.emptyIcon}>🛒</Text>
-        </View>
-
-        <Text style={styles.emptyTitle}>لا يوجد طلب لإرساله</Text>
-
-        <Text style={styles.emptyDescription}>
-          أضف منتجات إلى السلة أولًا ثم ارجع لإتمام الطلب.
-        </Text>
-
+      <View
+        style={
+          styles.emptyScreen
+        }
+      >
         <Pressable
           style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.buttonPressed,
+            styles.emptyBackButton,
+
+            pressed &&
+              styles.buttonPressed,
           ]}
-          onPress={() => router.replace('/')}
+          onPress={() =>
+            router.back()
+          }
         >
-          <Text style={styles.primaryButtonText}>
-            العودة للتسوق
-          </Text>
+          <Ionicons
+            name="arrow-back"
+            size={27}
+            color="#222222"
+          />
         </Pressable>
+
+        <View
+          style={
+            styles.emptyContainer
+          }
+        >
+          <View
+            style={
+              styles.emptyIconContainer
+            }
+          >
+            <Ionicons
+              name="cart-outline"
+              size={45}
+              color={
+                BRAND_GREEN
+              }
+            />
+          </View>
+
+          <Text
+            style={
+              styles.emptyTitle
+            }
+          >
+            لا يوجد طلب لإرساله
+          </Text>
+
+          <Text
+            style={
+              styles.emptyDescription
+            }
+          >
+            أضف منتجات إلى السلة
+            أولًا ثم ارجع لإتمام
+            الطلب.
+          </Text>
+
+          <Pressable
+            style={({
+              pressed,
+            }) => [
+              styles.primaryButton,
+
+              pressed &&
+                styles.buttonPressed,
+            ]}
+            onPress={() =>
+              router.replace('/')
+            }
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              العودة للتسوق
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
+  /* -------------------------------- */
+  /* LOADING                          */
+  /* -------------------------------- */
+
   if (isLoadingBootstrap) {
     return (
-      <View style={styles.emptyScreen}>
+      <View
+        style={
+          styles.emptyScreen
+        }
+      >
         <ActivityIndicator
           size="large"
-          color="#6d56df"
+          color={BRAND_GREEN}
         />
 
-        <Text style={styles.emptyTitle}>
+        <Text
+          style={
+            styles.emptyTitle
+          }
+        >
           جاري تحميل بيانات الطلب
         </Text>
 
         <Text
-          style={styles.emptyDescription}
+          style={
+            styles.emptyDescription
+          }
         >
-          يتم تحميل الإعدادات وطرق
-          الدفع من Supabase.
+          يتم تحميل الإعدادات
+          وطرق الدفع.
         </Text>
       </View>
     );
   }
+
+  /* -------------------------------- */
+  /* ERROR                            */
+  /* -------------------------------- */
 
   if (
     !bootstrap ||
@@ -304,31 +783,46 @@ export default function CheckoutScreen() {
     bootstrapError
   ) {
     return (
-      <View style={styles.emptyScreen}>
+      <View
+        style={
+          styles.emptyScreen
+        }
+      >
         <View
           style={
-            styles.emptyIconContainer
+            styles.errorIconContainer
           }
         >
-          <Text style={styles.emptyIcon}>
-            ⚠️
-          </Text>
+          <Ionicons
+            name="alert-circle-outline"
+            size={44}
+            color="#d64b4b"
+          />
         </View>
 
-        <Text style={styles.emptyTitle}>
+        <Text
+          style={
+            styles.emptyTitle
+          }
+        >
           تعذر تحميل بيانات الطلب
         </Text>
 
         <Text
-          style={styles.emptyDescription}
+          style={
+            styles.emptyDescription
+          }
         >
           {bootstrapError ??
             'منطقة التوصيل غير مضبوطة في Supabase.'}
         </Text>
 
         <Pressable
-          style={({ pressed }) => [
+          style={({
+            pressed,
+          }) => [
             styles.primaryButton,
+
             pressed &&
               styles.buttonPressed,
           ]}
@@ -348,6 +842,9 @@ export default function CheckoutScreen() {
     );
   }
 
+  /* -------------------------------- */
+  /* SEND ORDER                       */
+  /* -------------------------------- */
 
   async function sendOrderToWhatsApp() {
     setSubmitted(true);
@@ -383,9 +880,14 @@ export default function CheckoutScreen() {
       return;
     }
 
-    const activeStoreId = storeId;
-    const activeArea = defaultArea;
-    const activeBootstrap = bootstrap;
+    const activeStoreId =
+      storeId;
+
+    const activeArea =
+      defaultArea;
+
+    const activeBootstrap =
+      bootstrap;
 
     const uuidPattern =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -396,10 +898,14 @@ export default function CheckoutScreen() {
       ) ||
       items.some(
         (item) =>
-          !uuidPattern.test(item.id),
+          !uuidPattern.test(
+            item.id,
+          ),
       );
 
-    if (cartContainsLegacyIds) {
+    if (
+      cartContainsLegacyIds
+    ) {
       Alert.alert(
         'السلة تحتاج إلى تحديث',
         'هذه السلة أُنشئت قبل ربط الكتالوج بـSupabase. أفرغ السلة وأضف المنتجات من المتجر مرة أخرى.',
@@ -409,7 +915,8 @@ export default function CheckoutScreen() {
     }
 
     if (
-      !activeBootstrap.settings
+      !activeBootstrap
+        .settings
         .orders_enabled
     ) {
       Alert.alert(
@@ -428,7 +935,9 @@ export default function CheckoutScreen() {
       > | null = null;
 
     try {
-      setIsOpeningWhatsApp(true);
+      setIsOpeningWhatsApp(
+        true,
+      );
 
       if (pendingOrder) {
         try {
@@ -437,8 +946,11 @@ export default function CheckoutScreen() {
             'checkout_recreated',
           );
         } catch {
-          // The previous pending order may
-          // already be cancelled or confirmed.
+          /*
+           * Previous pending
+           * order may already
+           * be cancelled.
+           */
         }
 
         discardPendingOrder();
@@ -461,19 +973,25 @@ export default function CheckoutScreen() {
             normalizedPhone,
 
           address,
+
           landmark,
+
           notes,
 
           items: items.map(
             (item) => ({
-              productId: item.id,
+              productId:
+                item.id,
+
               quantity:
                 item.quantity,
             }),
           ),
         });
 
-      setPendingOrder(createdOrder);
+      setPendingOrder(
+        createdOrder,
+      );
 
       await openOrderInWhatsApp(
         createdOrder,
@@ -490,8 +1008,10 @@ export default function CheckoutScreen() {
             'whatsapp_open_failed',
           );
         } catch {
-          // Keep the original error visible
-          // to the customer.
+          /*
+           * Keep original
+           * error visible.
+           */
         }
 
         discardPendingOrder();
@@ -507,188 +1027,460 @@ export default function CheckoutScreen() {
         message,
       );
     } finally {
-      setIsOpeningWhatsApp(false);
+      setIsOpeningWhatsApp(
+        false,
+      );
     }
   }
+
+  /* -------------------------------- */
+  /* UI                               */
+  /* -------------------------------- */
 
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={
+        Platform.OS === 'ios'
+          ? 'padding'
+          : undefined
+      }
     >
       <ScrollView
-        contentContainerStyle={styles.pageContent}
+        contentContainerStyle={
+          styles.pageContent
+        }
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={
+          false
+        }
       >
-        <View style={styles.container}>
-          <View style={styles.topBar}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => router.back()}
+        {/* HEADER */}
+
+        <View
+          style={styles.header}
+        >
+          <Pressable
+            style={({
+              pressed,
+            }) => [
+              styles.backButton,
+
+              pressed &&
+                styles.buttonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <Ionicons
+              name="arrow-back"
+              size={28}
+              color="#262626"
+            />
+          </Pressable>
+
+          <View
+            style={
+              styles.headerContent
+            }
+          >
+            <Text
+              style={
+                styles.pageTitle
+              }
             >
-              <Text style={styles.backIcon}>›</Text>
-            </Pressable>
+              إتمام الطلب
+            </Text>
 
-            <View style={styles.titleContainer}>
-              <Text style={styles.pageTitle}>بيانات التوصيل</Text>
-              <Text style={styles.pageSubtitle}>
-                الخطوة الأخيرة قبل إرسال الطلب
+            <Text
+              style={
+                styles.pageSubtitle
+              }
+              numberOfLines={1}
+            >
+              {storeName ??
+                'Navienty Now'}
+            </Text>
+          </View>
+        </View>
+
+        {/* ORDER STORE */}
+
+        <View
+          style={
+            styles.orderStoreSection
+          }
+        >
+          <View
+            style={
+              styles.storeIconContainer
+            }
+          >
+            {displayStoreImage ? (
+              <Image
+                source={{
+                  uri: displayStoreImage,
+                }}
+                style={styles.storeImage}
+                resizeMode="cover"
+                onError={() =>
+                  setStoreImageFailed(true)
+                }
+              />
+            ) : (
+              <Text
+                style={
+                  styles.storeIcon
+                }
+              >
+                {storeIcon ??
+                  '🏪'}
               </Text>
-            </View>
-
-            <View style={styles.topBarPlaceholder} />
+            )}
           </View>
 
-          <View style={styles.storeCard}>
-            <View style={styles.storeIconContainer}>
-              <Text style={styles.storeIcon}>
-                {storeIcon ?? '🏪'}
-              </Text>
-            </View>
+          <View
+            style={
+              styles.storeContent
+            }
+          >
+            <Text
+              style={
+                styles.storeLabel
+              }
+            >
+              طلبك من
+            </Text>
 
-            <View style={styles.storeContent}>
-              <Text style={styles.storeLabel}>طلبك من</Text>
+            <Text
+              style={
+                styles.storeName
+              }
+              numberOfLines={1}
+            >
+              {storeName ??
+                'المتجر'}
+            </Text>
 
-              <Text style={styles.storeName} numberOfLines={1}>
-                {storeName ?? 'المتجر'}
-              </Text>
-
-              <Text style={styles.storeMeta}>
-                {itemCount} منتجات • الإجمالي {total}{' '}
-                {currencySymbol}
-              </Text>
-            </View>
+            <Text
+              style={
+                styles.storeMeta
+              }
+            >
+              {itemCount}{' '}
+              {itemCount === 1
+                ? 'منتج'
+                : 'منتجات'}{' '}
+              •{' '}
+              {formatPrice(
+                total,
+              )}
+            </Text>
           </View>
+        </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>بيانات العميل</Text>
+        {/* CUSTOMER DETAILS */}
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>الاسم بالكامل</Text>
+        <View
+          style={styles.section}
+        >
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            بيانات العميل
+          </Text>
+
+          {/* NAME */}
+
+          <View
+            style={styles.field}
+          >
+            <Text
+              style={
+                styles.fieldLabel
+              }
+            >
+              الاسم بالكامل
+            </Text>
+
+            <View
+              style={[
+                styles.inputContainer,
+
+                submitted &&
+                  !validation.customerName &&
+                  styles.inputContainerError,
+              ]}
+            >
+              <Ionicons
+                name="person-outline"
+                size={21}
+                color="#777777"
+              />
 
               <TextInput
-                style={[
-                  styles.input,
-                  submitted &&
-                    !validation.customerName &&
-                    styles.inputError,
-                ]}
-                value={customerName}
-                onChangeText={setCustomerName}
+                style={styles.input}
+                value={
+                  customerName
+                }
+                onChangeText={
+                  setCustomerName
+                }
                 placeholder="مثال: أحمد محمد"
-                placeholderTextColor="#aaaab3"
+                placeholderTextColor="#a1a1a1"
                 autoCapitalize="words"
                 textAlign="right"
               />
-
-              {submitted && !validation.customerName && (
-                <Text style={styles.errorText}>
-                  اكتب اسمًا صحيحًا مكوّنًا من حرفين على الأقل.
-                </Text>
-              )}
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>رقم الموبايل</Text>
+            {submitted &&
+              !validation.customerName && (
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  اكتب اسمًا صحيحًا
+                  مكوّنًا من حرفين على
+                  الأقل.
+                </Text>
+              )}
+          </View>
+
+          {/* PHONE */}
+
+          <View
+            style={styles.field}
+          >
+            <Text
+              style={
+                styles.fieldLabel
+              }
+            >
+              رقم الموبايل
+            </Text>
+
+            <View
+              style={[
+                styles.inputContainer,
+
+                submitted &&
+                  !validation.phoneNumber &&
+                  styles.inputContainerError,
+              ]}
+            >
+              <Ionicons
+                name="call-outline"
+                size={21}
+                color="#777777"
+              />
 
               <TextInput
-                style={[
-                  styles.input,
-                  submitted &&
-                    !validation.phoneNumber &&
-                    styles.inputError,
-                ]}
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
+                style={styles.input}
+                value={
+                  phoneNumber
+                }
+                onChangeText={
+                  setPhoneNumber
+                }
                 placeholder="01xxxxxxxxx"
-                placeholderTextColor="#aaaab3"
+                placeholderTextColor="#a1a1a1"
                 keyboardType="phone-pad"
                 maxLength={14}
                 textAlign="right"
               />
+            </View>
 
-              {submitted && !validation.phoneNumber && (
-                <Text style={styles.errorText}>
-                  اكتب رقم موبايل مصريًا صحيحًا من 11 رقمًا.
+            {submitted &&
+              !validation.phoneNumber && (
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  اكتب رقم موبايل
+                  مصريًا صحيحًا من 11
+                  رقمًا.
                 </Text>
               )}
+          </View>
+        </View>
+
+        {/* DELIVERY ADDRESS */}
+
+        <View
+          style={styles.section}
+        >
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            عنوان التوصيل
+          </Text>
+
+          {/* AREA */}
+
+          <View
+            style={
+              styles.areaCard
+            }
+          >
+            <View
+              style={
+                styles.areaIconContainer
+              }
+            >
+              <Ionicons
+                name="location-outline"
+                size={25}
+                color={
+                  BRAND_GREEN
+                }
+              />
             </View>
+
+            <View
+              style={
+                styles.areaContent
+              }
+            >
+              <Text
+                style={
+                  styles.areaLabel
+                }
+              >
+                منطقة التوصيل
+              </Text>
+
+              <Text
+                style={
+                  styles.areaValue
+                }
+              >
+                {defaultArea.name}
+              </Text>
+            </View>
+
+            <Ionicons
+              name="checkmark-circle"
+              size={23}
+              color={
+                BRAND_GREEN
+              }
+            />
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>عنوان التوصيل</Text>
+          {/* ADDRESS */}
 
-            <View style={styles.areaCard}>
-              <View style={styles.areaContent}>
-                <Text style={styles.areaLabel}>المنطقة الحالية</Text>
-                <Text style={styles.areaValue}>
-                  {defaultArea.name}
-                </Text>
-              </View>
+          <View
+            style={styles.field}
+          >
+            <Text
+              style={
+                styles.fieldLabel
+              }
+            >
+              العنوان بالتفصيل
+            </Text>
 
-              <Text style={styles.areaIcon}>📍</Text>
-            </View>
+            <View
+              style={[
+                styles.inputContainer,
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                العنوان بالتفصيل
-              </Text>
+                styles.multilineContainer,
+
+                submitted &&
+                  !validation.address &&
+                  styles.inputContainerError,
+              ]}
+            >
+              <Ionicons
+                name="home-outline"
+                size={21}
+                color="#777777"
+                style={
+                  styles.multilineIcon
+                }
+              />
 
               <TextInput
                 style={[
                   styles.input,
                   styles.multilineInput,
-                  submitted &&
-                    !validation.address &&
-                    styles.inputError,
                 ]}
                 value={address}
-                onChangeText={setAddress}
+                onChangeText={
+                  setAddress
+                }
                 placeholder="اسم الشارع، رقم العمارة، الدور، رقم الشقة"
-                placeholderTextColor="#aaaab3"
+                placeholderTextColor="#a1a1a1"
                 multiline
                 numberOfLines={4}
                 textAlign="right"
                 textAlignVertical="top"
               />
+            </View>
 
-              {submitted && !validation.address && (
-                <Text style={styles.errorText}>
-                  اكتب عنوانًا واضحًا ومفصلًا للتوصيل.
+            {submitted &&
+              !validation.address && (
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  اكتب عنوانًا واضحًا
+                  ومفصلًا للتوصيل.
                 </Text>
               )}
-            </View>
+          </View>
 
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                علامة مميزة للمكان
-              </Text>
+          {/* LANDMARK */}
 
-              <TextInput
-                style={styles.input}
-                value={landmark}
-                onChangeText={setLandmark}
-                placeholder="مثال: بجوار الصيدلية أو أمام المسجد"
-                placeholderTextColor="#aaaab3"
-                textAlign="right"
+          
+
+          {/* NOTES */}
+
+          <View
+            style={styles.field}
+          >
+            <Text
+              style={
+                styles.fieldLabel
+              }
+            >
+              ملاحظات على الطلب
+            </Text>
+
+            <View
+              style={[
+                styles.inputContainer,
+                styles.notesContainer,
+              ]}
+            >
+              <Ionicons
+                name="chatbox-outline"
+                size={21}
+                color="#777777"
+                style={
+                  styles.multilineIcon
+                }
               />
-            </View>
-
-            <View style={styles.field}>
-              <Text style={styles.fieldLabel}>
-                ملاحظات على الطلب
-              </Text>
 
               <TextInput
-                style={[styles.input, styles.notesInput]}
+                style={[
+                  styles.input,
+                  styles.notesInput,
+                ]}
                 value={notes}
-                onChangeText={setNotes}
+                onChangeText={
+                  setNotes
+                }
                 placeholder="أي تفاصيل مهمة للمتجر أو المندوب"
-                placeholderTextColor="#aaaab3"
+                placeholderTextColor="#a1a1a1"
                 multiline
                 numberOfLines={3}
                 textAlign="right"
@@ -696,26 +1488,61 @@ export default function CheckoutScreen() {
               />
             </View>
           </View>
+        </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>طريقة الدفع</Text>
+        {/* PAYMENT */}
 
-            <Text style={styles.sectionDescription}>
-              طرق الدفع تأتي من Supabase، وسيتم احتساب السعر
-              والإجمالي النهائي داخل قاعدة البيانات قبل فتح واتساب.
-            </Text>
+        <View
+          style={styles.section}
+        >
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
+            طريقة الدفع
+          </Text>
 
-            <View style={styles.paymentMethods}>
-              {paymentMethods.map((method) => {
-                const selected = paymentMethod === method.id;
+          <Text
+            style={
+              styles.sectionDescription
+            }
+          >
+            اختر طريقة الدفع
+            المناسبة لإتمام الطلب.
+          </Text>
+
+          <View
+            style={
+              styles.paymentMethods
+            }
+          >
+            {paymentMethods.map(
+              (method) => {
+                const selected =
+                  paymentMethod ===
+                  method.id;
+
+                const paymentImage =
+                  PAYMENT_METHOD_IMAGES[
+                    method.code
+                  ] ?? null;
 
                 return (
                   <Pressable
-                    key={method.id}
-                    style={({ pressed }) => [
+                    key={
+                      method.id
+                    }
+                    style={({
+                      pressed,
+                    }) => [
                       styles.paymentMethod,
-                      selected && styles.paymentMethodSelected,
-                      pressed && styles.buttonPressed,
+
+                      selected &&
+                        styles.paymentMethodSelected,
+
+                      pressed &&
+                        styles.paymentMethodPressed,
                     ]}
                     onPress={() =>
                       setPaymentMethod(
@@ -724,145 +1551,401 @@ export default function CheckoutScreen() {
                     }
                   >
                     <View
+                      style={
+                        styles.paymentIconContainer
+                      }
+                    >
+                      {paymentImage ? (
+                        <Image
+                          source={
+                            paymentImage
+                          }
+                          style={
+                            styles.paymentMethodImage
+                          }
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <Text
+                          style={
+                            styles.paymentIcon
+                          }
+                        >
+                          {method.icon ??
+                            '💳'}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View
+                      style={
+                        styles.paymentContent
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.paymentTitle
+                        }
+                      >
+                        {
+                          method.name_ar
+                        }
+                      </Text>
+
+                    </View>
+
+                    <View
                       style={[
                         styles.radioOuter,
-                        selected && styles.radioOuterSelected,
+
+                        selected &&
+                          styles.radioOuterSelected,
                       ]}
                     >
-                      {selected && <View style={styles.radioInner} />}
+                      {selected && (
+                        <View
+                          style={
+                            styles.radioInner
+                          }
+                        />
+                      )}
                     </View>
-
-                    <View style={styles.paymentContent}>
-                      <Text style={styles.paymentTitle}>
-                        {method.name_ar}
-                      </Text>
-
-                      <Text style={styles.paymentSubtitle}>
-                        {method.subtitle_ar ?? ''}
-                      </Text>
-                    </View>
-
-                    <Text style={styles.paymentIcon}>
-                      {method.icon ?? '💳'}
-                    </Text>
                   </Pressable>
                 );
-              })}
-            </View>
-
-            {submitted && !validation.paymentMethod && (
-              <Text style={styles.paymentError}>
-                اختر طريقة الدفع المناسبة.
-              </Text>
+              },
             )}
           </View>
 
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>ملخص الطلب</Text>
+          {submitted &&
+            !validation.paymentMethod && (
+              <Text
+                style={
+                  styles.paymentError
+                }
+              >
+                اختر طريقة الدفع
+                المناسبة.
+              </Text>
+            )}
 
-            <View style={styles.itemsSummary}>
-              {items.map((item) => (
-                <View key={item.id} style={styles.summaryItem}>
-                  <Text style={styles.summaryItemPrice}>
-                    {item.price * item.quantity}{' '}
-                    {currencySymbol}
-                  </Text>
+          
+        </View>
+
+        {/* ORDER DETAILS */}
+
+        <View
+          style={
+            styles.orderSummarySection
+          }
+        >
+          <Text
+            style={
+              styles.orderSummaryTitle
+            }
+          >
+            تفاصيل الطلب
+          </Text>
+
+          {/* ITEMS */}
+
+          <View
+            style={
+              styles.itemsSummary
+            }
+          >
+            {items.map(
+              (item) => (
+                <View
+                  key={`${item.id}-${
+                    item.variantId ??
+                    'base'
+                  }`}
+                  style={
+                    styles.summaryItem
+                  }
+                >
+                  <View
+                    style={
+                      styles.summaryItemContent
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.summaryItemName
+                      }
+                      numberOfLines={2}
+                    >
+                      {item.name}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.summaryItemQuantity
+                      }
+                    >
+                      الكمية:{' '}
+                      {item.quantity}
+                    </Text>
+                  </View>
 
                   <Text
-                    style={styles.summaryItemName}
-                    numberOfLines={1}
+                    style={
+                      styles.summaryItemPrice
+                    }
                   >
-                    {item.name} × {item.quantity}
+                    {formatPrice(
+                      Number(
+                        item.price,
+                      ) *
+                        item.quantity,
+                    )}
                   </Text>
                 </View>
-              ))}
-            </View>
-
-            <View style={styles.summaryDivider} />
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryValue}>
-                {subtotal}{' '}
-                {currencySymbol}
-              </Text>
-              <Text style={styles.summaryLabel}>
-                إجمالي المنتجات
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryValue}>
-                {deliveryFee}{' '}
-                {currencySymbol}
-              </Text>
-              <Text style={styles.summaryLabel}>
-                رسوم التوصيل
-              </Text>
-            </View>
-
-            <View style={styles.totalDivider} />
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalValue}>
-                {total}{' '}
-                {currencySymbol}
-              </Text>
-              <Text style={styles.totalLabel}>الإجمالي</Text>
-            </View>
+              ),
+            )}
           </View>
 
-          <View style={styles.whatsAppNotice}>
-            <View style={styles.whatsAppNoticeContent}>
-              <Text style={styles.whatsAppNoticeTitle}>
-                الطلب لن يُنفذ تلقائيًا
-              </Text>
+          <View
+            style={
+              styles.itemsDivider
+            }
+          />
 
-              <Text style={styles.whatsAppNoticeDescription}>
-                بعد فتح واتساب، أرسل الرسالة وانتظر تأكيد
-                المنتجات والمبلغ وبيانات الدفع من فريق{' '}
-                {appName}. رسالة الطلب والإجمالي تم إنشاؤهما
-                داخل Supabase.
-              </Text>
-            </View>
+          {/* SUBTOTAL */}
 
-            <Text style={styles.whatsAppIcon}>💬</Text>
+          <View
+            style={
+              styles.summaryRow
+            }
+          >
+            <Text
+              style={
+                styles.summaryLabel
+              }
+            >
+              المنتجات
+            </Text>
+
+            <Text
+              style={
+                styles.summaryValue
+              }
+            >
+              {formatPrice(
+                subtotal,
+              )}
+            </Text>
+          </View>
+
+          {/* DELIVERY */}
+
+          <View
+            style={
+              styles.summaryRow
+            }
+          >
+            <Text
+              style={
+                styles.summaryLabel
+              }
+            >
+              التوصيل
+            </Text>
+
+            <Text
+              style={
+                styles.summaryValue
+              }
+            >
+              {formatPrice(
+                deliveryFee,
+              )}
+            </Text>
+          </View>
+
+          {/* PAYMENT FEE */}
+
+          <View
+            style={
+              styles.summaryRow
+            }
+          >
+            <Text
+              style={
+                styles.summaryLabel
+              }
+            >
+              رسوم الدفع الإلكتروني
+            </Text>
+
+            <Text
+              style={
+                styles.summaryValue
+              }
+            >
+              {formatPrice(
+                paymentProcessingFee,
+              )}
+            </Text>
+          </View>
+
+          {/* TOTAL */}
+
+          <View
+            style={
+              styles.summaryDivider
+            }
+          />
+
+          <View
+            style={
+              styles.totalRow
+            }
+          >
+            <Text
+              style={
+                styles.totalLabel
+              }
+            >
+              الإجمالي
+            </Text>
+
+            <Text
+              style={
+                styles.totalValue
+              }
+            >
+              {formatPrice(total)}
+            </Text>
+          </View>
+        </View>
+
+        {/* WHATSAPP */}
+
+        <View
+          style={
+            styles.whatsAppNotice
+          }
+        >
+          <View
+            style={
+              styles.whatsAppIconContainer
+            }
+          >
+            <Ionicons
+              name="logo-whatsapp"
+              size={27}
+              color={
+                BRAND_GREEN
+              }
+            />
+          </View>
+
+          <View
+            style={
+              styles.whatsAppNoticeContent
+            }
+          >
+            <Text
+              style={
+                styles.whatsAppNoticeTitle
+              }
+            >
+              تأكيد الطلب عبر واتساب
+            </Text>
+
+            <Text
+              style={
+                styles.whatsAppNoticeDescription
+              }
+            >
+              بعد الضغط على إرسال
+              الطلب سيتم فتح واتساب.
+              أرسل الرسالة وانتظر
+              تأكيد الطلب من فريق{' '}
+              {appName}.
+            </Text>
           </View>
         </View>
       </ScrollView>
 
-      <View style={styles.submitBarWrapper}>
-        <View style={styles.submitBarContainer}>
+      {/* BOTTOM BAR */}
+
+      <View
+        style={
+          styles.submitBarWrapper
+        }
+      >
+        <View
+          style={
+            styles.submitBar
+          }
+        >
           <Pressable
-            style={({ pressed }) => [
+            style={({
+              pressed,
+            }) => [
+              styles.backToCartButton,
+
+              pressed &&
+                styles.bottomButtonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <Text
+              style={
+                styles.backToCartButtonText
+              }
+            >
+              السلة
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={({
+              pressed,
+            }) => [
               styles.submitButton,
-              isOpeningWhatsApp && styles.submitButtonDisabled,
+
+              isOpeningWhatsApp &&
+                styles.submitButtonDisabled,
+
               pressed &&
                 !isOpeningWhatsApp &&
                 styles.submitButtonPressed,
             ]}
-            disabled={isOpeningWhatsApp}
-            onPress={sendOrderToWhatsApp}
+            disabled={
+              isOpeningWhatsApp
+            }
+            onPress={
+              sendOrderToWhatsApp
+            }
           >
-            <View style={styles.submitTotal}>
-              <Text style={styles.submitTotalValue}>
-                {total}{' '}
-                {currencySymbol}
-              </Text>
+            {isOpeningWhatsApp ? (
+              <ActivityIndicator
+                size="small"
+                color="#ffffff"
+              />
+            ) : (
+              <>
+                <Ionicons
+                  name="logo-whatsapp"
+                  size={22}
+                  color="#ffffff"
+                />
 
-              <Text style={styles.submitTotalLabel}>
-                الإجمالي
-              </Text>
-            </View>
-
-            <Text style={styles.submitButtonText}>
-              {isOpeningWhatsApp
-                ? 'جاري فتح واتساب...'
-                : 'إرسال الطلب عبر واتساب'}
-            </Text>
-
-            <View style={styles.submitIconContainer}>
-              <Text style={styles.submitIcon}>💬</Text>
-            </View>
+                <Text
+                  style={
+                    styles.submitButtonText
+                  }
+                  numberOfLines={1}
+                >
+                  إرسال الطلب
+                </Text>
+              </>
+            )}
           </Pressable>
         </View>
       </View>
@@ -870,531 +1953,1025 @@ export default function CheckoutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: '#f7f7fa',
-    flex: 1,
-  },
-
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 135,
-    paddingHorizontal: 18,
-    paddingTop: 42,
-  },
-
-  container: {
-    alignSelf: 'center',
-    maxWidth: 520,
-    width: '100%',
-  },
-
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 14,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-
-  backIcon: {
-    color: '#5d47d2',
-    fontSize: 33,
-    lineHeight: 35,
-  },
-
-  titleContainer: {
-    alignItems: 'center',
-  },
-
-  pageTitle: {
-    color: '#202025',
-    fontSize: 23,
-    fontWeight: '900',
-  },
-
-  pageSubtitle: {
-    color: '#898992',
-    fontSize: 10,
-    marginTop: 4,
-  },
-
-  topBarPlaceholder: {
-    height: 44,
-    width: 44,
-  },
-
-  storeCard: {
-    alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 24,
-    flexDirection: 'row',
-    marginTop: 26,
-    padding: 18,
-  },
-
-  storeIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    height: 64,
-    justifyContent: 'center',
-    width: 64,
-  },
-
-  storeIcon: {
-    fontSize: 31,
-  },
-
-  storeContent: {
-    flex: 1,
-    marginLeft: 15,
-  },
-
-  storeLabel: {
-    color: '#dcd7ff',
-    fontSize: 11,
-    textAlign: 'right',
-  },
-
-  storeName: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 3,
-    textAlign: 'right',
-  },
-
-  storeMeta: {
-    color: '#e9e6ff',
-    fontSize: 10,
-    marginTop: 6,
-    textAlign: 'right',
-  },
-
-  section: {
-    marginTop: 28,
-  },
-
-  sectionTitle: {
-    color: '#202025',
-    fontSize: 20,
-    fontWeight: '900',
-    marginBottom: 14,
-    textAlign: 'right',
-  },
-
-  sectionDescription: {
-    color: '#777781',
-    fontSize: 11,
-    lineHeight: 18,
-    marginBottom: 14,
-    textAlign: 'right',
-  },
-
-  field: {
-    marginBottom: 15,
-  },
-
-  fieldLabel: {
-    color: '#3a3a40',
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 8,
-    textAlign: 'right',
-  },
-
-  input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e8e8ed',
-    borderRadius: 16,
-    borderWidth: 1,
-    color: '#202025',
-    fontSize: 14,
-    minHeight: 54,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    writingDirection: 'rtl',
-  },
-
-  inputError: {
-    borderColor: '#d64b4b',
-  },
-
-  multilineInput: {
-    minHeight: 112,
-  },
-
-  notesInput: {
-    minHeight: 90,
-  },
-
-  errorText: {
-    color: '#d64b4b',
-    fontSize: 10,
-    marginTop: 6,
-    textAlign: 'right',
-  },
-
-  areaCard: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 17,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 15,
-    padding: 15,
-  },
-
-  areaContent: {
-    flex: 1,
-  },
-
-  areaLabel: {
-    color: '#7d72b2',
-    fontSize: 10,
-    textAlign: 'right',
-  },
-
-  areaValue: {
-    color: '#4f3db8',
-    fontSize: 14,
-    fontWeight: '900',
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  areaIcon: {
-    fontSize: 22,
-    marginLeft: 11,
-  },
-
-  paymentMethods: {
-    gap: 10,
-  },
-
-  paymentMethod: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e8e8ed',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    minHeight: 72,
-    padding: 14,
-  },
-
-  paymentMethodSelected: {
-    backgroundColor: '#f1efff',
-    borderColor: '#6d56df',
-  },
-
-  radioOuter: {
-    alignItems: 'center',
-    borderColor: '#b7b7c0',
-    borderRadius: 10,
-    borderWidth: 2,
-    height: 20,
-    justifyContent: 'center',
-    width: 20,
-  },
-
-  radioOuterSelected: {
-    borderColor: '#6d56df',
-  },
-
-  radioInner: {
-    backgroundColor: '#6d56df',
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-
-  paymentContent: {
-    flex: 1,
-    marginHorizontal: 13,
-  },
-
-  paymentTitle: {
-    color: '#25252b',
-    fontSize: 14,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-
-  paymentSubtitle: {
-    color: '#898992',
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  paymentIcon: {
-    fontSize: 23,
-  },
-
-  paymentError: {
-    color: '#d64b4b',
-    fontSize: 10,
-    marginTop: 8,
-    textAlign: 'right',
-  },
-
-  summaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    marginTop: 28,
-    padding: 20,
-  },
-
-  summaryTitle: {
-    color: '#202025',
-    fontSize: 19,
-    fontWeight: '900',
-    marginBottom: 17,
-    textAlign: 'right',
-  },
-
-  itemsSummary: {
-    gap: 11,
-  },
-
-  summaryItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  summaryItemName: {
-    color: '#55555e',
-    flex: 1,
-    fontSize: 12,
-    marginLeft: 10,
-    textAlign: 'right',
-  },
-
-  summaryItemPrice: {
-    color: '#303036',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  summaryDivider: {
-    backgroundColor: '#eeeeF2',
-    height: 1,
-    marginVertical: 17,
-  },
-
-  summaryRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-
-  summaryLabel: {
-    color: '#777781',
-    fontSize: 13,
-  },
-
-  summaryValue: {
-    color: '#303036',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-
-  totalDivider: {
-    backgroundColor: '#eeeeF2',
-    height: 1,
-    marginBottom: 16,
-  },
-
-  totalRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  totalLabel: {
-    color: '#202025',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-
-  totalValue: {
-    color: '#5d47d2',
-    fontSize: 19,
-    fontWeight: '900',
-  },
-
-  whatsAppNotice: {
-    alignItems: 'center',
-    backgroundColor: '#e9f7ee',
-    borderRadius: 17,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 20,
-    marginTop: 16,
-    padding: 15,
-  },
-
-  whatsAppNoticeContent: {
-    flex: 1,
-  },
-
-  whatsAppNoticeTitle: {
-    color: '#246343',
-    fontSize: 12,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-
-  whatsAppNoticeDescription: {
-    color: '#4e8067',
-    fontSize: 10,
-    lineHeight: 17,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  whatsAppIcon: {
-    fontSize: 22,
-    marginLeft: 10,
-  },
-
-  submitBarWrapper: {
-    bottom: 0,
-    left: 0,
-    paddingBottom: 18,
-    paddingHorizontal: 18,
-    position: 'absolute',
-    right: 0,
-  },
-
-  submitBarContainer: {
-    alignSelf: 'center',
-    maxWidth: 520,
-    width: '100%',
-  },
-
-  submitButton: {
-    alignItems: 'center',
-    backgroundColor: '#25d366',
-    borderRadius: 20,
-    flexDirection: 'row',
-    minHeight: 70,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
-  },
-
-  submitButtonDisabled: {
-    opacity: 0.65,
-  },
-
-  submitButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
-
-  submitTotal: {
-    flex: 1,
-  },
-
-  submitTotalValue: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-
-  submitTotalLabel: {
-    color: '#d7f7e3',
-    fontSize: 10,
-    marginTop: 2,
-  },
-
-  submitButtonText: {
-    color: '#ffffff',
-    flex: 2,
-    fontSize: 14,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-
-  submitIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 11,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-
-  submitIcon: {
-    fontSize: 18,
-  },
-
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 16,
-    marginTop: 22,
-    minWidth: 210,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  buttonPressed: {
-    opacity: 0.75,
-  },
-
-  emptyScreen: {
-    alignItems: 'center',
-    backgroundColor: '#f7f7fa',
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-
-  emptyIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 42,
-    height: 84,
-    justifyContent: 'center',
-    width: 84,
-  },
-
-  emptyIcon: {
-    fontSize: 39,
-  },
-
-  emptyTitle: {
-    color: '#222228',
-    fontSize: 24,
-    fontWeight: '900',
-    marginTop: 20,
-    textAlign: 'center',
-  },
-
-  emptyDescription: {
-    color: '#777781',
-    fontSize: 13,
-    lineHeight: 21,
-    marginTop: 8,
-    maxWidth: 330,
-    textAlign: 'center',
-  },
-});
+/* ---------------------------------- */
+/* STYLES                             */
+/* ---------------------------------- */
+
+const styles =
+  StyleSheet.create({
+    screen: {
+      backgroundColor:
+        '#ffffff',
+
+      flex: 1,
+    },
+
+    pageContent: {
+      paddingBottom: 145,
+    },
+
+    /* -------------------------------- */
+    /* HEADER                           */
+    /* -------------------------------- */
+
+    header: {
+      alignItems: 'center',
+
+      flexDirection: 'row',
+
+      paddingBottom: 28,
+
+      paddingHorizontal: 24,
+
+      paddingTop: 54,
+    },
+
+    backButton: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderColor: '#e5e5e5',
+
+      borderRadius: 31,
+
+      borderWidth: 1,
+
+      height: 62,
+
+      justifyContent:
+        'center',
+
+      width: 62,
+    },
+
+    headerContent: {
+      flex: 1,
+
+      marginLeft: 18,
+    },
+
+    pageTitle: {
+      color: '#202020',
+
+      fontSize: 25,
+
+      fontWeight: '800',
+    },
+
+    pageSubtitle: {
+      color: '#8a8a8a',
+
+      fontSize: 15,
+
+      marginTop: 3,
+    },
+
+    /* -------------------------------- */
+    /* STORE                            */
+    /* -------------------------------- */
+
+    orderStoreSection: {
+      alignItems: 'center',
+
+      borderBottomColor:
+        '#eeeeee',
+
+      borderBottomWidth: 1,
+
+      borderTopColor:
+        '#eeeeee',
+
+      borderTopWidth: 1,
+
+      flexDirection: 'row',
+
+      marginBottom: 5,
+
+      paddingHorizontal: 24,
+
+      paddingVertical: 19,
+    },
+
+    storeIconContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#f5f5f5',
+
+      borderColor: '#ededed',
+
+      borderRadius: 17,
+
+      borderWidth: 1,
+
+      height: 62,
+
+      justifyContent:
+        'center',
+
+      overflow: 'hidden',
+
+      width: 62,
+    },
+
+    storeImage: {
+      height: '100%',
+
+      width: '100%',
+    },
+
+    storeIcon: {
+      fontSize: 30,
+    },
+
+    storeContent: {
+      flex: 1,
+
+      marginLeft: 15,
+    },
+
+    storeLabel: {
+      color: '#929292',
+
+      fontSize: 11,
+    },
+
+    storeName: {
+      color: '#242424',
+
+      fontSize: 18,
+
+      fontWeight: '800',
+
+      marginTop: 3,
+    },
+
+    storeMeta: {
+      color: '#818181',
+
+      fontSize: 12,
+
+      marginTop: 5,
+    },
+
+    /* -------------------------------- */
+    /* SECTIONS                         */
+    /* -------------------------------- */
+
+    section: {
+      borderBottomColor:
+        '#f0f0f0',
+
+      borderBottomWidth: 1,
+
+      paddingBottom: 7,
+
+      paddingHorizontal: 24,
+
+      paddingTop: 29,
+    },
+
+    sectionTitle: {
+      color: '#242424',
+
+      fontSize: 23,
+
+      fontWeight: '800',
+
+      marginBottom: 20,
+
+      textAlign: 'right',
+    },
+
+    sectionDescription: {
+      color: '#858585',
+
+      fontSize: 13,
+
+      lineHeight: 20,
+
+      marginBottom: 17,
+
+      textAlign: 'right',
+    },
+
+    /* -------------------------------- */
+    /* FIELDS                           */
+    /* -------------------------------- */
+
+    field: {
+      marginBottom: 20,
+    },
+
+    fieldLabel: {
+      color: '#373737',
+
+      fontSize: 14,
+
+      fontWeight: '700',
+
+      marginBottom: 9,
+
+      textAlign: 'right',
+    },
+
+    inputContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderColor: '#dfdfdf',
+
+      borderRadius: 17,
+
+      borderWidth: 1,
+
+      flexDirection: 'row',
+
+      minHeight: 58,
+
+      paddingHorizontal: 15,
+    },
+
+    inputContainerError: {
+      borderColor: '#d64b4b',
+    },
+
+    input: {
+      color: '#242424',
+
+      flex: 1,
+
+      fontSize: 15,
+
+      minHeight: 56,
+
+      paddingHorizontal: 13,
+
+      paddingVertical: 12,
+
+      writingDirection:
+        'rtl',
+    },
+
+    multilineContainer: {
+      alignItems: 'flex-start',
+
+      minHeight: 125,
+    },
+
+    multilineInput: {
+      minHeight: 120,
+
+      paddingTop: 16,
+    },
+
+    notesContainer: {
+      alignItems: 'flex-start',
+
+      minHeight: 105,
+    },
+
+    notesInput: {
+      minHeight: 100,
+
+      paddingTop: 16,
+    },
+
+    multilineIcon: {
+      marginTop: 17,
+    },
+
+    errorText: {
+      color: '#d64b4b',
+
+      fontSize: 11,
+
+      lineHeight: 17,
+
+      marginTop: 7,
+
+      textAlign: 'right',
+    },
+
+    /* -------------------------------- */
+    /* AREA                             */
+    /* -------------------------------- */
+
+    areaCard: {
+      alignItems: 'center',
+
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+
+      borderColor: '#d6f0e1',
+
+      borderRadius: 18,
+
+      borderWidth: 1,
+
+      flexDirection: 'row',
+
+      marginBottom: 21,
+
+      padding: 15,
+    },
+
+    areaIconContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderRadius: 21,
+
+      height: 42,
+
+      justifyContent:
+        'center',
+
+      width: 42,
+    },
+
+    areaContent: {
+      flex: 1,
+
+      marginHorizontal: 13,
+    },
+
+    areaLabel: {
+      color: '#638370',
+
+      fontSize: 11,
+
+      textAlign: 'right',
+    },
+
+    areaValue: {
+      color: '#1c5334',
+
+      fontSize: 14,
+
+      fontWeight: '800',
+
+      marginTop: 4,
+
+      textAlign: 'right',
+    },
+
+    /* -------------------------------- */
+    /* PAYMENT                          */
+    /* -------------------------------- */
+
+    paymentMethods: {
+      gap: 11,
+    },
+
+    paymentMethod: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderColor: '#dedede',
+
+      borderRadius: 19,
+
+      borderWidth: 1,
+
+      flexDirection: 'row',
+
+      minHeight: 78,
+
+      paddingHorizontal: 15,
+
+      paddingVertical: 12,
+    },
+
+    paymentMethodSelected: {
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+
+      borderColor:
+        BRAND_GREEN,
+
+      borderWidth: 1.5,
+    },
+
+    paymentMethodPressed: {
+      opacity: 0.76,
+    },
+
+    paymentIconContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderRadius: 14,
+
+      height: 49,
+
+      justifyContent:
+        'center',
+
+      overflow: 'hidden',
+
+      width: 49,
+    },
+
+    paymentMethodImage: {
+      height: '100%',
+
+      width: '100%',
+    },
+
+    paymentIcon: {
+      fontSize: 24,
+    },
+
+    paymentContent: {
+      flex: 1,
+
+      marginHorizontal: 13,
+    },
+
+    paymentTitle: {
+      color: '#262626',
+
+      fontSize: 15,
+
+      fontWeight: '700',
+
+      textAlign: 'right',
+    },
+
+
+    radioOuter: {
+      alignItems: 'center',
+
+      borderColor: '#b7b7b7',
+
+      borderRadius: 11,
+
+      borderWidth: 2,
+
+      height: 22,
+
+      justifyContent:
+        'center',
+
+      width: 22,
+    },
+
+    radioOuterSelected: {
+      borderColor:
+        BRAND_GREEN,
+    },
+
+    radioInner: {
+      backgroundColor:
+        BRAND_GREEN,
+
+      borderRadius: 6,
+
+      height: 12,
+
+      width: 12,
+    },
+
+    paymentError: {
+      color: '#d64b4b',
+
+      fontSize: 11,
+
+      marginTop: 9,
+
+      textAlign: 'right',
+    },
+
+    paymentFeeNotice: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#f7f7f7',
+
+      borderRadius: 14,
+
+      flexDirection: 'row',
+
+      marginBottom: 17,
+
+      marginTop: 14,
+
+      padding: 13,
+    },
+
+    paymentFeeNoticeText: {
+      color: '#686868',
+
+      flex: 1,
+
+      fontSize: 12,
+
+      lineHeight: 19,
+
+      marginLeft: 9,
+
+      textAlign: 'right',
+    },
+
+    /* -------------------------------- */
+    /* SUMMARY                          */
+    /* -------------------------------- */
+
+    orderSummarySection: {
+      borderBottomColor:
+        '#f0f0f0',
+
+      borderBottomWidth: 1,
+
+      paddingHorizontal: 24,
+
+      paddingVertical: 29,
+    },
+
+    orderSummaryTitle: {
+      color: '#242424',
+
+      fontSize: 23,
+
+      fontWeight: '800',
+
+      marginBottom: 22,
+
+      textAlign: 'right',
+    },
+
+    itemsSummary: {
+      gap: 16,
+    },
+
+    summaryItem: {
+      alignItems: 'center',
+
+      flexDirection: 'row',
+
+      justifyContent:
+        'space-between',
+    },
+
+    summaryItemContent: {
+      flex: 1,
+
+      marginRight: 16,
+    },
+
+    summaryItemName: {
+      color: '#343434',
+
+      fontSize: 14,
+
+      fontWeight: '600',
+
+      textAlign: 'right',
+    },
+
+    summaryItemQuantity: {
+      color: '#939393',
+
+      fontSize: 11,
+
+      marginTop: 4,
+
+      textAlign: 'right',
+    },
+
+    summaryItemPrice: {
+      color: '#343434',
+
+      fontSize: 13,
+
+      fontWeight: '600',
+    },
+
+    itemsDivider: {
+      backgroundColor:
+        '#eeeeee',
+
+      height: 1,
+
+      marginVertical: 21,
+    },
+
+    summaryRow: {
+      alignItems: 'center',
+
+      flexDirection: 'row',
+
+      justifyContent:
+        'space-between',
+
+      marginBottom: 16,
+    },
+
+    summaryLabel: {
+      color: '#696969',
+
+      fontSize: 14,
+    },
+
+    summaryValue: {
+      color: '#303030',
+
+      fontSize: 14,
+
+      fontWeight: '600',
+    },
+
+    summaryDivider: {
+      backgroundColor:
+        '#eeeeee',
+
+      height: 1,
+
+      marginBottom: 19,
+
+      marginTop: 3,
+    },
+
+    totalRow: {
+      alignItems: 'center',
+
+      flexDirection: 'row',
+
+      justifyContent:
+        'space-between',
+    },
+
+    totalLabel: {
+      color: '#202020',
+
+      fontSize: 18,
+
+      fontWeight: '800',
+    },
+
+    totalValue: {
+      color: '#202020',
+
+      fontSize: 20,
+
+      fontWeight: '900',
+    },
+
+    /* -------------------------------- */
+    /* WHATSAPP                         */
+    /* -------------------------------- */
+
+    whatsAppNotice: {
+      alignItems: 'center',
+
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+
+      borderColor: '#d5f0e0',
+
+      borderRadius: 18,
+
+      borderWidth: 1,
+
+      flexDirection: 'row',
+
+      marginHorizontal: 24,
+
+      marginTop: 21,
+
+      padding: 16,
+    },
+
+    whatsAppIconContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderRadius: 23,
+
+      height: 46,
+
+      justifyContent:
+        'center',
+
+      width: 46,
+    },
+
+    whatsAppNoticeContent: {
+      flex: 1,
+
+      marginLeft: 13,
+    },
+
+    whatsAppNoticeTitle: {
+      color: '#23553a',
+
+      fontSize: 14,
+
+      fontWeight: '800',
+
+      textAlign: 'right',
+    },
+
+    whatsAppNoticeDescription: {
+      color: '#557362',
+
+      fontSize: 11,
+
+      lineHeight: 18,
+
+      marginTop: 5,
+
+      textAlign: 'right',
+    },
+
+    /* -------------------------------- */
+    /* BOTTOM BAR                       */
+    /* -------------------------------- */
+
+    submitBarWrapper: {
+      backgroundColor:
+        '#ffffff',
+
+      borderTopColor:
+        '#e8e8e8',
+
+      borderTopWidth: 1,
+
+      bottom: 0,
+
+      left: 0,
+
+      paddingBottom: 20,
+
+      paddingHorizontal: 24,
+
+      paddingTop: 18,
+
+      position: 'absolute',
+
+      right: 0,
+
+      shadowColor: '#000000',
+
+      shadowOffset: {
+        width: 0,
+
+        height: -3,
+      },
+
+      shadowOpacity: 0.06,
+
+      shadowRadius: 8,
+
+      elevation: 12,
+    },
+
+    submitBar: {
+      flexDirection: 'row',
+
+      gap: 15,
+    },
+
+    backToCartButton: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderColor: '#252525',
+
+      borderRadius: 31,
+
+      borderWidth: 1.5,
+
+      flex: 0.7,
+
+      height: 64,
+
+      justifyContent:
+        'center',
+    },
+
+    backToCartButtonText: {
+      color: '#242424',
+
+      fontSize: 17,
+
+      fontWeight: '800',
+    },
+
+    submitButton: {
+      alignItems: 'center',
+
+      backgroundColor:
+        BRAND_GREEN,
+
+      borderRadius: 31,
+
+      flex: 1.3,
+
+      flexDirection: 'row',
+
+      gap: 9,
+
+      height: 64,
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal: 15,
+    },
+
+    submitButtonDisabled: {
+      opacity: 0.65,
+    },
+
+    submitButtonPressed: {
+      backgroundColor:
+        BRAND_GREEN_DARK,
+
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
+    },
+
+    submitButtonText: {
+      color: '#ffffff',
+
+      fontSize: 16,
+
+      fontWeight: '800',
+    },
+
+    bottomButtonPressed: {
+      opacity: 0.75,
+
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
+    },
+
+    /* -------------------------------- */
+    /* EMPTY / ERROR                    */
+    /* -------------------------------- */
+
+    emptyScreen: {
+      backgroundColor:
+        '#ffffff',
+
+      flex: 1,
+    },
+
+    emptyContainer: {
+      alignItems: 'center',
+
+      flex: 1,
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal: 30,
+    },
+
+    emptyBackButton: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderColor: '#e4e4e4',
+
+      borderRadius: 30,
+
+      borderWidth: 1,
+
+      height: 60,
+
+      justifyContent:
+        'center',
+
+      left: 24,
+
+      position: 'absolute',
+
+      top: 54,
+
+      width: 60,
+
+      zIndex: 5,
+    },
+
+    emptyIconContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+
+      borderRadius: 48,
+
+      height: 96,
+
+      justifyContent:
+        'center',
+
+      width: 96,
+    },
+
+    errorIconContainer: {
+      alignItems: 'center',
+
+      alignSelf: 'center',
+
+      backgroundColor:
+        '#fff1f1',
+
+      borderRadius: 48,
+
+      height: 96,
+
+      justifyContent:
+        'center',
+
+      marginTop: 'auto',
+
+      width: 96,
+    },
+
+    emptyTitle: {
+      color: '#242424',
+
+      fontSize: 24,
+
+      fontWeight: '800',
+
+      marginTop: 22,
+
+      textAlign: 'center',
+    },
+
+    emptyDescription: {
+      alignSelf: 'center',
+
+      color: '#7c7c7c',
+
+      fontSize: 14,
+
+      lineHeight: 22,
+
+      marginTop: 8,
+
+      maxWidth: 330,
+
+      textAlign: 'center',
+    },
+
+    primaryButton: {
+      alignItems: 'center',
+
+      alignSelf: 'center',
+
+      backgroundColor:
+        BRAND_GREEN,
+
+      borderRadius: 29,
+
+      marginBottom: 'auto',
+
+      marginTop: 24,
+
+      minWidth: 220,
+
+      paddingHorizontal: 30,
+
+      paddingVertical: 16,
+    },
+
+    primaryButtonText: {
+      color: '#ffffff',
+
+      fontSize: 16,
+
+      fontWeight: '800',
+    },
+
+    buttonPressed: {
+      opacity: 0.7,
+    },
+  });

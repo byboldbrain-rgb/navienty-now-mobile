@@ -1,38 +1,46 @@
 import {
-    useLocalSearchParams,
-    useRouter,
+  useLocalSearchParams,
+  useRouter,
 } from 'expo-router';
 import {
-    useEffect,
-    useState,
+  useEffect,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 import getAppBootstrap, {
-    type AppBootstrap,
+  type AppBootstrap,
 } from '../../services/bootstrap-service';
 import {
-    type StoreCategorySlug,
-    type StoreSummary,
-    listStores,
+  listStores,
+  type StoreCategorySlug,
+  type StoreSummary,
 } from '../../services/catalog-service';
+import BookstoreScreen from './bookstore';
+import PharmacyScreen from './pharmacy';
+import RestaurantsScreen from './restaurants';
 
 type BootstrapCategory =
   AppBootstrap['store_categories'][number] & {
     subtitle_ar?: string | null;
-    subtitle_en?: string | null;
   };
 
-export default function CategoryScreen() {
-  const router = useRouter();
+const BOOKSTORE_ALIASES = new Set([
+  'bookstore',
+  'library',
+  'books',
+  'stationery',
+]);
 
+export default function CategoryRouteScreen() {
   const params = useLocalSearchParams<{
     id?: string | string[];
   }>();
@@ -41,24 +49,81 @@ export default function CategoryScreen() {
     ? params.id[0]
     : params.id;
 
+  if (rawId === 'restaurants') {
+    return <RestaurantsScreen />;
+  }
+
+  if (rawId === 'pharmacy') {
+    return <PharmacyScreen />;
+  }
+
+  if (rawId && BOOKSTORE_ALIASES.has(rawId)) {
+    return <BookstoreScreen />;
+  }
+
+  return (
+    <GenericCategoryScreen
+      categorySlug={rawId ?? ''}
+    />
+  );
+}
+
+function StoreArtwork({
+  store,
+}: {
+  store: StoreSummary;
+}) {
+  const [imageFailed, setImageFailed] =
+    useState(false);
+
+  const imageUrl =
+    store.logoUrl ?? store.coverImageUrl;
+  const canShowImage =
+    Boolean(imageUrl) && !imageFailed;
+
+  return (
+    <View style={styles.storeArtwork}>
+      {canShowImage ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          accessibilityLabel={`صورة ${store.name}`}
+          resizeMode={
+            store.logoUrl ? 'contain' : 'cover'
+          }
+          source={{ uri: imageUrl ?? '' }}
+          style={styles.storeImage}
+          onError={() => {
+            setImageFailed(true);
+          }}
+        />
+      ) : (
+        <Text style={styles.storeIcon}>
+          {store.icon || '🏪'}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function GenericCategoryScreen({
+  categorySlug,
+}: {
+  categorySlug: string;
+}) {
+  const router = useRouter();
+
   const [category, setCategory] =
-    useState<BootstrapCategory | null>(
-      null,
-    );
-
-  const [stores, setStores] =
-    useState<StoreSummary[]>([]);
-
+    useState<BootstrapCategory | null>(null);
+  const [stores, setStores] = useState<
+    StoreSummary[]
+  >([]);
   const [isLoading, setIsLoading] =
     useState(true);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
   async function loadCategoryData() {
-    if (!rawId) {
+    if (!categorySlug) {
       setCategory(null);
       setStores([]);
       setErrorMessage(
@@ -72,50 +137,39 @@ export default function CategoryScreen() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const [
-        loadedBootstrap,
-        loadedStores,
-      ] = await Promise.all([
-        getAppBootstrap(),
-
-        listStores({
-          categorySlug:
-            rawId as StoreCategorySlug,
-        }),
-      ]);
-
-      const loadedCategories =
-        loadedBootstrap
-          .store_categories as
-          BootstrapCategory[];
+      const [bootstrap, loadedStores] =
+        await Promise.all([
+          getAppBootstrap(),
+          listStores({
+            categorySlug:
+              categorySlug as StoreCategorySlug,
+          }),
+        ]);
 
       const loadedCategory =
-        loadedCategories.find(
-          (currentCategory) =>
-            currentCategory.slug ===
-            rawId,
+        (
+          bootstrap.store_categories as
+            BootstrapCategory[]
+        ).find(
+          (item) => item.slug === categorySlug,
         ) ?? null;
 
       if (!loadedCategory) {
-        setCategory(null);
-        setStores([]);
-        setErrorMessage(
+        throw new Error(
           'القسم غير موجود أو غير مفعّل.',
         );
-        return;
       }
 
       setCategory(loadedCategory);
       setStores(loadedStores);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل القسم من Supabase.';
-
       setCategory(null);
       setStores([]);
-      setErrorMessage(message);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'تعذر تحميل القسم.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -123,25 +177,20 @@ export default function CategoryScreen() {
 
   useEffect(() => {
     void loadCategoryData();
-  }, [rawId]);
+  }, [categorySlug]);
 
   if (isLoading) {
     return (
       <View style={styles.stateScreen}>
         <ActivityIndicator
           size="large"
-          color="#6d56df"
+          color="#6D56DF"
         />
-
         <Text style={styles.stateTitle}>
-          جاري تحميل المتاجر
+          جاري تحميل القسم
         </Text>
-
-        <Text
-          style={styles.stateDescription}
-        >
-          يتم تحميل القسم والمتاجر
-          المتاحة من Supabase.
+        <Text style={styles.stateDescription}>
+          يتم تحميل الأماكن المتاحة.
         </Text>
       </View>
     );
@@ -150,17 +199,11 @@ export default function CategoryScreen() {
   if (!category || errorMessage) {
     return (
       <View style={styles.stateScreen}>
-        <Text style={styles.stateIcon}>
-          📦
-        </Text>
-
+        <Text style={styles.stateIcon}>📦</Text>
         <Text style={styles.stateTitle}>
           القسم غير متاح
         </Text>
-
-        <Text
-          style={styles.stateDescription}
-        >
+        <Text style={styles.stateDescription}>
           {errorMessage ??
             'لم نتمكن من العثور على القسم.'}
         </Text>
@@ -168,35 +211,25 @@ export default function CategoryScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.retryButton,
-            pressed &&
-              styles.buttonPressed,
+            pressed && styles.pressed,
           ]}
           onPress={() => {
             void loadCategoryData();
           }}
         >
-          <Text
-            style={styles.retryButtonText}
-          >
+          <Text style={styles.retryButtonText}>
             إعادة المحاولة
           </Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [
-            styles.backHomeButton,
-            pressed &&
-              styles.buttonPressed,
+            styles.homeButton,
+            pressed && styles.pressed,
           ]}
-          onPress={() =>
-            router.replace('/')
-          }
+          onPress={() => router.replace('/')}
         >
-          <Text
-            style={
-              styles.backHomeButtonText
-            }
-          >
+          <Text style={styles.homeButtonText}>
             العودة للرئيسية
           </Text>
         </Pressable>
@@ -206,233 +239,127 @@ export default function CategoryScreen() {
 
   return (
     <ScrollView
-      style={styles.screen}
-      contentContainerStyle={
-        styles.pageContent
-      }
+      contentContainerStyle={styles.pageContent}
       showsVerticalScrollIndicator={false}
+      style={styles.screen}
     >
       <View style={styles.container}>
         <View style={styles.header}>
           <Pressable
+            accessibilityLabel="العودة"
+            accessibilityRole="button"
             style={({ pressed }) => [
               styles.backButton,
-              pressed &&
-                styles.buttonPressed,
+              pressed && styles.pressed,
             ]}
             onPress={() => router.back()}
           >
-            <Text style={styles.backIcon}>
-              ›
-            </Text>
+            <Text style={styles.backIcon}>›</Text>
           </Pressable>
 
-          <View
-            style={styles.headerContent}
-          >
-            <Text
-              style={styles.categoryIcon}
-            >
+          <View style={styles.headerContent}>
+            <Text style={styles.categoryIcon}>
               {category.icon ?? '📦'}
             </Text>
-
             <Text style={styles.title}>
               {category.name_ar}
             </Text>
-
             <Text style={styles.subtitle}>
               {category.subtitle_ar ??
-                'اختر المتجر الذي تريد الطلب منه'}
+                'اختر المكان الذي تريد الطلب منه.'}
             </Text>
           </View>
         </View>
 
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>
-            المتاجر والأسعار المعروضة
-            تُحمّل مباشرة من Supabase
-          </Text>
-        </View>
-
-        <View
-          style={styles.sectionHeader}
-        >
+        <View style={styles.sectionHeader}>
           <Text style={styles.storeCount}>
-            {stores.length} متاجر
+            {stores.length} متاح
           </Text>
-
-          <Text style={styles.sectionTitle}>
-            المتاجر المتاحة
-          </Text>
+          <View style={styles.sectionCopy}>
+            <Text style={styles.sectionTitle}>
+              الأماكن المتاحة
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              اختر المكان المناسب لطلبك
+            </Text>
+          </View>
         </View>
 
         {stores.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text
-              style={styles.emptyIcon}
-            >
-              🏪
+            <Text style={styles.emptyIcon}>🏪</Text>
+            <Text style={styles.emptyTitle}>
+              لا توجد أماكن متاحة
             </Text>
-
-            <Text
-              style={styles.emptyTitle}
-            >
-              لا توجد متاجر متاحة
-            </Text>
-
-            <Text
-              style={
-                styles.emptyDescription
-              }
-            >
-              لا توجد متاجر مفعّلة لهذا
-              القسم في منطقة التوصيل
-              الحالية.
+            <Text style={styles.emptyDescription}>
+              لا توجد أماكن مفعلة لهذا القسم في الوقت الحالي.
             </Text>
           </View>
         ) : (
-          <View style={styles.stores}>
+          <View style={styles.storesList}>
             {stores.map((store) => (
               <Pressable
                 key={store.id}
+                accessibilityLabel={`فتح ${store.name}`}
+                accessibilityRole="button"
                 style={({ pressed }) => [
                   styles.storeCard,
-                  pressed &&
-                    styles.storeCardPressed,
+                  pressed && styles.storeCardPressed,
                 ]}
                 onPress={() =>
                   router.push({
-                    pathname:
-                      '/store/[id]',
-                    params: {
-                      id: store.id,
-                    },
+                    pathname: '/store/[id]',
+                    params: { id: store.id },
                   })
                 }
               >
-                <View
-                  style={
-                    styles.storeIconContainer
-                  }
-                >
-                  <Text
-                    style={styles.storeIcon}
-                  >
-                    {store.icon}
-                  </Text>
-                </View>
+                <StoreArtwork store={store} />
 
-                <View
-                  style={
-                    styles.storeContent
-                  }
-                >
-                  <View
-                    style={
-                      styles.storeTitleRow
-                    }
-                  >
+                <View style={styles.storeContent}>
+                  <View style={styles.storeTitleRow}>
                     {store.isFeatured && (
-                      <Text
-                        style={
-                          styles.featuredBadge
-                        }
-                      >
+                      <Text style={styles.featuredBadge}>
                         مميز
                       </Text>
                     )}
-
                     <Text
-                      style={
-                        styles.storeName
-                      }
+                      numberOfLines={1}
+                      style={styles.storeName}
                     >
                       {store.name}
                     </Text>
                   </View>
 
                   <Text
-                    style={
-                      styles.storeDescription
-                    }
+                    numberOfLines={2}
+                    style={styles.storeDescription}
                   >
-                    {store.description}
+                    {store.description ||
+                      'اضغط لعرض المنتجات المتاحة.'}
                   </Text>
 
-                  <View
-                    style={
-                      styles.deliveryRow
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.deliveryTime
-                      }
-                    >
+                  <View style={styles.storeMetaRow}>
+                    <Text style={styles.storeMetaText}>
+                      ⭐ {store.rating.toFixed(1)}
+                    </Text>
+                    <Text style={styles.storeMetaText}>
                       {store.deliveryTime ||
                         `${store.estimatedDeliveryMinutes ?? '-'} دقيقة`}
                     </Text>
-
-                    <Text
-                      style={
-                        styles.deliveryLabel
-                      }
-                    >
-                      وقت التوصيل
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.storeMetaRow
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.storeMetaValue
-                      }
-                    >
-                      ⭐ {store.rating}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.storeMetaValue
-                      }
-                    >
-                      توصيل{' '}
-                      {store.deliveryFee}{' '}
-                      ج.م
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.storeMetaValue
-                      }
-                    >
-                      حد أدنى{' '}
-                      {store.minimumOrder}{' '}
-                      ج.م
+                    <Text style={styles.storeMetaText}>
+                      توصيل {store.deliveryFee} ج.م
                     </Text>
                   </View>
 
                   {store.isManuallyClosed && (
-                    <Text
-                      style={
-                        styles.closedMessage
-                      }
-                    >
-                      {store.manualClosedNote ??
+                    <Text style={styles.closedMessage}>
+                      {store.manualClosedNote ||
                         'المتجر مغلق مؤقتًا'}
                     </Text>
                   )}
                 </View>
 
-                <Text
-                  style={styles.storeArrow}
-                >
-                  ‹
-                </Text>
+                <Text style={styles.storeArrow}>‹</Text>
               </Pressable>
             ))}
           </View>
@@ -444,306 +371,256 @@ export default function CategoryScreen() {
 
 const styles = StyleSheet.create({
   screen: {
+    backgroundColor: '#F7F7FA',
     flex: 1,
-    backgroundColor: '#f7f7fa',
   },
-
   pageContent: {
     flexGrow: 1,
+    paddingBottom: 42,
     paddingHorizontal: 18,
     paddingTop: 42,
-    paddingBottom: 40,
   },
-
   container: {
-    width: '100%',
-    maxWidth: 520,
     alignSelf: 'center',
+    maxWidth: 560,
+    width: '100%',
   },
-
   header: {
-    backgroundColor: '#6d56df',
+    backgroundColor: '#6D56DF',
     borderRadius: 28,
-    minHeight: 230,
-    padding: 22,
+    minHeight: 220,
+    padding: 21,
   },
-
   backButton: {
     alignItems: 'center',
-    backgroundColor:
-      'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     borderRadius: 14,
     height: 44,
     justifyContent: 'center',
     width: 44,
   },
-
   backIcon: {
-    color: '#ffffff',
-    fontSize: 33,
-    lineHeight: 35,
+    color: '#FFFFFF',
+    fontSize: 32,
+    lineHeight: 34,
   },
-
   headerContent: {
     alignItems: 'flex-end',
     marginTop: 10,
   },
-
   categoryIcon: {
     fontSize: 38,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-
   title: {
-    color: '#ffffff',
-    fontSize: 30,
+    color: '#FFFFFF',
+    fontSize: 29,
     fontWeight: '900',
     textAlign: 'right',
   },
-
   subtitle: {
-    color: '#edeaff',
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 8,
+    color: '#ECE9FF',
+    fontSize: 13,
+    lineHeight: 21,
+    marginTop: 7,
     textAlign: 'right',
   },
-
-  notice: {
-    backgroundColor: '#e9f7ee',
-    borderRadius: 16,
-    marginTop: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-  },
-
-  noticeText: {
-    color: '#246343',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-
   sectionHeader: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 14,
     marginTop: 28,
   },
-
-  sectionTitle: {
-    color: '#1d1d22',
-    fontSize: 20,
-    fontWeight: '800',
-  },
-
   storeCount: {
-    color: '#777781',
-    fontSize: 13,
-    fontWeight: '600',
+    backgroundColor: '#EEEAFE',
+    borderRadius: 999,
+    color: '#5F49C6',
+    fontSize: 10,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-
-  stores: {
-    gap: 13,
+  sectionCopy: {
+    alignItems: 'flex-end',
   },
-
+  sectionTitle: {
+    color: '#1D1D22',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  sectionSubtitle: {
+    color: '#85858C',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  storesList: {
+    gap: 12,
+  },
   storeCard: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E8E8EC',
     borderRadius: 21,
+    borderWidth: 1,
     flexDirection: 'row',
     minHeight: 112,
-    padding: 16,
+    padding: 12,
   },
-
   storeCardPressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.82,
+    transform: [{ scale: 0.992 }],
   },
-
-  storeIconContainer: {
+  storeArtwork: {
     alignItems: 'center',
-    backgroundColor: '#f1efff',
-    borderRadius: 18,
-    height: 66,
+    backgroundColor: '#F0EDFF',
+    borderRadius: 17,
+    height: 78,
     justifyContent: 'center',
-    width: 66,
+    overflow: 'hidden',
+    width: 78,
   },
-
+  storeImage: {
+    height: '100%',
+    width: '100%',
+  },
   storeIcon: {
-    fontSize: 31,
+    fontSize: 36,
   },
-
   storeContent: {
     flex: 1,
-    marginHorizontal: 14,
+    marginHorizontal: 12,
   },
-
   storeTitleRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 7,
     justifyContent: 'flex-end',
   },
-
   featuredBadge: {
-    backgroundColor: '#fff3d6',
-    borderRadius: 9,
-    color: '#9a6900',
-    fontSize: 9,
+    backgroundColor: '#FFF0CD',
+    borderRadius: 999,
+    color: '#8A5C08',
+    fontSize: 8,
     fontWeight: '900',
-    marginRight: 7,
     overflow: 'hidden',
     paddingHorizontal: 7,
     paddingVertical: 4,
   },
-
   storeName: {
-    color: '#202025',
-    fontSize: 17,
-    fontWeight: '800',
+    color: '#1E1E23',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '900',
     textAlign: 'right',
   },
-
   storeDescription: {
-    color: '#777781',
-    fontSize: 12,
-    lineHeight: 19,
-    marginTop: 4,
+    color: '#77777E',
+    fontSize: 10,
+    lineHeight: 16,
+    marginTop: 5,
     textAlign: 'right',
   },
-
-  deliveryRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 8,
-  },
-
-  deliveryTime: {
-    color: '#6d56df',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-
-  deliveryLabel: {
-    color: '#9999a2',
-    fontSize: 11,
-    marginLeft: 6,
-  },
-
   storeMetaRow: {
+    alignItems: 'center',
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    gap: 9,
+    gap: 8,
     marginTop: 8,
   },
-
-  storeMetaValue: {
-    color: '#777781',
+  storeMetaText: {
+    color: '#5D5D64',
     fontSize: 9,
     fontWeight: '700',
   },
-
   closedMessage: {
-    color: '#a13333',
-    fontSize: 10,
+    color: '#C43E3E',
+    fontSize: 9,
     fontWeight: '800',
-    marginTop: 8,
+    marginTop: 7,
     textAlign: 'right',
   },
-
   storeArrow: {
-    color: '#6d56df',
-    fontSize: 31,
+    color: '#6D56DF',
+    fontSize: 27,
+    lineHeight: 29,
   },
-
   emptyCard: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E8E8EC',
     borderRadius: 22,
-    padding: 25,
+    borderWidth: 1,
+    padding: 28,
   },
-
   emptyIcon: {
     fontSize: 42,
   },
-
   emptyTitle: {
-    color: '#222228',
-    fontSize: 18,
+    color: '#202024',
+    fontSize: 16,
     fontWeight: '900',
-    marginTop: 12,
+    marginTop: 11,
   },
-
   emptyDescription: {
-    color: '#777781',
-    fontSize: 12,
-    lineHeight: 20,
-    marginTop: 7,
-    maxWidth: 330,
+    color: '#7C7C83',
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 6,
     textAlign: 'center',
   },
-
   stateScreen: {
     alignItems: 'center',
-    backgroundColor: '#f7f7fa',
+    backgroundColor: '#F7F7FA',
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 28,
   },
-
   stateIcon: {
-    fontSize: 48,
+    fontSize: 50,
   },
-
   stateTitle: {
-    color: '#222228',
-    fontSize: 22,
+    color: '#1D1D22',
+    fontSize: 21,
     fontWeight: '900',
-    marginTop: 16,
+    marginTop: 17,
     textAlign: 'center',
   },
-
   stateDescription: {
-    color: '#777781',
+    color: '#77777E',
     fontSize: 13,
     lineHeight: 21,
     marginTop: 8,
-    maxWidth: 350,
     textAlign: 'center',
   },
-
   retryButton: {
-    backgroundColor: '#6d56df',
+    backgroundColor: '#6D56DF',
     borderRadius: 15,
     marginTop: 22,
-    paddingHorizontal: 22,
+    paddingHorizontal: 24,
     paddingVertical: 13,
   },
-
   retryButtonText: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
   },
-
-  backHomeButton: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e8e8ed',
+  homeButton: {
+    borderColor: '#DCDCE2',
     borderRadius: 15,
     borderWidth: 1,
-    marginTop: 11,
-    paddingHorizontal: 22,
-    paddingVertical: 13,
+    marginTop: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
   },
-
-  backHomeButtonText: {
-    color: '#5d47d2',
-    fontSize: 14,
+  homeButtonText: {
+    color: '#55555C',
+    fontSize: 13,
     fontWeight: '800',
   },
-
-  buttonPressed: {
+  pressed: {
     opacity: 0.75,
+    transform: [{ scale: 0.985 }],
   },
 });

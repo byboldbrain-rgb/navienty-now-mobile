@@ -13,7 +13,7 @@ import {
     View,
 } from 'react-native';
 
-import AppBottomNavigation from '../components/app-bottom-navigation';
+import AppBottomNavigation from '../category/app-bottom-navigation';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { supabase } from '../lib/supabase';
 import {

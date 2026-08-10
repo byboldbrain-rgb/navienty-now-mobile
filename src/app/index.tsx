@@ -10,7 +10,7 @@ import {
 import {
   Image,
   type LayoutChangeEvent,
-  Modal,
+  Linking,
   type NativeScrollEvent,
   StatusBar as NativeStatusBar,
   type NativeSyntheticEvent,
@@ -23,7 +23,8 @@ import {
   View,
 } from 'react-native';
 
-import AppBottomNavigation from '../components/app-bottom-navigation';
+import AppBottomNavigation from '../category/app-bottom-navigation';
+import { getCategoryIcon } from '../config/category-icons';
 import { useAuthSession } from '../hooks/use-auth-session';
 import getAppBootstrap, {
   type AppBootstrap,
@@ -34,6 +35,12 @@ import {
   listStores,
   type StoreSummary,
 } from '../services/catalog-service';
+import {
+  type HomeBanner,
+  type HomeBannerAudience,
+  type HomeBannerPlacement,
+  listHomeBanners,
+} from '../services/home-banners-service';
 import { useOrdersStore } from '../store/orders-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -252,84 +259,45 @@ function formatCurrency(
   }`;
 }
 
-function getStoreStatusLabel(
-  store: StoreSummary,
-): string {
-  if (store.isManuallyClosed) {
-    return store.manualClosedNote?.trim() ||
-      'مغلق مؤقتًا';
-  }
-
-  return 'متاح للطلب';
-}
-
-function SearchIcon({
-  color = NAVIENTY_NOW_COLORS.textMuted,
-}: {
-  color?: string;
-}) {
-  return (
-    <View
-      style={styles.searchIconCanvas}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
-      <View
-        style={[
-          styles.searchIconCircle,
-          {
-            borderColor: color,
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.searchIconHandle,
-          {
-            backgroundColor: color,
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
 function CategoryArtwork({
   category,
 }: {
   category: BootstrapCategory;
 }) {
-  const [imageFailed, setImageFailed] =
+  const [remoteImageFailed, setRemoteImageFailed] =
     useState(false);
 
-  const canShowImage =
-    Boolean(category.image_url) &&
-    !imageFailed;
+  useEffect(() => {
+    setRemoteImageFailed(false);
+  }, [category.image_url]);
+
+  const remoteImageUrl =
+    category.image_url?.trim() ?? '';
+
+  const canShowRemoteImage =
+    remoteImageUrl.length > 0 &&
+    !remoteImageFailed;
+
+  const imageSource = canShowRemoteImage
+    ? { uri: remoteImageUrl }
+    : getCategoryIcon(category.slug);
 
   return (
     <View style={styles.categoryArtwork}>
-      {canShowImage ? (
-        <Image
-          accessibilityIgnoresInvertColors
-          accessibilityLabel={
-            `صورة قسم ${category.name_ar}`
+      <Image
+        accessibilityIgnoresInvertColors
+        accessibilityLabel={
+          `أيقونة قسم ${category.name_ar}`
+        }
+        resizeMode="contain"
+        source={imageSource}
+        style={styles.categoryImage}
+        onError={() => {
+          if (canShowRemoteImage) {
+            setRemoteImageFailed(true);
           }
-          resizeMode="contain"
-          source={{
-            uri: category.image_url ?? '',
-          }}
-          style={styles.categoryImage}
-          onError={() => {
-            setImageFailed(true);
-          }}
-        />
-      ) : (
-        <Text
-          style={styles.categoryFallbackIcon}
-        >
-          {category.icon ?? '📦'}
-        </Text>
-      )}
+        }}
+      />
     </View>
   );
 }
@@ -400,16 +368,17 @@ function StoreArtwork({
   );
 }
 
-// Scalloped wave divider built from three large overlapping circles
-// poking up out of a page-colored strip. This mirrors the reference
-// header's wavy bottom edge while staying pure RN (no SVG deps) and
-// keeping whatever header color is passed to it.
+// Premium curved divider: a cleaner, softer wave made from large
+// circular cut-outs and a small base strip. This keeps the same brand
+// color while making the bottom edge feel more refined and intentional.
 function HeaderWave() {
   return (
     <View
       pointerEvents="none"
       style={styles.headerWaveContainer}
     >
+      <View style={styles.headerWaveBase} />
+
       <View
         style={[
           styles.waveCircle,
@@ -428,19 +397,17 @@ function HeaderWave() {
           styles.waveCircleThree,
         ]}
       />
+      <View
+        style={[
+          styles.waveCircle,
+          styles.waveCircleFour,
+        ]}
+      />
     </View>
   );
 }
 
-function HomeHeader({
-  location,
-  onPressLocation,
-  onPressSearch,
-}: {
-  location: ResolvedLocation;
-  onPressLocation: () => void;
-  onPressSearch: () => void;
-}) {
+function HomeHeader() {
   const topInset =
     Platform.OS === 'android'
       ? (NativeStatusBar.currentHeight ?? 0)
@@ -453,60 +420,38 @@ function HomeHeader({
       style={[
         styles.header,
         {
-          paddingTop: topInset + 16,
+          minHeight: topInset + 88,
         },
       ]}
     >
-      <View style={styles.headerContent}>
-        <Pressable
-          accessibilityLabel={
-            `التوصيل إلى ${location.fullName}. اضغط لتغيير المنطقة.`
-          }
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.locationButton,
-            pressed &&
-              styles.headerControlPressed,
+      <View
+        pointerEvents="none"
+        style={styles.headerDecorLayer}
+      >
+        <View
+          style={[
+            styles.headerGlow,
+            styles.headerGlowPrimary,
           ]}
-          onPress={onPressLocation}
-        >
-          <Text style={styles.locationChevron}>
-            ⌄
-          </Text>
-
-          <View style={styles.locationCopy}>
-            <Text style={styles.locationLabel}>
-              التوصيل إلى
-            </Text>
-
-            <Text
-              numberOfLines={1}
-              style={styles.locationValue}
-            >
-              {location.fullName}
-            </Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          accessibilityLabel="البحث عن أكل أو بقالة أو صيدلية أو المزيد"
-          accessibilityRole="search"
-          style={({ pressed }) => [
-            styles.searchPill,
-            pressed &&
-              styles.searchPillPressed,
+        />
+        <View
+          style={[
+            styles.headerGlow,
+            styles.headerGlowSecondary,
           ]}
-          onPress={onPressSearch}
-        >
-          <SearchIcon />
-
-          <Text
-            numberOfLines={1}
-            style={styles.searchPlaceholder}
-          >
-            ابحث عن أكل، بقالة، صيدلية والمزيد
-          </Text>
-        </Pressable>
+        />
+        <View
+          style={[
+            styles.headerStroke,
+            styles.headerStrokeOne,
+          ]}
+        />
+        <View
+          style={[
+            styles.headerStroke,
+            styles.headerStrokeTwo,
+          ]}
+        />
       </View>
 
       <HeaderWave />
@@ -580,54 +525,395 @@ function CategoryStrip({
   );
 }
 
-function LoginInvitationCard({
-  authErrorMessage,
-  onPressLogin,
+function HomeBannerCarousel({
+  width,
+  audience,
+  placement,
+  title,
 }: {
-  authErrorMessage: string | null;
-  onPressLogin: () => void;
+  width: number;
+  audience: Exclude<
+    HomeBannerAudience,
+    'all'
+  >;
+  placement: HomeBannerPlacement;
+  title?: string;
 }) {
-  return (
-    <View style={styles.loginCard}>
-      <View style={styles.loginArtworkWrap}>
-        <Image
-          accessibilityLabel="شعار Navienty Now"
-          resizeMode="contain"
-          source={navientyNowLogo}
-          style={styles.loginLogo}
+  const scrollViewRef =
+    useRef<ScrollView | null>(null);
+  const activeIndexRef = useRef(0);
+  const physicalIndexRef = useRef(0);
+  const [banners, setBanners] =
+    useState<HomeBanner[]>([]);
+  const [activeIndex, setActiveIndex] =
+    useState(0);
+  const [isLoading, setIsLoading] =
+    useState(true);
+  const [isUserInteracting, setIsUserInteracting] =
+    useState(false);
+
+  const carouselWidth = Math.max(1, width);
+  const bannerHeight = Math.round(
+    carouselWidth * (9 / 16),
+  );
+
+  const carouselItems = useMemo(() => {
+    if (banners.length <= 1) {
+      return banners;
+    }
+
+    return [
+      banners[banners.length - 1]!,
+      ...banners,
+      banners[0]!,
+    ];
+  }, [banners]);
+
+  const setLogicalIndex = useCallback(
+    (nextIndex: number) => {
+      activeIndexRef.current = nextIndex;
+      setActiveIndex(nextIndex);
+    },
+    [],
+  );
+
+  const scrollToPhysicalIndex = useCallback(
+    (
+      nextPhysicalIndex: number,
+      animated: boolean,
+    ) => {
+      physicalIndexRef.current = nextPhysicalIndex;
+
+      scrollViewRef.current?.scrollTo({
+        animated,
+        x: nextPhysicalIndex * carouselWidth,
+        y: 0,
+      });
+    },
+    [carouselWidth],
+  );
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadBanners() {
+      try {
+        setIsLoading(true);
+
+        const loadedBanners =
+          await listHomeBanners(
+            audience,
+            placement,
+          );
+
+        if (!isCancelled) {
+          activeIndexRef.current = 0;
+          physicalIndexRef.current =
+            loadedBanners.length > 1 ? 1 : 0;
+          setBanners(loadedBanners);
+          setActiveIndex(0);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          activeIndexRef.current = 0;
+          physicalIndexRef.current = 0;
+          setBanners([]);
+          setActiveIndex(0);
+
+          console.warn(
+            `Unable to load ${placement} home banners.`,
+            error,
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadBanners();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [audience, placement]);
+
+  useEffect(() => {
+    if (banners.length === 0) {
+      return;
+    }
+
+    const nextPhysicalIndex =
+      banners.length > 1
+        ? activeIndexRef.current + 1
+        : 0;
+
+    const positionTimer = setTimeout(() => {
+      scrollToPhysicalIndex(
+        nextPhysicalIndex,
+        false,
+      );
+    }, 0);
+
+    return () => {
+      clearTimeout(positionTimer);
+    };
+  }, [
+    banners.length,
+    carouselWidth,
+    scrollToPhysicalIndex,
+  ]);
+
+  useEffect(() => {
+    if (
+      banners.length <= 1 ||
+      isUserInteracting
+    ) {
+      return;
+    }
+
+    const autoPlayTimer = setTimeout(() => {
+      const nextLogicalIndex =
+        (activeIndexRef.current + 1) %
+        banners.length;
+      const nextPhysicalIndex =
+        physicalIndexRef.current + 1;
+
+      setLogicalIndex(nextLogicalIndex);
+      scrollToPhysicalIndex(
+        nextPhysicalIndex,
+        true,
+      );
+    }, 5000);
+
+    return () => {
+      clearTimeout(autoPlayTimer);
+    };
+  }, [
+    activeIndex,
+    banners.length,
+    isUserInteracting,
+    scrollToPhysicalIndex,
+    setLogicalIndex,
+  ]);
+
+  function handleScrollEnd(
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) {
+    if (banners.length <= 1) {
+      physicalIndexRef.current = 0;
+      setLogicalIndex(0);
+      setIsUserInteracting(false);
+      return;
+    }
+
+    const rawPhysicalIndex = Math.round(
+      event.nativeEvent.contentOffset.x /
+        carouselWidth,
+    );
+
+    if (rawPhysicalIndex <= 0) {
+      const lastLogicalIndex =
+        banners.length - 1;
+
+      setLogicalIndex(lastLogicalIndex);
+      scrollToPhysicalIndex(
+        banners.length,
+        false,
+      );
+    } else if (
+      rawPhysicalIndex >=
+      banners.length + 1
+    ) {
+      setLogicalIndex(0);
+      scrollToPhysicalIndex(1, false);
+    } else {
+      physicalIndexRef.current =
+        rawPhysicalIndex;
+      setLogicalIndex(
+        rawPhysicalIndex - 1,
+      );
+    }
+
+    setIsUserInteracting(false);
+  }
+
+  async function openBanner(
+    banner: HomeBanner,
+  ) {
+    if (!banner.linkUrl) {
+      return;
+    }
+
+    try {
+      await Linking.openURL(banner.linkUrl);
+    } catch (error) {
+      console.warn(
+        'Unable to open home banner link.',
+        error,
+      );
+    }
+  }
+
+  const sectionStyle = title
+    ? styles.exclusiveOffersSection
+    : styles.homeBannerSection;
+
+  if (isLoading) {
+    return (
+      <View
+        style={[
+          sectionStyle,
+          {
+            width: carouselWidth,
+          },
+        ]}
+      >
+        {title ? (
+          <SectionHeader title={title} />
+        ) : null}
+
+        <View
+          style={[
+            styles.homeBannerLoadingCard,
+            {
+              height: bannerHeight,
+              width: carouselWidth,
+            },
+          ]}
         />
       </View>
+    );
+  }
 
-      <View style={styles.loginContent}>
-        <Text style={styles.loginTitle}>
-          أهلاً بك.
-        </Text>
+  if (banners.length === 0) {
+    return null;
+  }
 
-        <Text style={styles.loginDescription}>
-          سجّل الدخول لتحصل على تجربة أسرع وأكثر تخصيصًا.
-        </Text>
+  return (
+    <View
+      style={[
+        sectionStyle,
+        {
+          width: carouselWidth,
+        },
+      ]}
+    >
+      {title ? (
+        <SectionHeader title={title} />
+      ) : null}
 
-        {authErrorMessage && (
-          <Text style={styles.authWarningText}>
-            {authErrorMessage} يمكنك متابعة التصفح كزائر.
-          </Text>
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        accessibilityLabel={
+          title ||
+          'لوحة إعلانات Navienty Now'
+        }
+        alwaysBounceHorizontal={false}
+        bounces={false}
+        contentContainerStyle={{
+          height: bannerHeight,
+        }}
+        contentOffset={{
+          x:
+            banners.length > 1
+              ? carouselWidth
+              : 0,
+          y: 0,
+        }}
+        decelerationRate="fast"
+        nestedScrollEnabled
+        overScrollMode="never"
+        pagingEnabled
+        scrollEventThrottle={16}
+        showsHorizontalScrollIndicator={false}
+        snapToAlignment="start"
+        snapToInterval={carouselWidth}
+        style={[
+          styles.homeBannerScroll,
+          {
+            height: bannerHeight,
+            width: carouselWidth,
+          },
+        ]}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollBeginDrag={() => {
+          setIsUserInteracting(true);
+        }}
+        onScrollEndDrag={() => {
+          setIsUserInteracting(false);
+        }}
+      >
+        {carouselItems.map(
+          (banner, renderIndex) => (
+            <Pressable
+              key={`${banner.id}-${renderIndex}`}
+              accessibilityLabel={
+                banner.altTextAr ||
+                banner.altTextEn ||
+                title ||
+                'إعلان Navienty Now'
+              }
+              accessibilityRole={
+                banner.linkUrl ? 'link' : 'image'
+              }
+              disabled={!banner.linkUrl}
+              style={({ pressed }) => [
+                styles.homeBannerCard,
+                {
+                  height: bannerHeight,
+                  width: carouselWidth,
+                },
+                pressed &&
+                  banner.linkUrl &&
+                  styles.homeBannerPressed,
+              ]}
+              onPress={() => {
+                void openBanner(banner);
+              }}
+            >
+              <Image
+                accessibilityIgnoresInvertColors
+                resizeMode="cover"
+                source={{
+                  uri: banner.imageUrl,
+                }}
+                style={[
+                  styles.homeBannerImage,
+                  {
+                    height: bannerHeight,
+                    width: carouselWidth,
+                  },
+                ]}
+                onError={(event) => {
+                  console.warn(
+                    'Unable to load home banner image.',
+                    banner.imageUrl,
+                    event.nativeEvent.error,
+                  );
+                }}
+              />
+            </Pressable>
+          ),
         )}
+      </ScrollView>
 
-        <Pressable
-          accessibilityLabel="تسجيل الدخول إلى Navienty Now"
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.loginButton,
-            pressed &&
-              styles.primaryButtonPressed,
-          ]}
-          onPress={onPressLogin}
-        >
-          <Text style={styles.loginButtonText}>
-            تسجيل الدخول
-          </Text>
-        </Pressable>
-      </View>
+      {banners.length > 1 && (
+        <View style={styles.homeBannerDots}>
+          {banners.map((banner, index) => (
+            <View
+              key={banner.id}
+              style={[
+                styles.homeBannerDot,
+                index === activeIndex &&
+                  styles.homeBannerDotActive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -956,179 +1242,6 @@ function SectionHeader({
   );
 }
 
-// Flush-edge brand row: the logo tile sits directly against the
-// card's leading edge (no inner padding around it), matching a
-// dense "brands near you" list layout.
-function BigBrandRow({
-  store,
-  onPress,
-}: {
-  store: StoreSummary;
-  onPress: () => void;
-}) {
-  const statusLabel =
-    getStoreStatusLabel(store);
-
-  const deliveryLabel =
-    store.deliveryTime ||
-    (store.estimatedDeliveryMinutes
-      ? `${store.estimatedDeliveryMinutes} دقيقة تقريبًا`
-      : statusLabel);
-
-  return (
-    <Pressable
-      accessibilityLabel={
-        `${store.name}. ${deliveryLabel}.`
-      }
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.brandRow,
-        pressed && styles.cardPressed,
-      ]}
-      onPress={onPress}
-    >
-      <StoreArtwork
-        flushEdge
-        store={store}
-      />
-
-      <View style={styles.brandRowContent}>
-        <View style={styles.brandNameRow}>
-          {store.isFeatured && (
-            <View
-              style={styles.featuredBadge}
-            >
-              <Text
-                style={styles.featuredBadgeText}
-              >
-                مميز
-              </Text>
-            </View>
-          )}
-
-          <Text
-            numberOfLines={1}
-            style={styles.brandRowName}
-          >
-            {store.name}
-          </Text>
-        </View>
-
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.brandRowMeta,
-            store.isManuallyClosed &&
-              styles.brandRowMetaClosed,
-          ]}
-        >
-          {deliveryLabel}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function BigBrandsSection({
-  stores,
-  isLoading,
-  errorMessage,
-  onPressRetry,
-  onPressStore,
-  onPressViewAll,
-}: {
-  stores: StoreSummary[];
-  isLoading: boolean;
-  errorMessage: string | null;
-  onPressRetry: () => void;
-  onPressStore: (storeId: string) => void;
-  onPressViewAll: () => void;
-}) {
-  return (
-    <View style={styles.storesSection}>
-      <SectionHeader
-        actionLabel="عرض الكل"
-        title="أشهر البراندات قريبة منك"
-        onPressAction={onPressViewAll}
-      />
-
-      {isLoading ? (
-        <View style={styles.storeSkeletonList}>
-          {[0, 1].map((index) => (
-            <View
-              key={index}
-              style={styles.storeSkeletonRow}
-            >
-              <View
-                style={styles.storeSkeletonImage}
-              />
-              <View
-                style={styles.storeSkeletonCopy}
-              >
-                <View
-                  style={styles.storeSkeletonTitle}
-                />
-                <View
-                  style={styles.storeSkeletonMeta}
-                />
-              </View>
-            </View>
-          ))}
-        </View>
-      ) : errorMessage ? (
-        <View style={styles.inlineErrorCard}>
-          <Text style={styles.inlineErrorTitle}>
-            تعذر تحميل الأماكن
-          </Text>
-          <Text
-            style={styles.inlineErrorDescription}
-          >
-            حاول مرة أخرى مع بقاء باقي الصفحة متاحًا.
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.inlineRetryButton,
-              pressed &&
-                styles.primaryButtonPressed,
-            ]}
-            onPress={onPressRetry}
-          >
-            <Text
-              style={styles.inlineRetryButtonText}
-            >
-              إعادة المحاولة
-            </Text>
-          </Pressable>
-        </View>
-      ) : stores.length === 0 ? (
-        <View style={styles.compactEmptyCard}>
-          <Text style={styles.compactEmptyTitle}>
-            لا توجد أماكن متاحة في هذه المنطقة
-          </Text>
-          <Text
-            style={styles.compactEmptyDescription}
-          >
-            جرّب اختيار منطقة توصيل أخرى.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.storeRows}>
-          {stores.map((store) => (
-            <BigBrandRow
-              key={store.id}
-              store={store}
-              onPress={() => {
-                onPressStore(store.id);
-              }}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
 // A promo banner (title + tagline + "see more" arrow) followed by a
 // horizontally-scrolling rail of deal cards: cover image, a discount
 // chip, a small round logo badge, name, rating and an average-price
@@ -1406,177 +1519,6 @@ function DiscoveryRail({
   );
 }
 
-function LocationSelectorModal({
-  bootstrap,
-  selectedLocation,
-  visible,
-  onClose,
-  onSelectLocation,
-}: {
-  bootstrap: AppBootstrap;
-  selectedLocation: ResolvedLocation;
-  visible: boolean;
-  onClose: () => void;
-  onSelectLocation: (
-    location: ResolvedLocation,
-  ) => void;
-}) {
-  return (
-    <Modal
-      animationType="fade"
-      transparent
-      visible={visible}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalBackdrop}>
-        <Pressable
-          accessibilityLabel="إغلاق اختيار منطقة التوصيل"
-          accessibilityRole="button"
-          style={StyleSheet.absoluteFill}
-          onPress={onClose}
-        />
-
-        <View style={styles.locationModalCard}>
-          <View style={styles.modalHandle} />
-
-          <View style={styles.modalHeader}>
-            <Pressable
-              accessibilityLabel="إغلاق"
-              accessibilityRole="button"
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.modalCloseButton,
-                pressed &&
-                  styles.sectionActionPressed,
-              ]}
-              onPress={onClose}
-            >
-              <Text
-                style={styles.modalCloseText}
-              >
-                ×
-              </Text>
-            </Pressable>
-
-            <View style={styles.modalHeaderCopy}>
-              <Text style={styles.modalTitle}>
-                اختر منطقة التوصيل
-              </Text>
-              <Text
-                style={styles.modalDescription}
-              >
-                سنعرض الأماكن التي تخدم المنطقة المختارة.
-              </Text>
-            </View>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={
-              styles.locationOptions
-            }
-            showsVerticalScrollIndicator={false}
-          >
-            {bootstrap.cities.map((city) => (
-              <View
-                key={city.id}
-                style={styles.cityGroup}
-              >
-                <Text style={styles.cityName}>
-                  {city.name_ar}
-                </Text>
-
-                {city.areas.length === 0 ? (
-                  <Text
-                    style={styles.noAreasText}
-                  >
-                    لا توجد مناطق مفعلة في هذه المدينة.
-                  </Text>
-                ) : (
-                  city.areas.map((area) => {
-                    const isSelected =
-                      area.id ===
-                      selectedLocation.areaId;
-
-                    return (
-                      <Pressable
-                        key={area.id}
-                        accessibilityLabel={
-                          `اختيار ${area.name_ar}، ${city.name_ar}`
-                        }
-                        accessibilityRole="radio"
-                        accessibilityState={{
-                          checked: isSelected,
-                        }}
-                        style={({ pressed }) => [
-                          styles.areaOption,
-                          isSelected &&
-                            styles.areaOptionSelected,
-                          pressed &&
-                            styles.areaOptionPressed,
-                        ]}
-                        onPress={() => {
-                          onSelectLocation(
-                            locationFromArea(
-                              city,
-                              area,
-                            ),
-                          );
-                        }}
-                      >
-                        <View
-                          style={[
-                            styles.areaRadio,
-                            isSelected &&
-                              styles.areaRadioSelected,
-                          ]}
-                        >
-                          {isSelected && (
-                            <View
-                              style={
-                                styles.areaRadioDot
-                              }
-                            />
-                          )}
-                        </View>
-
-                        <View
-                          style={styles.areaOptionCopy}
-                        >
-                          <Text
-                            style={
-                              styles.areaOptionName
-                            }
-                          >
-                            {area.name_ar}
-                          </Text>
-
-                          {area.default_estimated_delivery_minutes ? (
-                            <Text
-                              style={
-                                styles.areaOptionMeta
-                              }
-                            >
-                              وقت تقديري افتراضي{' '}
-                              {
-                                area.default_estimated_delivery_minutes
-                              }{' '}
-                              دقيقة
-                            </Text>
-                          ) : null}
-                        </View>
-                      </Pressable>
-                    );
-                  })
-                )}
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 function HomeLoadingSkeleton() {
   return (
     <View style={styles.screen}>
@@ -1590,14 +1532,6 @@ function HomeLoadingSkeleton() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.loadingHeader}>
-          <View style={styles.loadingHeaderInner}>
-            <View
-              style={styles.loadingLocationLine}
-            />
-            <View
-              style={styles.loadingSearchPill}
-            />
-          </View>
           <HeaderWave />
         </View>
 
@@ -1628,36 +1562,9 @@ function HomeLoadingSkeleton() {
             style={styles.loadingSectionTitle}
           />
 
-          <View style={styles.storeSkeletonList}>
-            {[0, 1].map((index) => (
-              <View
-                key={index}
-                style={styles.storeSkeletonRow}
-              >
-                <View
-                  style={
-                    styles.storeSkeletonImage
-                  }
-                />
-                <View
-                  style={
-                    styles.storeSkeletonCopy
-                  }
-                >
-                  <View
-                    style={
-                      styles.storeSkeletonTitle
-                    }
-                  />
-                  <View
-                    style={
-                      styles.storeSkeletonMeta
-                    }
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
+          <View
+            style={styles.loadingExclusiveBanner}
+          />
         </View>
       </ScrollView>
 
@@ -1672,19 +1579,10 @@ function HomeLoadingSkeleton() {
 function HomeFatalError({
   message,
   onRetry,
-  onOpenSearch,
 }: {
   message: string;
   onRetry: () => void;
-  onOpenSearch: () => void;
 }) {
-  const fallbackLocation: ResolvedLocation = {
-    areaId: null,
-    cityId: null,
-    cityName: '',
-    areaName: 'منطقتك',
-    fullName: 'منطقة التوصيل غير محددة',
-  };
 
   return (
     <View style={styles.screen}>
@@ -1696,11 +1594,7 @@ function HomeFatalError({
         }
         showsVerticalScrollIndicator={false}
       >
-        <HomeHeader
-          location={fallbackLocation}
-          onPressLocation={onRetry}
-          onPressSearch={onOpenSearch}
-        />
+        <HomeHeader />
 
         <View style={styles.errorContentShell}>
           <View style={styles.fatalErrorIcon}>
@@ -1763,9 +1657,6 @@ export default function HomeScreen() {
 
   const [selectedLocation, setSelectedLocation] =
     useState<ResolvedLocation | null>(null);
-  const [locationModalVisible, setLocationModalVisible] =
-    useState(false);
-
   const [stores, setStores] =
     useState<StoreSummary[]>([]);
   const [isStoresLoading, setIsStoresLoading] =
@@ -1896,10 +1787,6 @@ export default function HomeScreen() {
     [bootstrap],
   );
 
-  const nearbyStores = useMemo(
-    () => stores.slice(0, isSignedIn ? 3 : 2),
-    [isSignedIn, stores],
-  );
 
   // Reuses whichever stores are flagged as featured for the deals
   // rail; falls back to the first few stores if none are featured.
@@ -1933,6 +1820,19 @@ export default function HomeScreen() {
     NAVIENTY_NOW_LAYOUT.contentMaxWidth,
   );
 
+  const bannerContentWidth = Math.max(
+    1,
+    contentWidth -
+      NAVIENTY_NOW_LAYOUT.pageGutter * 2,
+  );
+
+  const bannerAudience: Exclude<
+    HomeBannerAudience,
+    'all'
+  > = isSignedIn
+    ? 'signed_in'
+    : 'signed_out';
+
   const effectiveLocation =
     selectedLocation ??
     (bootstrap
@@ -1942,6 +1842,11 @@ export default function HomeScreen() {
   function openCategory(
     categorySlug: string,
   ) {
+    if (categorySlug === 'supermarket') {
+      router.push('/category/supermarket');
+      return;
+    }
+
     router.push({
       pathname: '/category/[id]',
       params: {
@@ -1961,10 +1866,6 @@ export default function HomeScreen() {
 
   function openSearch() {
     router.push('/search');
-  }
-
-  function openLogin() {
-    router.push('/login');
   }
 
   function openOrders() {
@@ -1989,7 +1890,6 @@ export default function HomeScreen() {
           bootstrapError ??
           'لم تصل بيانات التطبيق من Supabase.'
         }
-        onOpenSearch={openSearch}
         onRetry={() => {
           void loadBootstrap();
         }}
@@ -2008,13 +1908,7 @@ export default function HomeScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <HomeHeader
-          location={effectiveLocation}
-          onPressLocation={() => {
-            setLocationModalVisible(true);
-          }}
-          onPressSearch={openSearch}
-        />
+        <HomeHeader />
 
         <View
           style={[
@@ -2053,25 +1947,18 @@ export default function HomeScreen() {
               />
             </>
           ) : (
-            <LoginInvitationCard
-              authErrorMessage={
-                authState.status === 'error'
-                  ? authState.errorMessage
-                  : null
-              }
-              onPressLogin={openLogin}
+            <HomeBannerCarousel
+              audience="signed_out"
+              placement="main"
+              width={bannerContentWidth}
             />
           )}
 
-          <BigBrandsSection
-            errorMessage={storesError}
-            isLoading={isStoresLoading}
-            stores={nearbyStores}
-            onPressRetry={() => {
-              void loadStores();
-            }}
-            onPressStore={openStore}
-            onPressViewAll={openSearch}
+          <HomeBannerCarousel
+            audience={bannerAudience}
+            placement="exclusive_offers"
+            title="عروض حصرية"
+            width={bannerContentWidth}
           />
 
           {isSignedIn &&
@@ -2108,20 +1995,6 @@ export default function HomeScreen() {
         isSignedIn={isSignedIn}
       />
 
-      <LocationSelectorModal
-        bootstrap={bootstrap}
-        selectedLocation={
-          effectiveLocation
-        }
-        visible={locationModalVisible}
-        onClose={() => {
-          setLocationModalVisible(false);
-        }}
-        onSelectLocation={(location) => {
-          setSelectedLocation(location);
-          setLocationModalVisible(false);
-        }}
-      />
     </View>
   );
 }
@@ -2142,131 +2015,73 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    minHeight: 214,
+    minHeight: 112,
     overflow: 'hidden',
-    paddingBottom: 48,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    width: '100%',
-  },
-
-  headerContent: {
-    alignSelf: 'center',
-    maxWidth:
-      NAVIENTY_NOW_LAYOUT.contentMaxWidth -
-      NAVIENTY_NOW_LAYOUT.pageGutter * 2,
-    width: '100%',
-    zIndex: 2,
-  },
-
-  locationButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    minHeight: 48,
-    paddingHorizontal: 2,
-    paddingVertical: 3,
-  },
-
-  headerControlPressed: {
-    opacity: 0.72,
-  },
-
-  locationChevron: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 23,
-    fontWeight: '700',
-    lineHeight: 24,
-    marginRight: 8,
-    marginTop: 4,
-  },
-
-  locationCopy: {
-    alignItems: 'flex-start',
-    maxWidth: '88%',
-  },
-
-  locationLabel: {
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  locationValue: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 17,
-    fontWeight: '800',
-    marginTop: 2,
-    maxWidth: 330,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  searchPill: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderRadius: 28,
-    flexDirection: 'row-reverse',
-    marginTop: 13,
-    minHeight: 58,
-    paddingHorizontal: 19,
-    width: '100%',
-  },
-
-  searchPillPressed: {
-    backgroundColor: '#F4F4F5',
-    transform: [{ scale: 0.995 }],
-  },
-
-  searchPlaceholder: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    marginRight: 13,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  searchIconCanvas: {
-    height: 23,
     position: 'relative',
-    width: 23,
+    width: '100%',
   },
 
-  searchIconCircle: {
-    borderRadius: 8,
-    borderWidth: 2,
-    height: 15,
-    left: 1,
+  headerDecorLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  headerGlow: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 999,
     position: 'absolute',
-    top: 1,
-    width: 15,
   },
 
-  searchIconHandle: {
-    borderRadius: 2,
-    height: 2,
-    left: 14,
+  headerGlowPrimary: {
+    height: 230,
+    right: -36,
+    top: 10,
+    width: 230,
+  },
+
+  headerGlowSecondary: {
+    height: 160,
+    left: -34,
+    top: 78,
+    width: 160,
+  },
+
+  headerStroke: {
+    borderColor: 'rgba(255,255,255,0.13)',
+    borderRadius: 999,
+    borderWidth: 1,
     position: 'absolute',
-    top: 15,
-    transform: [{ rotate: '45deg' }],
-    width: 8,
   },
 
-  // Scalloped wave: a clipped strip at the header's bottom edge
-  // holding three big circles. Each circle is filled with the page
-  // background color and pokes up into the header color, so the
-  // gaps between the circle tops read as wave crests.
+  headerStrokeOne: {
+    height: 216,
+    right: -88,
+    top: -48,
+    width: 216,
+  },
+
+  headerStrokeTwo: {
+    height: 138,
+    left: -44,
+    top: 28,
+    width: 138,
+  },
+
+  // Premium bottom curve using softer, wider circular cut-outs.
   headerWaveContainer: {
     bottom: 0,
-    height: 46,
+    height: 56,
     left: 0,
     overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+  },
+
+  headerWaveBase: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.page,
+    bottom: 0,
+    height: 14,
+    left: 0,
     position: 'absolute',
     right: 0,
   },
@@ -2279,25 +2094,33 @@ const styles = StyleSheet.create({
   },
 
   waveCircleOne: {
-    height: 190,
-    left: -60,
-    top: 8,
-    width: 190,
+    height: 164,
+    left: -42,
+    top: 18,
+    width: 164,
   },
 
   waveCircleTwo: {
-    height: 230,
-    left: '50%',
-    marginLeft: -115,
-    top: -18,
-    width: 230,
+    height: 196,
+    left: '28%',
+    marginLeft: -98,
+    top: 12,
+    width: 196,
   },
 
   waveCircleThree: {
-    height: 190,
-    right: -60,
-    top: 8,
-    width: 190,
+    height: 196,
+    left: '72%',
+    marginLeft: -98,
+    top: 12,
+    width: 196,
+  },
+
+  waveCircleFour: {
+    height: 164,
+    right: -42,
+    top: 18,
+    width: 164,
   },
 
   contentShell: {
@@ -2334,7 +2157,7 @@ const styles = StyleSheet.create({
   categoryArtwork: {
     alignItems: 'center',
     backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
+      NAVIENTY_NOW_COLORS.white,
     borderRadius: 21,
     height: 82,
     justifyContent: 'center',
@@ -2362,87 +2185,67 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
 
-  loginCard: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
+  homeBannerSection: {
+    marginTop: 29,
+    width: '100%',
+  },
+
+  exclusiveOffersSection: {
+    marginTop: 33,
+    width: '100%',
+  },
+
+  homeBannerLoadingCard: {
+    aspectRatio: 16 / 9,
+    backgroundColor: '#EFEFF1',
     borderRadius:
       NAVIENTY_NOW_LAYOUT.majorRadius,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 29,
-    minHeight: 232,
-    overflow: 'hidden',
-    padding: 22,
+    width: '100%',
   },
 
-  loginArtworkWrap: {
-    alignItems: 'center',
+  homeBannerScroll: {
+    width: '100%',
+  },
+
+  homeBannerCard: {
     backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryUltraPale,
-    borderRadius: 23,
-    height: 108,
-    justifyContent: 'center',
-    marginRight: 18,
-    transform: [{ rotate: '-5deg' }],
-    width: 108,
+      NAVIENTY_NOW_COLORS.surface,
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.majorRadius,
+    overflow: 'hidden',
   },
 
-  loginLogo: {
-    borderRadius: 18,
-    height: 94,
-    width: 94,
+  homeBannerImage: {
+    height: '100%',
+    width: '100%',
   },
 
-  loginContent: {
-    alignItems: 'flex-end',
-    flex: 1,
+  homeBannerPressed: {
+    opacity: 0.86,
+    transform: [{ scale: 0.995 }],
   },
 
-  loginTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 25,
-    fontWeight: '900',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
 
-  loginDescription: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 14,
-    lineHeight: 23,
-    marginTop: 7,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  authWarningText: {
-    color: NAVIENTY_NOW_COLORS.error,
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 7,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  loginButton: {
+  homeBannerDots: {
     alignItems: 'center',
+    flexDirection: 'row-reverse',
+    justifyContent: 'center',
+    marginTop: 12,
+    minHeight: 7,
+  },
+
+  homeBannerDot: {
+    backgroundColor: '#D9DBDF',
+    borderRadius: 999,
+    height: 7,
+    marginHorizontal: 3,
+    width: 7,
+  },
+
+  homeBannerDotActive: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 17,
-    justifyContent: 'center',
-    marginTop: 17,
-    minHeight: 49,
-    paddingHorizontal: 22,
-  },
-
-  loginButtonText: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 14,
-    fontWeight: '900',
+    width: 18,
   },
 
   primaryButtonPressed: {
@@ -3269,177 +3072,6 @@ const styles = StyleSheet.create({
     width: '42%',
   },
 
-  modalBackdrop: {
-    backgroundColor: 'rgba(10,18,14,0.48)',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-
-  locationModalCard: {
-    alignSelf: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    maxHeight: '78%',
-    maxWidth:
-      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
-    paddingBottom:
-      Platform.OS === 'ios' ? 26 : 18,
-    paddingHorizontal: 20,
-    width: '100%',
-  },
-
-  modalHandle: {
-    alignSelf: 'center',
-    backgroundColor: '#D8D8DC',
-    borderRadius: 3,
-    height: 5,
-    marginTop: 10,
-    width: 44,
-  },
-
-  modalHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    marginTop: 15,
-  },
-
-  modalCloseButton: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderRadius: 18,
-    height: 36,
-    justifyContent: 'center',
-    marginRight: 12,
-    width: 36,
-  },
-
-  modalCloseText: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 25,
-    lineHeight: 27,
-  },
-
-  modalHeaderCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-
-  modalTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 20,
-    fontWeight: '900',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  modalDescription: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 18,
-    marginTop: 5,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  locationOptions: {
-    paddingBottom: 10,
-    paddingTop: 15,
-  },
-
-  cityGroup: {
-    marginBottom: 18,
-  },
-
-  cityName: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 15,
-    fontWeight: '900',
-    marginBottom: 8,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  noAreasText: {
-    color: NAVIENTY_NOW_COLORS.textMuted,
-    fontSize: 11,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  areaOption: {
-    alignItems: 'center',
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 8,
-    minHeight: 65,
-    padding: 13,
-  },
-
-  areaOptionSelected: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryUltraPale,
-    borderColor:
-      NAVIENTY_NOW_COLORS.primary,
-  },
-
-  areaOptionPressed: {
-    opacity: 0.7,
-  },
-
-  areaRadio: {
-    alignItems: 'center',
-    borderColor: '#B9B9BF',
-    borderRadius: 10,
-    borderWidth: 2,
-    height: 20,
-    justifyContent: 'center',
-    marginRight: 12,
-    width: 20,
-  },
-
-  areaRadioSelected: {
-    borderColor:
-      NAVIENTY_NOW_COLORS.primary,
-  },
-
-  areaRadioDot: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
-
-  areaOptionCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-
-  areaOptionName: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 14,
-    fontWeight: '800',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  areaOptionMeta: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
   loadingPageContent: {
     paddingBottom:
       NAVIENTY_NOW_LAYOUT.bottomNavigationHeight +
@@ -3449,43 +3081,13 @@ const styles = StyleSheet.create({
   loadingHeader: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    minHeight: 214,
-    overflow: 'hidden',
-    paddingBottom: 48,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop:
+    minHeight:
       Platform.OS === 'android'
         ? (NativeStatusBar.currentHeight ?? 0) +
-          20
-        : 36,
-  },
-
-  loadingHeaderInner: {
-    alignSelf: 'center',
-    maxWidth:
-      NAVIENTY_NOW_LAYOUT.contentMaxWidth -
-      NAVIENTY_NOW_LAYOUT.pageGutter * 2,
-    width: '100%',
-    zIndex: 2,
-  },
-
-  loadingLocationLine: {
-    backgroundColor:
-      'rgba(255,255,255,0.28)',
-    borderRadius: 7,
-    height: 21,
-    width: 176,
-  },
-
-  loadingSearchPill: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderRadius: 28,
-    height: 58,
-    marginTop: 24,
-    opacity: 0.96,
-    width: '100%',
+          88
+        : 106,
+    overflow: 'hidden',
+    position: 'relative',
   },
 
   loadingCategories: {
@@ -3521,6 +3123,13 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_LAYOUT.majorRadius,
     height: 232,
     marginTop: 30,
+  },
+
+  loadingExclusiveBanner: {
+    backgroundColor: '#EFEFF1',
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.majorRadius,
+    height: 232,
   },
 
   loadingSectionTitle: {

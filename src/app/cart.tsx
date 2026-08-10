@@ -1,70 +1,802 @@
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import {
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Stack,
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Animated,
+  Image,
+  Modal,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 import {
-    selectCartItemCount,
-    selectCartSubtotal,
-    selectCartTotal,
-    useCartStore,
+  type CatalogProduct,
+  type StoreCatalog,
+  getStoreCatalog,
+} from '../services/catalog-service';
+
+import {
+  useCartStore,
 } from '../store/cart-store';
+
+const BRAND_GREEN = '#00B14F';
+const BRAND_GREEN_SOFT = '#EAF8F0';
+
+/**
+ * Navienty Now fixed checkout fees.
+ *
+ * Electronic payment fee: EGP 10 per order.
+ * Delivery fee: EGP 25 per order.
+ */
+const FIXED_PAYMENT_PROCESSING_FEE = 10;
+const FIXED_DELIVERY_FEE = 25;
+
+/**
+ * Multi-cart bottom sheet swipe-to-dismiss settings.
+ */
+const CART_PICKER_CLOSE_DISTANCE = 95;
+const CART_PICKER_CLOSE_VELOCITY = 0.75;
+const CART_PICKER_OFFSCREEN_Y = 900;
+
+function getSingleParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
+function isImageUri(
+  value: string | null | undefined,
+) {
+  if (!value) {
+    return false;
+  }
+
+  return (
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('file://') ||
+    value.startsWith('data:image/')
+  );
+}
+
+function getProductImage(
+  product: CatalogProduct | null | undefined,
+): string | null {
+  if (!product) {
+    return null;
+  }
+
+  if (isImageUri(product.imageUrl)) {
+    return product.imageUrl;
+  }
+
+  const coverImage = product.images?.find(
+    (image) =>
+      image.isCover &&
+      isImageUri(image.imageUrl),
+  );
+
+  if (coverImage) {
+    return coverImage.imageUrl;
+  }
+
+  const firstImage = product.images?.find(
+    (image) => isImageUri(image.imageUrl),
+  );
+
+  return firstImage?.imageUrl ?? null;
+}
+
+function getProductDisplayPrice(
+  product: CatalogProduct,
+) {
+  if (
+    !product.variants ||
+    product.variants.length === 0
+  ) {
+    return Number(product.price ?? 0);
+  }
+
+  return Math.min(
+    ...product.variants.map(
+      (variant) => Number(variant.price ?? 0),
+    ),
+  );
+}
+
+function getCartItemCount(
+  items: Array<{ quantity: number }>,
+) {
+  return items.reduce(
+    (total, item) =>
+      total + Number(item.quantity ?? 0),
+    0,
+  );
+}
+
+function getCartSubtotal(
+  items: Array<{
+    price: number;
+    quantity: number;
+  }>,
+) {
+  return items.reduce(
+    (total, item) =>
+      total +
+      Number(item.price ?? 0) *
+        Number(item.quantity ?? 0),
+    0,
+  );
+}
+
+function formatCartItemCount(
+  count: number,
+) {
+  if (count === 1) {
+    return 'صنف واحد';
+  }
+
+  if (count === 2) {
+    return 'صنفان';
+  }
+
+  return `${count} أصناف`;
+}
 
 export default function CartScreen() {
   const router = useRouter();
 
-  const [clearModalVisible, setClearModalVisible] =
-    useState(false);
+  const params =
+    useLocalSearchParams<{
+      storeId?:
+        | string
+        | string[];
+    }>();
 
-  const items = useCartStore((state) => state.items);
-  const storeId = useCartStore((state) => state.storeId);
-  const storeName = useCartStore((state) => state.storeName);
-  const storeIcon = useCartStore((state) => state.storeIcon);
-  const deliveryFee = useCartStore(
-    (state) => state.deliveryFee,
-  );
-  const minimumOrder = useCartStore(
-    (state) => state.minimumOrder,
+  const requestedStoreId =
+    getSingleParam(
+      params.storeId,
+    );
+
+  const [
+    selectedStoreId,
+    setSelectedStoreId,
+  ] = useState<string | null>(null);
+
+  const [
+    clearModalVisible,
+    setClearModalVisible,
+  ] = useState(false);
+
+  const [
+    catalog,
+    setCatalog,
+  ] = useState<StoreCatalog | null>(null);
+
+  const [
+    failedImages,
+    setFailedImages,
+  ] = useState<Record<string, boolean>>(
+    {},
   );
 
-  const increaseItem = useCartStore(
-    (state) => state.increaseItem,
-  );
-  const decreaseItem = useCartStore(
-    (state) => state.decreaseItem,
-  );
-  const removeItem = useCartStore(
-    (state) => state.removeItem,
-  );
-  const clearCart = useCartStore(
-    (state) => state.clearCart,
+  const [
+    storeImages,
+    setStoreImages,
+  ] = useState<Record<string, string | null>>(
+    {},
   );
 
-  const itemCount = useCartStore(selectCartItemCount);
-  const subtotal = useCartStore(selectCartSubtotal);
-  const total = useCartStore(selectCartTotal);
+  const [
+    failedStoreImages,
+    setFailedStoreImages,
+  ] = useState<Record<string, boolean>>(
+    {},
+  );
+
+  /**
+   * Interactive Y position for the multi-cart sheet.
+   * 0 = open. Positive values move it down with the finger.
+   */
+  const cartPickerTranslateY = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const cartPickerIsClosing = useRef(false);
+
+  /* ============================================================
+   * MULTI CART STATE
+   * ============================================================
+   */
+
+  const carts = useCartStore(
+    (state) => state.carts,
+  );
+
+  const activeStoreId = useCartStore(
+    (state) => state.activeStoreId,
+  );
+
+  const addItem = useCartStore(
+    (state) => state.addItem,
+  );
+
+  const setActiveCart = useCartStore(
+    (state) => state.setActiveCart,
+  );
+
+  const increaseStoreItem = useCartStore(
+    (state) => state.increaseStoreItem,
+  );
+
+  const decreaseStoreItem = useCartStore(
+    (state) => state.decreaseStoreItem,
+  );
+
+  const removeStoreItem = useCartStore(
+    (state) => state.removeStoreItem,
+  );
+
+  const clearStoreCart = useCartStore(
+    (state) => state.clearStoreCart,
+  );
+
+  const availableCarts = useMemo(
+    () =>
+      Object.values(carts).filter(
+        (cart) => cart.items.length > 0,
+      ),
+    [carts],
+  );
+
+  const hasMultipleCarts =
+    availableCarts.length > 1;
+
+  function restoreCartPickerPosition() {
+    cartPickerIsClosing.current = false;
+
+    Animated.spring(
+      cartPickerTranslateY,
+      {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 22,
+        stiffness: 240,
+        mass: 0.9,
+      },
+    ).start();
+  }
+
+  function closeCartPicker() {
+    if (cartPickerIsClosing.current) {
+      return;
+    }
+
+    cartPickerIsClosing.current = true;
+
+    Animated.timing(
+      cartPickerTranslateY,
+      {
+        toValue: CART_PICKER_OFFSCREEN_Y,
+        duration: 210,
+        useNativeDriver: true,
+      },
+    ).start(({ finished }) => {
+      if (!finished) {
+        cartPickerIsClosing.current = false;
+        return;
+      }
+
+      router.back();
+    });
+  }
+
+  /**
+   * The responder lives on the sheet's handle/header area.
+   * This is intentionally separate from the ScrollView so the
+   * cart list keeps its normal scrolling/press behaviour.
+   */
+  const cartPickerPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+
+        onMoveShouldSetPanResponder: (
+          _,
+          gestureState,
+        ) => {
+          const verticalMovement =
+            Math.abs(gestureState.dy) >
+            Math.abs(gestureState.dx);
+
+          return (
+            verticalMovement &&
+            gestureState.dy > 3
+          );
+        },
+
+        onMoveShouldSetPanResponderCapture: (
+          _,
+          gestureState,
+        ) => {
+          const verticalMovement =
+            Math.abs(gestureState.dy) >
+            Math.abs(gestureState.dx);
+
+          return (
+            verticalMovement &&
+            gestureState.dy > 3
+          );
+        },
+
+        onPanResponderGrant: () => {
+          cartPickerTranslateY.stopAnimation();
+        },
+
+        onPanResponderMove: (
+          _,
+          gestureState,
+        ) => {
+          cartPickerTranslateY.setValue(
+            Math.max(gestureState.dy, 0),
+          );
+        },
+
+        onPanResponderRelease: (
+          _,
+          gestureState,
+        ) => {
+          const shouldClose =
+            gestureState.dy >=
+              CART_PICKER_CLOSE_DISTANCE ||
+            gestureState.vy >=
+              CART_PICKER_CLOSE_VELOCITY;
+
+          if (shouldClose) {
+            closeCartPicker();
+            return;
+          }
+
+          restoreCartPickerPosition();
+        },
+
+        onPanResponderTerminate: () => {
+          restoreCartPickerPosition();
+        },
+
+        onPanResponderTerminationRequest:
+          () => false,
+      }),
+    [cartPickerTranslateY],
+  );
+
+  /**
+   * Reset the sheet whenever the chooser becomes visible again.
+   */
+  useEffect(() => {
+    if (
+      hasMultipleCarts &&
+      !selectedStoreId
+    ) {
+      cartPickerIsClosing.current = false;
+      cartPickerTranslateY.setValue(0);
+    }
+  }, [
+    cartPickerTranslateY,
+    hasMultipleCarts,
+    selectedStoreId,
+  ]);
+
+  /**
+   * If there is only one cart, open it directly just like the old
+   * cart screen.
+   *
+   * If there are multiple carts, no cart is selected initially so
+   * the "All shopping carts" bottom sheet is displayed.
+   */
+  useEffect(() => {
+    if (availableCarts.length === 0) {
+      if (selectedStoreId !== null) {
+        setSelectedStoreId(null);
+      }
+
+      return;
+    }
+
+    if (availableCarts.length === 1) {
+      const onlyStoreId =
+        availableCarts[0].storeId;
+
+      if (
+        selectedStoreId !== onlyStoreId
+      ) {
+        setSelectedStoreId(
+          onlyStoreId,
+        );
+      }
+
+      if (
+        activeStoreId !== onlyStoreId
+      ) {
+        setActiveCart(
+          onlyStoreId,
+        );
+      }
+
+      return;
+    }
+
+    if (
+      selectedStoreId &&
+      !carts[selectedStoreId]
+    ) {
+      setSelectedStoreId(null);
+    }
+  }, [
+    activeStoreId,
+    availableCarts,
+    carts,
+    selectedStoreId,
+    setActiveCart,
+  ]);
+
+  /**
+   * requestedStoreId is useful when this screen is opened while
+   * there is only one cart. When there are multiple carts we always
+   * start with the carts chooser, matching the requested UX.
+   */
+  useEffect(() => {
+    if (
+      hasMultipleCarts ||
+      !requestedStoreId ||
+      !carts[requestedStoreId]
+    ) {
+      return;
+    }
+
+    setSelectedStoreId(
+      requestedStoreId,
+    );
+
+    setActiveCart(
+      requestedStoreId,
+    );
+  }, [
+    carts,
+    hasMultipleCarts,
+    requestedStoreId,
+    setActiveCart,
+  ]);
+
+  const currentCart =
+    selectedStoreId
+      ? carts[selectedStoreId] ?? null
+      : null;
+
+  const items =
+    currentCart?.items ?? [];
+
+  const storeId =
+    currentCart?.storeId ?? null;
+
+  const storeName =
+    currentCart?.storeName ?? null;
+
+  const storeIcon =
+    currentCart?.storeIcon ?? null;
+
+  const minimumOrder =
+    currentCart?.minimumOrder ?? 0;
+
+  const subtotal = useMemo(
+    () => getCartSubtotal(items),
+    [items],
+  );
+
+  const paymentProcessingFee =
+    FIXED_PAYMENT_PROCESSING_FEE;
+
+  const deliveryFee =
+    FIXED_DELIVERY_FEE;
+
+  const grandTotal =
+    Number(subtotal ?? 0) +
+    deliveryFee +
+    paymentProcessingFee;
+
+  /* ============================================================
+   * LOAD STORE LOGOS FOR MULTI-CART CHOOSER
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStoreImages() {
+      if (
+        availableCarts.length === 0
+      ) {
+        if (!cancelled) {
+          setStoreImages({});
+        }
+
+        return;
+      }
+
+      const nextImages: Record<
+        string,
+        string | null
+      > = {};
+
+      await Promise.all(
+        availableCarts.map(
+          async (cart) => {
+            if (
+              isImageUri(
+                cart.storeIcon,
+              )
+            ) {
+              nextImages[
+                cart.storeId
+              ] = cart.storeIcon;
+
+              return;
+            }
+
+            try {
+              const loadedCatalog =
+                await getStoreCatalog(
+                  cart.storeId,
+                );
+
+              const imageUrl =
+                loadedCatalog.store.logoUrl ??
+                loadedCatalog.store
+                  .coverImageUrl ??
+                null;
+
+              nextImages[
+                cart.storeId
+              ] = isImageUri(imageUrl)
+                ? imageUrl
+                : null;
+            } catch {
+              nextImages[
+                cart.storeId
+              ] = null;
+            }
+          },
+        ),
+      );
+
+      if (!cancelled) {
+        setStoreImages(
+          nextImages,
+        );
+      }
+    }
+
+    void loadStoreImages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [availableCarts]);
+
+  /* ============================================================
+   * LOAD SELECTED STORE CATALOG
+   * ============================================================
+   */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCatalog() {
+      if (!storeId) {
+        setCatalog(null);
+
+        return;
+      }
+
+      try {
+        const loadedCatalog =
+          await getStoreCatalog(storeId);
+
+        if (!cancelled) {
+          setCatalog(loadedCatalog);
+        }
+      } catch {
+        if (!cancelled) {
+          setCatalog(null);
+        }
+      }
+    }
+
+    void loadCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
+
+  const catalogProducts = useMemo(() => {
+    if (!catalog) {
+      return [];
+    }
+
+    return catalog.sections.flatMap(
+      (section) => section.products,
+    );
+  }, [catalog]);
+
+  const productsById = useMemo(() => {
+    const productMap =
+      new Map<string, CatalogProduct>();
+
+    catalogProducts.forEach((product) => {
+      productMap.set(
+        product.id,
+        product,
+      );
+    });
+
+    return productMap;
+  }, [catalogProducts]);
+
+  const recommendations = useMemo(() => {
+    const cartProductIds = new Set(
+      items.map((item) => item.id),
+    );
+
+    return catalogProducts
+      .filter(
+        (product) =>
+          !cartProductIds.has(product.id),
+      )
+      .slice(0, 8);
+  }, [
+    catalogProducts,
+    items,
+  ]);
 
   const remainingForMinimum = Math.max(
-    minimumOrder - subtotal,
+    Number(minimumOrder ?? 0) -
+      Number(subtotal ?? 0),
     0,
   );
 
   const minimumReached =
-    items.length > 0 && subtotal >= minimumOrder;
+    items.length > 0 &&
+    Number(subtotal ?? 0) >=
+      Number(minimumOrder ?? 0);
+
+  function formatPrice(
+    value:
+      | number
+      | string
+      | null
+      | undefined,
+  ) {
+    const numericValue =
+      Number(value ?? 0);
+
+    if (
+      Number.isInteger(numericValue)
+    ) {
+      return `EGP ${numericValue}`;
+    }
+
+    return `EGP ${numericValue.toFixed(
+      2,
+    )}`;
+  }
+
+  function formatCartSelectorPrice(
+    value:
+      | number
+      | string
+      | null
+      | undefined,
+  ) {
+    const numericValue =
+      Number(value ?? 0);
+
+    return `${numericValue.toFixed(
+      2,
+    )} ج.م`;
+  }
+
+  function markImageAsFailed(
+    imageUrl: string,
+  ) {
+    setFailedImages(
+      (current) => ({
+        ...current,
+        [imageUrl]: true,
+      }),
+    );
+  }
+
+  function markStoreImageAsFailed(
+    storeIdToMark: string,
+  ) {
+    setFailedStoreImages(
+      (current) => ({
+        ...current,
+        [storeIdToMark]: true,
+      }),
+    );
+  }
+
+  function canDisplayImage(
+    imageUrl: string | null,
+  ) {
+    return (
+      !!imageUrl &&
+      !failedImages[imageUrl]
+    );
+  }
+
+  function handleSelectCart(
+    nextStoreId: string,
+  ) {
+    setActiveCart(
+      nextStoreId,
+    );
+
+    setSelectedStoreId(
+      nextStoreId,
+    );
+  }
+
+  function handleBack() {
+    if (
+      hasMultipleCarts &&
+      selectedStoreId
+    ) {
+      setSelectedStoreId(null);
+
+      return;
+    }
+
+    router.back();
+  }
 
   function handleClearCart() {
-    clearCart();
+    if (!storeId) {
+      return;
+    }
+
+    clearStoreCart(storeId);
+
     setClearModalVisible(false);
+    setSelectedStoreId(null);
   }
 
   function continueShopping() {
     if (storeId) {
+      setActiveCart(storeId);
+
       router.replace({
         pathname: '/store/[id]',
         params: {
@@ -78,43 +810,160 @@ export default function CartScreen() {
     router.replace('/');
   }
 
-  if (items.length === 0) {
+  function handleCheckout() {
+    if (
+      !minimumReached ||
+      !storeId
+    ) {
+      return;
+    }
+
+    setActiveCart(storeId);
+
+    router.push({
+      pathname: '/checkout',
+      params: {
+        storeId,
+
+        paymentProcessingFee:
+          paymentProcessingFee.toFixed(2),
+
+        deliveryFee:
+          deliveryFee.toFixed(2),
+
+        grandTotal:
+          grandTotal.toFixed(2),
+      },
+    });
+  }
+
+  function addRecommendation(
+    product: CatalogProduct,
+  ) {
+    if (
+      !currentCart ||
+      !storeId ||
+      !storeName
+    ) {
+      return;
+    }
+
+    if (
+      product.variants &&
+      product.variants.length > 0
+    ) {
+      continueShopping();
+
+      return;
+    }
+
+    addItem(
+      {
+        id: storeId,
+        name: storeName,
+        icon: storeIcon ?? '🏪',
+        categorySlug:
+          currentCart.categorySlug,
+        deliveryFee:
+          FIXED_DELIVERY_FEE,
+        minimumOrder:
+          Number(minimumOrder ?? 0),
+      },
+      {
+        id: product.id,
+        name: product.name,
+        description:
+          product.description,
+        price:
+          Number(product.price ?? 0),
+        icon: product.icon,
+        variantId: null,
+        variantName: null,
+      },
+    );
+  }
+
+  /* ============================================================
+   * EMPTY STATE
+   * ============================================================
+   */
+
+  if (availableCarts.length === 0) {
     return (
       <View style={styles.emptyScreen}>
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconContainer}>
-            <Text style={styles.emptyIcon}>🛒</Text>
+        <Stack.Screen
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+            contentStyle: {
+              backgroundColor: 'transparent',
+            },
+          }}
+        />
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.emptyBackButton,
+
+            pressed &&
+              styles.buttonPressed,
+          ]}
+          onPress={() => router.back()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={27}
+            color="#222222"
+          />
+        </Pressable>
+
+        <View
+          style={styles.emptyContainer}
+        >
+          <View
+            style={
+              styles.emptyIconContainer
+            }
+          >
+            <Ionicons
+              name="cart-outline"
+              size={44}
+              color={BRAND_GREEN}
+            />
           </View>
 
-          <Text style={styles.emptyTitle}>
+          <Text
+            style={styles.emptyTitle}
+          >
             السلة فارغة
           </Text>
 
-          <Text style={styles.emptyDescription}>
-            لم تضف أي منتجات إلى طلبك حتى الآن.
+          <Text
+            style={
+              styles.emptyDescription
+            }
+          >
+            لم تضف أي منتجات إلى طلبك
+            حتى الآن.
           </Text>
 
           <Pressable
             style={({ pressed }) => [
               styles.primaryButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={() => router.replace('/')}
-          >
-            <Text style={styles.primaryButtonText}>
-              ابدأ التسوق
-            </Text>
-          </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && styles.buttonPressed,
+              pressed &&
+                styles.buttonPressed,
             ]}
-            onPress={() => router.back()}
+            onPress={() =>
+              router.replace('/')
+            }
           >
-            <Text style={styles.secondaryButtonText}>
-              رجوع
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              ابدأ التسوق
             </Text>
           </Pressable>
         </View>
@@ -122,326 +971,925 @@ export default function CartScreen() {
     );
   }
 
+  /* ============================================================
+   * MULTI-CART CHOOSER
+   *
+   * Appears automatically when the customer has products from
+   * more than one place.
+   * ============================================================
+   */
+
+  if (
+    hasMultipleCarts &&
+    !selectedStoreId
+  ) {
+    return (
+      <View
+        style={styles.cartPickerScreen}
+      >
+        <Stack.Screen
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+            contentStyle: {
+              backgroundColor: 'transparent',
+            },
+          }}
+        />
+
+        <Pressable
+          style={styles.cartPickerBackdrop}
+          onPress={closeCartPicker}
+        />
+
+        <Animated.View
+          style={[
+            styles.cartPickerSheet,
+            {
+              transform: [
+                {
+                  translateY:
+                    cartPickerTranslateY,
+                },
+              ],
+            },
+          ]}
+        >
+          <View
+            {...cartPickerPanResponder.panHandlers}
+            style={styles.sheetDragArea}
+          >
+            <View
+              style={styles.sheetHandle}
+            />
+
+            <View
+              style={styles.sheetTopRow}
+            >
+              <Pressable
+                accessibilityLabel="إغلاق"
+                hitSlop={10}
+                style={({ pressed }) => [
+                  styles.sheetCloseButton,
+
+                  pressed &&
+                    styles.sheetCloseButtonPressed,
+                ]}
+                onPress={closeCartPicker}
+              >
+                <Ionicons
+                  name="close"
+                  size={31}
+                  color="#171717"
+                />
+              </Pressable>
+            </View>
+
+            <Text
+              style={styles.cartPickerTitle}
+            >
+              جميع سلات التسوق
+            </Text>
+          </View>
+
+          <ScrollView
+            style={styles.cartPickerList}
+            contentContainerStyle={
+              styles.cartPickerListContent
+            }
+            showsVerticalScrollIndicator={
+              false
+            }
+          >
+            {availableCarts.map(
+              (cart, index) => {
+                const itemCount =
+                  getCartItemCount(
+                    cart.items,
+                  );
+
+                const cartSubtotal =
+                  getCartSubtotal(
+                    cart.items,
+                  );
+
+                const storeImage =
+                  storeImages[
+                    cart.storeId
+                  ] ?? null;
+
+                const displayStoreImage =
+                  !!storeImage &&
+                  !failedStoreImages[
+                    cart.storeId
+                  ];
+
+                const isLast =
+                  index ===
+                  availableCarts.length - 1;
+
+                return (
+                  <Pressable
+                    key={cart.storeId}
+                    style={({ pressed }) => [
+                      styles.cartPickerRow,
+
+                      !isLast &&
+                        styles.cartPickerRowBorder,
+
+                      pressed &&
+                        styles.cartPickerRowPressed,
+                    ]}
+                    onPress={() =>
+                      handleSelectCart(
+                        cart.storeId,
+                      )
+                    }
+                  >
+                    <View
+                      style={
+                        styles.cartPickerLogoBox
+                      }
+                    >
+                      {displayStoreImage ? (
+                        <Image
+                          source={{
+                            uri: storeImage!,
+                          }}
+                          style={
+                            styles.cartPickerLogo
+                          }
+                          resizeMode="cover"
+                          onError={() =>
+                            markStoreImageAsFailed(
+                              cart.storeId,
+                            )
+                          }
+                        />
+                      ) : isImageUri(
+                          cart.storeIcon,
+                        ) &&
+                        !failedStoreImages[
+                          cart.storeId
+                        ] ? (
+                        <Image
+                          source={{
+                            uri: cart.storeIcon,
+                          }}
+                          style={
+                            styles.cartPickerLogo
+                          }
+                          resizeMode="cover"
+                          onError={() =>
+                            markStoreImageAsFailed(
+                              cart.storeId,
+                            )
+                          }
+                        />
+                      ) : (
+                        <Text
+                          style={
+                            styles.cartPickerLogoFallback
+                          }
+                        >
+                          {cart.storeIcon ||
+                            '🏪'}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View
+                      style={
+                        styles.cartPickerStoreContent
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.cartPickerStoreName
+                        }
+                        numberOfLines={1}
+                      >
+                        {cart.storeName}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.cartPickerItemCount
+                        }
+                        numberOfLines={1}
+                      >
+                        {formatCartItemCount(
+                          itemCount,
+                        )}
+                      </Text>
+                    </View>
+
+                    <Text
+                      style={
+                        styles.cartPickerPrice
+                      }
+                      numberOfLines={1}
+                    >
+                      {formatCartSelectorPrice(
+                        cartSubtotal,
+                      )}
+                    </Text>
+                  </Pressable>
+                );
+              },
+            )}
+          </ScrollView>
+
+          
+
+          
+        </Animated.View>
+      </View>
+    );
+  }
+
+  /* ============================================================
+   * SELECTED CART DETAILS
+   * ============================================================
+   */
+
+  if (!currentCart) {
+    return null;
+  }
+
   return (
     <View style={styles.screen}>
+      <Stack.Screen
+        options={{
+          headerShown: false,
+          presentation: 'transparentModal',
+          contentStyle: {
+            backgroundColor: 'transparent',
+          },
+        }}
+      />
+
       <ScrollView
-        contentContainerStyle={styles.pageContent}
-        showsVerticalScrollIndicator={false}
+        contentContainerStyle={
+          styles.pageContent
+        }
+        showsVerticalScrollIndicator={
+          false
+        }
       >
-        <View style={styles.container}>
-          <View style={styles.topBar}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => router.back()}
+        {/* HEADER */}
+
+        <View style={styles.header}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.backButton,
+
+              pressed &&
+                styles.buttonPressed,
+            ]}
+            onPress={handleBack}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={28}
+              color="#262626"
+            />
+          </Pressable>
+
+          <View
+            style={styles.headerContent}
+          >
+            <Text
+              style={styles.pageTitle}
             >
-              <Text style={styles.backIcon}>›</Text>
-            </Pressable>
+              السلة
+            </Text>
 
-            <View style={styles.titleContainer}>
-              <Text style={styles.pageTitle}>
-                سلة الطلب
-              </Text>
-
-              <Text style={styles.itemCountText}>
-                {itemCount} منتجات
-              </Text>
-            </View>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.clearButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => setClearModalVisible(true)}
-            >
-              <Text style={styles.clearButtonText}>
-                إفراغ
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.storeCard}>
-            <View style={styles.storeIconContainer}>
-              <Text style={styles.storeIcon}>
-                {storeIcon ?? '🏪'}
-              </Text>
-            </View>
-
-            <View style={styles.storeContent}>
-              <Text style={styles.storeLabel}>
-                طلبك من
-              </Text>
-
+            {hasMultipleCarts ? (
               <Text
-                style={styles.storeName}
+                style={
+                  styles.headerStoreName
+                }
                 numberOfLines={1}
               >
-                {storeName ?? 'المتجر'}
+                {storeName}
               </Text>
-
-              <Text style={styles.oneStoreNotice}>
-                يمكن إضافة منتجات من متجر واحد لكل طلب
-              </Text>
-            </View>
+            ) : null}
           </View>
 
-          {!minimumReached ? (
-            <View style={styles.minimumWarning}>
-              <View style={styles.minimumMessage}>
-                <Text style={styles.minimumWarningTitle}>
-                  أضف منتجات بقيمة {remainingForMinimum} ج.م
-                </Text>
+          <Pressable
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.clearCartButton,
 
-                <Text style={styles.minimumWarningDescription}>
-                  للوصول إلى الحد الأدنى للطلب
-                </Text>
-              </View>
-
-              <Text style={styles.minimumWarningIcon}>
-                🛍️
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.minimumSuccess}>
-              <View style={styles.minimumMessage}>
-                <Text style={styles.minimumSuccessTitle}>
-                  وصلت إلى الحد الأدنى للطلب
-                </Text>
-
-                <Text style={styles.minimumSuccessDescription}>
-                  يمكنك الآن متابعة تنفيذ الطلب
-                </Text>
-              </View>
-
-              <Text style={styles.minimumSuccessIcon}>
-                ✓
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionCount}>
-              {itemCount} منتجات
+              pressed &&
+                styles.buttonPressed,
+            ]}
+            onPress={() =>
+              setClearModalVisible(true)
+            }
+          >
+            <Text
+              style={
+                styles.clearCartButtonText
+              }
+            >
+              إفراغ السلة
             </Text>
+          </Pressable>
+        </View>
 
-            <Text style={styles.sectionTitle}>
-              المنتجات
-            </Text>
-          </View>
+        {/* ITEMS */}
 
-          <View style={styles.itemsList}>
-            {items.map((item) => {
+        <View style={styles.itemsSection}>
+          {items.map(
+            (item, index) => {
+              const catalogProduct =
+                productsById.get(item.id);
+
+              const imageUrl =
+                getProductImage(
+                  catalogProduct,
+                );
+
               const itemTotal =
-                item.price * item.quantity;
+                Number(item.price) *
+                item.quantity;
+
+              const variantName =
+                item.variantName;
+
+              const isLast =
+                index ===
+                items.length - 1;
 
               return (
                 <View
-                  key={item.id}
-                  style={styles.itemCard}
-                >
-                  <View style={styles.itemImage}>
-                    <Text style={styles.itemIcon}>
-                      {item.icon}
-                    </Text>
-                  </View>
+                  key={`${item.id}-${
+                    item.variantId ??
+                    'base'
+                  }`}
+                  style={[
+                    styles.itemRow,
 
-                  <View style={styles.itemContent}>
+                    isLast &&
+                      styles.itemRowLast,
+                  ]}
+                >
+                  {/* PRODUCT DETAILS */}
+
+                  <View
+                    style={
+                      styles.itemContent
+                    }
+                  >
                     <Text
                       style={styles.itemName}
-                      numberOfLines={1}
+                      numberOfLines={2}
                     >
                       {item.name}
                     </Text>
 
-                    <Text
-                      style={styles.itemDescription}
-                      numberOfLines={2}
-                    >
-                      {item.description}
-                    </Text>
-
-                    <View style={styles.itemPriceRow}>
-                      <Text style={styles.itemTotal}>
-                        {itemTotal} ج.م
+                    {!!variantName && (
+                      <Text
+                        style={
+                          styles.variantName
+                        }
+                        numberOfLines={1}
+                      >
+                        {variantName}
                       </Text>
+                    )}
 
-                      <Text style={styles.itemUnitPrice}>
-                        {item.price} ج.م للوحدة
+                    <Pressable
+                      style={(responsiveness) => [
+                        styles.editButton,
+
+                        responsiveness.pressed &&
+                          styles.buttonPressed,
+                      ]}
+                      onPress={
+                        continueShopping
+                      }
+                    >
+                      <Ionicons
+                        name="pencil-outline"
+                        size={22}
+                        color={BRAND_GREEN}
+                      />
+
+                      <Text
+                        style={
+                          styles.editButtonText
+                        }
+                      >
+                        تعديل
+                      </Text>
+                    </Pressable>
+
+                    <View
+                      style={
+                        styles.itemPriceContainer
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.itemPrice
+                        }
+                      >
+                        {formatPrice(
+                          itemTotal,
+                        )}
                       </Text>
                     </View>
+                  </View>
 
-                    <View style={styles.itemActions}>
+                  {/* PRODUCT IMAGE */}
+
+                  <View
+                    style={styles.itemMedia}
+                  >
+                    {canDisplayImage(
+                      imageUrl,
+                    ) ? (
+                      <Image
+                        source={{
+                          uri: imageUrl!,
+                        }}
+                        style={styles.itemImage}
+                        resizeMode="cover"
+                        onError={() =>
+                          markImageAsFailed(
+                            imageUrl!,
+                          )
+                        }
+                      />
+                    ) : (
+                      <View
+                        style={
+                          styles.itemImageFallback
+                        }
+                      >
+                        {item.icon ? (
+                          <Text
+                            style={
+                              styles.itemEmoji
+                            }
+                          >
+                            {item.icon}
+                          </Text>
+                        ) : (
+                          <Ionicons
+                            name="restaurant-outline"
+                            size={45}
+                            color="#bbbbbb"
+                          />
+                        )}
+                      </View>
+                    )}
+
+                    {/* QUANTITY PILL */}
+
+                    <View
+                      style={
+                        styles.quantityControl
+                      }
+                    >
                       <Pressable
                         style={({ pressed }) => [
-                          styles.removeButton,
-                          pressed && styles.buttonPressed,
+                          styles.quantityButton,
+
+                          pressed &&
+                            styles.buttonPressed,
                         ]}
-                        onPress={() => removeItem(item.id)}
+                        onPress={() => {
+                          if (!storeId) {
+                            return;
+                          }
+
+                          if (
+                            item.quantity <= 1
+                          ) {
+                            removeStoreItem(
+                              storeId,
+                              item.id,
+                              item.variantId ??
+                                null,
+                            );
+
+                            return;
+                          }
+
+                          decreaseStoreItem(
+                            storeId,
+                            item.id,
+                            item.variantId ??
+                              null,
+                          );
+                        }}
                       >
-                        <Text style={styles.removeButtonText}>
-                          حذف
-                        </Text>
+                        <Ionicons
+                          name={
+                            item.quantity <= 1
+                              ? 'trash-outline'
+                              : 'remove'
+                          }
+                          size={
+                            item.quantity <= 1
+                              ? 22
+                              : 24
+                          }
+                          color={BRAND_GREEN}
+                        />
                       </Pressable>
 
-                      <View style={styles.quantityControl}>
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.quantityButton,
-                            pressed && styles.buttonPressed,
-                          ]}
-                          onPress={() =>
-                            increaseItem(item.id)
-                          }
-                        >
-                          <Text
-                            style={styles.quantityButtonText}
-                          >
-                            +
-                          </Text>
-                        </Pressable>
+                      <Text
+                        style={
+                          styles.quantityText
+                        }
+                      >
+                        {item.quantity}
+                      </Text>
 
-                        <Text style={styles.quantityText}>
-                          {item.quantity}
-                        </Text>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.quantityButton,
 
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.quantityButton,
-                            pressed && styles.buttonPressed,
-                          ]}
-                          onPress={() =>
-                            decreaseItem(item.id)
+                          pressed &&
+                            styles.buttonPressed,
+                        ]}
+                        onPress={() => {
+                          if (!storeId) {
+                            return;
                           }
-                        >
-                          <Text
-                            style={styles.quantityButtonText}
-                          >
-                            −
-                          </Text>
-                        </Pressable>
-                      </View>
+
+                          increaseStoreItem(
+                            storeId,
+                            item.id,
+                            item.variantId ??
+                              null,
+                          );
+                        }}
+                      >
+                        <Ionicons
+                          name="add"
+                          size={28}
+                          color={BRAND_GREEN}
+                        />
+                      </Pressable>
                     </View>
                   </View>
                 </View>
               );
-            })}
-          </View>
+            },
+          )}
+        </View>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.continueShoppingButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={continueShopping}
+        {/* RECOMMENDATIONS */}
+
+        {recommendations.length > 0 && (
+          <View
+            style={
+              styles.recommendationsSection
+            }
           >
-            <Text style={styles.continueShoppingText}>
-              + إضافة منتجات أخرى
-            </Text>
-          </Pressable>
-
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>
-              ملخص الطلب
+            <Text
+              style={
+                styles.recommendationsTitle
+              }
+            >
+              قد يعجبك أيضًا...
             </Text>
 
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryValue}>
-                {subtotal} ج.م
-              </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={
+                false
+              }
+              contentContainerStyle={
+                styles.recommendationsScroll
+              }
+            >
+              {recommendations.map(
+                (product) => {
+                  const imageUrl =
+                    getProductImage(
+                      product,
+                    );
 
-              <Text style={styles.summaryLabel}>
-                إجمالي المنتجات
-              </Text>
-            </View>
+                  const displayPrice =
+                    getProductDisplayPrice(
+                      product,
+                    );
 
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryValue}>
-                {deliveryFee} ج.م
-              </Text>
+                  const hasVariants =
+                    product.variants.length > 0;
 
-              <Text style={styles.summaryLabel}>
-                رسوم التوصيل
-              </Text>
-            </View>
+                  return (
+                    <View
+                      key={product.id}
+                      style={
+                        styles.recommendationCard
+                      }
+                    >
+                      <View
+                        style={
+                          styles.recommendationImageWrapper
+                        }
+                      >
+                        {canDisplayImage(
+                          imageUrl,
+                        ) ? (
+                          <Image
+                            source={{
+                              uri: imageUrl!,
+                            }}
+                            style={
+                              styles.recommendationImage
+                            }
+                            resizeMode="cover"
+                            onError={() =>
+                              markImageAsFailed(
+                                imageUrl!,
+                              )
+                            }
+                          />
+                        ) : (
+                          <View
+                            style={
+                              styles.recommendationImageFallback
+                            }
+                          >
+                            {product.icon ? (
+                              <Text
+                                style={
+                                  styles.recommendationEmoji
+                                }
+                              >
+                                {product.icon}
+                              </Text>
+                            ) : (
+                              <Ionicons
+                                name="image-outline"
+                                size={40}
+                                color="#b5b5b5"
+                              />
+                            )}
+                          </View>
+                        )}
 
-            <View style={styles.summaryDivider} />
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.recommendationAddButton,
 
-            <View style={styles.totalRow}>
-              <Text style={styles.totalValue}>
-                {total} ج.م
-              </Text>
+                            pressed &&
+                              styles.recommendationAddButtonPressed,
+                          ]}
+                          onPress={() =>
+                            addRecommendation(
+                              product,
+                            )
+                          }
+                        >
+                          <Ionicons
+                            name={
+                              hasVariants
+                                ? 'chevron-forward'
+                                : 'add'
+                            }
+                            size={
+                              hasVariants
+                                ? 25
+                                : 31
+                            }
+                            color={BRAND_GREEN}
+                          />
+                        </Pressable>
+                      </View>
 
-              <Text style={styles.totalLabel}>
-                الإجمالي
-              </Text>
-            </View>
+                      <Text
+                        style={
+                          styles.recommendationName
+                        }
+                        numberOfLines={2}
+                      >
+                        {product.name}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.recommendationPrice
+                        }
+                        numberOfLines={1}
+                      >
+                        {hasVariants
+                          ? `من ${formatPrice(
+                              displayPrice,
+                            )}`
+                          : formatPrice(
+                              displayPrice,
+                            )}
+                      </Text>
+                    </View>
+                  );
+                },
+              )}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ORDER DETAILS */}
+
+        <View
+          style={
+            styles.orderSummarySection
+          }
+        >
+          <Text
+            style={
+              styles.orderSummaryTitle
+            }
+          >
+            تفاصيل الطلب
+          </Text>
+
+          <View
+            style={styles.summaryRow}
+          >
+            <Text
+              style={styles.summaryLabel}
+            >
+              المنتجات
+            </Text>
+
+            <Text
+              style={styles.summaryValue}
+            >
+              {formatPrice(subtotal)}
+            </Text>
           </View>
 
-          <View style={styles.paymentNotice}>
-            <Text style={styles.paymentNoticeText}>
-              سيتم تأكيد تفاصيل الطلب وطريقة الدفع عبر واتساب
+          <View
+            style={styles.summaryRow}
+          >
+            <Text
+              style={styles.summaryLabel}
+            >
+              التوصيل
             </Text>
 
-            <Text style={styles.paymentNoticeIcon}>
-              💬
+            <Text
+              style={styles.summaryValue}
+            >
+              {formatPrice(deliveryFee)}
+            </Text>
+          </View>
+
+          <View
+            style={styles.summaryRow}
+          >
+            <View
+              style={
+                styles.paymentFeeLabelContainer
+              }
+            >
+              <Text
+                style={
+                  styles.summaryLabel
+                }
+              >
+                رسوم الدفع الإلكتروني
+              </Text>
+
+              <Ionicons
+                name="information-circle-outline"
+                size={16}
+                color="#8a8a8a"
+              />
+            </View>
+
+            <Text
+              style={styles.summaryValue}
+            >
+              {formatPrice(
+                paymentProcessingFee,
+              )}
+            </Text>
+          </View>
+
+          <Text
+            style={
+              styles.paymentFeeDescription
+            }
+          >
+            رسوم دفع إلكتروني ثابتة بقيمة EGP 10 لكل طلب.
+          </Text>
+
+          <View
+            style={styles.summaryDivider}
+          />
+
+          <View
+            style={styles.summaryRow}
+          >
+            <Text
+              style={styles.totalLabel}
+            >
+              الإجمالي
+            </Text>
+
+            <Text
+              style={styles.totalValue}
+            >
+              {formatPrice(grandTotal)}
             </Text>
           </View>
         </View>
+
+        {!minimumReached &&
+          Number(minimumOrder) > 0 && (
+            <View
+              style={styles.minimumNotice}
+            >
+              <Ionicons
+                name="information-circle-outline"
+                size={22}
+                color="#8a6519"
+              />
+
+              <Text
+                style={
+                  styles.minimumNoticeText
+                }
+              >
+                متبقي{' '}
+                {formatPrice(
+                  remainingForMinimum,
+                )}{' '}
+                للوصول إلى الحد الأدنى
+                للطلب
+              </Text>
+            </View>
+          )}
       </ScrollView>
 
-      <View style={styles.checkoutBarWrapper}>
-        <View style={styles.checkoutBarContainer}>
+      {/* BOTTOM CHECKOUT */}
+
+      <View
+        style={styles.checkoutBarWrapper}
+      >
+        <View style={styles.checkoutBar}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.addItemsButton,
+
+              pressed &&
+                styles.bottomButtonPressed,
+            ]}
+            onPress={continueShopping}
+          >
+            <Text
+              style={
+                styles.addItemsButtonText
+              }
+            >
+              إضافة منتجات
+            </Text>
+          </Pressable>
+
           <Pressable
             disabled={!minimumReached}
             style={({ pressed }) => [
               styles.checkoutButton,
+
               !minimumReached &&
                 styles.checkoutButtonDisabled,
+
               pressed &&
                 minimumReached &&
-                styles.checkoutButtonPressed,
+                styles.bottomButtonPressed,
             ]}
-            onPress={() => router.push('/checkout')}
+            onPress={handleCheckout}
           >
-            <View style={styles.checkoutTotal}>
-              <Text style={styles.checkoutTotalValue}>
-                {total} ج.م
-              </Text>
-
-              <Text style={styles.checkoutTotalLabel}>
-                الإجمالي
-              </Text>
-            </View>
-
             <Text
               style={[
                 styles.checkoutButtonText,
+
                 !minimumReached &&
                   styles.checkoutButtonTextDisabled,
               ]}
             >
               {minimumReached
-                ? 'متابعة الطلب'
-                : `متبقي ${remainingForMinimum} ج.م`}
+                ? 'إتمام الطلب'
+                : `متبقي ${Math.ceil(
+                    remainingForMinimum,
+                  )}`}
             </Text>
-
-            <View
-              style={[
-                styles.checkoutArrowContainer,
-                !minimumReached &&
-                  styles.checkoutArrowDisabled,
-              ]}
-            >
-              <Text style={styles.checkoutArrow}>
-                ‹
-              </Text>
-            </View>
           </Pressable>
         </View>
       </View>
+
+      {/* CLEAR CART MODAL */}
 
       <Modal
         visible={clearModalVisible}
@@ -453,398 +1901,593 @@ export default function CartScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <View style={styles.modalIconContainer}>
-              <Text style={styles.modalIcon}>🗑️</Text>
+            <View
+              style={styles.modalDangerIcon}
+            >
+              <Ionicons
+                name="trash-outline"
+                size={34}
+                color="#d64b4b"
+              />
             </View>
 
-            <Text style={styles.modalTitle}>
-              إفراغ سلة الطلب؟
+            <Text
+              style={styles.modalTitle}
+            >
+              إفراغ السلة؟
             </Text>
 
-            <Text style={styles.modalDescription}>
-              سيتم حذف جميع المنتجات الموجودة في السلة.
+            <Text
+              style={
+                styles.modalDescription
+              }
+            >
+              سيتم حذف منتجات{' '}
+              {storeName ?? 'هذا المتجر'}{' '}
+              فقط، ولن تتأثر السلال الأخرى.
             </Text>
 
             <Pressable
               style={({ pressed }) => [
                 styles.dangerButton,
-                pressed && styles.buttonPressed,
+
+                pressed &&
+                  styles.buttonPressed,
               ]}
               onPress={handleClearCart}
             >
-              <Text style={styles.dangerButtonText}>
-                نعم، إفراغ السلة
+              <Text
+                style={
+                  styles.dangerButtonText
+                }
+              >
+                نعم، إفراغ هذه السلة
               </Text>
             </Pressable>
 
             <Pressable
               style={({ pressed }) => [
                 styles.modalCancelButton,
-                pressed && styles.buttonPressed,
+
+                pressed &&
+                  styles.buttonPressed,
               ]}
               onPress={() =>
                 setClearModalVisible(false)
               }
             >
-              <Text style={styles.modalCancelButtonText}>
+              <Text
+                style={
+                  styles.modalCancelButtonText
+                }
+              >
                 إلغاء
               </Text>
             </Pressable>
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: '#f7f7fa',
+  /* ============================================================
+   * MULTI CART PICKER
+   * ============================================================
+   */
+
+  cartPickerScreen: {
+    backgroundColor:
+      'rgba(0, 0, 0, 0.46)',
     flex: 1,
+    justifyContent: 'flex-end',
   },
 
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 135,
-    paddingHorizontal: 18,
-    paddingTop: 42,
+  cartPickerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
 
-  container: {
+  cartPickerSheet: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 34,
+    borderTopRightRadius: 34,
+    maxHeight: '76%',
+    minHeight: 390,
+    overflow: 'hidden',
+    paddingBottom: 13,
+    paddingHorizontal: 24,
+    paddingTop: 0,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: -6,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+
+    elevation: 24,
+  },
+
+  sheetDragArea: {
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+    paddingTop: 9,
+  },
+
+  sheetHandle: {
     alignSelf: 'center',
-    maxWidth: 520,
-    width: '100%',
+    backgroundColor: '#e5e5e5',
+    borderRadius: 3,
+    height: 5,
+    marginTop: 3,
+    width: 70,
   },
 
-  topBar: {
+  sheetTopRow: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row-reverse',
+    height: 73,
+    justifyContent: 'flex-start',
   },
 
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 14,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-
-  backIcon: {
-    color: '#5d47d2',
-    fontSize: 33,
-    lineHeight: 35,
-  },
-
-  titleContainer: {
-    alignItems: 'center',
-  },
-
-  pageTitle: {
-    color: '#202025',
-    fontSize: 23,
-    fontWeight: '900',
-  },
-
-  itemCountText: {
-    color: '#898992',
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  clearButton: {
-    alignItems: 'center',
-    backgroundColor: '#fff0f0',
-    borderRadius: 13,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: 14,
-  },
-
-  clearButtonText: {
-    color: '#d64b4b',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  storeCard: {
-    alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 24,
-    flexDirection: 'row',
-    marginTop: 26,
-    padding: 18,
-  },
-
-  storeIconContainer: {
+  sheetCloseButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 18,
+    borderColor: '#e1e1e1',
+    borderRadius: 34,
+    borderWidth: 1,
     height: 64,
     justifyContent: 'center',
     width: 64,
   },
 
-  storeIcon: {
+  sheetCloseButtonPressed: {
+    backgroundColor: '#f6f6f6',
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
+  cartPickerTitle: {
+    color: '#1e1e1e',
     fontSize: 31,
-  },
-
-  storeContent: {
-    flex: 1,
-    marginLeft: 15,
-  },
-
-  storeLabel: {
-    color: '#dcd7ff',
-    fontSize: 11,
-    textAlign: 'right',
-  },
-
-  storeName: {
-    color: '#ffffff',
-    fontSize: 18,
     fontWeight: '900',
-    marginTop: 3,
+    lineHeight: 42,
+    marginBottom: 19,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
-  oneStoreNotice: {
-    color: '#e9e6ff',
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 6,
-    textAlign: 'right',
+  cartPickerList: {
+    flexGrow: 0,
   },
 
-  minimumWarning: {
+  cartPickerListContent: {
+    paddingBottom: 4,
+  },
+
+  cartPickerRow: {
     alignItems: 'center',
-    backgroundColor: '#fff3d6',
-    borderRadius: 17,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 16,
-    padding: 15,
+    flexDirection: 'row-reverse',
+    minHeight: 128,
+    paddingVertical: 14,
   },
 
-  minimumMessage: {
+  cartPickerRowBorder: {
+    borderBottomColor: '#e6e6e6',
+    borderBottomWidth: 1,
+  },
+
+  cartPickerRowPressed: {
+    opacity: 0.74,
+  },
+
+  cartPickerLogoBox: {
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderColor: '#eeeeee',
+    borderRadius: 13,
+    borderWidth: 1,
+    height: 91,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 91,
+  },
+
+  cartPickerLogo: {
+    height: '100%',
+    width: '100%',
+  },
+
+  cartPickerLogoFallback: {
+    fontSize: 43,
+  },
+
+  cartPickerStoreContent: {
     flex: 1,
+    marginHorizontal: 17,
   },
 
-  minimumWarningTitle: {
-    color: '#7a5a13',
-    fontSize: 13,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-
-  minimumWarningDescription: {
-    color: '#9a7a31',
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  minimumWarningIcon: {
+  cartPickerStoreName: {
+    color: '#1d1d1d',
     fontSize: 21,
-    marginLeft: 10,
+    fontWeight: '700',
+    lineHeight: 28,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
-  minimumSuccess: {
+  cartPickerItemCount: {
+    color: '#444444',
+    fontSize: 17,
+    marginTop: 8,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  cartPickerPrice: {
+    color: '#1d1d1d',
+    fontSize: 19,
+    fontWeight: '700',
+    minWidth: 120,
+    textAlign: 'left',
+  },
+
+  cartPickerNote: {
+    borderTopColor: '#e6e6e6',
+    borderTopWidth: 1,
+    marginTop: 7,
+    paddingHorizontal: 10,
+    paddingTop: 22,
+  },
+
+  cartPickerNoteText: {
+    color: '#858585',
+    fontSize: 15,
+    lineHeight: 25,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  homeIndicator: {
+    alignSelf: 'center',
+    backgroundColor: '#111111',
+    borderRadius: 4,
+    height: 7,
+    marginTop: 28,
+    width: 210,
+  },
+
+  /* ============================================================
+   * NORMAL CART SCREEN
+   * ============================================================
+   */
+
+  screen: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+
+  pageContent: {
+    paddingBottom: 150,
+  },
+
+  /* ---------------------------------- */
+  /* HEADER                             */
+  /* ---------------------------------- */
+
+  header: {
     alignItems: 'center',
-    backgroundColor: '#e6f8ed',
-    borderRadius: 17,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 16,
-    padding: 15,
+    paddingHorizontal: 24,
+    paddingTop: 54,
+    paddingBottom: 28,
   },
 
-  minimumSuccessTitle: {
-    color: '#197642',
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e5e5',
+    borderRadius: 31,
+    borderWidth: 1,
+    height: 62,
+    justifyContent: 'center',
+    width: 62,
+  },
+
+  headerContent: {
+    flex: 1,
+    marginLeft: 18,
+  },
+
+  pageTitle: {
+    color: '#202020',
+    fontSize: 25,
+    fontWeight: '800',
+  },
+
+  headerStoreName: {
+    color: '#8a8a8a',
+    fontSize: 14,
+    marginTop: 3,
+  },
+
+  clearCartButton: {
+    paddingHorizontal: 7,
+    paddingVertical: 10,
+  },
+
+  clearCartButtonText: {
+    color: '#777777',
     fontSize: 13,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-
-  minimumSuccessDescription: {
-    color: '#4f906c',
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  minimumSuccessIcon: {
-    color: '#197642',
-    fontSize: 22,
-    fontWeight: '900',
-    marginLeft: 12,
-  },
-
-  sectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-    marginTop: 29,
-  },
-
-  sectionTitle: {
-    color: '#202025',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-
-  sectionCount: {
-    color: '#888891',
-    fontSize: 12,
     fontWeight: '700',
   },
 
-  itemsList: {
-    gap: 13,
+  /* ---------------------------------- */
+  /* CART ITEMS                         */
+  /* ---------------------------------- */
+
+  itemsSection: {
+    paddingHorizontal: 24,
   },
 
-  itemCard: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 21,
+  itemRow: {
     flexDirection: 'row',
-    minHeight: 150,
-    padding: 14,
+    minHeight: 245,
+    paddingBottom: 26,
+    paddingTop: 11,
+    borderBottomColor: '#e8e8e8',
+    borderBottomWidth: 1,
   },
 
-  itemImage: {
-    alignItems: 'center',
-    backgroundColor: '#f1efff',
-    borderRadius: 18,
-    height: 76,
-    justifyContent: 'center',
-    width: 76,
-  },
-
-  itemIcon: {
-    fontSize: 35,
+  itemRowLast: {
+    borderBottomWidth: 0,
   },
 
   itemContent: {
     flex: 1,
-    marginLeft: 14,
+    justifyContent: 'flex-start',
+    paddingRight: 20,
   },
 
   itemName: {
-    color: '#202025',
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'right',
+    color: '#242424',
+    fontSize: 21,
+    fontWeight: '700',
+    lineHeight: 28,
+    textAlign: 'left',
   },
 
-  itemDescription: {
-    color: '#777781',
-    fontSize: 11,
+  variantName: {
+    color: '#777777',
+    fontSize: 13,
     lineHeight: 18,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  itemPriceRow: {
-    alignItems: 'flex-end',
-    marginTop: 8,
-  },
-
-  itemTotal: {
-    color: '#5d47d2',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  itemUnitPrice: {
-    color: '#9a9aa2',
-    fontSize: 9,
     marginTop: 2,
+    textAlign: 'left',
+    width: '100%',
   },
 
-  itemActions: {
+  editButton: {
     alignItems: 'center',
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 11,
+    marginTop: 13,
+    paddingVertical: 3,
   },
 
-  removeButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 5,
+  editButtonText: {
+    borderBottomColor: BRAND_GREEN,
+    borderBottomWidth: 1,
+    color: BRAND_GREEN,
+    fontSize: 17,
+    fontWeight: '600',
+    marginLeft: 7,
   },
 
-  removeButtonText: {
-    color: '#d64b4b',
-    fontSize: 11,
-    fontWeight: '800',
+  itemPriceContainer: {
+    marginTop: 'auto',
+    paddingBottom: 8,
+  },
+
+  itemPrice: {
+    color: '#242424',
+    fontSize: 19,
+    fontWeight: '600',
+  },
+
+  itemMedia: {
+    height: 194,
+    position: 'relative',
+    width: 194,
+  },
+
+  itemImage: {
+    backgroundColor: '#f2f2f2',
+    borderRadius: 15,
+    height: '100%',
+    width: '100%',
+  },
+
+  itemImageFallback: {
+    alignItems: 'center',
+    backgroundColor: '#f4f4f4',
+    borderRadius: 15,
+    height: '100%',
+    justifyContent: 'center',
+    width: '100%',
+  },
+
+  itemEmoji: {
+    fontSize: 59,
   },
 
   quantityControl: {
     alignItems: 'center',
-    backgroundColor: '#f1efff',
-    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderColor: '#e4e4e4',
+    borderRadius: 31,
+    borderWidth: 1,
+    bottom: -11,
     flexDirection: 'row',
-    gap: 9,
-    padding: 4,
+    height: 60,
+    justifyContent: 'space-between',
+    left: 7,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: 7,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+
+    elevation: 4,
   },
 
   quantityButton: {
     alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 9,
-    height: 30,
+    borderRadius: 26,
+    height: 50,
     justifyContent: 'center',
-    width: 30,
-  },
-
-  quantityButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-    lineHeight: 21,
+    width: 50,
   },
 
   quantityText: {
-    color: '#25252b',
-    fontSize: 14,
-    fontWeight: '900',
-    minWidth: 22,
+    color: '#242424',
+    fontSize: 19,
+    fontWeight: '600',
+    minWidth: 34,
     textAlign: 'center',
   },
 
-  continueShoppingButton: {
-    alignItems: 'center',
-    borderColor: '#d9d3fa',
+  /* ---------------------------------- */
+  /* RECOMMENDATIONS                    */
+  /* ---------------------------------- */
+
+  recommendationsSection: {
+    backgroundColor: '#faf8f4',
+    marginTop: 8,
+    paddingBottom: 27,
+    paddingTop: 29,
+  },
+
+  recommendationsTitle: {
+    color: '#242424',
+    fontSize: 25,
+    fontWeight: '800',
+    paddingHorizontal: 24,
+  },
+
+  recommendationsScroll: {
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingTop: 23,
+  },
+
+  recommendationCard: {
+    width: 162,
+  },
+
+  recommendationImageWrapper: {
+    height: 194,
+    position: 'relative',
+    width: 162,
+  },
+
+  recommendationImage: {
+    backgroundColor: '#f1f1f1',
+    borderColor: '#e3e3e3',
     borderRadius: 17,
-    borderStyle: 'dashed',
-    borderWidth: 1.5,
-    marginTop: 16,
-    paddingVertical: 15,
+    borderWidth: 1,
+    height: '100%',
+    width: '100%',
   },
 
-  continueShoppingText: {
-    color: '#5d47d2',
-    fontSize: 13,
-    fontWeight: '900',
+  recommendationImageFallback: {
+    alignItems: 'center',
+    backgroundColor: '#f3f3f3',
+    borderColor: '#e3e3e3',
+    borderRadius: 17,
+    borderWidth: 1,
+    height: '100%',
+    justifyContent: 'center',
+    width: '100%',
   },
 
-  summaryCard: {
+  recommendationEmoji: {
+    fontSize: 49,
+  },
+
+  recommendationAddButton: {
+    alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 22,
-    marginTop: 27,
-    padding: 20,
+    borderColor: '#e5e5e5',
+    borderRadius: 29,
+    borderWidth: 1,
+    bottom: 10,
+    height: 57,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 10,
+    width: 57,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.09,
+    shadowRadius: 5,
+
+    elevation: 4,
   },
 
-  summaryTitle: {
-    color: '#202025',
-    fontSize: 19,
-    fontWeight: '900',
-    marginBottom: 18,
-    textAlign: 'right',
+  recommendationAddButtonPressed: {
+    transform: [
+      {
+        scale: 0.94,
+      },
+    ],
+  },
+
+  recommendationName: {
+    color: '#252525',
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 21,
+    marginTop: 13,
+  },
+
+  recommendationPrice: {
+    color: '#363636',
+    fontSize: 15,
+    marginTop: 6,
+  },
+
+  /* ---------------------------------- */
+  /* SUMMARY                            */
+  /* ---------------------------------- */
+
+  orderSummarySection: {
+    borderTopColor: '#f1f1f1',
+    borderTopWidth: 1,
+    marginTop: 23,
+    paddingHorizontal: 24,
+    paddingTop: 26,
+  },
+
+  orderSummaryTitle: {
+    color: '#242424',
+    fontSize: 21,
+    fontWeight: '800',
+    marginBottom: 20,
   },
 
   summaryRow: {
@@ -855,336 +2498,294 @@ const styles = StyleSheet.create({
   },
 
   summaryLabel: {
-    color: '#777781',
-    fontSize: 13,
-    fontWeight: '600',
+    color: '#696969',
+    fontSize: 15,
   },
 
   summaryValue: {
-    color: '#303036',
-    fontSize: 13,
-    fontWeight: '800',
+    color: '#303030',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  paymentFeeLabelContainer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+  },
+
+  paymentFeeDescription: {
+    color: '#8a8a8a',
+    fontSize: 11,
+    lineHeight: 17,
+    marginBottom: 16,
+    marginTop: -6,
   },
 
   summaryDivider: {
-    backgroundColor: '#eeeeF2',
+    backgroundColor: '#eeeeee',
     height: 1,
-    marginBottom: 16,
-  },
-
-  totalRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    marginBottom: 17,
   },
 
   totalLabel: {
-    color: '#202025',
-    fontSize: 16,
-    fontWeight: '900',
+    color: '#202020',
+    fontSize: 18,
+    fontWeight: '800',
   },
 
   totalValue: {
-    color: '#5d47d2',
+    color: '#202020',
     fontSize: 19,
-    fontWeight: '900',
+    fontWeight: '800',
   },
 
-  paymentNotice: {
+  minimumNotice: {
     alignItems: 'center',
-    backgroundColor: '#e9f7ee',
-    borderRadius: 17,
+    backgroundColor: '#fff8e7',
+    borderRadius: 14,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 20,
-    marginTop: 16,
-    padding: 15,
+    marginHorizontal: 24,
+    marginTop: 15,
+    padding: 13,
   },
 
-  paymentNoticeText: {
-    color: '#347052',
+  minimumNoticeText: {
+    color: '#82651f',
     flex: 1,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 18,
-    textAlign: 'right',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 
-  paymentNoticeIcon: {
-    fontSize: 21,
-    marginLeft: 10,
-  },
+  /* ---------------------------------- */
+  /* BOTTOM BAR                         */
+  /* ---------------------------------- */
 
   checkoutBarWrapper: {
+    backgroundColor: '#ffffff',
+    borderTopColor: '#e8e8e8',
+    borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    paddingBottom: 18,
-    paddingHorizontal: 18,
+    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingTop: 18,
     position: 'absolute',
     right: 0,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+
+    elevation: 12,
   },
 
-  checkoutBarContainer: {
-    alignSelf: 'center',
-    maxWidth: 520,
-    width: '100%',
+  checkoutBar: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+
+  addItemsButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#252525',
+    borderRadius: 31,
+    borderWidth: 1.5,
+    flex: 1,
+    height: 64,
+    justifyContent: 'center',
+  },
+
+  addItemsButtonText: {
+    color: '#242424',
+    fontSize: 17,
+    fontWeight: '800',
   },
 
   checkoutButton: {
     alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 20,
-    flexDirection: 'row',
-    minHeight: 70,
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+    backgroundColor: BRAND_GREEN,
+    borderRadius: 31,
+    flex: 1,
+    height: 64,
+    justifyContent: 'center',
   },
 
   checkoutButtonDisabled: {
-    backgroundColor: '#d9d9df',
-  },
-
-  checkoutButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
-
-  checkoutTotal: {
-    flex: 1,
-  },
-
-  checkoutTotalValue: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-
-  checkoutTotalLabel: {
-    color: '#dcd7ff',
-    fontSize: 10,
-    marginTop: 2,
+    backgroundColor: '#dddddd',
   },
 
   checkoutButtonText: {
     color: '#ffffff',
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '900',
-    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '800',
   },
 
   checkoutButtonTextDisabled: {
-    color: '#777781',
+    color: '#8b8b8b',
   },
 
-  checkoutArrowContainer: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 11,
-    height: 35,
-    justifyContent: 'center',
-    width: 35,
+  bottomButtonPressed: {
+    opacity: 0.88,
+    transform: [
+      {
+        scale: 0.98,
+      },
+    ],
   },
 
-  checkoutArrowDisabled: {
-    backgroundColor: '#eeeeF2',
-  },
-
-  checkoutArrow: {
-    color: '#5d47d2',
-    fontSize: 27,
-    lineHeight: 30,
-  },
+  /* ---------------------------------- */
+  /* MODALS                             */
+  /* ---------------------------------- */
 
   modalOverlay: {
     alignItems: 'center',
-    backgroundColor: 'rgba(22, 19, 33, 0.55)',
+    backgroundColor:
+      'rgba(0, 0, 0, 0.50)',
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: 22,
   },
 
   modalCard: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 26,
-    maxWidth: 440,
-    padding: 24,
+    borderRadius: 25,
+    maxWidth: 430,
+    padding: 25,
     width: '100%',
   },
 
-  modalIconContainer: {
+  modalDangerIcon: {
     alignItems: 'center',
-    backgroundColor: '#fff0f0',
-    borderRadius: 22,
-    height: 76,
+    backgroundColor: '#fff1f1',
+    borderRadius: 40,
+    height: 78,
     justifyContent: 'center',
-    width: 76,
-  },
-
-  modalIcon: {
-    fontSize: 34,
-  },
-
-  successModalIcon: {
-    alignItems: 'center',
-    backgroundColor: '#e6f8ed',
-    borderRadius: 38,
-    height: 76,
-    justifyContent: 'center',
-    width: 76,
-  },
-
-  successModalEmoji: {
-    color: '#197642',
-    fontSize: 35,
-    fontWeight: '900',
+    width: 78,
   },
 
   modalTitle: {
-    color: '#222228',
+    color: '#242424',
     fontSize: 22,
-    fontWeight: '900',
+    fontWeight: '800',
     marginTop: 18,
-    textAlign: 'center',
   },
 
   modalDescription: {
-    color: '#777781',
-    fontSize: 13,
-    lineHeight: 22,
-    marginTop: 10,
+    color: '#777777',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 9,
     textAlign: 'center',
   },
 
   dangerButton: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    backgroundColor: '#d64b4b',
+    backgroundColor: '#d84a4a',
     borderRadius: 16,
-    marginTop: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    marginTop: 23,
+    paddingVertical: 15,
   },
 
   dangerButtonText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '800',
   },
 
   modalCancelButton: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    backgroundColor: '#f1f1f5',
+    backgroundColor: '#f2f2f2',
     borderRadius: 16,
     marginTop: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 15,
   },
 
   modalCancelButtonText: {
-    color: '#61616a',
+    color: '#555555',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '700',
   },
 
-  checkoutSummary: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#f1efff',
-    borderRadius: 17,
-    marginTop: 20,
-    padding: 16,
-  },
-
-  checkoutSummaryValue: {
-    color: '#5d47d2',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-
-  checkoutSummaryLabel: {
-    color: '#7d72b2',
-    fontSize: 11,
-    marginTop: 4,
-  },
-
-  primaryButton: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#6d56df',
-    borderRadius: 16,
-    marginTop: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  secondaryButton: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#eeeafd',
-    borderRadius: 16,
-    marginTop: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-
-  secondaryButtonText: {
-    color: '#5d47d2',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  buttonPressed: {
-    opacity: 0.75,
-  },
+  /* ---------------------------------- */
+  /* EMPTY CART                         */
+  /* ---------------------------------- */
 
   emptyScreen: {
-    alignItems: 'center',
-    backgroundColor: '#f7f7fa',
+    backgroundColor: '#ffffff',
     flex: 1,
+  },
+
+  emptyBackButton: {
+    alignItems: 'center',
+    borderColor: '#e4e4e4',
+    borderRadius: 30,
+    borderWidth: 1,
+    height: 60,
     justifyContent: 'center',
-    padding: 20,
+    left: 24,
+    position: 'absolute',
+    top: 54,
+    width: 60,
   },
 
   emptyContainer: {
     alignItems: 'center',
-    maxWidth: 420,
-    width: '100%',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 30,
   },
 
   emptyIconContainer: {
     alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 42,
-    height: 84,
+    backgroundColor:
+      BRAND_GREEN_SOFT,
+    borderRadius: 48,
+    height: 96,
     justifyContent: 'center',
-    width: 84,
-  },
-
-  emptyIcon: {
-    fontSize: 39,
+    width: 96,
   },
 
   emptyTitle: {
-    color: '#222228',
+    color: '#242424',
     fontSize: 25,
-    fontWeight: '900',
-    marginTop: 20,
+    fontWeight: '800',
+    marginTop: 22,
   },
 
   emptyDescription: {
-    color: '#777781',
-    fontSize: 13,
+    color: '#7c7c7c',
+    fontSize: 14,
     lineHeight: 21,
     marginTop: 8,
     textAlign: 'center',
+  },
+
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: BRAND_GREEN,
+    borderRadius: 29,
+    marginTop: 24,
+    minWidth: 220,
+    paddingHorizontal: 30,
+    paddingVertical: 16,
+  },
+
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+
+  buttonPressed: {
+    opacity: 0.7,
   },
 });
