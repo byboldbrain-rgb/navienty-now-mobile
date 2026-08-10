@@ -1,1050 +1,2510 @@
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import {
-    useMemo,
-    useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Animated,
+  Image,
+  type ImageSourcePropType,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import getAppBootstrap from '../../services/bootstrap-service';
 import {
-    CatalogCartBar,
-    CatalogStateScreen,
-    formatCurrency,
-    ProductArtwork,
-    QuantityControl,
-    ReplaceCartModal,
-} from '../../components/category/catalog-shared';
-import useCatalogCart from '../../hooks/use-catalog-cart';
-import { useCategoryStoreCatalog } from '../../hooks/use-category-store-catalog';
-import type {
-    CatalogProduct,
-    CatalogSection,
+  type CatalogProduct,
+  type CatalogSection,
+  getCatalogSectionProducts,
+  getStoreCatalog,
+  listStores,
+  type StoreCatalog,
 } from '../../services/catalog-service';
 import {
-    NAVIENTY_NOW_LAYOUT,
-} from '../../theme/navienty-now-theme';
+  listPharmacyPromotionBanners,
+  type PharmacyPromotionBanner,
+} from '../../services/pharmacy-banner-service';
+import {
+  useCartStore,
+} from '../../store/cart-store';
 
-const PHARMACY_ACCENT = '#186B63';
-const PHARMACY_ACCENT_DARK = '#0D4D47';
-const PHARMACY_PALE = '#EAF7F5';
+const CATEGORY_ROWS = 3;
 
-type VisibleSection = {
-  id: string;
-  name: string;
-  products: CatalogProduct[];
+/**
+ * Interactive Categories Indicator
+ */
+const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
+const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
+
+/**
+ * Pharmacy category artwork.
+ *
+ * ضع الصور هنا لاحقًا بنفس أسماء الـ slugs.
+ *
+ * Example:
+ *
+ * 'medicines-treatments':
+ *   require('../../../assets/images/pharmacy-categories/medicines-treatments.png'),
+ */
+const PHARMACY_CATEGORY_IMAGES: Record<
+  string,
+  ImageSourcePropType | null
+> = {
+  'medicines-treatments': null,
+  'cold-flu-allergy': null,
+  'headache-pain-fever': null,
+  'stomach-digestive': null,
+  'first-aid-wounds': null,
+  skincare: null,
+  'hair-scalp-care': null,
+  'oral-dental-care': null,
+  'vitamins-supplements': null,
+  'personal-care-hygiene': null,
+  'women-care': null,
+  'men-care': null,
+  'eyes-lenses': null,
+  cosmetics: null,
+  'sun-insect-protection': null,
+  'sanitization-disinfection': null,
 };
+
+type CategoryDisplayItem = {
+  key: string;
+  label: string;
+  imageSource:
+    | ImageSourcePropType
+    | null;
+  section: CatalogSection;
+};
+
+type ResolvedPromotionBanner =
+  PharmacyPromotionBanner & {
+    products: CatalogProduct[];
+  };
+
+type FeaturedProductCardProps = {
+  product: CatalogProduct;
+  currencyCode: string;
+  cardWidth: number;
+  quantity: number;
+  isStoreClosed: boolean;
+  onAdd: () => void;
+  onIncrease: () => void;
+  onDecrease: () => void;
+};
+
+function getProductImage(
+  product: CatalogProduct,
+): string | null {
+  if (product.imageUrl) {
+    return product.imageUrl;
+  }
+
+  const coverImage =
+    product.images.find(
+      (image) =>
+        image.isCover,
+    );
+
+  if (coverImage) {
+    return coverImage.imageUrl;
+  }
+
+  return (
+    product.images[0]?.imageUrl ??
+    null
+  );
+}
+
+function getDiscountPercent(
+  product: CatalogProduct,
+): number | null {
+  const compareAtPrice =
+    product.compareAtPrice;
+
+  if (
+    compareAtPrice === null ||
+    compareAtPrice <=
+      product.price ||
+    compareAtPrice <= 0
+  ) {
+    return null;
+  }
+
+  return Math.round(
+    ((compareAtPrice -
+      product.price) /
+      compareAtPrice) *
+      100,
+  );
+}
+
+function formatMoney(
+  amount: number,
+  currencyCode: string,
+) {
+  return `${currencyCode} ${amount.toFixed(
+    2,
+  )}`;
+}
+
+function getArabicCurrencyLabel(
+  currencyCode: string,
+) {
+  if (
+    currencyCode
+      .trim()
+      .toUpperCase() === 'EGP'
+  ) {
+    return 'ج.م';
+  }
+
+  return currencyCode;
+}
+
+function formatCartMoney(
+  amount: number,
+  currencyCode: string,
+) {
+  return `${getArabicCurrencyLabel(
+    currencyCode,
+  )} ${amount.toFixed(2)}`;
+}
+
+function makeCategoryColumns(
+  categories: CategoryDisplayItem[],
+) {
+  const columns:
+    CategoryDisplayItem[][] = [];
+
+  for (
+    let index = 0;
+    index < categories.length;
+    index += CATEGORY_ROWS
+  ) {
+    columns.push(
+      categories.slice(
+        index,
+        index + CATEGORY_ROWS,
+      ),
+    );
+  }
+
+  return columns;
+}
+
+function getPharmacyCategoryFallbackIcon(
+  section: CatalogSection,
+) {
+  const searchableValue = [
+    section.slug,
+    section.name,
+    section.nameEn ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  const rules: Array<
+    [string[], string]
+  > = [
+    [
+      [
+        'baby',
+        'babies',
+        'infant',
+        'child',
+        'mother',
+        'طفل',
+        'اطفال',
+        'أطفال',
+        'ام',
+        'أم',
+      ],
+      '🍼',
+    ],
+
+    [
+      [
+        'first-aid',
+        'first aid',
+        'wound',
+        'wounds',
+        'bandage',
+        'اسعاف',
+        'إسعاف',
+        'جروح',
+      ],
+      '🩹',
+    ],
+
+    [
+      [
+        'oral',
+        'dental',
+        'teeth',
+        'tooth',
+        'mouth',
+        'اسنان',
+        'أسنان',
+        'فم',
+      ],
+      '🪥',
+    ],
+
+    [
+      [
+        'skin',
+        'skincare',
+        'derma',
+        'بشرة',
+        'جلد',
+      ],
+      '🧴',
+    ],
+
+    [
+      [
+        'hair',
+        'haircare',
+        'scalp',
+        'شعر',
+        'فروة',
+      ],
+      '🧴',
+    ],
+
+    [
+      [
+        'eye',
+        'eyes',
+        'optic',
+        'lens',
+        'lenses',
+        'عين',
+        'عيون',
+        'عدسات',
+      ],
+      '👁️',
+    ],
+
+    [
+      [
+        'cold',
+        'flu',
+        'cough',
+        'allergy',
+        'برد',
+        'انفلونزا',
+        'كحة',
+        'حساسية',
+      ],
+      '🤧',
+    ],
+
+    [
+      [
+        'headache',
+        'pain',
+        'fever',
+        'صداع',
+        'الم',
+        'ألم',
+        'حرارة',
+      ],
+      '🌡️',
+    ],
+
+    [
+      [
+        'stomach',
+        'digestive',
+        'digestion',
+        'معدة',
+        'هضم',
+        'قولون',
+      ],
+      '💊',
+    ],
+
+    [
+      [
+        'women',
+        'woman',
+        'female',
+        'نسائي',
+        'نساء',
+        'مرأة',
+      ],
+      '🌸',
+    ],
+
+    [
+      [
+        'men',
+        'man',
+        'male',
+        'رجال',
+        'رجل',
+      ],
+      '🧔',
+    ],
+
+    [
+      [
+        'vitamin',
+        'vitamins',
+        'supplement',
+        'supplements',
+        'فيتامين',
+        'مكمل',
+      ],
+      '💊',
+    ],
+
+    [
+      [
+        'cosmetic',
+        'cosmetics',
+        'makeup',
+        'تجميل',
+        'مكياج',
+      ],
+      '💄',
+    ],
+
+    [
+      [
+        'sun',
+        'sunscreen',
+        'insect',
+        'mosquito',
+        'شمس',
+        'حشرات',
+        'ناموس',
+      ],
+      '☀️',
+    ],
+
+    [
+      [
+        'sanitization',
+        'disinfection',
+        'sanitizer',
+        'hygiene',
+        'تعقيم',
+        'تطهير',
+      ],
+      '🧴',
+    ],
+  ];
+
+  for (
+    const [
+      keywords,
+      icon,
+    ] of rules
+  ) {
+    if (
+      keywords.some(
+        (keyword) =>
+          searchableValue.includes(
+            keyword,
+          ),
+      )
+    ) {
+      return icon;
+    }
+  }
+
+  return '💊';
+}
+
+function BackArrowIcon() {
+  return (
+    <View
+      style={styles.backArrowCanvas}
+    >
+      <View
+        style={styles.backArrowStem}
+      />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
+function CategoryVisual({
+  item,
+}: {
+  item: CategoryDisplayItem;
+}) {
+  return (
+    <View
+      style={styles.categoryImageBox}
+    >
+      {item.imageSource ? (
+        <Image
+          source={item.imageSource}
+          style={styles.categoryImage}
+          resizeMode="contain"
+        />
+      ) : (
+        <Text
+          style={
+            styles.categoryFallbackIcon
+          }
+        >
+          {getPharmacyCategoryFallbackIcon(
+            item.section,
+          )}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * نفس Product Card الموجود
+ * في supermarket.tsx
+ */
+function FeaturedProductCard({
+  product,
+  currencyCode,
+  cardWidth,
+  quantity,
+  isStoreClosed,
+  onAdd,
+  onIncrease,
+  onDecrease,
+}: FeaturedProductCardProps) {
+  const imageUrl =
+    getProductImage(product);
+
+  const discount =
+    getDiscountPercent(product);
+
+  return (
+    <View
+      style={[
+        styles.featuredProductCard,
+        {
+          width: cardWidth,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.featuredProductImageBox,
+          {
+            width: cardWidth,
+            height: cardWidth,
+          },
+        ]}
+      >
+        {imageUrl ? (
+          <Image
+            source={{
+              uri: imageUrl,
+            }}
+            style={
+              styles.featuredProductImage
+            }
+            resizeMode="contain"
+          />
+        ) : (
+          <Text
+            style={
+              styles.featuredProductFallback
+            }
+          >
+            {product.icon || '💊'}
+          </Text>
+        )}
+
+        {discount !== null && (
+          <View
+            style={
+              styles.featuredDiscountBadge
+            }
+          >
+            <Text
+              style={
+                styles.featuredDiscountText
+              }
+              numberOfLines={1}
+            >
+              Save {discount}%
+            </Text>
+          </View>
+        )}
+
+        {quantity === 0 ? (
+          <Pressable
+            disabled={isStoreClosed}
+            hitSlop={5}
+            style={({ pressed }) => [
+              styles.featuredAddButton,
+
+              isStoreClosed &&
+                styles.featuredAddButtonDisabled,
+
+              pressed &&
+                !isStoreClosed &&
+                styles.featuredAddButtonPressed,
+            ]}
+            onPress={onAdd}
+          >
+            <Text
+              style={
+                styles.featuredAddButtonText
+              }
+            >
+              +
+            </Text>
+          </Pressable>
+        ) : (
+          <View
+            style={
+              styles.featuredQuantityPill
+            }
+          >
+            <Pressable
+              hitSlop={4}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={onDecrease}
+            >
+              <Text
+                style={
+                  styles.featuredQuantityButtonText
+                }
+              >
+                −
+              </Text>
+            </Pressable>
+
+            <Text
+              style={
+                styles.featuredQuantityValue
+              }
+            >
+              {quantity}
+            </Text>
+
+            <Pressable
+              disabled={
+                isStoreClosed
+              }
+              hitSlop={4}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={onIncrease}
+            >
+              <Text
+                style={
+                  styles.featuredQuantityButtonText
+                }
+              >
+                +
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <Text
+        style={
+          styles.featuredProductName
+        }
+        numberOfLines={2}
+      >
+        {product.nameEn?.trim() ||
+          product.name}
+      </Text>
+
+      <View
+        style={
+          styles.featuredCurrentPriceWrap
+        }
+      >
+        <Text
+          style={
+            styles.featuredCurrentPrice
+          }
+          numberOfLines={1}
+        >
+          {formatMoney(
+            product.price,
+            currencyCode,
+          )}
+        </Text>
+      </View>
+
+      {product.compareAtPrice !== null &&
+        product.compareAtPrice >
+          product.price && (
+          <Text
+            style={
+              styles.featuredOldPrice
+            }
+            numberOfLines={1}
+          >
+            {formatMoney(
+              product.compareAtPrice,
+              currencyCode,
+            )}
+          </Text>
+        )}
+    </View>
+  );
+}
 
 export default function PharmacyScreen() {
   const router = useRouter();
 
-  const {
-    catalog,
-    stores,
-    activeStoreId,
-    currencySymbol,
+  const { width: windowWidth } =
+    useWindowDimensions();
+
+  const categoryScrollX = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const [
+    categoryViewportWidth,
+    setCategoryViewportWidth,
+  ] = useState(0);
+
+  const [
+    categoryContentWidth,
+    setCategoryContentWidth,
+  ] = useState(0);
+
+  const [catalog, setCatalog] =
+    useState<StoreCatalog | null>(
+      null,
+    );
+
+  const [
+    promotionBanners,
+    setPromotionBanners,
+  ] = useState<
+    PharmacyPromotionBanner[]
+  >([]);
+
+  const [
+    currencyCode,
+    setCurrencyCode,
+  ] = useState('EGP');
+
+  const [
     isLoading,
+    setIsLoading,
+  ] = useState(true);
+
+  const [
     errorMessage,
-    reload,
-    selectStore,
-  } = useCategoryStoreCatalog('pharmacy');
+    setErrorMessage,
+  ] = useState<string | null>(
+    null,
+  );
 
-  const {
-    cartItemCount,
-    cartSubtotal,
-    cartStoreName,
-    pendingProduct,
-    storeIsClosed,
-    getProductQuantity,
-    increaseProduct,
-    decreaseProduct,
-    replaceCartAndAddProduct,
-    dismissPendingProduct,
-  } = useCatalogCart(catalog);
+  const carts = useCartStore(
+    (state) => state.carts,
+  );
 
-  const [searchText, setSearchText] =
-    useState('');
-  const [activeSectionId, setActiveSectionId] =
-    useState('all');
+  const addItem = useCartStore(
+    (state) => state.addItem,
+  );
 
-  const visibleSections = useMemo<
-    VisibleSection[]
+  const increaseStoreItem =
+    useCartStore(
+      (state) =>
+        state.increaseStoreItem,
+    );
+
+  const decreaseStoreItem =
+    useCartStore(
+      (state) =>
+        state.decreaseStoreItem,
+    );
+
+  const setActiveCart =
+    useCartStore(
+      (state) =>
+        state.setActiveCart,
+    );
+
+  async function loadPharmacy() {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const bootstrap =
+        await getAppBootstrap();
+
+      const defaultServiceAreaId =
+        bootstrap.settings
+          .default_service_area_id ??
+        undefined;
+
+      const pharmacyStores =
+        await listStores({
+          categorySlug: 'pharmacy',
+          serviceAreaId:
+            defaultServiceAreaId,
+        });
+
+      if (
+        pharmacyStores.length === 0
+      ) {
+        throw new Error(
+          'No pharmacy is currently available.',
+        );
+      }
+
+      const pharmacy =
+        pharmacyStores.find(
+          (store) =>
+            store.isFeatured &&
+            !store.isManuallyClosed,
+        ) ??
+        pharmacyStores.find(
+          (store) =>
+            !store.isManuallyClosed,
+        ) ??
+        pharmacyStores[0];
+
+      const [
+        loadedCatalog,
+        loadedPromotionBanners,
+      ] = await Promise.all([
+        getStoreCatalog(
+          pharmacy.id,
+          defaultServiceAreaId,
+        ),
+
+        listPharmacyPromotionBanners({
+          storeId: pharmacy.id,
+        }).catch(
+          (bannerError) => {
+            console.warn(
+              'Unable to load pharmacy banners:',
+              bannerError,
+            );
+
+            return [];
+          },
+        ),
+      ]);
+
+      setCatalog(
+        loadedCatalog,
+      );
+
+      setPromotionBanners(
+        loadedPromotionBanners,
+      );
+
+      setCurrencyCode(
+        bootstrap.settings
+          .currency_code ||
+          'EGP',
+      );
+    } catch (error) {
+      setCatalog(null);
+
+      setPromotionBanners([]);
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load the pharmacy.',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadPharmacy();
+  }, []);
+
+  /**
+   * Categories
+   */
+  const categories = useMemo<
+    CategoryDisplayItem[]
   >(() => {
     if (!catalog) {
       return [];
     }
 
-    const normalizedSearch = searchText
-      .trim()
-      .toLocaleLowerCase('ar');
+    const rootSections =
+      catalog.categoryTree.length > 0
+        ? catalog.categoryTree
+        : catalog.sections.filter(
+            (section) =>
+              section.parentId === null,
+          );
 
-    return catalog.sections
-      .filter(
-        (section) =>
-          activeSectionId === 'all' ||
-          section.id === activeSectionId,
+    return [...rootSections]
+      .sort(
+        (first, second) => {
+          if (
+            first.sortOrder !==
+            second.sortOrder
+          ) {
+            return (
+              first.sortOrder -
+              second.sortOrder
+            );
+          }
+
+          return first.name.localeCompare(
+            second.name,
+            'ar',
+          );
+        },
       )
-      .map((section) => ({
-        id: section.id,
-        name: section.name,
-        products: section.products.filter(
-          (product) => {
-            if (!normalizedSearch) {
-              return true;
-            }
+      .map(
+        (section) => ({
+          key: section.id,
 
-            return [
-              product.name,
-              product.nameEn ?? '',
-              product.description,
-              product.barcode ?? '',
-              product.sku ?? '',
-            ]
-              .join(' ')
-              .toLocaleLowerCase('ar')
-              .includes(normalizedSearch);
-          },
-        ),
-      }))
-      .filter(
-        (section) => section.products.length > 0,
+          label:
+            section.name,
+
+          imageSource:
+            PHARMACY_CATEGORY_IMAGES[
+              section.slug
+            ] ?? null,
+
+          section,
+        }),
       );
-  }, [activeSectionId, catalog, searchText]);
+  }, [catalog]);
 
-  const visibleProductCount =
-    visibleSections.reduce(
-      (total, section) =>
-        total + section.products.length,
-      0,
+  const categoryColumns =
+    useMemo(
+      () =>
+        makeCategoryColumns(
+          categories,
+        ),
+      [categories],
+    );
+
+  const categoryMaxScroll =
+    Math.max(
+      categoryContentWidth -
+        categoryViewportWidth,
+      1,
+    );
+
+  const categoryIndicatorTravel =
+    CATEGORY_INDICATOR_TRACK_WIDTH -
+    CATEGORY_INDICATOR_THUMB_WIDTH;
+
+  const categoryIndicatorTranslateX =
+    categoryScrollX.interpolate({
+      inputRange: [
+        0,
+        categoryMaxScroll,
+      ],
+
+      outputRange: [
+        0,
+        categoryIndicatorTravel,
+      ],
+
+      extrapolate: 'clamp',
+    });
+
+  /**
+   * Build a product map so banner
+   * product IDs can be resolved.
+   */
+  const catalogProductsById =
+    useMemo(() => {
+      const productsById =
+        new Map<
+          string,
+          CatalogProduct
+        >();
+
+      for (
+        const section of
+        catalog?.sections ?? []
+      ) {
+        const sectionProducts =
+          getCatalogSectionProducts(
+            section,
+            true,
+          );
+
+        for (
+          const product of
+          sectionProducts
+        ) {
+          productsById.set(
+            product.id,
+            product,
+          );
+        }
+
+        for (
+          const product of
+          section.products
+        ) {
+          productsById.set(
+            product.id,
+            product,
+          );
+        }
+      }
+
+      return productsById;
+    }, [catalog]);
+
+  const resolvedPromotionBanners =
+    useMemo<
+      ResolvedPromotionBanner[]
+    >(() => {
+      return promotionBanners
+        .map(
+          (banner) => ({
+            ...banner,
+
+            products:
+              banner.productIds
+                .map(
+                  (productId) =>
+                    catalogProductsById.get(
+                      productId,
+                    ),
+                )
+                .filter(
+                  (
+                    product,
+                  ): product is CatalogProduct =>
+                    Boolean(
+                      product,
+                    ),
+                ),
+          }),
+        )
+        .filter(
+          (banner) =>
+            Boolean(
+              banner.imageUrl.trim(),
+            ),
+        );
+    }, [
+      catalogProductsById,
+      promotionBanners,
+    ]);
+
+  /**
+   * Same dimensions as supermarket.
+   */
+  const pageWidth =
+    Math.min(
+      windowWidth,
+      560,
+    );
+
+  const featuredCardWidth =
+    Math.min(
+      116,
+      Math.max(
+        92,
+        pageWidth * 0.3,
+      ),
+    );
+
+  const promotionBannerWidth =
+    Math.max(
+      pageWidth - 18,
+      1,
+    );
+
+  const promotionBannerHeight =
+    Math.round(
+      promotionBannerWidth *
+        0.64,
+    );
+
+  const promotionProductsOverlap =
+    Math.round(
+      promotionBannerHeight *
+        0.49,
     );
 
   if (isLoading) {
     return (
-      <CatalogStateScreen
-        isLoading
-        accentColor={PHARMACY_ACCENT}
-        description="يتم تحميل الصيدلية والمنتجات المتاحة."
-        title="جاري فتح الصيدلية"
-      />
-    );
-  }
-
-  if (!catalog || errorMessage) {
-    return (
-      <CatalogStateScreen
-        accentColor={PHARMACY_ACCENT}
-        description={
-          errorMessage ??
-          'لم نتمكن من تحميل بيانات الصيدلية.'
+      <SafeAreaView
+        style={
+          styles.stateScreen
         }
-        icon="💊"
-        title="الصيدلية غير متاحة"
-        onBack={() => router.replace('/')}
-        onRetry={() => {
-          void reload();
-        }}
-      />
+      >
+        <StatusBar
+          style="dark"
+        />
+
+        <ActivityIndicator
+          size="large"
+          color="#111111"
+        />
+
+        <Text
+          style={
+            styles.stateTitle
+          }
+        >
+          جاري تحميل الصيدلية
+        </Text>
+      </SafeAreaView>
     );
   }
 
-  const currentStore = catalog.store;
-  const delivery = catalog.delivery;
+  if (
+    !catalog ||
+    errorMessage
+  ) {
+    return (
+      <SafeAreaView
+        style={
+          styles.stateScreen
+        }
+      >
+        <StatusBar
+          style="dark"
+        />
+
+        <Text
+          style={
+            styles.stateEmoji
+          }
+        >
+          💊
+        </Text>
+
+        <Text
+          style={
+            styles.stateTitle
+          }
+        >
+          الصيدلية غير متاحة
+        </Text>
+
+        <Text
+          style={
+            styles.stateDescription
+          }
+        >
+          {errorMessage ??
+            'تعذر تحميل الصيدلية.'}
+        </Text>
+
+        <Pressable
+          style={({
+            pressed,
+          }) => [
+            styles.retryButton,
+
+            pressed &&
+              styles.generalPressed,
+          ]}
+          onPress={() => {
+            void loadPharmacy();
+          }}
+        >
+          <Text
+            style={
+              styles.retryButtonText
+            }
+          >
+            إعادة المحاولة
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={({
+            pressed,
+          }) => [
+            styles.errorBackButton,
+
+            pressed &&
+              styles.generalPressed,
+          ]}
+          onPress={() =>
+            router.back()
+          }
+        >
+          <Text
+            style={
+              styles.errorBackButtonText
+            }
+          >
+            رجوع
+          </Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
+  const currentStore =
+    catalog.store;
+
+  const delivery =
+    catalog.delivery;
+
+  const currentCart =
+    carts[
+      currentStore.id
+    ] ?? null;
+
+  const cartItems =
+    currentCart?.items ?? [];
+
+  const isStoreClosed =
+    currentStore.isManuallyClosed;
+
+  const currentStoreItemCount =
+    cartItems.reduce(
+      (total, item) =>
+        total +
+        item.quantity,
+      0,
+    );
+
+  const currentStoreSubtotal =
+    cartItems.reduce(
+      (total, item) =>
+        total +
+        item.price *
+          item.quantity,
+      0,
+    );
+
+  const shouldShowCartBar =
+    currentStoreItemCount > 0;
+
+  function openCategory(
+    item: CategoryDisplayItem,
+  ) {
+    router.push({
+      pathname:
+        '/pharmacy-category/[slug]',
+
+      params: {
+        slug:
+          item.section.slug,
+
+        storeId:
+          currentStore.id,
+
+        categoryKey:
+          item.key,
+
+        label:
+          item.label,
+      },
+    });
+  }
+
+  function addFeaturedProduct(
+    product: CatalogProduct,
+  ) {
+    if (isStoreClosed) {
+      return;
+    }
+
+    addItem(
+      {
+        id:
+          currentStore.id,
+
+        name:
+          currentStore.name,
+
+        icon:
+          currentStore.icon,
+
+        categorySlug:
+          currentStore.categorySlug,
+
+        deliveryFee:
+          delivery.deliveryFee,
+
+        minimumOrder:
+          delivery.minimumOrder,
+      },
+      {
+        id:
+          product.id,
+
+        name:
+          product.name,
+
+        description:
+          product.description,
+
+        price:
+          product.price,
+
+        icon:
+          product.icon,
+
+        variantId:
+          null,
+
+        variantName:
+          null,
+      },
+    );
+  }
+
+  function increaseFeaturedProduct(
+    product: CatalogProduct,
+  ) {
+    if (isStoreClosed) {
+      return;
+    }
+
+    const existingItem =
+      cartItems.find(
+        (item) =>
+          item.id ===
+            product.id &&
+          item.variantId ===
+            null,
+      );
+
+    if (existingItem) {
+      increaseStoreItem(
+        currentStore.id,
+        product.id,
+        null,
+      );
+
+      return;
+    }
+
+    addFeaturedProduct(
+      product,
+    );
+  }
+
+  function decreaseFeaturedProduct(
+    productId: string,
+  ) {
+    const existingItem =
+      cartItems.find(
+        (item) =>
+          item.id ===
+            productId &&
+          item.variantId ===
+            null,
+      );
+
+    if (!existingItem) {
+      return;
+    }
+
+    decreaseStoreItem(
+      currentStore.id,
+      productId,
+      null,
+    );
+  }
+
+  function getProductQuantity(
+    productId: string,
+  ) {
+    return (
+      cartItems.find(
+        (item) =>
+          item.id ===
+            productId &&
+          item.variantId ===
+            null,
+      )?.quantity ?? 0
+    );
+  }
+
+  function openCart() {
+    setActiveCart(
+      currentStore.id,
+    );
+
+    router.push({
+      pathname: '/cart',
+
+      params: {
+        storeId:
+          currentStore.id,
+      },
+    });
+  }
 
   return (
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.pageContent,
-          cartItemCount > 0 &&
-            styles.pageContentWithCart,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <SafeAreaView
+      style={styles.screen}
+      edges={['top']}
+    >
+      <StatusBar
+        style="dark"
+      />
+
+      <View
+        style={
+          styles.pageShell
+        }
       >
-        <View style={styles.container}>
-          <View style={styles.hero}>
-            <View style={styles.heroTopRow}>
-              <Pressable
-                accessibilityLabel="العودة"
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.backButton,
-                  pressed && styles.pressed,
-                ]}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.backIcon}>›</Text>
-              </Pressable>
+        {/* HEADER */}
+        <View
+          style={styles.header}
+        >
+          <Pressable
+            style={({
+              pressed,
+            }) => [
+              styles.backButton,
 
-              <View style={styles.heroCopy}>
-                <Text style={styles.heroEyebrow}>
-                  الصيدلية
-                </Text>
-                <Text style={styles.heroTitle}>
-                  {currentStore.name}
-                </Text>
-                <Text style={styles.heroDescription}>
-                  {currentStore.shortDescription ||
-                    'منتجات الصيدلية والعناية الشخصية في مكان واحد.'}
-                </Text>
-              </View>
+              pressed &&
+                styles.headerButtonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <BackArrowIcon />
+          </Pressable>
+        </View>
 
-              <View style={styles.heroIconBox}>
-                <Text style={styles.heroIcon}>
-                  {currentStore.icon || '💊'}
-                </Text>
-              </View>
-            </View>
+        {/* MAIN */}
+        <ScrollView
+          style={
+            styles.mainScrollView
+          }
+          contentContainerStyle={[
+            styles.mainContent,
 
-            <View style={styles.deliveryCardsRow}>
-              <View style={styles.deliveryInfoCard}>
-                <Text style={styles.deliveryInfoValue}>
-                  {delivery.deliveryTime ||
-                    `${delivery.estimatedDeliveryMinutes ?? '-'} دقيقة`}
-                </Text>
-                <Text style={styles.deliveryInfoLabel}>
-                  وقت التوصيل
-                </Text>
-              </View>
+            shouldShowCartBar &&
+              styles.mainContentWithCart,
+          ]}
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          {/* CATEGORIES */}
+          <View
+            style={
+              styles.categoriesSection
+            }
+          >
+            <Text
+              style={
+                styles.categoriesTitle
+              }
+            >
+              تسوق حسب الفئة
+            </Text>
 
-              <View style={styles.deliveryInfoCard}>
-                <Text style={styles.deliveryInfoValue}>
-                  {formatCurrency(
-                    delivery.deliveryFee,
-                    currencySymbol,
+            {categoryColumns.length >
+            0 ? (
+              <>
+                <Animated.ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={
+                    false
+                  }
+                  scrollEventThrottle={
+                    16
+                  }
+                  contentContainerStyle={
+                    styles.categoriesRail
+                  }
+                  onLayout={(
+                    event,
+                  ) => {
+                    setCategoryViewportWidth(
+                      event
+                        .nativeEvent
+                        .layout
+                        .width,
+                    );
+                  }}
+                  onContentSizeChange={(
+                    width,
+                  ) => {
+                    setCategoryContentWidth(
+                      width,
+                    );
+                  }}
+                  onScroll={Animated.event(
+                    [
+                      {
+                        nativeEvent: {
+                          contentOffset:
+                            {
+                              x: categoryScrollX,
+                            },
+                        },
+                      },
+                    ],
+                    {
+                      useNativeDriver:
+                        true,
+                    },
                   )}
-                </Text>
-                <Text style={styles.deliveryInfoLabel}>
-                  رسوم التوصيل
-                </Text>
-              </View>
+                >
+                  {categoryColumns.map(
+                    (
+                      column,
+                      columnIndex,
+                    ) => (
+                      <View
+                        key={`pharmacy-category-column-${columnIndex}`}
+                        style={
+                          styles.categoryColumn
+                        }
+                      >
+                        {column.map(
+                          (
+                            item,
+                          ) => (
+                            <Pressable
+                              key={
+                                item.key
+                              }
+                              style={({
+                                pressed,
+                              }) => [
+                                styles.categoryItem,
 
-              <View style={styles.deliveryInfoCard}>
-                <Text style={styles.deliveryInfoValue}>
-                  ⭐ {currentStore.rating.toFixed(1)}
-                </Text>
-                <Text style={styles.deliveryInfoLabel}>
-                  التقييم
-                </Text>
-              </View>
-            </View>
+                                pressed &&
+                                  styles.categoryItemPressed,
+                              ]}
+                              onPress={() =>
+                                openCategory(
+                                  item,
+                                )
+                              }
+                            >
+                              <CategoryVisual
+                                item={
+                                  item
+                                }
+                              />
 
-            {storeIsClosed && (
-              <View style={styles.closedNotice}>
-                <Text style={styles.closedNoticeText}>
-                  {currentStore.manualClosedNote ||
-                    'الصيدلية مغلقة مؤقتًا.'}
+                              <Text
+                                style={
+                                  styles.categoryLabel
+                                }
+                                numberOfLines={
+                                  2
+                                }
+                              >
+                                {
+                                  item.label
+                                }
+                              </Text>
+                            </Pressable>
+                          ),
+                        )}
+                      </View>
+                    ),
+                  )}
+                </Animated.ScrollView>
+
+                <View
+                  style={
+                    styles.categoryPagination
+                  }
+                >
+                  <Animated.View
+                    style={[
+                      styles.categoryPaginationActive,
+
+                      {
+                        transform:
+                          [
+                            {
+                              translateX:
+                                categoryIndicatorTranslateX,
+                            },
+                          ],
+                      },
+                    ]}
+                  />
+                </View>
+              </>
+            ) : (
+              <View
+                style={
+                  styles.emptyCategories
+                }
+              >
+                <Text
+                  style={
+                    styles.emptyCategoriesIcon
+                  }
+                >
+                  💊
+                </Text>
+
+                <Text
+                  style={
+                    styles.emptyCategoriesTitle
+                  }
+                >
+                  لا توجد فئات متاحة حاليًا
                 </Text>
               </View>
             )}
           </View>
 
-          {stores.length > 1 && (
-            <View style={styles.storeSwitcherSection}>
-              <Text style={styles.smallSectionTitle}>
-                اختر الصيدلية
-              </Text>
-              <ScrollView
-                horizontal
-                contentContainerStyle={
-                  styles.storeSwitcherContent
+          {/* PROMOTION BANNERS */}
+          {resolvedPromotionBanners.map(
+            (
+              banner,
+              bannerIndex,
+            ) => (
+              <View
+                key={
+                  banner.id
                 }
-                showsHorizontalScrollIndicator={false}
+                style={[
+                  styles.promotionSection,
+
+                  bannerIndex ===
+                    resolvedPromotionBanners.length -
+                      1 &&
+                    styles.promotionSectionLast,
+                ]}
               >
-                {stores.map((store) => {
-                  const isActive =
-                    store.id === activeStoreId;
-
-                  return (
-                    <Pressable
-                      key={store.id}
-                      style={({ pressed }) => [
-                        styles.storeSwitcherItem,
-                        isActive &&
-                          styles.storeSwitcherItemActive,
-                        pressed && styles.pressed,
-                      ]}
-                      onPress={() => {
-                        void selectStore(store.id);
-                      }}
-                    >
-                      <Text
-                        style={styles.storeSwitcherIcon}
-                      >
-                        {store.icon || '💊'}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.storeSwitcherText,
-                          isActive &&
-                            styles.storeSwitcherTextActive,
-                        ]}
-                      >
-                        {store.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={styles.searchBox}>
-            <Text style={styles.searchIcon}>⌕</Text>
-            <TextInput
-              autoCorrect={false}
-              placeholder="ابحث باسم المنتج أو الدواء"
-              placeholderTextColor="#8A8A91"
-              returnKeyType="search"
-              style={styles.searchInput}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-          </View>
-
-          <Pressable
-            accessibilityLabel="معلومات رفع الروشتة"
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.prescriptionCard,
-              pressed && styles.pressed,
-            ]}
-            onPress={() => {
-              Alert.alert(
-                'رفع الروشتة',
-                'سيتم ربط رفع الروشتة ومراجعتها في خطوة مستقلة. المنتجات التي تحتاج وصفة يجب مراجعتها قبل تأكيد الطلب.',
-              );
-            }}
-          >
-            <View style={styles.prescriptionAction}>
-              <Text style={styles.prescriptionArrow}>
-                ‹
-              </Text>
-            </View>
-
-            <View style={styles.prescriptionCopy}>
-              <Text style={styles.prescriptionTitle}>
-                لديك روشتة؟
-              </Text>
-              <Text
-                style={styles.prescriptionDescription}
-              >
-                اضغط لمعرفة مسار مراجعة الروشتة قبل تنفيذ الطلب.
-              </Text>
-            </View>
-
-            <View style={styles.prescriptionIconBox}>
-              <Text style={styles.prescriptionIcon}>
-                🧾
-              </Text>
-            </View>
-          </Pressable>
-
-          <View style={styles.safetyRow}>
-            <View style={styles.safetyCard}>
-              <Text style={styles.safetyIcon}>🔒</Text>
-              <Text style={styles.safetyText}>
-                بيانات الطلب محمية
-              </Text>
-            </View>
-            <View style={styles.safetyCard}>
-              <Text style={styles.safetyIcon}>📋</Text>
-              <Text style={styles.safetyText}>
-                مراجعة المنتجات المقيدة
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.sectionHeading}>
-            <Text style={styles.productCountBadge}>
-              {visibleProductCount} منتج
-            </Text>
-            <View style={styles.sectionHeadingCopy}>
-              <Text style={styles.sectionHeadingTitle}>
-                أقسام الصيدلية
-              </Text>
-              <Text
-                style={styles.sectionHeadingDescription}
-              >
-                اختر القسم أو ابحث عن المنتج مباشرة
-              </Text>
-            </View>
-          </View>
-
-          <SectionChips
-            activeSectionId={activeSectionId}
-            sections={catalog.sections}
-            onSelect={setActiveSectionId}
-          />
-
-          {visibleSections.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyIcon}>🔎</Text>
-              <Text style={styles.emptyTitle}>
-                لا توجد منتجات مطابقة
-              </Text>
-              <Text style={styles.emptyDescription}>
-                جرّب البحث باسم مختلف أو اختر قسمًا آخر.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.sectionsList}>
-              {visibleSections.map((section) => (
+                {/* BANNER */}
                 <View
-                  key={section.id}
-                  style={styles.productsSection}
+                  style={
+                    styles.promotionBannerFrame
+                  }
                 >
-                  <View style={styles.productsSectionHeader}>
-                    <Text style={styles.productsSectionCount}>
-                      {section.products.length}
-                    </Text>
-                    <Text style={styles.productsSectionTitle}>
-                      {section.name}
-                    </Text>
-                  </View>
+                  <Image
+                    source={{
+                      uri:
+                        banner.imageUrl,
+                    }}
+                    style={[
+                      styles.promotionBanner,
 
-                  <View style={styles.productsList}>
-                    {section.products.map((product) => (
-                      <PharmacyProductCard
-                        key={product.id}
-                        currencySymbol={currencySymbol}
-                        disabled={storeIsClosed}
-                        product={product}
-                        quantity={getProductQuantity(
-                          product.id,
-                        )}
-                        onDecrease={() =>
-                          decreaseProduct(product.id)
-                        }
-                        onIncrease={() =>
-                          increaseProduct(product)
-                        }
-                      />
-                    ))}
-                  </View>
+                      {
+                        height:
+                          promotionBannerHeight,
+                      },
+                    ]}
+                    resizeMode="cover"
+                    accessibilityLabel={
+                      banner.altTextAr ??
+                      banner.adminLabel
+                    }
+                  />
                 </View>
-              ))}
-            </View>
+
+                {/* PRODUCTS */}
+                {banner.products
+                  .length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={
+                      false
+                    }
+                    directionalLockEnabled
+                    contentContainerStyle={
+                      styles.promotionProductsRail
+                    }
+                    style={[
+                      styles.promotionProductsScroll,
+
+                      {
+                        marginTop:
+                          -promotionProductsOverlap,
+                      },
+                    ]}
+                  >
+                    {banner.products.map(
+                      (
+                        product,
+                      ) => (
+                        <FeaturedProductCard
+                          key={`${banner.id}-${product.id}`}
+                          product={
+                            product
+                          }
+                          currencyCode={
+                            currencyCode
+                          }
+                          cardWidth={
+                            featuredCardWidth
+                          }
+                          quantity={getProductQuantity(
+                            product.id,
+                          )}
+                          isStoreClosed={
+                            isStoreClosed
+                          }
+                          onAdd={() =>
+                            addFeaturedProduct(
+                              product,
+                            )
+                          }
+                          onIncrease={() =>
+                            increaseFeaturedProduct(
+                              product,
+                            )
+                          }
+                          onDecrease={() =>
+                            decreaseFeaturedProduct(
+                              product.id,
+                            )
+                          }
+                        />
+                      ),
+                    )}
+                  </ScrollView>
+                )}
+              </View>
+            ),
           )}
-        </View>
-      </ScrollView>
+        </ScrollView>
 
-      <CatalogCartBar
-        accentColor={PHARMACY_ACCENT}
-        currencySymbol={currencySymbol}
-        itemCount={cartItemCount}
-        storeName={cartStoreName}
-        subtotal={cartSubtotal}
-        onPress={() => router.push('/cart')}
-      />
-
-      <ReplaceCartModal
-        accentColor={PHARMACY_ACCENT}
-        currentCartStoreName={cartStoreName}
-        product={pendingProduct}
-        onCancel={dismissPendingProduct}
-        onOpenCart={() => {
-          dismissPendingProduct();
-          router.push('/cart');
-        }}
-        onReplace={replaceCartAndAddProduct}
-      />
-    </View>
-  );
-}
-
-function SectionChips({
-  sections,
-  activeSectionId,
-  onSelect,
-}: {
-  sections: CatalogSection[];
-  activeSectionId: string;
-  onSelect: (sectionId: string) => void;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      contentContainerStyle={styles.sectionChipsContent}
-      showsHorizontalScrollIndicator={false}
-      style={styles.sectionChips}
-    >
-      <SectionChip
-        active={activeSectionId === 'all'}
-        label="الكل"
-        onPress={() => onSelect('all')}
-      />
-
-      {sections.map((section) => (
-        <SectionChip
-          key={section.id}
-          active={activeSectionId === section.id}
-          label={section.name}
-          onPress={() => onSelect(section.id)}
-        />
-      ))}
-    </ScrollView>
-  );
-}
-
-function SectionChip({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.sectionChip,
-        active && styles.sectionChipActive,
-        pressed && styles.pressed,
-      ]}
-      onPress={onPress}
-    >
-      <Text
-        style={[
-          styles.sectionChipText,
-          active && styles.sectionChipTextActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function PharmacyProductCard({
-  product,
-  currencySymbol,
-  quantity,
-  disabled,
-  onIncrease,
-  onDecrease,
-}: {
-  product: CatalogProduct;
-  currencySymbol: string;
-  quantity: number;
-  disabled: boolean;
-  onIncrease: () => void;
-  onDecrease: () => void;
-}) {
-  return (
-    <View style={styles.productCard}>
-      <ProductArtwork
-        backgroundColor={PHARMACY_PALE}
-        product={product}
-        size={92}
-      />
-
-      <View style={styles.productContent}>
-        <View style={styles.productBadgesRow}>
-          {product.requiresPrescription && (
-            <Text style={styles.prescriptionBadge}>
-              يحتاج وصفة
+        {/* CLOSED */}
+        {isStoreClosed && (
+          <View
+            style={
+              styles.closedOverlay
+            }
+          >
+            <Text
+              style={
+                styles.closedOverlayText
+              }
+            >
+              {currentStore.manualClosedNote ??
+                'الصيدلية مغلقة حاليًا.'}
             </Text>
-          )}
-          {product.isAgeRestricted && (
-            <Text style={styles.ageBadge}>
-              تحقق من العمر
-            </Text>
-          )}
-        </View>
-
-        <Text
-          numberOfLines={2}
-          style={styles.productName}
-        >
-          {product.name}
-        </Text>
-        <Text
-          numberOfLines={2}
-          style={styles.productDescription}
-        >
-          {product.description ||
-            product.unitLabelAr ||
-            'منتج متاح من الصيدلية.'}
-        </Text>
-
-        <View style={styles.productBottomRow}>
-          <QuantityControl
-            accentColor={PHARMACY_ACCENT}
-            disabled={disabled}
-            quantity={quantity}
-            onDecrease={onDecrease}
-            onIncrease={onIncrease}
-          />
-
-          <View style={styles.productPriceBox}>
-            <Text style={styles.productPrice}>
-              {formatCurrency(
-                product.price,
-                currencySymbol,
-              )}
-            </Text>
-            {product.compareAtPrice !== null &&
-              product.compareAtPrice > product.price && (
-                <Text style={styles.comparePrice}>
-                  {formatCurrency(
-                    product.compareAtPrice,
-                    currencySymbol,
-                  )}
-                </Text>
-              )}
           </View>
-        </View>
+        )}
+
+        {/* CART */}
+        {shouldShowCartBar && (
+          <View
+            pointerEvents="box-none"
+            style={
+              styles.cartBarFloatingWrapper
+            }
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`عرض السلة، ${currentStoreItemCount} منتجات، الإجمالي ${formatCartMoney(
+                currentStoreSubtotal,
+                currencyCode,
+              )}`}
+              style={({
+                pressed,
+              }) => [
+                styles.cartBar,
+
+                pressed &&
+                  styles.cartBarPressed,
+              ]}
+              onPress={
+                openCart
+              }
+            >
+              <View
+                style={
+                  styles.cartCountBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.cartCountText
+                  }
+                >
+                  {
+                    currentStoreItemCount
+                  }
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.cartBarRight
+                }
+              >
+                <Text
+                  style={
+                    styles.cartBarText
+                  }
+                  numberOfLines={
+                    1
+                  }
+                >
+                  {formatCartMoney(
+                    currentStoreSubtotal,
+                    currencyCode,
+                  )}{' '}
+                  عرض السلة
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: '#F7FBFA',
-    flex: 1,
-  },
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 42,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 42,
-  },
-  pageContentWithCart: {
-    paddingBottom: 116,
-  },
-  container: {
-    alignSelf: 'center',
-    maxWidth: NAVIENTY_NOW_LAYOUT.contentMaxWidth,
-    width: '100%',
-  },
-  hero: {
-    backgroundColor: PHARMACY_ACCENT_DARK,
-    borderRadius: 30,
-    padding: 20,
-  },
-  heroTopRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 13,
-  },
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 14,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  backIcon: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    lineHeight: 34,
-  },
-  heroCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-  heroEyebrow: {
-    color: '#9CE5DA',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '900',
-    marginTop: 7,
-    textAlign: 'right',
-  },
-  heroDescription: {
-    color: 'rgba(255,255,255,0.76)',
-    fontSize: 12,
-    lineHeight: 20,
-    marginTop: 7,
-    textAlign: 'right',
-  },
-  heroIconBox: {
-    alignItems: 'center',
-    backgroundColor: '#D7FFF7',
-    borderRadius: 20,
-    height: 66,
-    justifyContent: 'center',
-    width: 66,
-  },
-  heroIcon: {
-    fontSize: 35,
-  },
-  deliveryCardsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 20,
-  },
-  deliveryInfoCard: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 15,
-    flex: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 11,
-  },
-  deliveryInfoValue: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  deliveryInfoLabel: {
-    color: 'rgba(255,255,255,0.62)',
-    fontSize: 9,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  closedNotice: {
-    backgroundColor: 'rgba(255,224,224,0.16)',
-    borderRadius: 13,
-    marginTop: 12,
-    padding: 11,
-  },
-  closedNoticeText: {
-    color: '#FFD7D7',
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
-  storeSwitcherSection: {
-    marginTop: 22,
-  },
-  smallSectionTitle: {
-    color: '#1F2F2D',
-    fontSize: 15,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  storeSwitcherContent: {
-    gap: 9,
-    paddingTop: 11,
-  },
-  storeSwitcherItem: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DCE7E5',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    maxWidth: 210,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  storeSwitcherItemActive: {
-    backgroundColor: PHARMACY_PALE,
-    borderColor: PHARMACY_ACCENT,
-  },
-  storeSwitcherIcon: {
-    fontSize: 20,
-  },
-  storeSwitcherText: {
-    color: '#5D6665',
-    flexShrink: 1,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  storeSwitcherTextActive: {
-    color: PHARMACY_ACCENT_DARK,
-  },
-  searchBox: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DDE9E7',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 20,
-    minHeight: 54,
-    paddingHorizontal: 15,
-  },
-  searchIcon: {
-    color: PHARMACY_ACCENT,
-    fontSize: 24,
-    marginRight: 9,
-  },
-  searchInput: {
-    color: '#1A2524',
-    flex: 1,
-    fontSize: 14,
-    paddingVertical: 14,
-    textAlign: 'right',
-  },
-  prescriptionCard: {
-    alignItems: 'center',
-    backgroundColor: '#EEEAFE',
-    borderRadius: 22,
-    flexDirection: 'row',
-    marginTop: 16,
-    padding: 16,
-  },
-  prescriptionAction: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 13,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  prescriptionArrow: {
-    color: '#5F49C6',
-    fontSize: 26,
-    lineHeight: 28,
-  },
-  prescriptionCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  prescriptionTitle: {
-    color: '#332479',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  prescriptionDescription: {
-    color: '#6D61A0',
-    fontSize: 11,
-    lineHeight: 18,
-    marginTop: 5,
-    textAlign: 'right',
-  },
-  prescriptionIconBox: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
-  },
-  prescriptionIcon: {
-    fontSize: 27,
-  },
-  safetyRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  safetyCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E0EAE8',
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: 'row-reverse',
-    gap: 7,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 8,
-  },
-  safetyIcon: {
-    fontSize: 17,
-  },
-  safetyText: {
-    color: '#4D5D5B',
-    fontSize: 10,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
-  sectionHeading: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 28,
-  },
-  productCountBadge: {
-    backgroundColor: PHARMACY_PALE,
-    borderRadius: 999,
-    color: PHARMACY_ACCENT,
-    fontSize: 10,
-    fontWeight: '900',
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  sectionHeadingCopy: {
-    alignItems: 'flex-end',
-  },
-  sectionHeadingTitle: {
-    color: '#1A2524',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  sectionHeadingDescription: {
-    color: '#818A89',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  sectionChips: {
-    marginHorizontal: -20,
-    marginTop: 14,
-  },
-  sectionChipsContent: {
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  sectionChip: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DFE9E7',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  sectionChipActive: {
-    backgroundColor: PHARMACY_ACCENT,
-    borderColor: PHARMACY_ACCENT,
-  },
-  sectionChipText: {
-    color: '#66706F',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  sectionChipTextActive: {
-    color: '#FFFFFF',
-  },
-  sectionsList: {
-    gap: 25,
-    marginTop: 24,
-  },
-  productsSection: {
-    gap: 12,
-  },
-  productsSectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  productsSectionTitle: {
-    color: '#202B2A',
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  productsSectionCount: {
-    color: '#8A9392',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  productsList: {
-    gap: 11,
-  },
-  productCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1EAE8',
-    borderRadius: 21,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 13,
-    padding: 12,
-  },
-  productContent: {
-    flex: 1,
-  },
-  productBadgesRow: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 5,
-  },
-  prescriptionBadge: {
-    backgroundColor: '#FFF2D9',
-    borderRadius: 999,
-    color: '#8A5D09',
-    fontSize: 8,
-    fontWeight: '900',
-    overflow: 'hidden',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  ageBadge: {
-    backgroundColor: '#FDE8E8',
-    borderRadius: 999,
-    color: '#A13B3B',
-    fontSize: 8,
-    fontWeight: '900',
-    overflow: 'hidden',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  productName: {
-    color: '#1C2726',
-    fontSize: 14,
-    fontWeight: '900',
-    marginTop: 5,
-    textAlign: 'right',
-  },
-  productDescription: {
-    color: '#7C8584',
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-  productBottomRow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 11,
-  },
-  productPriceBox: {
-    alignItems: 'flex-end',
-  },
-  productPrice: {
-    color: PHARMACY_ACCENT_DARK,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  comparePrice: {
-    color: '#A0A0A6',
-    fontSize: 9,
-    marginTop: 3,
-    textDecorationLine: 'line-through',
-  },
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1EAE8',
-    borderRadius: 22,
-    borderWidth: 1,
-    marginTop: 24,
-    padding: 28,
-  },
-  emptyIcon: {
-    fontSize: 40,
-  },
-  emptyTitle: {
-    color: '#222D2C',
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 11,
-  },
-  emptyDescription: {
-    color: '#7B8583',
-    fontSize: 11,
-    lineHeight: 18,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.985 }],
-  },
-});
+const styles =
+  StyleSheet.create({
+    screen: {
+      backgroundColor:
+        '#FFFFFF',
+      flex: 1,
+    },
+
+    pageShell: {
+      alignSelf: 'center',
+      backgroundColor:
+        '#FFFFFF',
+      flex: 1,
+      maxWidth: 560,
+      position:
+        'relative',
+      width: '100%',
+    },
+
+    header: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+      flexDirection:
+        'row',
+      paddingBottom: 12,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      zIndex: 10,
+    },
+
+    backButton: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+      borderColor:
+        '#E1E1E1',
+      borderRadius: 24,
+      borderWidth: 1,
+      height: 46,
+      justifyContent:
+        'center',
+      width: 46,
+    },
+
+    headerButtonPressed: {
+      backgroundColor:
+        '#F7F7F7',
+
+      transform: [
+        {
+          scale: 0.97,
+        },
+      ],
+    },
+
+    backArrowCanvas: {
+      height: 23,
+      position:
+        'relative',
+      width: 24,
+    },
+
+    backArrowStem: {
+      backgroundColor:
+        '#242424',
+      borderRadius: 2,
+      height: 2.2,
+      left: 3,
+      position:
+        'absolute',
+      top: 10.3,
+      width: 19,
+    },
+
+    backArrowDiagonal: {
+      backgroundColor:
+        '#242424',
+      borderRadius: 2,
+      height: 2.2,
+      left: 2,
+      position:
+        'absolute',
+      width: 10,
+    },
+
+    backArrowTop: {
+      top: 7,
+
+      transform: [
+        {
+          rotate:
+            '-42deg',
+        },
+      ],
+    },
+
+    backArrowBottom: {
+      top: 14,
+
+      transform: [
+        {
+          rotate:
+            '42deg',
+        },
+      ],
+    },
+
+    mainScrollView: {
+      flex: 1,
+    },
+
+    mainContent: {
+      backgroundColor:
+        '#FFFFFF',
+      paddingBottom: 30,
+    },
+
+    mainContentWithCart: {
+      paddingBottom: 115,
+    },
+
+    /**
+     * CATEGORIES
+     */
+    categoriesSection: {
+      backgroundColor:
+        '#FFFFFF',
+      paddingTop: 1,
+    },
+
+    categoriesTitle: {
+      color: '#202020',
+      fontSize: 21,
+      fontWeight: '800',
+      letterSpacing:
+        -0.45,
+      marginBottom: 14,
+      paddingHorizontal: 16,
+    },
+
+    categoriesRail: {
+      gap: 7,
+      paddingHorizontal: 16,
+    },
+
+    categoryColumn: {
+      gap: 15,
+      width: 85,
+    },
+
+    categoryItem: {
+      alignItems:
+        'center',
+      width: 85,
+    },
+
+    categoryItemPressed: {
+      opacity: 0.68,
+
+      transform: [
+        {
+          scale: 0.97,
+        },
+      ],
+    },
+
+    categoryImageBox: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#F5F5F5',
+      borderRadius: 13,
+      height: 80,
+      justifyContent:
+        'center',
+      overflow:
+        'hidden',
+      width: 80,
+    },
+
+    categoryImage: {
+      height: '92%',
+      width: '92%',
+    },
+
+    categoryFallbackIcon: {
+      fontSize: 39,
+    },
+
+    categoryLabel: {
+      color: '#202020',
+      fontSize: 13.5,
+      fontWeight: '400',
+      letterSpacing:
+        -0.2,
+      lineHeight: 18,
+      marginTop: 8,
+      minHeight: 36,
+      textAlign:
+        'center',
+      writingDirection:
+        'rtl',
+      width: 85,
+    },
+
+    categoryPagination: {
+      alignSelf:
+        'center',
+      backgroundColor:
+        '#E6E6E6',
+      borderRadius: 3,
+      height: 5,
+      marginBottom: 22,
+      marginTop: 18,
+      overflow:
+        'hidden',
+      position:
+        'relative',
+      width:
+        CATEGORY_INDICATOR_TRACK_WIDTH,
+    },
+
+    categoryPaginationActive: {
+      backgroundColor:
+        '#151515',
+      borderRadius: 3,
+      height: 5,
+      left: 0,
+      position:
+        'absolute',
+      top: 0,
+      width:
+        CATEGORY_INDICATOR_THUMB_WIDTH,
+    },
+
+    emptyCategories: {
+      alignItems:
+        'center',
+      paddingHorizontal: 28,
+      paddingVertical: 28,
+    },
+
+    emptyCategoriesIcon: {
+      fontSize: 42,
+    },
+
+    emptyCategoriesTitle: {
+      color: '#202020',
+      fontSize: 15,
+      fontWeight: '700',
+      marginTop: 10,
+      textAlign:
+        'center',
+    },
+
+    /**
+     * PROMOTION SECTION
+     */
+    promotionSection: {
+      backgroundColor:
+        '#FFFFFF',
+      marginBottom: 22,
+      overflow:
+        'visible',
+      width: '100%',
+    },
+
+    promotionSectionLast: {
+      marginBottom: 0,
+    },
+
+    promotionBannerFrame: {
+      marginHorizontal: 9,
+      overflow:
+        'hidden',
+    },
+
+    promotionBanner: {
+      backgroundColor:
+        '#F4F4F4',
+      width: '100%',
+    },
+
+    promotionProductsScroll: {
+      overflow:
+        'visible',
+    },
+
+    promotionProductsRail: {
+      alignItems:
+        'flex-start',
+      gap: 7,
+      paddingBottom: 7,
+      paddingHorizontal: 21,
+      paddingTop: 0,
+    },
+
+    /**
+     * PROMOTION PRODUCT CARD
+     */
+    featuredProductCard: {
+      backgroundColor:
+        'transparent',
+      overflow:
+        'visible',
+    },
+
+    featuredProductImageBox: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+      borderColor:
+        '#E8E8E8',
+      borderRadius: 12,
+      borderWidth: 1,
+      justifyContent:
+        'center',
+      overflow:
+        'visible',
+      position:
+        'relative',
+    },
+
+    featuredProductImage: {
+      height: '68%',
+      width: '68%',
+    },
+
+    featuredProductFallback: {
+      fontSize: 34,
+    },
+
+    featuredDiscountBadge: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#BFFF00',
+      borderRadius: 3,
+      justifyContent:
+        'center',
+      left: 6,
+      minHeight: 17,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+      position:
+        'absolute',
+      top: 6,
+      zIndex: 5,
+    },
+
+    featuredDiscountText: {
+      color: '#111111',
+      fontSize: 8.5,
+      fontWeight: '500',
+      lineHeight: 11,
+    },
+
+    featuredAddButton: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+      borderColor:
+        '#E7E7E7',
+      borderRadius: 18,
+      borderWidth: 1,
+      bottom: 6,
+      elevation: 2,
+      height: 34,
+      justifyContent:
+        'center',
+      position:
+        'absolute',
+      right: 6,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius: 2,
+      width: 34,
+      zIndex: 8,
+    },
+
+    featuredAddButtonPressed: {
+      backgroundColor:
+        '#F8F8F8',
+
+      transform: [
+        {
+          scale: 0.94,
+        },
+      ],
+    },
+
+    featuredAddButtonDisabled: {
+      opacity: 0.45,
+    },
+
+    featuredAddButtonText: {
+      color: '#F04A00',
+      fontSize: 25,
+      fontWeight: '300',
+      lineHeight: 27,
+      marginTop: -2,
+    },
+
+    featuredQuantityPill: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+      borderColor:
+        '#E7E7E7',
+      borderRadius: 18,
+      borderWidth: 1,
+      bottom: 6,
+      elevation: 2,
+      flexDirection:
+        'row',
+      height: 34,
+      position:
+        'absolute',
+      right: 6,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius: 2,
+      zIndex: 8,
+    },
+
+    featuredQuantityButton: {
+      alignItems:
+        'center',
+      height: 32,
+      justifyContent:
+        'center',
+      width: 25,
+    },
+
+    featuredQuantityButtonText: {
+      color: '#F04A00',
+      fontSize: 18,
+      fontWeight: '500',
+      lineHeight: 20,
+    },
+
+    featuredQuantityValue: {
+      color: '#202020',
+      fontSize: 10,
+      fontWeight: '700',
+      minWidth: 14,
+      textAlign:
+        'center',
+    },
+
+    featuredProductName: {
+      color: '#202020',
+      fontSize: 10.5,
+      fontWeight: '400',
+      letterSpacing:
+        -0.15,
+      lineHeight: 12.5,
+      marginTop: 7,
+      minHeight: 25,
+      textAlign: 'left',
+      writingDirection:
+        'ltr',
+    },
+
+    featuredCurrentPriceWrap: {
+      alignSelf:
+        'flex-start',
+      borderBottomColor:
+        '#BFFF00',
+      borderBottomWidth: 2,
+      marginTop: 3,
+    },
+
+    featuredCurrentPrice: {
+      color: '#202020',
+      fontSize: 10.5,
+      fontWeight: '500',
+      lineHeight: 13,
+      textAlign: 'left',
+      writingDirection:
+        'ltr',
+    },
+
+    featuredOldPrice: {
+      alignSelf:
+        'flex-start',
+      color: '#858585',
+      fontSize: 9,
+      lineHeight: 11,
+      marginTop: 1,
+      textAlign: 'left',
+      textDecorationLine:
+        'line-through',
+      writingDirection:
+        'ltr',
+    },
+
+    /**
+     * CART
+     */
+    cartBarFloatingWrapper: {
+      bottom: 12,
+      left: 18,
+      position:
+        'absolute',
+      right: 18,
+      zIndex: 999,
+    },
+
+    cartBar: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#00B956',
+      borderRadius: 34,
+      elevation: 20,
+      flexDirection:
+        'row',
+      height: 64,
+      justifyContent:
+        'space-between',
+      paddingHorizontal: 9,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      shadowOpacity:
+        0.16,
+
+      shadowRadius: 8,
+      width: '100%',
+    },
+
+    cartBarPressed: {
+      opacity: 0.92,
+
+      transform: [
+        {
+          scale: 0.985,
+        },
+      ],
+    },
+
+    cartCountBadge: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#009D49',
+      borderRadius: 24,
+      height: 48,
+      justifyContent:
+        'center',
+      width: 48,
+    },
+
+    cartCountText: {
+      color: '#FFFFFF',
+      fontSize: 17,
+      fontWeight: '800',
+      textAlign:
+        'center',
+    },
+
+    cartBarRight: {
+      alignItems:
+        'flex-end',
+      flex: 1,
+      justifyContent:
+        'center',
+      paddingHorizontal: 16,
+    },
+
+    cartBarText: {
+      color: '#FFFFFF',
+      fontSize: 15.5,
+      fontWeight: '800',
+      textAlign:
+        'right',
+      writingDirection:
+        'rtl',
+    },
+
+    closedOverlay: {
+      backgroundColor:
+        '#252525',
+      left: 16,
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      position:
+        'absolute',
+      right: 16,
+      top: 68,
+      zIndex: 50,
+    },
+
+    closedOverlayText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '600',
+      textAlign:
+        'center',
+      writingDirection:
+        'rtl',
+    },
+
+    /**
+     * STATES
+     */
+    stateScreen: {
+      alignItems:
+        'center',
+      backgroundColor:
+        '#FFFFFF',
+      flex: 1,
+      justifyContent:
+        'center',
+      paddingHorizontal: 28,
+    },
+
+    stateEmoji: {
+      fontSize: 50,
+    },
+
+    stateTitle: {
+      color: '#202020',
+      fontSize: 21,
+      fontWeight: '800',
+      marginTop: 15,
+      textAlign:
+        'center',
+    },
+
+    stateDescription: {
+      color: '#777777',
+      fontSize: 13,
+      lineHeight: 20,
+      marginTop: 8,
+      maxWidth: 330,
+      textAlign:
+        'center',
+    },
+
+    retryButton: {
+      backgroundColor:
+        '#222222',
+      borderRadius: 14,
+      marginTop: 22,
+      minWidth: 150,
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+    },
+
+    retryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+      textAlign:
+        'center',
+    },
+
+    errorBackButton: {
+      borderColor:
+        '#E0E0E0',
+      borderRadius: 14,
+      borderWidth: 1,
+      marginTop: 10,
+      minWidth: 150,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+    },
+
+    errorBackButtonText: {
+      color: '#222222',
+      fontSize: 14,
+      fontWeight: '600',
+      textAlign:
+        'center',
+    },
+
+    generalPressed: {
+      opacity: 0.72,
+
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
+    },
+  });
