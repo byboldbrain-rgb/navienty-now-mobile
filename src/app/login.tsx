@@ -1,31 +1,167 @@
-import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import {
-    useEffect,
-    useState,
+  FontAwesome,
+  Ionicons,
+} from '@expo/vector-icons';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
 } from 'react';
 import {
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
 import { useAuthSession } from '../hooks/use-auth-session';
 import { supabase } from '../lib/supabase';
 import {
-    NAVIENTY_NOW_COLORS,
-    NAVIENTY_NOW_LAYOUT,
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
 } from '../theme/navienty-now-theme';
 
-const navientyNowLogo = require('../assets/images/navienty-now-logo.jpg');
+WebBrowser.maybeCompleteAuthSession();
 
-type AuthStep = 'phone' | 'otp';
+/**
+ * Transparent Hero Artwork
+ *
+ * src/assets/images/navienty-now-auth-hero.png
+ */
+const navientyNowHero = require(
+  '../assets/images/navienty-now-auth-hero.png',
+);
+
+/**
+ * Hero background.
+ */
+const AUTH_HERO_BACKGROUND = '#FBF7EF';
+const AUTH_WHITE = '#FFFFFF';
+const AUTH_BORDER = '#747474';
+
+/**
+ * ============================================================
+ * TALABAT REFERENCE SYSTEM
+ * ============================================================
+ *
+ * Reference screenshot:
+ *
+ * Width = 591
+ * Height = 1280
+ *
+ * IMPORTANT:
+ *
+ * The landing page keeps its WIDTH-based scale for typography,
+ * buttons, and icons, but vertical empty space is kept tighter.
+ *
+ * This means:
+ *
+ * - The content starts higher inside the white section.
+ * - We do not force an artificial minimum page height.
+ * - Most normal phone screens can show the login choices
+ *   without requiring an unnecessary vertical scroll.
+ */
+const REFERENCE_WIDTH = 591;
+
+/**
+ * Approximate reference dimensions,
+ * measured from the supplied Talabat screenshot.
+ *
+ * These values are then scaled according
+ * to the current screen width.
+ */
+const REF = {
+  /**
+   * Hero excluding the system status-bar area,
+   * because SafeAreaView already handles it.
+   */
+  heroHeight: 500,
+
+  /**
+   * Landing hero artwork fills the entire hero section.
+   * Its size is controlled by the container itself.
+   */
+
+  /**
+   * Back button.
+   */
+  backButtonSize: 60,
+  backButtonTop: 20,
+  backButtonRight: 25,
+  backIconSize: 30,
+
+  /**
+   * Wave.
+   */
+  waveHeight: 50,
+
+  /**
+   * White content.
+   */
+  contentHorizontalPadding: 26,
+  landingTopSpace: 24,
+
+  /**
+   * Welcome.
+   */
+  welcomeFontSize: 31,
+  welcomeLineHeight: 42,
+
+  descriptionFontSize: 17,
+  descriptionLineHeight: 29,
+  descriptionMarginTop: 14,
+  descriptionMaxWidth: 475,
+
+  /**
+   * Social buttons.
+   */
+  providersMarginTop: 30,
+
+  providerHeight: 69,
+  providerGap: 18,
+
+  providerFontSize: 19,
+  providerLineHeight: 27,
+
+  providerIconSize: 26,
+  providerIconGap: 12,
+
+  /**
+   * Small bottom breathing room only.
+   *
+   * Do not force a large minimum page height here,
+   * otherwise short screens get an unnecessary scroll.
+   */
+  bottomSpace: 20,
+} as const;
+
+type AuthStep =
+  | 'landing'
+  | 'phone'
+  | 'otp';
+
+type SocialProvider =
+  | 'google'
+  | 'apple'
+  | 'facebook';
 
 type FormMessage =
   | {
@@ -54,7 +190,9 @@ function normalizeEgyptianPhone(
   return null;
 }
 
-function maskPhone(phone: string): string {
+function maskPhone(
+  phone: string,
+): string {
   if (phone.length < 8) {
     return phone;
   }
@@ -62,763 +200,2622 @@ function maskPhone(phone: string): string {
   return `${phone.slice(0, 5)}••••${phone.slice(-3)}`;
 }
 
+function getSingleParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string | undefined {
+  return Array.isArray(value)
+    ? value[0]
+    : value;
+}
+
+/**
+ * ============================================================
+ * HERO WAVE
+ * ============================================================
+ */
+
+type HeroWaveProps = {
+  width: number;
+  height: number;
+};
+
+function HeroWave({
+  width,
+  height,
+}: HeroWaveProps) {
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.heroWave,
+        {
+          height,
+        },
+      ]}
+    >
+      <Svg
+        height={height}
+        preserveAspectRatio="none"
+        viewBox="0 0 591 50"
+        width={width}
+      >
+        {/*
+         * Very subtle organic transition,
+         * intentionally close to the Talabat reference.
+         *
+         * It should NOT look like a big wave.
+         */}
+        <Path
+          d="
+            M0 17
+
+            C37 16
+             69 15
+             102 17
+
+            C141 19
+             174 21
+             208 21
+
+            C246 21
+             280 18
+             314 17
+
+            C351 16
+             387 18
+             421 19
+
+            C461 21
+             499 20
+             534 18
+
+            C552 17
+             571 17
+             591 18
+
+            L591 50
+            L0 50
+            Z
+          "
+          fill={AUTH_WHITE}
+        />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * ============================================================
+ * PROVIDER BUTTON
+ * ============================================================
+ */
+
+type ProviderButtonProps = {
+  label: string;
+
+  provider:
+    | SocialProvider
+    | 'phone';
+
+  disabled?: boolean;
+
+  loading?: boolean;
+
+  /**
+   * Current Talabat-reference scale.
+   */
+  scale: number;
+
+  onPress: () => void;
+};
+
+function ProviderButton({
+  label,
+  provider,
+  disabled = false,
+  loading = false,
+  scale,
+  onPress,
+}: ProviderButtonProps) {
+  const px = (
+    value: number,
+  ) => value * scale;
+
+  function renderIcon() {
+    if (loading) {
+      return (
+        <ActivityIndicator
+          color={
+            NAVIENTY_NOW_COLORS.text
+          }
+          size="small"
+        />
+      );
+    }
+
+    if (provider === 'phone') {
+      return (
+        <Ionicons
+          color={
+            NAVIENTY_NOW_COLORS.text
+          }
+          name="call-outline"
+          size={
+            px(
+              REF.providerIconSize,
+            )
+          }
+        />
+      );
+    }
+
+    if (provider === 'google') {
+      return (
+        <FontAwesome
+          color="#4285F4"
+          name="google"
+          size={
+            px(
+              REF.providerIconSize,
+            )
+          }
+        />
+      );
+    }
+
+    if (provider === 'apple') {
+      return (
+        <FontAwesome
+          color="#000000"
+          name="apple"
+          size={
+            px(
+              REF.providerIconSize +
+                2,
+            )
+          }
+        />
+      );
+    }
+
+    return (
+      <FontAwesome
+        color="#1877F2"
+        name="facebook"
+        size={
+          px(
+            REF.providerIconSize +
+              1,
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      style={({
+        pressed,
+      }) => [
+        styles.providerButton,
+
+        {
+          borderRadius:
+            px(
+              REF.providerHeight /
+                2,
+            ),
+
+          height:
+            px(
+              REF.providerHeight,
+            ),
+
+          marginBottom:
+            px(
+              REF.providerGap,
+            ),
+
+          paddingHorizontal:
+            px(20),
+        },
+
+        pressed &&
+          !disabled &&
+          styles.providerButtonPressed,
+
+        disabled &&
+          styles.providerButtonDisabled,
+      ]}
+      onPress={onPress}
+    >
+      <View
+        style={
+          styles.providerButtonContent
+        }
+      >
+        <Text
+          style={[
+            styles.providerButtonText,
+
+            {
+              fontSize:
+                px(
+                  REF.providerFontSize,
+                ),
+
+              lineHeight:
+                px(
+                  REF.providerLineHeight,
+                ),
+            },
+          ]}
+        >
+          {label}
+        </Text>
+
+        <View
+          style={[
+            styles.providerIcon,
+
+            {
+              marginLeft:
+                px(
+                  REF.providerIconGap,
+                ),
+
+              minWidth:
+                px(31),
+            },
+          ]}
+        >
+          {renderIcon()}
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * ============================================================
+ * SCREEN
+ * ============================================================
+ */
+
 export default function LoginScreen() {
   const router = useRouter();
-  const authState = useAuthSession();
+
+  const params =
+    useLocalSearchParams<{
+      returnTo?:
+        | string
+        | string[];
+
+      storeId?:
+        | string
+        | string[];
+    }>();
+
+  const returnTo =
+    getSingleParam(
+      params.returnTo,
+    );
+
+  const returnStoreId =
+    getSingleParam(
+      params.storeId,
+    );
+
+  const authState =
+    useAuthSession();
+
+  const {
+    height: screenHeight,
+    width: screenWidth,
+  } = useWindowDimensions();
 
   const [step, setStep] =
-    useState<AuthStep>('phone');
-  const [fullName, setFullName] =
+    useState<AuthStep>(
+      'landing',
+    );
+
+  const [
+    phoneInput,
+    setPhoneInput,
+  ] =
     useState('');
-  const [phoneInput, setPhoneInput] =
+
+  const [
+    verifiedPhone,
+    setVerifiedPhone,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [
+    otpCode,
+    setOtpCode,
+  ] =
     useState('');
-  const [verifiedPhone, setVerifiedPhone] =
-    useState<string | null>(null);
-  const [otpCode, setOtpCode] =
-    useState('');
-  const [isSubmitting, setIsSubmitting] =
+
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] =
     useState(false);
-  const [formMessage, setFormMessage] =
-    useState<FormMessage>(null);
 
-  useEffect(() => {
-    if (authState.status === 'signedIn') {
-      router.replace('/');
-    }
-  }, [authState.status, router]);
+  const [
+    socialProvider,
+    setSocialProvider,
+  ] =
+    useState<
+      SocialProvider | null
+    >(null);
 
-  const normalizedPhone =
-    normalizeEgyptianPhone(phoneInput);
+  const [
+    formMessage,
+    setFormMessage,
+  ] =
+    useState<FormMessage>(
+      null,
+    );
 
-  const phoneFormIsValid =
-    normalizedPhone !== null;
+  /**
+   * ==========================================================
+   * LANDING REFERENCE SCALE
+   * ==========================================================
+   *
+   * This is the critical change.
+   *
+   * Before:
+   *
+   * screenHeight < 850
+   *     ↓
+   * compact design
+   *     ↓
+   * everything became too small.
+   *
+   * Now:
+   *
+   * screenWidth / 591
+   *     ↓
+   * same proportions as reference.
+   */
+  const landingScale =
+    useMemo(
+      () => {
+        const rawScale =
+          screenWidth /
+          REFERENCE_WIDTH;
 
-  const otpFormIsValid =
-    /^\d{6}$/.test(otpCode);
+        /**
+         * Avoid extreme layouts on
+         * unusually narrow / wide
+         * browser windows.
+         */
+        return Math.min(
+          1.08,
+          Math.max(
+            0.64,
+            rawScale,
+          ),
+        );
+      },
+      [screenWidth],
+    );
 
-  async function sendOtp() {
-    setFormMessage(null);
+  const dp = (
+    value: number,
+  ) =>
+    value *
+    landingScale;
 
-    if (!normalizedPhone) {
-      setFormMessage({
-        type: 'error',
-        text:
-          'اكتب رقم موبايل مصري صحيح يبدأ بـ 010 أو 011 أو 012 أو 015.',
-      });
-      return;
-    }
+  /**
+   * ==========================================================
+   * LANDING GEOMETRY
+   * ==========================================================
+   */
 
-    try {
-      setIsSubmitting(true);
+  const landingHeroHeight =
+    dp(
+      REF.heroHeight,
+    );
 
-      const metadata = fullName.trim()
-        ? {
-            full_name: fullName.trim(),
-          }
-        : undefined;
+  const waveHeight =
+    dp(
+      REF.waveHeight,
+    );
 
-      const { error } =
-        await supabase.auth.signInWithOtp({
-          phone: normalizedPhone,
-          options: {
-            data: metadata,
-            shouldCreateUser: true,
+  const backButtonSize =
+    dp(
+      REF.backButtonSize,
+    );
+
+  const backButtonTop =
+    dp(
+      REF.backButtonTop,
+    );
+
+  const backButtonRight =
+    dp(
+      REF.backButtonRight,
+    );
+
+  /**
+   * Phone/OTP can still have a smaller hero
+   * because the keyboard matters there.
+   *
+   * This DOES NOT affect the landing screen.
+   */
+  const secondaryHeroHeight =
+    Math.min(
+      330,
+      Math.max(
+        235,
+        screenHeight *
+          0.29,
+      ),
+    );
+
+  const activeHeroHeight =
+    step === 'landing'
+      ? landingHeroHeight
+      : secondaryHeroHeight;
+
+  /**
+   * Secondary-page artwork.
+   */
+  const secondaryArtworkWidth =
+    Math.min(
+      285,
+      screenWidth *
+        0.58,
+    );
+
+  const secondaryArtworkHeight =
+    secondaryArtworkWidth *
+    0.72;
+
+  /**
+   * OAuth.
+   */
+  const redirectTo =
+    useMemo(
+      () =>
+        makeRedirectUri({
+          scheme:
+            'navientynow',
+
+          path:
+            'auth/callback',
+        }),
+      [],
+    );
+
+  const redirectAfterLogin =
+    useCallback(() => {
+      /**
+       * Only allow the protected destination we explicitly
+       * support here instead of blindly navigating to an
+       * arbitrary route received from query params.
+       */
+      if (
+        returnTo === '/checkout' &&
+        returnStoreId
+      ) {
+        router.replace({
+          pathname: '/checkout',
+          params: {
+            storeId:
+              returnStoreId,
           },
         });
+
+        return;
+      }
+
+      router.replace('/');
+    }, [
+      returnStoreId,
+      returnTo,
+      router,
+    ]);
+
+  useEffect(() => {
+    if (
+      authState.status ===
+      'signedIn'
+    ) {
+      redirectAfterLogin();
+    }
+  }, [
+    authState.status,
+    redirectAfterLogin,
+  ]);
+
+  const normalizedPhone =
+    normalizeEgyptianPhone(
+      phoneInput,
+    );
+
+  const phoneFormIsValid =
+    normalizedPhone !==
+    null;
+
+  const otpFormIsValid =
+    /^\d{6}$/.test(
+      otpCode,
+    );
+
+  const anythingIsLoading =
+    isSubmitting ||
+    socialProvider !== null;
+
+  /**
+   * ==========================================================
+   * OAUTH SESSION
+   * ==========================================================
+   */
+
+  async function createSessionFromUrl(
+    url: string,
+  ) {
+    const {
+      params,
+      errorCode,
+    } =
+      QueryParams.getQueryParams(
+        url,
+      );
+
+    if (errorCode) {
+      throw new Error(
+        String(
+          errorCode,
+        ),
+      );
+    }
+
+    const errorDescription =
+      typeof params
+        .error_description ===
+      'string'
+        ? params
+            .error_description
+        : null;
+
+    if (
+      errorDescription
+    ) {
+      throw new Error(
+        errorDescription,
+      );
+    }
+
+    const code =
+      typeof params.code ===
+      'string'
+        ? params.code
+        : null;
+
+    if (code) {
+      const {
+        error,
+      } =
+        await supabase.auth
+          .exchangeCodeForSession(
+            code,
+          );
 
       if (error) {
         throw error;
       }
 
-      setVerifiedPhone(normalizedPhone);
-      setStep('otp');
-      setOtpCode('');
+      return;
+    }
+
+    const accessToken =
+      typeof params
+        .access_token ===
+      'string'
+        ? params
+            .access_token
+        : null;
+
+    const refreshToken =
+      typeof params
+        .refresh_token ===
+      'string'
+        ? params
+            .refresh_token
+        : null;
+
+    if (
+      !accessToken ||
+      !refreshToken
+    ) {
+      throw new Error(
+        'لم يتم استلام بيانات تسجيل الدخول.',
+      );
+    }
+
+    const {
+      error,
+    } =
+      await supabase.auth
+        .setSession({
+          access_token:
+            accessToken,
+
+          refresh_token:
+            refreshToken,
+        });
+
+    if (error) {
+      throw error;
+    }
+  }
+
+  async function signInWithSocialProvider(
+    provider: SocialProvider,
+  ) {
+    setFormMessage(null);
+
+    try {
+      setSocialProvider(
+        provider,
+      );
+
+      const {
+        data,
+        error,
+      } =
+        authState.status ===
+        'anonymous'
+          ? await supabase.auth
+              .linkIdentity({
+                provider,
+
+                options: {
+                  redirectTo,
+
+                  skipBrowserRedirect:
+                    true,
+                },
+              })
+          : await supabase.auth
+              .signInWithOAuth({
+                provider,
+
+                options: {
+                  redirectTo,
+
+                  skipBrowserRedirect:
+                    true,
+                },
+              });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.url) {
+        throw new Error(
+          'تعذر فتح صفحة تسجيل الدخول.',
+        );
+      }
+
+      const result =
+        await WebBrowser
+          .openAuthSessionAsync(
+            data.url,
+            redirectTo,
+          );
+
+      if (
+        result.type ===
+        'success'
+      ) {
+        await createSessionFromUrl(
+          result.url,
+        );
+
+        redirectAfterLogin();
+      }
+    } catch (error) {
       setFormMessage({
-        type: 'success',
+        type:
+          'error',
+
         text:
-          'تم إرسال رمز التحقق إلى رقم الموبايل.',
+          error instanceof
+          Error
+            ? error.message
+            : 'تعذر تسجيل الدخول. حاول مرة أخرى.',
+      });
+    } finally {
+      setSocialProvider(
+        null,
+      );
+    }
+  }
+
+  /**
+   * ==========================================================
+   * WHATSAPP OTP
+   * ==========================================================
+   */
+
+  async function sendOtp() {
+    setFormMessage(null);
+
+    if (
+      !normalizedPhone
+    ) {
+      setFormMessage({
+        type:
+          'error',
+
+        text:
+          'اكتب رقم موبايل مصري صحيح يبدأ بـ 010 أو 011 أو 012 أو 015.',
+      });
+
+      return;
+    }
+
+    try {
+      setIsSubmitting(
+        true,
+      );
+
+      const {
+        error,
+      } =
+        await supabase.auth
+          .signInWithOtp({
+            phone:
+              normalizedPhone,
+
+            options: {
+              channel:
+                'whatsapp',
+
+              shouldCreateUser:
+                true,
+            },
+          });
+
+      if (error) {
+        throw error;
+      }
+
+      setVerifiedPhone(
+        normalizedPhone,
+      );
+
+      setOtpCode('');
+
+      setStep('otp');
+
+      setFormMessage({
+        type:
+          'success',
+
+        text:
+          'تم إرسال رمز التحقق إليك عبر WhatsApp.',
       });
     } catch (error) {
       setFormMessage({
-        type: 'error',
+        type:
+          'error',
+
         text:
-          error instanceof Error
+          error instanceof
+          Error
             ? error.message
-            : 'تعذر إرسال رمز التحقق.',
+            : 'تعذر إرسال رمز التحقق عبر WhatsApp.',
       });
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(
+        false,
+      );
     }
   }
 
   async function verifyOtp() {
     setFormMessage(null);
 
-    if (!verifiedPhone || !otpFormIsValid) {
+    if (
+      !verifiedPhone ||
+      !otpFormIsValid
+    ) {
       setFormMessage({
-        type: 'error',
-        text: 'اكتب رمز التحقق المكوّن من 6 أرقام.',
+        type:
+          'error',
+
+        text:
+          'اكتب رمز التحقق المكوّن من 6 أرقام.',
       });
+
       return;
     }
 
     try {
-      setIsSubmitting(true);
+      setIsSubmitting(
+        true,
+      );
 
-      const { error } =
-        await supabase.auth.verifyOtp({
-          phone: verifiedPhone,
-          token: otpCode,
-          type: 'sms',
-        });
+      const {
+        error,
+      } =
+        await supabase.auth
+          .verifyOtp({
+            phone:
+              verifiedPhone,
+
+            token:
+              otpCode,
+
+            type:
+              'sms',
+          });
 
       if (error) {
         throw error;
       }
 
-      router.replace('/');
+      redirectAfterLogin();
     } catch (error) {
       setFormMessage({
-        type: 'error',
+        type:
+          'error',
+
         text:
-          error instanceof Error
+          error instanceof
+          Error
             ? error.message
-            : 'تعذر التحقق من الرمز.',
+            : 'رمز التحقق غير صحيح أو انتهت صلاحيته.',
       });
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(
+        false,
+      );
     }
   }
 
-  function editPhone() {
-    setStep('phone');
-    setVerifiedPhone(null);
-    setOtpCode('');
+  function openPhoneLogin() {
     setFormMessage(null);
+
+    setStep(
+      'phone',
+    );
   }
 
+  function goBackToLanding() {
+    setPhoneInput('');
+
+    setVerifiedPhone(
+      null,
+    );
+
+    setOtpCode('');
+
+    setFormMessage(null);
+
+    setStep(
+      'landing',
+    );
+  }
+
+  function handleBack() {
+    setFormMessage(null);
+
+    if (
+      step === 'otp'
+    ) {
+      setOtpCode('');
+
+      setVerifiedPhone(
+        null,
+      );
+
+      setStep(
+        'phone',
+      );
+
+      return;
+    }
+
+    if (
+      step === 'phone'
+    ) {
+      goBackToLanding();
+
+      return;
+    }
+
+    /**
+     * When Login was opened from the cart checkout flow,
+     * the back button should return to the cart instead
+     * of discarding that navigation context.
+     */
+    if (
+      returnTo === '/checkout'
+    ) {
+      router.back();
+
+      return;
+    }
+
+    router.replace('/');
+  }
+
+  /**
+   * ==========================================================
+   * LOADING
+   * ==========================================================
+   */
+
   if (
-    authState.status === 'loading' ||
-    authState.status === 'signedIn'
+    authState.status ===
+      'loading' ||
+    authState.status ===
+      'signedIn'
   ) {
     return (
-      <View style={styles.loadingScreen}>
-        <StatusBar style="dark" />
+      <View
+        style={
+          styles.loadingScreen
+        }
+      >
+        <StatusBar
+          style="dark"
+        />
+
         <Image
           accessibilityLabel="شعار Navienty Now"
+          fadeDuration={0}
           resizeMode="contain"
-          source={navientyNowLogo}
-          style={styles.loadingLogo}
+          source={
+            navientyNowHero
+          }
+          style={
+            styles.loadingLogo
+          }
         />
-        <Text style={styles.loadingText}>
+
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
           جاري التحقق من الحساب...
         </Text>
       </View>
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      behavior={
-        Platform.OS === 'ios'
-          ? 'padding'
-          : undefined
-      }
-      style={styles.screen}
-    >
-      <StatusBar style="dark" />
+  /**
+   * ==========================================================
+   * UI
+   * ==========================================================
+   */
 
-      <ScrollView
-        contentContainerStyle={styles.pageContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+  return (
+    <SafeAreaView
+      edges={['top']}
+      style={
+        styles.safeArea
+      }
+    >
+      <KeyboardAvoidingView
+        behavior={
+          Platform.OS ===
+          'ios'
+            ? 'padding'
+            : undefined
+        }
+        style={
+          styles.screen
+        }
       >
-        <View style={styles.container}>
-          <View style={styles.topBar}>
+        <StatusBar
+          backgroundColor={
+            AUTH_HERO_BACKGROUND
+          }
+          style="dark"
+        />
+
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={
+            styles.pageContent
+          }
+          keyboardShouldPersistTaps="handled"
+          overScrollMode="never"
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          {/* ================================================= */}
+          {/* HERO                                              */}
+          {/* ================================================= */}
+
+          <View
+            style={[
+              styles.heroSection,
+
+              {
+                height:
+                  activeHeroHeight,
+              },
+            ]}
+          >
+            {/* ============================= */}
+            {/* BACK BUTTON                   */}
+            {/* ============================= */}
+
             <Pressable
               accessibilityLabel="العودة"
               accessibilityRole="button"
-              style={({ pressed }) => [
+              hitSlop={12}
+              style={({
+                pressed,
+              }) => [
                 styles.backButton,
-                pressed && styles.buttonPressed,
+
+                step ===
+                'landing'
+                  ? {
+                      height:
+                        backButtonSize,
+
+                      right:
+                        backButtonRight,
+
+                      top:
+                        backButtonTop,
+
+                      width:
+                        backButtonSize,
+                    }
+                  : styles.secondaryBackButton,
+
+                pressed &&
+                  styles.backButtonPressed,
               ]}
-              onPress={() => router.back()}
+              onPress={
+                handleBack
+              }
             >
-              <Text style={styles.backIcon}>›</Text>
+              <Ionicons
+                color={
+                  NAVIENTY_NOW_COLORS.text
+                }
+                name="arrow-forward"
+                size={
+                  step ===
+                  'landing'
+                    ? dp(
+                        REF.backIconSize,
+                      )
+                    : 27
+                }
+              />
             </Pressable>
 
-            <Text style={styles.topBarTitle}>
-              حساب Navienty Now
-            </Text>
+            {/* ============================= */}
+            {/* LANDING ARTWORK               */}
+            {/* ============================= */}
 
-            <View style={styles.topBarSpacer} />
-          </View>
+            {step ===
+            'landing' ? (
+              <View
+                pointerEvents="none"
+                style={
+                  styles.heroArtworkContainer
+                }
+              >
+                <Image
+                  accessibilityLabel="Navienty Now"
+                  fadeDuration={0}
+                  resizeMode="cover"
+                  source={
+                    navientyNowHero
+                  }
+                  style={
+                    styles.heroArtworkImage
+                  }
+                />
+              </View>
+            ) : (
+              <View
+                pointerEvents="none"
+                style={
+                  styles.secondaryArtworkContainer
+                }
+              >
+                <Image
+                  accessibilityLabel="Navienty Now"
+                  fadeDuration={0}
+                  resizeMode="contain"
+                  source={
+                    navientyNowHero
+                  }
+                  style={{
+                    height:
+                      secondaryArtworkHeight,
 
-          <View style={styles.brandBlock}>
-            <Image
-              accessibilityLabel="شعار Navienty Now"
-              resizeMode="contain"
-              source={navientyNowLogo}
-              style={styles.logo}
+                    width:
+                      secondaryArtworkWidth,
+                  }}
+                />
+              </View>
+            )}
+
+            {/* ============================= */}
+            {/* ORGANIC WAVE                  */}
+            {/* ============================= */}
+
+            <HeroWave
+              height={
+                step ===
+                'landing'
+                  ? waveHeight
+                  : 34
+              }
+              width={
+                screenWidth
+              }
             />
-
-            <Text style={styles.pageTitle}>
-              {step === 'phone'
-                ? 'سجّل الدخول برقمك'
-                : 'أدخل رمز التحقق'}
-            </Text>
-
-            <Text style={styles.pageDescription}>
-              {step === 'phone'
-                ? 'سنرسل لك رمزًا قصيرًا عبر رسالة SMS. التصفح يظل متاحًا دون تسجيل الدخول.'
-                : `أرسلنا رمزًا من 6 أرقام إلى ${
-                    verifiedPhone
-                      ? maskPhone(verifiedPhone)
-                      : 'رقمك'
-                  }.`}
-            </Text>
           </View>
 
-          <View style={styles.formCard}>
-            {step === 'phone' ? (
-              <>
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>
-                    الاسم — اختياري
+          {/* ================================================= */}
+          {/* LANDING                                          */}
+          {/* ================================================= */}
+
+          {step ===
+            'landing' && (
+            <View
+              style={[
+                styles.landingContent,
+
+                {
+                  paddingBottom:
+                    dp(
+                      REF.bottomSpace,
+                    ),
+
+                  paddingHorizontal:
+                    dp(
+                      REF.contentHorizontalPadding,
+                    ),
+
+                  paddingTop:
+                    dp(
+                      REF.landingTopSpace,
+                    ),
+                },
+              ]}
+            >
+              {/* =========================== */}
+              {/* WELCOME                     */}
+              {/* =========================== */}
+
+              <View
+                style={[
+                  styles.welcomeBlock,
+
+                  {
+                    maxWidth:
+                      dp(520),
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.welcomeTitle,
+
+                    {
+                      fontSize:
+                        dp(
+                          REF.welcomeFontSize,
+                        ),
+
+                      lineHeight:
+                        dp(
+                          REF.welcomeLineHeight,
+                        ),
+                    },
+                  ]}
+                >
+                  مرحباً!
+                </Text>
+
+                <Text
+                  style={[
+                    styles.welcomeDescription,
+
+                    {
+                      fontSize:
+                        dp(
+                          REF.descriptionFontSize,
+                        ),
+
+                      lineHeight:
+                        dp(
+                          REF.descriptionLineHeight,
+                        ),
+
+                      marginTop:
+                        dp(
+                          REF.descriptionMarginTop,
+                        ),
+
+                      maxWidth:
+                        dp(
+                          REF.descriptionMaxWidth,
+                        ),
+                    },
+                  ]}
+                >
+                  {authState.status ===
+                  'anonymous'
+                    ? 'اربط حسابك اختياريًا علشان تقدر تسترجع بياناتك على جهاز آخر'
+                    : 'قم بتسجيل الدخول أو الاشتراك واحصل على تجربة طلب مخصصة لك'}
+                </Text>
+              </View>
+
+              {/* =========================== */}
+              {/* PROVIDERS                   */}
+              {/* =========================== */}
+
+              <View
+                style={[
+                  styles.providersContainer,
+
+                  {
+                    marginTop:
+                      dp(
+                        REF.providersMarginTop,
+                      ),
+
+                    maxWidth:
+                      dp(540),
+                  },
+                ]}
+              >
+                {authState.status !==
+                  'anonymous' && (
+                  <ProviderButton
+                    disabled={
+                      anythingIsLoading
+                    }
+                    label="الاستمرار باستخدام رقم الهاتف"
+                    provider="phone"
+                    scale={
+                      landingScale
+                    }
+                    onPress={
+                      openPhoneLogin
+                    }
+                  />
+                )}
+
+                <ProviderButton
+                  disabled={
+                    anythingIsLoading
+                  }
+                  label="إستمرار عبر جوجل"
+                  loading={
+                    socialProvider ===
+                    'google'
+                  }
+                  provider="google"
+                  scale={
+                    landingScale
+                  }
+                  onPress={() => {
+                    void signInWithSocialProvider(
+                      'google',
+                    );
+                  }}
+                />
+
+                <ProviderButton
+                  disabled={
+                    anythingIsLoading
+                  }
+                  label="إستمرار عبر Apple"
+                  loading={
+                    socialProvider ===
+                    'apple'
+                  }
+                  provider="apple"
+                  scale={
+                    landingScale
+                  }
+                  onPress={() => {
+                    void signInWithSocialProvider(
+                      'apple',
+                    );
+                  }}
+                />
+
+                <ProviderButton
+                  disabled={
+                    anythingIsLoading
+                  }
+                  label="إستمرار عبر الفيسبوك"
+                  loading={
+                    socialProvider ===
+                    'facebook'
+                  }
+                  provider="facebook"
+                  scale={
+                    landingScale
+                  }
+                  onPress={() => {
+                    void signInWithSocialProvider(
+                      'facebook',
+                    );
+                  }}
+                />
+              </View>
+
+              {formMessage && (
+                <View
+                  style={[
+                    styles.messageCard,
+
+                    formMessage.type ===
+                    'success'
+                      ? styles.successMessageCard
+                      : styles.errorMessageCard,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.messageText,
+
+                      formMessage.type ===
+                      'success'
+                        ? styles.successMessageText
+                        : styles.errorMessageText,
+                    ]}
+                  >
+                    {
+                      formMessage.text
+                    }
                   </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ================================================= */}
+          {/* PHONE                                            */}
+          {/* ================================================= */}
+
+          {step ===
+            'phone' && (
+            <View
+              style={
+                styles.formContent
+              }
+            >
+              <View
+                style={
+                  styles.authFormSection
+                }
+              >
+                <Text
+                  style={
+                    styles.authFormTitle
+                  }
+                >
+                  أدخل رقم هاتفك
+                </Text>
+
+                <Text
+                  style={
+                    styles.authFormDescription
+                  }
+                >
+                  هنرسل لك رمز تحقق مكوّن من 6 أرقام عبر WhatsApp
+                </Text>
+
+                <View
+                  style={
+                    styles.phoneField
+                  }
+                >
+                  <View
+                    style={
+                      styles.countryCode
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.countryCodeText
+                      }
+                    >
+                      +20
+                    </Text>
+                  </View>
+
                   <TextInput
-                    accessibilityLabel="الاسم اختياري"
-                    autoCapitalize="words"
-                    placeholder="اكتب اسمك"
+                    accessibilityLabel="رقم الموبايل المصري"
+                    autoFocus
+                    keyboardType="phone-pad"
+                    maxLength={15}
+                    placeholder="01012345678"
                     placeholderTextColor={
                       NAVIENTY_NOW_COLORS.textMuted
                     }
+                    returnKeyType="done"
                     selectionColor={
                       NAVIENTY_NOW_COLORS.primary
                     }
-                    style={styles.input}
-                    textContentType="name"
-                    value={fullName}
-                    onChangeText={setFullName}
+                    style={
+                      styles.phoneInput
+                    }
+                    textContentType="telephoneNumber"
+                    value={
+                      phoneInput
+                    }
+                    onChangeText={
+                      setPhoneInput
+                    }
+                    onSubmitEditing={() => {
+                      if (
+                        phoneFormIsValid
+                      ) {
+                        void sendOtp();
+                      }
+                    }}
                   />
                 </View>
 
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.fieldLabel}>
-                    رقم الموبايل
-                  </Text>
+                {formMessage && (
+                  <View
+                    style={[
+                      styles.messageCard,
 
-                  <View style={styles.phoneField}>
-                    <View style={styles.countryCode}>
-                      <Text
-                        style={styles.countryCodeText}
-                      >
-                        +20
-                      </Text>
-                    </View>
+                      formMessage.type ===
+                      'success'
+                        ? styles.successMessageCard
+                        : styles.errorMessageCard,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.messageText,
 
-                    <TextInput
-                      accessibilityLabel="رقم الموبايل المصري"
-                      keyboardType="phone-pad"
-                      maxLength={15}
-                      placeholder="01012345678"
-                      placeholderTextColor={
-                        NAVIENTY_NOW_COLORS.textMuted
+                        formMessage.type ===
+                        'success'
+                          ? styles.successMessageText
+                          : styles.errorMessageText,
+                      ]}
+                    >
+                      {
+                        formMessage.text
                       }
-                      returnKeyType="done"
-                      selectionColor={
-                        NAVIENTY_NOW_COLORS.primary
-                      }
-                      style={styles.phoneInput}
-                      textContentType="telephoneNumber"
-                      value={phoneInput}
-                      onChangeText={setPhoneInput}
-                      onSubmitEditing={() => {
-                        if (phoneFormIsValid) {
-                          void sendOtp();
-                        }
-                      }}
-                    />
+                    </Text>
                   </View>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.otpLabel}>
-                  رمز التحقق
+                )}
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={
+                    isSubmitting ||
+                    !phoneFormIsValid
+                  }
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.primaryButton,
+
+                    (
+                      !phoneFormIsValid ||
+                      isSubmitting
+                    ) &&
+                      styles.primaryButtonDisabled,
+
+                    pressed &&
+                      phoneFormIsValid &&
+                      !isSubmitting &&
+                      styles.primaryButtonPressed,
+                  ]}
+                  onPress={() => {
+                    void sendOtp();
+                  }}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator
+                      color={
+                        NAVIENTY_NOW_COLORS.white
+                      }
+                    />
+                  ) : (
+                    <View
+                      style={
+                        styles.primaryButtonContent
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.primaryButtonText
+                        }
+                      >
+                        إرسال الرمز عبر WhatsApp
+                      </Text>
+
+                      <FontAwesome
+                        color="#FFFFFF"
+                        name="whatsapp"
+                        size={23}
+                      />
+                    </View>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.secondaryAction,
+
+                    pressed &&
+                      styles.secondaryActionPressed,
+                  ]}
+                  onPress={
+                    goBackToLanding
+                  }
+                >
+                  <Text
+                    style={
+                      styles.secondaryActionText
+                    }
+                  >
+                    استخدام طريقة أخرى
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {/* ================================================= */}
+          {/* OTP                                              */}
+          {/* ================================================= */}
+
+          {step ===
+            'otp' && (
+            <View
+              style={
+                styles.formContent
+              }
+            >
+              <View
+                style={
+                  styles.authFormSection
+                }
+              >
+                <Text
+                  style={
+                    styles.authFormTitle
+                  }
+                >
+                  أدخل رمز التحقق
+                </Text>
+
+                <Text
+                  style={
+                    styles.authFormDescription
+                  }
+                >
+                  أرسلنا رمزًا من 6 أرقام عبر WhatsApp إلى{' '}
+                  {verifiedPhone
+                    ? maskPhone(
+                        verifiedPhone,
+                      )
+                    : 'رقمك'}
                 </Text>
 
                 <TextInput
-                  accessibilityLabel="رمز التحقق المكوّن من 6 أرقام"
+                  accessibilityLabel="رمز التحقق"
                   autoFocus
                   keyboardType="number-pad"
                   maxLength={6}
                   placeholder="000000"
-                  placeholderTextColor="#B9B9BE"
+                  placeholderTextColor="#B6B6BA"
                   returnKeyType="done"
                   selectionColor={
                     NAVIENTY_NOW_COLORS.primary
                   }
-                  style={styles.otpInput}
+                  style={
+                    styles.otpInput
+                  }
                   textContentType="oneTimeCode"
-                  value={otpCode}
-                  onChangeText={(value) => {
+                  value={
+                    otpCode
+                  }
+                  onChangeText={(
+                    value,
+                  ) => {
                     setOtpCode(
                       value
-                        .replace(/\D/g, '')
-                        .slice(0, 6),
+                        .replace(
+                          /\D/g,
+                          '',
+                        )
+                        .slice(
+                          0,
+                          6,
+                        ),
                     );
                   }}
                   onSubmitEditing={() => {
-                    if (otpFormIsValid) {
+                    if (
+                      otpFormIsValid
+                    ) {
                       void verifyOtp();
                     }
                   }}
                 />
 
+                {formMessage && (
+                  <View
+                    style={[
+                      styles.messageCard,
+
+                      formMessage.type ===
+                      'success'
+                        ? styles.successMessageCard
+                        : styles.errorMessageCard,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.messageText,
+
+                        formMessage.type ===
+                        'success'
+                          ? styles.successMessageText
+                          : styles.errorMessageText,
+                      ]}
+                    >
+                      {
+                        formMessage.text
+                      }
+                    </Text>
+                  </View>
+                )}
+
                 <Pressable
                   accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.editPhoneButton,
-                    pressed && styles.buttonPressed,
+                  disabled={
+                    isSubmitting ||
+                    !otpFormIsValid
+                  }
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.primaryButton,
+
+                    (
+                      !otpFormIsValid ||
+                      isSubmitting
+                    ) &&
+                      styles.primaryButtonDisabled,
+
+                    pressed &&
+                      otpFormIsValid &&
+                      !isSubmitting &&
+                      styles.primaryButtonPressed,
                   ]}
-                  onPress={editPhone}
+                  onPress={() => {
+                    void verifyOtp();
+                  }}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator
+                      color={
+                        NAVIENTY_NOW_COLORS.white
+                      }
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.primaryButtonText
+                      }
+                    >
+                      تأكيد الدخول
+                    </Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={
+                    isSubmitting
+                  }
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.secondaryAction,
+
+                    pressed &&
+                      styles.secondaryActionPressed,
+                  ]}
+                  onPress={() => {
+                    void sendOtp();
+                  }}
                 >
                   <Text
-                    style={styles.editPhoneText}
+                    style={
+                      styles.secondaryActionText
+                    }
                   >
-                    تعديل رقم الموبايل
+                    إعادة إرسال الرمز عبر WhatsApp
                   </Text>
                 </Pressable>
-              </>
-            )}
 
-            {formMessage && (
-              <View
-                style={[
-                  styles.messageCard,
-                  formMessage.type ===
-                    'success'
-                    ? styles.successMessageCard
-                    : styles.errorMessageCard,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.messageText,
-                    formMessage.type ===
-                      'success'
-                      ? styles.successMessageText
-                      : styles.errorMessageText,
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={
+                    isSubmitting
+                  }
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.editPhoneAction,
+
+                    pressed &&
+                      styles.secondaryActionPressed,
                   ]}
+                  onPress={() => {
+                    setOtpCode('');
+
+                    setFormMessage(
+                      null,
+                    );
+
+                    setVerifiedPhone(
+                      null,
+                    );
+
+                    setStep(
+                      'phone',
+                    );
+                  }}
                 >
-                  {formMessage.text}
-                </Text>
+                  <Text
+                    style={
+                      styles.editPhoneActionText
+                    }
+                  >
+                    تعديل رقم الهاتف
+                  </Text>
+                </Pressable>
               </View>
-            )}
-
-            <Pressable
-              accessibilityLabel={
-                step === 'phone'
-                  ? 'إرسال رمز التحقق'
-                  : 'تأكيد رمز التحقق'
-              }
-              accessibilityRole="button"
-              disabled={isSubmitting}
-              style={({ pressed }) => [
-                styles.submitButton,
-                isSubmitting &&
-                  styles.submitButtonDisabled,
-                pressed &&
-                  !isSubmitting &&
-                  styles.submitButtonPressed,
-              ]}
-              onPress={() => {
-                if (step === 'phone') {
-                  void sendOtp();
-                } else {
-                  void verifyOtp();
-                }
-              }}
-            >
-              <Text style={styles.submitButtonText}>
-                {isSubmitting
-                  ? 'جاري التنفيذ...'
-                  : step === 'phone'
-                    ? 'إرسال الرمز'
-                    : 'تأكيد الدخول'}
-              </Text>
-            </Pressable>
-
-            {step === 'otp' && (
-              <Pressable
-                accessibilityRole="button"
-                disabled={isSubmitting}
-                style={({ pressed }) => [
-                  styles.resendButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => {
-                  void sendOtp();
-                }}
-              >
-                <Text style={styles.resendButtonText}>
-                  إعادة إرسال الرمز
-                </Text>
-              </Pressable>
-            )}
-
-            <Text style={styles.providerNotice}>
-              يتطلب هذا المسار تفعيل Phone Auth ومزوّد SMS داخل Supabase.
-            </Text>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.guestButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={() => router.replace('/')}
-          >
-            <Text style={styles.guestButtonText}>
-              متابعة التصفح كزائر
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.page,
-    flex: 1,
-  },
+const styles =
+  StyleSheet.create({
+    /**
+     * ========================================================
+     * ROOT
+     * ========================================================
+     */
 
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 40,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop:
-      Platform.OS === 'ios' ? 28 : 18,
-  },
+    safeArea: {
+      backgroundColor:
+        AUTH_HERO_BACKGROUND,
 
-  container: {
-    alignSelf: 'center',
-    maxWidth: 470,
-    width: '100%',
-  },
+      flex: 1,
+    },
 
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 48,
-  },
+    screen: {
+      backgroundColor:
+        AUTH_WHITE,
 
-  backButton: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderRadius: 20,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
+      flex: 1,
+    },
 
-  backIcon: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 31,
-    lineHeight: 32,
-  },
+    pageContent: {
+      backgroundColor:
+        AUTH_WHITE,
 
-  buttonPressed: {
-    opacity: 0.58,
-  },
+      flexGrow: 1,
+    },
 
-  topBarTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 14,
-    fontWeight: '800',
-  },
+    /**
+     * ========================================================
+     * HERO
+     * ========================================================
+     */
 
-  topBarSpacer: {
-    width: 40,
-  },
+    heroSection: {
+      backgroundColor:
+        AUTH_HERO_BACKGROUND,
 
-  brandBlock: {
-    alignItems: 'center',
-    marginTop: 23,
-  },
+      overflow:
+        'hidden',
 
-  logo: {
-    borderRadius: 25,
-    height: 124,
-    width: 124,
-  },
+      position:
+        'relative',
 
-  pageTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 27,
-    fontWeight: '900',
-    marginTop: 20,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
+      width:
+        '100%',
+    },
 
-  pageDescription: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 21,
-    marginTop: 7,
-    maxWidth: 350,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
+    heroArtworkContainer: {
+      bottom: 0,
 
-  formCard: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.majorRadius,
-    borderWidth: 1,
-    marginTop: 27,
-    padding: 20,
-  },
+      left: 0,
 
-  fieldGroup: {
-    marginBottom: 17,
-  },
+      position:
+        'absolute',
 
-  fieldLabel: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 7,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+      right: 0,
 
-  input: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 15,
-    borderWidth: 1,
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 14,
-    minHeight: 52,
-    paddingHorizontal: 15,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+      top: 0,
 
-  phoneField: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 15,
-    borderWidth: 1,
-    flexDirection: 'row',
-    minHeight: 54,
-    overflow: 'hidden',
-  },
+      zIndex: 5,
+    },
 
-  countryCode: {
-    alignItems: 'center',
-    borderRightColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRightWidth: 1,
-    justifyContent: 'center',
-    minHeight: 52,
-    paddingHorizontal: 14,
-  },
+    heroArtworkImage: {
+      height:
+        '100%',
 
-  countryCodeText: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 13,
-    fontWeight: '800',
-    writingDirection: 'ltr',
-  },
+      width:
+        '100%',
+    },
 
-  phoneInput: {
-    color: NAVIENTY_NOW_COLORS.text,
-    flex: 1,
-    fontSize: 15,
-    minHeight: 52,
-    paddingHorizontal: 15,
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
+    secondaryArtworkContainer: {
+      alignItems:
+        'center',
 
-  otpLabel: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 9,
-    textAlign: 'center',
-  },
+      bottom: 36,
 
-  otpInput: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 17,
-    borderWidth: 1,
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: 10,
-    minHeight: 66,
-    paddingHorizontal: 18,
-    textAlign: 'center',
-    writingDirection: 'ltr',
-  },
+      justifyContent:
+        'center',
 
-  editPhoneButton: {
-    alignSelf: 'center',
-    justifyContent: 'center',
-    marginTop: 11,
-    minHeight: 38,
-    paddingHorizontal: 8,
-  },
+      left: 0,
 
-  editPhoneText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 11,
-    fontWeight: '800',
-  },
+      position:
+        'absolute',
 
-  messageCard: {
-    borderRadius: 13,
-    borderWidth: 1,
-    marginBottom: 15,
-    marginTop: 4,
-    padding: 12,
-  },
+      right: 0,
 
-  errorMessageCard: {
-    backgroundColor: '#FFF5F5',
-    borderColor: '#F1CCCC',
-  },
+      top: 25,
 
-  successMessageCard: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryUltraPale,
-    borderColor: '#CDEAD8',
-  },
+      zIndex: 5,
+    },
 
-  messageText: {
-    fontSize: 10,
-    lineHeight: 17,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+    /**
+     * ========================================================
+     * BACK BUTTON
+     * ========================================================
+     */
 
-  errorMessageText: {
-    color: '#A13838',
-  },
+    backButton: {
+      alignItems:
+        'center',
 
-  successMessageText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-  },
+      backgroundColor:
+        AUTH_WHITE,
 
-  submitButton: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 16,
-    justifyContent: 'center',
-    minHeight: 54,
-    paddingHorizontal: 18,
-  },
+      borderColor:
+        '#DEDFE0',
 
-  submitButtonDisabled: {
-    opacity: 0.62,
-  },
+      borderRadius:
+        999,
 
-  submitButtonPressed: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryPressed,
-    transform: [{ scale: 0.99 }],
-  },
+      borderWidth:
+        1,
 
-  submitButtonText: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 14,
-    fontWeight: '900',
-  },
+      justifyContent:
+        'center',
 
-  resendButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    minHeight: 42,
-  },
+      position:
+        'absolute',
 
-  resendButtonText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 11,
-    fontWeight: '800',
-  },
+      zIndex:
+        50,
 
-  providerNotice: {
-    color: NAVIENTY_NOW_COLORS.textMuted,
-    fontSize: 9,
-    lineHeight: 15,
-    marginTop: 10,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
+      shadowColor:
+        '#000000',
 
-  guestButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 18,
-    minHeight: 44,
-  },
+      shadowOffset: {
+        height: 1,
+        width: 0,
+      },
 
-  guestButtonText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 12,
-    fontWeight: '800',
-  },
+      shadowOpacity:
+        0.04,
 
-  loadingScreen: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.page,
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
+      shadowRadius:
+        5,
 
-  loadingLogo: {
-    borderRadius: 24,
-    height: 112,
-    width: 112,
-  },
+      elevation:
+        2,
+    },
 
-  loadingText: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 12,
-    marginTop: 18,
-  },
-});
+    secondaryBackButton: {
+      height:
+        52,
+
+      right:
+        NAVIENTY_NOW_LAYOUT.pageGutter,
+
+      top:
+        14,
+
+      width:
+        52,
+    },
+
+    backButtonPressed: {
+      opacity:
+        0.62,
+
+      transform: [
+        {
+          scale:
+            0.97,
+        },
+      ],
+    },
+
+    /**
+     * ========================================================
+     * WAVE
+     * ========================================================
+     */
+
+    heroWave: {
+      bottom:
+        -1,
+
+      left:
+        0,
+
+      position:
+        'absolute',
+
+      right:
+        0,
+
+      zIndex:
+        30,
+    },
+
+    /**
+     * ========================================================
+     * LANDING CONTENT
+     * ========================================================
+     */
+
+    landingContent: {
+      backgroundColor:
+        AUTH_WHITE,
+
+      flexGrow:
+        1,
+
+      width:
+        '100%',
+    },
+
+    /**
+     * ========================================================
+     * WELCOME
+     * ========================================================
+     */
+
+    welcomeBlock: {
+      alignItems:
+        'center',
+
+      alignSelf:
+        'center',
+
+      width:
+        '100%',
+    },
+
+    welcomeTitle: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    welcomeDescription: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontWeight:
+        '400',
+
+      paddingHorizontal:
+        4,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    /**
+     * ========================================================
+     * PROVIDERS
+     * ========================================================
+     */
+
+    providersContainer: {
+      alignSelf:
+        'center',
+
+      width:
+        '100%',
+    },
+
+    providerButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        AUTH_WHITE,
+
+      borderColor:
+        AUTH_BORDER,
+
+      borderWidth:
+        1.15,
+
+      justifyContent:
+        'center',
+
+      width:
+        '100%',
+    },
+
+    providerButtonPressed: {
+      backgroundColor:
+        '#FAFAFA',
+
+      transform: [
+        {
+          scale:
+            0.994,
+        },
+      ],
+    },
+
+    providerButtonDisabled: {
+      opacity:
+        0.5,
+    },
+
+    providerButtonContent: {
+      alignItems:
+        'center',
+
+      flexDirection:
+        'row',
+
+      justifyContent:
+        'center',
+    },
+
+    providerButtonText: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontWeight:
+        '700',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    providerIcon: {
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    /**
+     * ========================================================
+     * PHONE / OTP CONTENT
+     * ========================================================
+     */
+
+    formContent: {
+      backgroundColor:
+        AUTH_WHITE,
+
+      flexGrow:
+        1,
+
+      paddingBottom:
+        44,
+
+      paddingHorizontal:
+        NAVIENTY_NOW_LAYOUT.pageGutter,
+
+      paddingTop:
+        48,
+
+      width:
+        '100%',
+    },
+
+    authFormSection: {
+      alignSelf:
+        'center',
+
+      maxWidth:
+        520,
+
+      width:
+        '100%',
+    },
+
+    authFormTitle: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontSize:
+        29,
+
+      fontWeight:
+        '800',
+
+      lineHeight:
+        40,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    authFormDescription: {
+      color:
+        NAVIENTY_NOW_COLORS.textSecondary,
+
+      fontSize:
+        15,
+
+      lineHeight:
+        25,
+
+      marginTop:
+        12,
+
+      paddingHorizontal:
+        14,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    /**
+     * ========================================================
+     * PHONE
+     * ========================================================
+     */
+
+    phoneField: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        AUTH_WHITE,
+
+      borderColor:
+        AUTH_BORDER,
+
+      borderRadius:
+        999,
+
+      borderWidth:
+        1.2,
+
+      flexDirection:
+        'row',
+
+      height:
+        64,
+
+      marginTop:
+        34,
+
+      overflow:
+        'hidden',
+    },
+
+    countryCode: {
+      alignItems:
+        'center',
+
+      borderRightColor:
+        NAVIENTY_NOW_COLORS.border,
+
+      borderRightWidth:
+        1,
+
+      height:
+        '100%',
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal:
+        18,
+    },
+
+    countryCodeText: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontSize:
+        16,
+
+      fontWeight:
+        '700',
+
+      writingDirection:
+        'ltr',
+    },
+
+    phoneInput: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      flex:
+        1,
+
+      fontSize:
+        17,
+
+      height:
+        '100%',
+
+      paddingHorizontal:
+        18,
+
+      textAlign:
+        'left',
+
+      writingDirection:
+        'ltr',
+    },
+
+    /**
+     * ========================================================
+     * OTP
+     * ========================================================
+     */
+
+    otpInput: {
+      backgroundColor:
+        AUTH_WHITE,
+
+      borderColor:
+        AUTH_BORDER,
+
+      borderRadius:
+        22,
+
+      borderWidth:
+        1.2,
+
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontSize:
+        29,
+
+      fontWeight:
+        '800',
+
+      height:
+        72,
+
+      letterSpacing:
+        11,
+
+      marginTop:
+        32,
+
+      paddingHorizontal:
+        20,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'ltr',
+    },
+
+    /**
+     * ========================================================
+     * PRIMARY ACTION
+     * ========================================================
+     */
+
+    primaryButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        999,
+
+      height:
+        64,
+
+      justifyContent:
+        'center',
+
+      marginTop:
+        21,
+
+      paddingHorizontal:
+        20,
+    },
+
+    primaryButtonContent: {
+      alignItems:
+        'center',
+
+      flexDirection:
+        'row',
+
+      justifyContent:
+        'center',
+    },
+
+    primaryButtonDisabled: {
+      opacity:
+        0.45,
+    },
+
+    primaryButtonPressed: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primaryPressed,
+
+      transform: [
+        {
+          scale:
+            0.994,
+        },
+      ],
+    },
+
+    primaryButtonText: {
+      color:
+        NAVIENTY_NOW_COLORS.white,
+
+      fontSize:
+        17,
+
+      fontWeight:
+        '800',
+
+      marginRight:
+        11,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    secondaryAction: {
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      marginTop:
+        13,
+
+      minHeight:
+        46,
+    },
+
+    secondaryActionPressed: {
+      opacity:
+        0.55,
+    },
+
+    secondaryActionText: {
+      color:
+        NAVIENTY_NOW_COLORS.primaryDark,
+
+      fontSize:
+        14,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    editPhoneAction: {
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      minHeight:
+        42,
+    },
+
+    editPhoneActionText: {
+      color:
+        NAVIENTY_NOW_COLORS.textSecondary,
+
+      fontSize:
+        13,
+
+      fontWeight:
+        '700',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    /**
+     * ========================================================
+     * MESSAGES
+     * ========================================================
+     */
+
+    messageCard: {
+      borderRadius:
+        14,
+
+      borderWidth:
+        1,
+
+      marginTop:
+        17,
+
+      paddingHorizontal:
+        14,
+
+      paddingVertical:
+        11,
+    },
+
+    errorMessageCard: {
+      backgroundColor:
+        '#FFF5F5',
+
+      borderColor:
+        '#F1CCCC',
+    },
+
+    successMessageCard: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primaryUltraPale,
+
+      borderColor:
+        '#CDEAD8',
+    },
+
+    messageText: {
+      fontSize:
+        12,
+
+      lineHeight:
+        19,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    errorMessageText: {
+      color:
+        '#A13838',
+    },
+
+    successMessageText: {
+      color:
+        NAVIENTY_NOW_COLORS.primaryDark,
+    },
+
+    /**
+     * ========================================================
+     * LOADING
+     * ========================================================
+     */
+
+    loadingScreen: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        AUTH_HERO_BACKGROUND,
+
+      flex:
+        1,
+
+      justifyContent:
+        'center',
+
+      padding:
+        24,
+    },
+
+    loadingLogo: {
+      height:
+        280,
+
+      width:
+        340,
+    },
+
+    loadingText: {
+      color:
+        NAVIENTY_NOW_COLORS.textSecondary,
+
+      fontSize:
+        13,
+
+      marginTop:
+        17,
+    },
+  });

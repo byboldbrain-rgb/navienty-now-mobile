@@ -1,10 +1,13 @@
 import type { Session } from '@supabase/supabase-js';
 import {
-    useEffect,
-    useState,
+  useEffect,
+  useState,
 } from 'react';
 
 import { supabase } from '../lib/supabase';
+import {
+  isAnonymousSession,
+} from '../services/anonymous-auth-service';
 
 export type AuthSessionState =
   | {
@@ -15,6 +18,11 @@ export type AuthSessionState =
   | {
       status: 'signedOut';
       session: null;
+      errorMessage: null;
+    }
+  | {
+      status: 'anonymous';
+      session: Session;
       errorMessage: null;
     }
   | {
@@ -31,17 +39,25 @@ export type AuthSessionState =
 function stateFromSession(
   session: Session | null,
 ): AuthSessionState {
-  if (session) {
+  if (!session) {
     return {
-      status: 'signedIn',
+      status: 'signedOut',
+      session: null,
+      errorMessage: null,
+    };
+  }
+
+  if (isAnonymousSession(session)) {
+    return {
+      status: 'anonymous',
       session,
       errorMessage: null,
     };
   }
 
   return {
-    status: 'signedOut',
-    session: null,
+    status: 'signedIn',
+    session,
     errorMessage: null,
   };
 }
@@ -68,7 +84,9 @@ export function useAuthSession(): AuthSessionState {
           return;
         }
 
-        setState(stateFromSession(session));
+        setState(
+          stateFromSession(session),
+        );
       },
     );
 
@@ -91,13 +109,16 @@ export function useAuthSession(): AuthSessionState {
             status: 'error',
             session: null,
             errorMessage:
-              'تعذر التحقق من حالة تسجيل الدخول.',
+              'تعذر التحقق من حالة الحساب.',
           });
+
           return;
         }
 
         setState(
-          stateFromSession(data.session),
+          stateFromSession(
+            data.session,
+          ),
         );
       })
       .catch(() => {
@@ -113,7 +134,7 @@ export function useAuthSession(): AuthSessionState {
           status: 'error',
           session: null,
           errorMessage:
-            'تعذر التحقق من حالة تسجيل الدخول.',
+            'تعذر التحقق من حالة الحساب.',
         });
       });
 

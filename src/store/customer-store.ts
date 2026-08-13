@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import {
-    createJSONStorage,
-    persist,
+  createJSONStorage,
+  persist,
 } from 'zustand/middleware';
 
 export type PaymentMethodId =
@@ -11,10 +11,39 @@ export type PaymentMethodId =
 export type CustomerData = {
   customerName: string;
   phoneNumber: string;
+
+  /**
+   * Editable checkout address.
+   *
+   * location-picker fills this automatically using reverse geocoding.
+   * The customer can still append building / floor / apartment details
+   * later from checkout.
+   */
   address: string;
+
+  /**
+   * Address returned directly from reverse geocoding for the selected
+   * map pin. Kept separately from `address` so manual checkout edits do
+   * not lose the original mapped address.
+   */
+  locationAddress: string;
+
+  /**
+   * Exact map pin selected by the customer.
+   */
+  locationLatitude: number | null;
+  locationLongitude: number | null;
+
   landmark: string;
+
   paymentMethod:
     PaymentMethodId | null;
+};
+
+export type DeliveryLocation = {
+  latitude: number;
+  longitude: number;
+  address: string;
 };
 
 type CustomerField =
@@ -46,6 +75,12 @@ type CustomerState =
         | null,
     ) => void;
 
+    setDeliveryLocation: (
+      location: DeliveryLocation,
+    ) => void;
+
+    clearDeliveryLocation: () => void;
+
     updateCustomerField: (
       field: CustomerField,
       value:
@@ -69,6 +104,9 @@ const initialCustomerState:
     customerName: '',
     phoneNumber: '',
     address: '',
+    locationAddress: '',
+    locationLatitude: null,
+    locationLongitude: null,
     landmark: '',
     paymentMethod: null,
   };
@@ -117,6 +155,33 @@ export const useCustomerStore =
           });
         },
 
+        setDeliveryLocation: (
+          location,
+        ) => {
+          set({
+            address:
+              location.address,
+
+            locationAddress:
+              location.address,
+
+            locationLatitude:
+              location.latitude,
+
+            locationLongitude:
+              location.longitude,
+          });
+        },
+
+        clearDeliveryLocation: () => {
+          set({
+            address: '',
+            locationAddress: '',
+            locationLatitude: null,
+            locationLongitude: null,
+          });
+        },
+
         updateCustomerField: (
           field,
           value,
@@ -146,6 +211,21 @@ export const useCustomerStore =
             address:
               customerData.address ??
               state.address,
+
+            locationAddress:
+              customerData
+                .locationAddress ??
+              state.locationAddress,
+
+            locationLatitude:
+              customerData
+                .locationLatitude ??
+              state.locationLatitude,
+
+            locationLongitude:
+              customerData
+                .locationLongitude ??
+              state.locationLongitude,
 
             landmark:
               customerData.landmark ??
@@ -190,13 +270,81 @@ export const useCustomerStore =
           phoneNumber:
             state.phoneNumber,
 
-          address: state.address,
+          address:
+            state.address,
 
-          landmark: state.landmark,
+          locationAddress:
+            state.locationAddress,
+
+          locationLatitude:
+            state.locationLatitude,
+
+          locationLongitude:
+            state.locationLongitude,
+
+          landmark:
+            state.landmark,
 
           paymentMethod:
             state.paymentMethod,
         }),
+
+        migrate: (
+          persistedState,
+          version,
+        ) => {
+          const previous =
+            persistedState as
+              Partial<CustomerData>;
+
+          if (version < 2) {
+            return {
+              ...initialCustomerState,
+            };
+          }
+
+          return {
+            customerName:
+              previous.customerName ??
+              '',
+
+            phoneNumber:
+              previous.phoneNumber ??
+              '',
+
+            address:
+              previous.address ??
+              '',
+
+            locationAddress:
+              previous.locationAddress ??
+              '',
+
+            locationLatitude:
+              typeof previous
+                .locationLatitude ===
+                'number'
+                ? previous
+                    .locationLatitude
+                : null,
+
+            locationLongitude:
+              typeof previous
+                .locationLongitude ===
+                'number'
+                ? previous
+                    .locationLongitude
+                : null,
+
+            landmark:
+              previous.landmark ??
+              '',
+
+            paymentMethod:
+              previous.paymentMethod ??
+              null,
+          };
+        },
 
         onRehydrateStorage:
           () => (state) => {
@@ -205,7 +353,7 @@ export const useCustomerStore =
             );
           },
 
-        version: 2,
+        version: 3,
       },
     ),
   );

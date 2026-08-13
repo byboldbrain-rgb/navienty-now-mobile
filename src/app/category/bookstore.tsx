@@ -1,1025 +1,1704 @@
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import {
-    useMemo,
-    useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Animated,
+  Image,
+  type ImageSourcePropType,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-    CatalogCartBar,
-    CatalogStateScreen,
-    formatCurrency,
-    ProductArtwork,
-    QuantityControl,
-    ReplaceCartModal,
-} from '../../components/category/catalog-shared';
-import useCatalogCart from '../../hooks/use-catalog-cart';
-import { useCategoryStoreCatalog } from '../../hooks/use-category-store-catalog';
-import type {
-    CatalogProduct,
-    CatalogSection,
+  getBookstoreCategoryImage,
+} from '../../config/bookstore-category-images';
+import {
+  type BookstorePromotionBanner,
+  listBookstorePromotionBanners,
+} from '../../services/bookstore-banner-service';
+import getAppBootstrap from '../../services/bootstrap-service';
+import {
+  type CatalogProduct,
+  type CatalogSection,
+  getCatalogSectionProducts,
+  getStoreCatalog,
+  listStores,
+  type StoreCatalog,
 } from '../../services/catalog-service';
-import {
-    NAVIENTY_NOW_LAYOUT,
-} from '../../theme/navienty-now-theme';
+import { useCartStore } from '../../store/cart-store';
 
-const BOOKSTORE_SLUGS = [
-  'bookstore',
-  'library',
-  'books',
-  'stationery',
-] as const;
+const CATEGORY_ROWS = 3;
+const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
+const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
 
-const BOOKSTORE_ACCENT = '#263B75';
-const BOOKSTORE_DARK = '#15254F';
-const BOOKSTORE_YELLOW = '#F4C95D';
-const BOOKSTORE_PALE = '#F3F5FB';
-
-type VisibleSection = {
-  id: string;
-  name: string;
-  products: CatalogProduct[];
+type CategoryDisplayItem = {
+  key: string;
+  label: string;
+  imageSource: ImageSourcePropType | null;
+  section: CatalogSection;
 };
+
+type ResolvedPromotionBanner =
+  BookstorePromotionBanner & {
+    products: CatalogProduct[];
+  };
+
+type FeaturedProductCardProps = {
+  product: CatalogProduct;
+  currencyCode: string;
+  cardWidth: number;
+  quantity: number;
+  isStoreClosed: boolean;
+  onAdd: () => void;
+  onIncrease: () => void;
+  onDecrease: () => void;
+};
+
+function getProductImage(
+  product: CatalogProduct,
+): string | null {
+  if (product.imageUrl) {
+    return product.imageUrl;
+  }
+
+  const coverImage = product.images.find(
+    (image) => image.isCover,
+  );
+
+  if (coverImage) {
+    return coverImage.imageUrl;
+  }
+
+  return product.images[0]?.imageUrl ?? null;
+}
+
+function getDiscountPercent(
+  product: CatalogProduct,
+): number | null {
+  const compareAtPrice = product.compareAtPrice;
+
+  if (
+    compareAtPrice === null ||
+    compareAtPrice <= product.price ||
+    compareAtPrice <= 0
+  ) {
+    return null;
+  }
+
+  return Math.round(
+    ((compareAtPrice - product.price) /
+      compareAtPrice) *
+      100,
+  );
+}
+
+function formatMoney(
+  amount: number,
+  currencyCode: string,
+) {
+  return `${currencyCode} ${amount.toFixed(2)}`;
+}
+
+function getArabicCurrencyLabel(
+  currencyCode: string,
+) {
+  if (
+    currencyCode.trim().toUpperCase() === 'EGP'
+  ) {
+    return 'ج.م';
+  }
+
+  return currencyCode;
+}
+
+function formatCartMoney(
+  amount: number,
+  currencyCode: string,
+) {
+  return `${getArabicCurrencyLabel(
+    currencyCode,
+  )} ${amount.toFixed(2)}`;
+}
+
+function makeCategoryColumns(
+  categories: CategoryDisplayItem[],
+) {
+  const columns: CategoryDisplayItem[][] = [];
+
+  for (
+    let index = 0;
+    index < categories.length;
+    index += CATEGORY_ROWS
+  ) {
+    columns.push(
+      categories.slice(
+        index,
+        index + CATEGORY_ROWS,
+      ),
+    );
+  }
+
+  return columns;
+}
+
+function getBookstoreCategoryFallbackIcon(
+  section: CatalogSection,
+) {
+  const searchableValue = [
+    section.slug,
+    section.name,
+    section.nameEn ?? '',
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  const rules: Array<[string[], string]> = [
+    [
+      [
+        'book',
+        'books',
+        'textbook',
+        'textbooks',
+        'كتاب',
+        'كتب',
+        'مراجع',
+      ],
+      '📚',
+    ],
+    [
+      [
+        'notebook',
+        'notebooks',
+        'copybook',
+        'كشكول',
+        'كشاكيل',
+        'دفتر',
+        'دفاتر',
+      ],
+      '📓',
+    ],
+    [
+      [
+        'pen',
+        'pens',
+        'pencil',
+        'pencils',
+        'writing',
+        'قلم',
+        'اقلام',
+        'أقلام',
+      ],
+      '✏️',
+    ],
+    [
+      [
+        'stationery',
+        'school-supplies',
+        'school supplies',
+        'ادوات مكتبية',
+        'أدوات مكتبية',
+        'ادوات مدرسية',
+        'أدوات مدرسية',
+      ],
+      '🖇️',
+    ],
+    [
+      [
+        'art',
+        'drawing',
+        'painting',
+        'color',
+        'colors',
+        'رسم',
+        'الوان',
+        'ألوان',
+      ],
+      '🎨',
+    ],
+    [
+      [
+        'paper',
+        'papers',
+        'ورق',
+        'اوراق',
+        'أوراق',
+      ],
+      '📄',
+    ],
+    [
+      [
+        'file',
+        'files',
+        'folder',
+        'folders',
+        'ملف',
+        'ملفات',
+      ],
+      '📁',
+    ],
+    [
+      [
+        'calculator',
+        'calculators',
+        'آلة حاسبة',
+        'اله حاسبة',
+      ],
+      '🧮',
+    ],
+    [
+      [
+        'office',
+        'desk',
+        'مكتب',
+        'مكتبية',
+      ],
+      '🗂️',
+    ],
+    [
+      [
+        'gift',
+        'gifts',
+        'هدية',
+        'هدايا',
+      ],
+      '🎁',
+    ],
+  ];
+
+  for (const [keywords, icon] of rules) {
+    if (
+      keywords.some((keyword) =>
+        searchableValue.includes(keyword),
+      )
+    ) {
+      return icon;
+    }
+  }
+
+  return '📚';
+}
+
+function BackArrowIcon() {
+  return (
+    <View style={styles.backArrowCanvas}>
+      <View style={styles.backArrowStem} />
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowTop,
+        ]}
+      />
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
+function CategoryVisual({
+  item,
+}: {
+  item: CategoryDisplayItem;
+}) {
+  /**
+   * Local bundled artwork has first priority.
+   * This avoids waiting for a network image when a local asset exists.
+   */
+  if (item.imageSource) {
+    return (
+      <View style={styles.categoryImageBox}>
+        <Image
+          source={item.imageSource}
+          style={styles.categoryImage}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  }
+
+  /**
+   * Remote image is only a fallback.
+   * The bookstore seed keeps image_url NULL, so normally this branch
+   * will not be used unless you intentionally add a remote image later.
+   */
+  if (item.section.imageUrl) {
+    return (
+      <View style={styles.categoryImageBox}>
+        <Image
+          source={{ uri: item.section.imageUrl }}
+          style={styles.categoryImage}
+          resizeMode="contain"
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.categoryImageBox}>
+      <Text style={styles.categoryFallbackIcon}>
+        {getBookstoreCategoryFallbackIcon(
+          item.section,
+        )}
+      </Text>
+    </View>
+  );
+}
+
+function FeaturedProductCard({
+  product,
+  currencyCode,
+  cardWidth,
+  quantity,
+  isStoreClosed,
+  onAdd,
+  onIncrease,
+  onDecrease,
+}: FeaturedProductCardProps) {
+  const imageUrl = getProductImage(product);
+  const discount = getDiscountPercent(product);
+
+  return (
+    <View
+      style={[
+        styles.featuredProductCard,
+        { width: cardWidth },
+      ]}
+    >
+      <View
+        style={[
+          styles.featuredProductImageBox,
+          {
+            width: cardWidth,
+            height: cardWidth,
+          },
+        ]}
+      >
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.featuredProductImage}
+            resizeMode="contain"
+          />
+        ) : (
+          <Text style={styles.featuredProductFallback}>
+            {product.icon || '📚'}
+          </Text>
+        )}
+
+        {discount !== null && (
+          <View style={styles.featuredDiscountBadge}>
+            <Text
+              style={styles.featuredDiscountText}
+              numberOfLines={1}
+            >
+              Save {discount}%
+            </Text>
+          </View>
+        )}
+
+        {quantity === 0 ? (
+          <Pressable
+            disabled={isStoreClosed}
+            hitSlop={5}
+            style={({ pressed }) => [
+              styles.featuredAddButton,
+              isStoreClosed &&
+                styles.featuredAddButtonDisabled,
+              pressed &&
+                !isStoreClosed &&
+                styles.featuredAddButtonPressed,
+            ]}
+            onPress={onAdd}
+          >
+            <Text style={styles.featuredAddButtonText}>
+              +
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={styles.featuredQuantityPill}>
+            <Pressable
+              hitSlop={4}
+              style={styles.featuredQuantityButton}
+              onPress={onDecrease}
+            >
+              <Text
+                style={
+                  styles.featuredQuantityButtonText
+                }
+              >
+                −
+              </Text>
+            </Pressable>
+
+            <Text style={styles.featuredQuantityValue}>
+              {quantity}
+            </Text>
+
+            <Pressable
+              disabled={isStoreClosed}
+              hitSlop={4}
+              style={styles.featuredQuantityButton}
+              onPress={onIncrease}
+            >
+              <Text
+                style={
+                  styles.featuredQuantityButtonText
+                }
+              >
+                +
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <Text
+        style={styles.featuredProductName}
+        numberOfLines={2}
+      >
+        {product.nameEn?.trim() || product.name}
+      </Text>
+
+      <View style={styles.featuredCurrentPriceWrap}>
+        <Text
+          style={styles.featuredCurrentPrice}
+          numberOfLines={1}
+        >
+          {formatMoney(
+            product.price,
+            currencyCode,
+          )}
+        </Text>
+      </View>
+
+      {product.compareAtPrice !== null &&
+        product.compareAtPrice > product.price && (
+          <Text
+            style={styles.featuredOldPrice}
+            numberOfLines={1}
+          >
+            {formatMoney(
+              product.compareAtPrice,
+              currencyCode,
+            )}
+          </Text>
+        )}
+    </View>
+  );
+}
 
 export default function BookstoreScreen() {
   const router = useRouter();
+  const { width: windowWidth } =
+    useWindowDimensions();
 
-  const {
-    catalog,
-    stores,
-    activeStoreId,
-    currencySymbol,
-    isLoading,
-    errorMessage,
-    reload,
-    selectStore,
-  } = useCategoryStoreCatalog(
-    BOOKSTORE_SLUGS,
+  const categoryScrollX = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const [
+    categoryViewportWidth,
+    setCategoryViewportWidth,
+  ] = useState(0);
+
+  const [
+    categoryContentWidth,
+    setCategoryContentWidth,
+  ] = useState(0);
+
+  const [catalog, setCatalog] =
+    useState<StoreCatalog | null>(null);
+
+  const [
+    promotionBanners,
+    setPromotionBanners,
+  ] = useState<BookstorePromotionBanner[]>([]);
+
+  const [currencyCode, setCurrencyCode] =
+    useState('EGP');
+
+  const [isLoading, setIsLoading] =
+    useState(true);
+
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
+
+  const carts = useCartStore(
+    (state) => state.carts,
   );
 
-  const {
-    cartItemCount,
-    cartSubtotal,
-    cartStoreName,
-    pendingProduct,
-    storeIsClosed,
-    getProductQuantity,
-    increaseProduct,
-    decreaseProduct,
-    replaceCartAndAddProduct,
-    dismissPendingProduct,
-  } = useCatalogCart(catalog);
+  const addItem = useCartStore(
+    (state) => state.addItem,
+  );
 
-  const [searchText, setSearchText] =
-    useState('');
-  const [activeSectionId, setActiveSectionId] =
-    useState('all');
+  const increaseStoreItem = useCartStore(
+    (state) => state.increaseStoreItem,
+  );
 
-  const visibleSections = useMemo<
-    VisibleSection[]
+  const decreaseStoreItem = useCartStore(
+    (state) => state.decreaseStoreItem,
+  );
+
+  const setActiveCart = useCartStore(
+    (state) => state.setActiveCart,
+  );
+
+  async function loadBookstore() {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const bootstrap = await getAppBootstrap();
+
+      const defaultServiceAreaId =
+        bootstrap.settings.default_service_area_id ??
+        undefined;
+
+      const bookstoreStores = await listStores({
+        categorySlug: 'bookstores',
+        serviceAreaId: defaultServiceAreaId,
+      });
+
+      if (bookstoreStores.length === 0) {
+        throw new Error(
+          'No bookstore is currently available.',
+        );
+      }
+
+      const bookstore =
+        bookstoreStores.find(
+          (store) =>
+            store.isFeatured &&
+            !store.isManuallyClosed,
+        ) ??
+        bookstoreStores.find(
+          (store) => !store.isManuallyClosed,
+        ) ??
+        bookstoreStores[0];
+
+      const [
+        loadedCatalog,
+        loadedPromotionBanners,
+      ] = await Promise.all([
+        getStoreCatalog(
+          bookstore.id,
+          defaultServiceAreaId,
+        ),
+        listBookstorePromotionBanners({
+          storeId: bookstore.id,
+        }).catch((bannerError) => {
+          console.warn(
+            'Unable to load bookstore banners:',
+            bannerError,
+          );
+          return [];
+        }),
+      ]);
+
+      setCatalog(loadedCatalog);
+      setPromotionBanners(
+        loadedPromotionBanners,
+      );
+      setCurrencyCode(
+        bootstrap.settings.currency_code || 'EGP',
+      );
+    } catch (error) {
+      setCatalog(null);
+      setPromotionBanners([]);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load the bookstore.',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadBookstore();
+  }, []);
+
+  const categories = useMemo<
+    CategoryDisplayItem[]
   >(() => {
     if (!catalog) {
       return [];
     }
 
-    const normalizedSearch = searchText
-      .trim()
-      .toLocaleLowerCase('ar');
+    const rootSections =
+      catalog.categoryTree.length > 0
+        ? catalog.categoryTree
+        : catalog.sections.filter(
+            (section) =>
+              section.parentId === null,
+          );
 
-    return catalog.sections
-      .filter(
-        (section) =>
-          activeSectionId === 'all' ||
-          section.id === activeSectionId,
-      )
+    return [...rootSections]
+      .sort((first, second) => {
+        if (
+          first.sortOrder !== second.sortOrder
+        ) {
+          return first.sortOrder - second.sortOrder;
+        }
+
+        return first.name.localeCompare(
+          second.name,
+          'ar',
+        );
+      })
       .map((section) => ({
-        id: section.id,
-        name: section.name,
-        products: section.products.filter(
-          (product) => {
-            if (!normalizedSearch) {
-              return true;
-            }
+        key: section.id,
+        label: section.name,
+        imageSource:
+          getBookstoreCategoryImage(
+            section.slug,
+          ),
+        section,
+      }));
+  }, [catalog]);
 
-            return [
-              product.name,
-              product.nameEn ?? '',
-              product.description,
-              product.sku ?? '',
-              product.barcode ?? '',
-            ]
-              .join(' ')
-              .toLocaleLowerCase('ar')
-              .includes(normalizedSearch);
-          },
-        ),
+  const categoryColumns = useMemo(
+    () => makeCategoryColumns(categories),
+    [categories],
+  );
+
+  const categoryMaxScroll = Math.max(
+    categoryContentWidth -
+      categoryViewportWidth,
+    1,
+  );
+
+  const categoryIndicatorTravel =
+    CATEGORY_INDICATOR_TRACK_WIDTH -
+    CATEGORY_INDICATOR_THUMB_WIDTH;
+
+  const categoryIndicatorTranslateX =
+    categoryScrollX.interpolate({
+      inputRange: [0, categoryMaxScroll],
+      outputRange: [
+        0,
+        categoryIndicatorTravel,
+      ],
+      extrapolate: 'clamp',
+    });
+
+  const catalogProductsById = useMemo(() => {
+    const productsById =
+      new Map<string, CatalogProduct>();
+
+    for (const section of catalog?.sections ?? []) {
+      const sectionProducts =
+        getCatalogSectionProducts(
+          section,
+          true,
+        );
+
+      for (const product of sectionProducts) {
+        productsById.set(product.id, product);
+      }
+
+      for (const product of section.products) {
+        productsById.set(product.id, product);
+      }
+    }
+
+    return productsById;
+  }, [catalog]);
+
+  const resolvedPromotionBanners = useMemo<
+    ResolvedPromotionBanner[]
+  >(() => {
+    return promotionBanners
+      .map((banner) => ({
+        ...banner,
+        products: banner.productIds
+          .map((productId) =>
+            catalogProductsById.get(productId),
+          )
+          .filter(
+            (
+              product,
+            ): product is CatalogProduct =>
+              Boolean(product),
+          ),
       }))
-      .filter(
-        (section) => section.products.length > 0,
+      .filter((banner) =>
+        Boolean(banner.imageUrl.trim()),
       );
-  }, [activeSectionId, catalog, searchText]);
+  }, [
+    catalogProductsById,
+    promotionBanners,
+  ]);
 
-  const visibleProductCount =
-    visibleSections.reduce(
-      (total, section) =>
-        total + section.products.length,
-      0,
-    );
+  const pageWidth = Math.min(
+    windowWidth,
+    560,
+  );
+
+  const featuredCardWidth = Math.min(
+    116,
+    Math.max(92, pageWidth * 0.3),
+  );
+
+  const promotionBannerWidth = Math.max(
+    pageWidth - 18,
+    1,
+  );
+
+  const promotionBannerHeight = Math.round(
+    promotionBannerWidth * 0.64,
+  );
+
+  const promotionProductsOverlap = Math.round(
+    promotionBannerHeight * 0.49,
+  );
 
   if (isLoading) {
     return (
-      <CatalogStateScreen
-        isLoading
-        accentColor={BOOKSTORE_ACCENT}
-        description="يتم تحميل المكتبة والمنتجات المتاحة."
-        title="جاري فتح المكتبة"
-      />
+      <SafeAreaView style={styles.stateScreen}>
+        <StatusBar style="dark" />
+        <ActivityIndicator
+          size="large"
+          color="#111111"
+        />
+        <Text style={styles.stateTitle}>
+          جاري تحميل المكتبة
+        </Text>
+      </SafeAreaView>
     );
   }
 
   if (!catalog || errorMessage) {
     return (
-      <CatalogStateScreen
-        accentColor={BOOKSTORE_ACCENT}
-        description={
-          errorMessage ??
-          'لم نتمكن من تحميل بيانات المكتبة.'
-        }
-        icon="📚"
-        title="المكتبة غير متاحة"
-        onBack={() => router.replace('/')}
-        onRetry={() => {
-          void reload();
-        }}
-      />
+      <SafeAreaView style={styles.stateScreen}>
+        <StatusBar style="dark" />
+
+        <Text style={styles.stateEmoji}>📚</Text>
+        <Text style={styles.stateTitle}>
+          المكتبة غير متاحة
+        </Text>
+        <Text style={styles.stateDescription}>
+          {errorMessage ??
+            'تعذر تحميل المكتبة.'}
+        </Text>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.retryButton,
+            pressed && styles.generalPressed,
+          ]}
+          onPress={() => {
+            void loadBookstore();
+          }}
+        >
+          <Text style={styles.retryButtonText}>
+            إعادة المحاولة
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.errorBackButton,
+            pressed && styles.generalPressed,
+          ]}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.errorBackButtonText}>
+            رجوع
+          </Text>
+        </Pressable>
+      </SafeAreaView>
     );
   }
 
   const currentStore = catalog.store;
   const delivery = catalog.delivery;
 
+  const currentCart =
+    carts[currentStore.id] ?? null;
+  const cartItems = currentCart?.items ?? [];
+
+  const isStoreClosed =
+    currentStore.isManuallyClosed;
+
+  const currentStoreItemCount =
+    cartItems.reduce(
+      (total, item) => total + item.quantity,
+      0,
+    );
+
+  const currentStoreSubtotal = cartItems.reduce(
+    (total, item) =>
+      total + item.price * item.quantity,
+    0,
+  );
+
+  const shouldShowCartBar =
+    currentStoreItemCount > 0;
+
+  function openCategory(
+    item: CategoryDisplayItem,
+  ) {
+    router.push({
+      pathname: '/bookstore-category/[slug]',
+      params: {
+        slug: item.section.slug,
+        storeId: currentStore.id,
+        categoryKey: item.key,
+        label: item.label,
+      },
+    });
+  }
+
+  function addFeaturedProduct(
+    product: CatalogProduct,
+  ) {
+    if (isStoreClosed) {
+      return;
+    }
+
+    addItem(
+      {
+        id: currentStore.id,
+        name: currentStore.name,
+        icon: currentStore.icon,
+        categorySlug: currentStore.categorySlug,
+        deliveryFee: delivery.deliveryFee,
+        minimumOrder: delivery.minimumOrder,
+      },
+      {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        icon: product.icon,
+        variantId: null,
+        variantName: null,
+      },
+    );
+  }
+
+  function increaseFeaturedProduct(
+    product: CatalogProduct,
+  ) {
+    if (isStoreClosed) {
+      return;
+    }
+
+    const existingItem = cartItems.find(
+      (item) =>
+        item.id === product.id &&
+        item.variantId === null,
+    );
+
+    if (existingItem) {
+      increaseStoreItem(
+        currentStore.id,
+        product.id,
+        null,
+      );
+      return;
+    }
+
+    addFeaturedProduct(product);
+  }
+
+  function decreaseFeaturedProduct(
+    productId: string,
+  ) {
+    const existingItem = cartItems.find(
+      (item) =>
+        item.id === productId &&
+        item.variantId === null,
+    );
+
+    if (!existingItem) {
+      return;
+    }
+
+    decreaseStoreItem(
+      currentStore.id,
+      productId,
+      null,
+    );
+  }
+
+  function getProductQuantity(
+    productId: string,
+  ) {
+    return (
+      cartItems.find(
+        (item) =>
+          item.id === productId &&
+          item.variantId === null,
+      )?.quantity ?? 0
+    );
+  }
+
+  function openCart() {
+    setActiveCart(currentStore.id);
+
+    router.push({
+      pathname: '/cart',
+      params: {
+        storeId: currentStore.id,
+      },
+    });
+  }
+
   return (
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.pageContent,
-          cartItemCount > 0 &&
-            styles.pageContentWithCart,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.container}>
-          <View style={styles.hero}>
-            <View style={styles.heroDecorationOne} />
-            <View style={styles.heroDecorationTwo} />
+    <SafeAreaView
+      style={styles.screen}
+      edges={['top']}
+    >
+      <StatusBar style="dark" />
 
-            <View style={styles.heroTopRow}>
-              <Pressable
-                accessibilityLabel="العودة"
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.backButton,
-                  pressed && styles.pressed,
-                ]}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.backIcon}>›</Text>
-              </Pressable>
+      <View style={styles.pageShell}>
+        <View style={styles.header}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed &&
+                styles.headerButtonPressed,
+            ]}
+            onPress={() => router.back()}
+          >
+            <BackArrowIcon />
+          </Pressable>
+        </View>
 
-              <View style={styles.heroCopy}>
-                <Text style={styles.heroEyebrow}>
-                  مكتبة Navienty Now
-                </Text>
-                <Text style={styles.heroTitle}>
-                  {currentStore.name}
-                </Text>
-                <Text style={styles.heroDescription}>
-                  {currentStore.shortDescription ||
-                    'كتب، أدوات مكتبية ومستلزمات الدراسة في طلب واحد.'}
-                </Text>
-              </View>
-
-              <View style={styles.heroIconBox}>
-                <Text style={styles.heroIcon}>
-                  {currentStore.icon || '📚'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.heroMetaRow}>
-              <View style={styles.heroMetaItem}>
-                <Text style={styles.heroMetaValue}>
-                  ⭐ {currentStore.rating.toFixed(1)}
-                </Text>
-                <Text style={styles.heroMetaLabel}>
-                  التقييم
-                </Text>
-              </View>
-              <View style={styles.heroMetaDivider} />
-              <View style={styles.heroMetaItem}>
-                <Text style={styles.heroMetaValue}>
-                  {delivery.deliveryTime ||
-                    `${delivery.estimatedDeliveryMinutes ?? '-'} دقيقة`}
-                </Text>
-                <Text style={styles.heroMetaLabel}>
-                  التوصيل
-                </Text>
-              </View>
-              <View style={styles.heroMetaDivider} />
-              <View style={styles.heroMetaItem}>
-                <Text style={styles.heroMetaValue}>
-                  {formatCurrency(
-                    delivery.deliveryFee,
-                    currencySymbol,
-                  )}
-                </Text>
-                <Text style={styles.heroMetaLabel}>
-                  الرسوم
-                </Text>
-              </View>
-            </View>
-
-            {storeIsClosed && (
-              <View style={styles.closedNotice}>
-                <Text style={styles.closedNoticeText}>
-                  {currentStore.manualClosedNote ||
-                    'المكتبة مغلقة مؤقتًا.'}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {stores.length > 1 && (
-            <View style={styles.storeSwitcherSection}>
-              <Text style={styles.storeSwitcherTitle}>
-                المكتبات المتاحة
-              </Text>
-              <ScrollView
-                horizontal
-                contentContainerStyle={
-                  styles.storeSwitcherContent
-                }
-                showsHorizontalScrollIndicator={false}
-              >
-                {stores.map((store) => {
-                  const isActive =
-                    store.id === activeStoreId;
-
-                  return (
-                    <Pressable
-                      key={store.id}
-                      style={({ pressed }) => [
-                        styles.storeSwitcherItem,
-                        isActive &&
-                          styles.storeSwitcherItemActive,
-                        pressed && styles.pressed,
-                      ]}
-                      onPress={() => {
-                        void selectStore(store.id);
-                      }}
-                    >
-                      <Text
-                        style={styles.storeSwitcherIcon}
-                      >
-                        {store.icon || '📚'}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.storeSwitcherText,
-                          isActive &&
-                            styles.storeSwitcherTextActive,
-                        ]}
-                      >
-                        {store.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={styles.searchBox}>
-            <View style={styles.searchBadge}>
-              <Text style={styles.searchBadgeText}>
-                بحث
-              </Text>
-            </View>
-            <TextInput
-              autoCorrect={false}
-              placeholder="ابحث عن كتاب أو أداة مكتبية"
-              placeholderTextColor="#888A93"
-              returnKeyType="search"
-              style={styles.searchInput}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            <Text style={styles.searchIcon}>⌕</Text>
-          </View>
-
-          <View style={styles.featureStrip}>
-            <FeatureCard
-              icon="✏️"
-              title="أدوات الدراسة"
-              description="كل الأساسيات في مكان واحد"
-            />
-            <FeatureCard
-              icon="📖"
-              title="كتب ومراجع"
-              description="تصفح المتاح حسب الأقسام"
-            />
-          </View>
-
-          <View style={styles.sectionHeading}>
-            <Text style={styles.productCountBadge}>
-              {visibleProductCount} منتج
+        <ScrollView
+          style={styles.mainScrollView}
+          contentContainerStyle={[
+            styles.mainContent,
+            shouldShowCartBar &&
+              styles.mainContentWithCart,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.categoriesSection}>
+            <Text style={styles.categoriesTitle}>
+              تسوق حسب الفئة
             </Text>
-            <View style={styles.sectionHeadingCopy}>
-              <Text style={styles.sectionHeadingTitle}>
-                تصفح المكتبة
-              </Text>
-              <Text
-                style={styles.sectionHeadingDescription}
-              >
-                اختر قسمًا أو استخدم البحث
-              </Text>
-            </View>
+
+            {categoryColumns.length > 0 ? (
+              <>
+                <Animated.ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  scrollEventThrottle={16}
+                  contentContainerStyle={
+                    styles.categoriesRail
+                  }
+                  onLayout={(event) => {
+                    setCategoryViewportWidth(
+                      event.nativeEvent.layout.width,
+                    );
+                  }}
+                  onContentSizeChange={(width) => {
+                    setCategoryContentWidth(width);
+                  }}
+                  onScroll={Animated.event(
+                    [
+                      {
+                        nativeEvent: {
+                          contentOffset: {
+                            x: categoryScrollX,
+                          },
+                        },
+                      },
+                    ],
+                    { useNativeDriver: true },
+                  )}
+                >
+                  {categoryColumns.map(
+                    (column, columnIndex) => (
+                      <View
+                        key={`bookstore-category-column-${columnIndex}`}
+                        style={styles.categoryColumn}
+                      >
+                        {column.map((item) => (
+                          <Pressable
+                            key={item.key}
+                            style={({ pressed }) => [
+                              styles.categoryItem,
+                              pressed &&
+                                styles.categoryItemPressed,
+                            ]}
+                            onPress={() =>
+                              openCategory(item)
+                            }
+                          >
+                            <CategoryVisual
+                              item={item}
+                            />
+                            <Text
+                              style={
+                                styles.categoryLabel
+                              }
+                              numberOfLines={2}
+                            >
+                              {item.label}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    ),
+                  )}
+                </Animated.ScrollView>
+
+                <View style={styles.categoryPagination}>
+                  <Animated.View
+                    style={[
+                      styles.categoryPaginationActive,
+                      {
+                        transform: [
+                          {
+                            translateX:
+                              categoryIndicatorTranslateX,
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                </View>
+              </>
+            ) : (
+              <View style={styles.emptyCategories}>
+                <Text
+                  style={styles.emptyCategoriesIcon}
+                >
+                  📚
+                </Text>
+                <Text
+                  style={
+                    styles.emptyCategoriesTitle
+                  }
+                >
+                  لا توجد فئات متاحة حاليًا
+                </Text>
+              </View>
+            )}
           </View>
 
-          <SectionChips
-            activeSectionId={activeSectionId}
-            sections={catalog.sections}
-            onSelect={setActiveSectionId}
-          />
-
-          {visibleSections.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyIcon}>🔎</Text>
-              <Text style={styles.emptyTitle}>
-                لا توجد نتائج
-              </Text>
-              <Text style={styles.emptyDescription}>
-                جرّب اسمًا مختلفًا أو اختر قسمًا آخر.
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.sectionsList}>
-              {visibleSections.map((section) => (
+          {resolvedPromotionBanners.map(
+            (banner, bannerIndex) => (
+              <View
+                key={banner.id}
+                style={[
+                  styles.promotionSection,
+                  bannerIndex ===
+                    resolvedPromotionBanners.length -
+                      1 &&
+                    styles.promotionSectionLast,
+                ]}
+              >
                 <View
-                  key={section.id}
-                  style={styles.productsSection}
+                  style={styles.promotionBannerFrame}
                 >
-                  <View style={styles.productsSectionHeader}>
-                    <Text style={styles.productsSectionCount}>
-                      {section.products.length} منتج
-                    </Text>
-                    <Text style={styles.productsSectionTitle}>
-                      {section.name}
-                    </Text>
-                  </View>
-
-                  <View style={styles.productsGrid}>
-                    {section.products.map((product) => (
-                      <BookProductCard
-                        key={product.id}
-                        currencySymbol={currencySymbol}
-                        disabled={storeIsClosed}
-                        product={product}
-                        quantity={getProductQuantity(
-                          product.id,
-                        )}
-                        onDecrease={() =>
-                          decreaseProduct(product.id)
-                        }
-                        onIncrease={() =>
-                          increaseProduct(product)
-                        }
-                      />
-                    ))}
-                  </View>
+                  <Image
+                    source={{ uri: banner.imageUrl }}
+                    style={[
+                      styles.promotionBanner,
+                      {
+                        height:
+                          promotionBannerHeight,
+                      },
+                    ]}
+                    resizeMode="cover"
+                    accessibilityLabel={
+                      banner.altTextAr ??
+                      banner.adminLabel
+                    }
+                  />
                 </View>
-              ))}
-            </View>
-          )}
-        </View>
-      </ScrollView>
 
-      <CatalogCartBar
-        accentColor={BOOKSTORE_ACCENT}
-        currencySymbol={currencySymbol}
-        itemCount={cartItemCount}
-        storeName={cartStoreName}
-        subtotal={cartSubtotal}
-        onPress={() => router.push('/cart')}
-      />
-
-      <ReplaceCartModal
-        accentColor={BOOKSTORE_ACCENT}
-        currentCartStoreName={cartStoreName}
-        product={pendingProduct}
-        onCancel={dismissPendingProduct}
-        onOpenCart={() => {
-          dismissPendingProduct();
-          router.push('/cart');
-        }}
-        onReplace={replaceCartAndAddProduct}
-      />
-    </View>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <View style={styles.featureCard}>
-      <View style={styles.featureIconBox}>
-        <Text style={styles.featureIcon}>{icon}</Text>
-      </View>
-      <View style={styles.featureCopy}>
-        <Text style={styles.featureTitle}>
-          {title}
-        </Text>
-        <Text style={styles.featureDescription}>
-          {description}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function SectionChips({
-  sections,
-  activeSectionId,
-  onSelect,
-}: {
-  sections: CatalogSection[];
-  activeSectionId: string;
-  onSelect: (sectionId: string) => void;
-}) {
-  return (
-    <ScrollView
-      horizontal
-      contentContainerStyle={styles.sectionChipsContent}
-      showsHorizontalScrollIndicator={false}
-      style={styles.sectionChips}
-    >
-      <SectionChip
-        active={activeSectionId === 'all'}
-        label="الكل"
-        onPress={() => onSelect('all')}
-      />
-
-      {sections.map((section) => (
-        <SectionChip
-          key={section.id}
-          active={activeSectionId === section.id}
-          label={section.name}
-          onPress={() => onSelect(section.id)}
-        />
-      ))}
-    </ScrollView>
-  );
-}
-
-function SectionChip({
-  active,
-  label,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.sectionChip,
-        active && styles.sectionChipActive,
-        pressed && styles.pressed,
-      ]}
-      onPress={onPress}
-    >
-      <Text
-        style={[
-          styles.sectionChipText,
-          active && styles.sectionChipTextActive,
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function BookProductCard({
-  product,
-  currencySymbol,
-  quantity,
-  disabled,
-  onIncrease,
-  onDecrease,
-}: {
-  product: CatalogProduct;
-  currencySymbol: string;
-  quantity: number;
-  disabled: boolean;
-  onIncrease: () => void;
-  onDecrease: () => void;
-}) {
-  return (
-    <View style={styles.productCard}>
-      <View style={styles.productArtworkWrap}>
-        <ProductArtwork
-          backgroundColor={BOOKSTORE_PALE}
-          product={product}
-          size={112}
-        />
-      </View>
-
-      <Text
-        numberOfLines={2}
-        style={styles.productName}
-      >
-        {product.name}
-      </Text>
-      <Text
-        numberOfLines={2}
-        style={styles.productDescription}
-      >
-        {product.description ||
-          product.unitLabelAr ||
-          'منتج متاح من المكتبة.'}
-      </Text>
-
-      <View style={styles.productPriceRow}>
-        <View style={styles.productPriceBox}>
-          <Text style={styles.productPrice}>
-            {formatCurrency(
-              product.price,
-              currencySymbol,
-            )}
-          </Text>
-          {product.compareAtPrice !== null &&
-            product.compareAtPrice > product.price && (
-              <Text style={styles.comparePrice}>
-                {formatCurrency(
-                  product.compareAtPrice,
-                  currencySymbol,
+                {banner.products.length > 0 && (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    directionalLockEnabled
+                    contentContainerStyle={
+                      styles.promotionProductsRail
+                    }
+                    style={[
+                      styles.promotionProductsScroll,
+                      {
+                        marginTop:
+                          -promotionProductsOverlap,
+                      },
+                    ]}
+                  >
+                    {banner.products.map(
+                      (product) => (
+                        <FeaturedProductCard
+                          key={`${banner.id}-${product.id}`}
+                          product={product}
+                          currencyCode={currencyCode}
+                          cardWidth={featuredCardWidth}
+                          quantity={getProductQuantity(
+                            product.id,
+                          )}
+                          isStoreClosed={
+                            isStoreClosed
+                          }
+                          onAdd={() =>
+                            addFeaturedProduct(
+                              product,
+                            )
+                          }
+                          onIncrease={() =>
+                            increaseFeaturedProduct(
+                              product,
+                            )
+                          }
+                          onDecrease={() =>
+                            decreaseFeaturedProduct(
+                              product.id,
+                            )
+                          }
+                        />
+                      ),
+                    )}
+                  </ScrollView>
                 )}
-              </Text>
-            )}
-        </View>
-      </View>
+              </View>
+            ),
+          )}
+        </ScrollView>
 
-      <View style={styles.quantityWrap}>
-        <QuantityControl
-          accentColor={BOOKSTORE_ACCENT}
-          disabled={disabled}
-          quantity={quantity}
-          onDecrease={onDecrease}
-          onIncrease={onIncrease}
-        />
+        {isStoreClosed && (
+          <View style={styles.closedOverlay}>
+            <Text style={styles.closedOverlayText}>
+              {currentStore.manualClosedNote ??
+                'المكتبة مغلقة حاليًا.'}
+            </Text>
+          </View>
+        )}
+
+        {shouldShowCartBar && (
+          <View
+            pointerEvents="box-none"
+            style={styles.cartBarFloatingWrapper}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`عرض السلة، ${currentStoreItemCount} منتجات، الإجمالي ${formatCartMoney(
+                currentStoreSubtotal,
+                currencyCode,
+              )}`}
+              style={({ pressed }) => [
+                styles.cartBar,
+                pressed && styles.cartBarPressed,
+              ]}
+              onPress={openCart}
+            >
+              <View style={styles.cartCountBadge}>
+                <Text style={styles.cartCountText}>
+                  {currentStoreItemCount}
+                </Text>
+              </View>
+
+              <View style={styles.cartBarRight}>
+                <Text
+                  style={styles.cartBarText}
+                  numberOfLines={1}
+                >
+                  {formatCartMoney(
+                    currentStoreSubtotal,
+                    currencyCode,
+                  )}{' '}
+                  عرض السلة
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: '#FBFAF7',
+    backgroundColor: '#FFFFFF',
     flex: 1,
   },
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 42,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 42,
-  },
-  pageContentWithCart: {
-    paddingBottom: 116,
-  },
-  container: {
+  pageShell: {
     alignSelf: 'center',
-    maxWidth: NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+    maxWidth: 560,
+    position: 'relative',
     width: '100%',
   },
-  hero: {
-    backgroundColor: BOOKSTORE_DARK,
-    borderRadius: 30,
-    overflow: 'hidden',
-    padding: 20,
-    position: 'relative',
-  },
-  heroDecorationOne: {
-    backgroundColor: 'rgba(244,201,93,0.12)',
-    borderRadius: 100,
-    height: 150,
-    position: 'absolute',
-    right: -45,
-    top: -55,
-    width: 150,
-  },
-  heroDecorationTwo: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 80,
-    bottom: -75,
-    height: 160,
-    left: -50,
-    position: 'absolute',
-    width: 160,
-  },
-  heroTopRow: {
-    alignItems: 'flex-start',
+  header: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
-    gap: 13,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    zIndex: 10,
   },
   backButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    borderRadius: 14,
-    height: 44,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 46,
     justifyContent: 'center',
-    width: 44,
+    width: 46,
   },
-  backIcon: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    lineHeight: 34,
+  headerButtonPressed: {
+    backgroundColor: '#F7F7F7',
+    transform: [{ scale: 0.97 }],
   },
-  heroCopy: {
-    alignItems: 'flex-end',
+  backArrowCanvas: {
+    height: 23,
+    position: 'relative',
+    width: 24,
+  },
+  backArrowStem: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2.2,
+    left: 3,
+    position: 'absolute',
+    top: 10.3,
+    width: 19,
+  },
+  backArrowDiagonal: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2.2,
+    left: 2,
+    position: 'absolute',
+    width: 10,
+  },
+  backArrowTop: {
+    top: 7,
+    transform: [{ rotate: '-42deg' }],
+  },
+  backArrowBottom: {
+    top: 14,
+    transform: [{ rotate: '42deg' }],
+  },
+  mainScrollView: {
     flex: 1,
   },
-  heroEyebrow: {
-    color: BOOKSTORE_YELLOW,
-    fontSize: 11,
-    fontWeight: '900',
+  mainContent: {
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 30,
   },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '900',
-    marginTop: 7,
-    textAlign: 'right',
+  mainContentWithCart: {
+    paddingBottom: 115,
   },
-  heroDescription: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12,
-    lineHeight: 20,
-    marginTop: 7,
-    textAlign: 'right',
+  categoriesSection: {
+    backgroundColor: '#FFFFFF',
+    paddingTop: 1,
   },
-  heroIconBox: {
+  categoriesTitle: {
+    color: '#202020',
+    fontSize: 21,
+    fontWeight: '800',
+    letterSpacing: -0.45,
+    marginBottom: 14,
+    paddingHorizontal: 16,
+  },
+  categoriesRail: {
+    gap: 7,
+    paddingHorizontal: 16,
+  },
+  categoryColumn: {
+    gap: 15,
+    width: 85,
+  },
+  categoryItem: {
     alignItems: 'center',
-    backgroundColor: BOOKSTORE_YELLOW,
-    borderRadius: 20,
-    height: 66,
-    justifyContent: 'center',
-    transform: [{ rotate: '4deg' }],
-    width: 66,
+    width: 85,
   },
-  heroIcon: {
+  categoryItemPressed: {
+    opacity: 0.68,
+    transform: [{ scale: 0.97 }],
+  },
+  categoryImageBox: {
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 13,
+    height: 80,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 80,
+  },
+  categoryImage: {
+    height: '92%',
+    width: '92%',
+  },
+  categoryFallbackIcon: {
+    fontSize: 39,
+  },
+  categoryLabel: {
+    color: '#202020',
+    fontSize: 13.5,
+    fontWeight: '400',
+    letterSpacing: -0.2,
+    lineHeight: 18,
+    marginTop: 8,
+    minHeight: 36,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    width: 85,
+  },
+  categoryPagination: {
+    alignSelf: 'center',
+    backgroundColor: '#E6E6E6',
+    borderRadius: 3,
+    height: 5,
+    marginBottom: 22,
+    marginTop: 18,
+    overflow: 'hidden',
+    position: 'relative',
+    width: CATEGORY_INDICATOR_TRACK_WIDTH,
+  },
+  categoryPaginationActive: {
+    backgroundColor: '#151515',
+    borderRadius: 3,
+    height: 5,
+    left: 0,
+    position: 'absolute',
+    top: 0,
+    width: CATEGORY_INDICATOR_THUMB_WIDTH,
+  },
+  emptyCategories: {
+    alignItems: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 28,
+  },
+  emptyCategoriesIcon: {
+    fontSize: 42,
+  },
+  emptyCategoriesTitle: {
+    color: '#202020',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  promotionSection: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 22,
+    overflow: 'visible',
+    width: '100%',
+  },
+  promotionSectionLast: {
+    marginBottom: 0,
+  },
+  promotionBannerFrame: {
+    marginHorizontal: 9,
+    overflow: 'hidden',
+  },
+  promotionBanner: {
+    backgroundColor: '#F4F4F4',
+    width: '100%',
+  },
+  promotionProductsScroll: {
+    overflow: 'visible',
+  },
+  promotionProductsRail: {
+    alignItems: 'flex-start',
+    gap: 7,
+    paddingBottom: 7,
+    paddingHorizontal: 21,
+    paddingTop: 0,
+  },
+  featuredProductCard: {
+    backgroundColor: 'transparent',
+    overflow: 'visible',
+  },
+  featuredProductImageBox: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E8E8E8',
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    overflow: 'visible',
+    position: 'relative',
+  },
+  featuredProductImage: {
+    height: '68%',
+    width: '68%',
+  },
+  featuredProductFallback: {
     fontSize: 34,
   },
-  heroMetaRow: {
+  featuredDiscountBadge: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.09)',
-    borderRadius: 17,
+    backgroundColor: '#BFFF00',
+    borderRadius: 3,
+    justifyContent: 'center',
+    left: 6,
+    minHeight: 17,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    position: 'absolute',
+    top: 6,
+    zIndex: 5,
+  },
+  featuredDiscountText: {
+    color: '#111111',
+    fontSize: 8.5,
+    fontWeight: '500',
+    lineHeight: 11,
+  },
+  featuredAddButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7E7E7',
+    borderRadius: 18,
+    borderWidth: 1,
+    bottom: 6,
+    elevation: 2,
+    height: 34,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    width: 34,
+    zIndex: 8,
+  },
+  featuredAddButtonPressed: {
+    backgroundColor: '#F8F8F8',
+    transform: [{ scale: 0.94 }],
+  },
+  featuredAddButtonDisabled: {
+    opacity: 0.45,
+  },
+  featuredAddButtonText: {
+    color: '#F04A00',
+    fontSize: 25,
+    fontWeight: '300',
+    lineHeight: 27,
+    marginTop: -2,
+  },
+  featuredQuantityPill: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7E7E7',
+    borderRadius: 18,
+    borderWidth: 1,
+    bottom: 6,
+    elevation: 2,
     flexDirection: 'row',
-    marginTop: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
+    height: 34,
+    position: 'absolute',
+    right: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    zIndex: 8,
   },
-  heroMetaItem: {
+  featuredQuantityButton: {
     alignItems: 'center',
-    flex: 1,
+    height: 32,
+    justifyContent: 'center',
+    width: 25,
   },
-  heroMetaValue: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
+  featuredQuantityButtonText: {
+    color: '#F04A00',
+    fontSize: 18,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  featuredQuantityValue: {
+    color: '#202020',
+    fontSize: 10,
+    fontWeight: '700',
+    minWidth: 14,
     textAlign: 'center',
   },
-  heroMetaLabel: {
-    color: 'rgba(255,255,255,0.58)',
-    fontSize: 9,
-    marginTop: 4,
+  featuredProductName: {
+    color: '#202020',
+    fontSize: 10.5,
+    fontWeight: '400',
+    letterSpacing: -0.15,
+    lineHeight: 12.5,
+    marginTop: 7,
+    minHeight: 25,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
-  heroMetaDivider: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    height: 28,
-    width: 1,
-  },
-  closedNotice: {
-    backgroundColor: 'rgba(255,225,225,0.13)',
-    borderRadius: 13,
-    marginTop: 12,
-    padding: 11,
-  },
-  closedNoticeText: {
-    color: '#FFD7D7',
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'right',
-  },
-  storeSwitcherSection: {
-    marginTop: 22,
-  },
-  storeSwitcherTitle: {
-    color: '#242A3A',
-    fontSize: 15,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  storeSwitcherContent: {
-    gap: 9,
-    paddingTop: 11,
-  },
-  storeSwitcherItem: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1E2E8',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    maxWidth: 210,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  storeSwitcherItemActive: {
-    backgroundColor: '#EEF1FA',
-    borderColor: BOOKSTORE_ACCENT,
-  },
-  storeSwitcherIcon: {
-    fontSize: 20,
-  },
-  storeSwitcherText: {
-    color: '#646773',
-    flexShrink: 1,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  storeSwitcherTextActive: {
-    color: BOOKSTORE_DARK,
-  },
-  searchBox: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E2E7',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 20,
-    minHeight: 55,
-    paddingHorizontal: 13,
-  },
-  searchBadge: {
-    backgroundColor: '#EEF1FA',
-    borderRadius: 10,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-  },
-  searchBadgeText: {
-    color: BOOKSTORE_ACCENT,
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  searchInput: {
-    color: '#202330',
-    flex: 1,
-    fontSize: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 14,
-    textAlign: 'right',
-  },
-  searchIcon: {
-    color: BOOKSTORE_ACCENT,
-    fontSize: 24,
-  },
-  featureStrip: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  featureCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E4E1',
-    borderRadius: 18,
-    borderWidth: 1,
-    flex: 1,
-    flexDirection: 'row-reverse',
-    gap: 9,
-    padding: 11,
-  },
-  featureIconBox: {
-    alignItems: 'center',
-    backgroundColor: '#FFF6DC',
-    borderRadius: 13,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  featureIcon: {
-    fontSize: 21,
-  },
-  featureCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-  featureTitle: {
-    color: '#2A2D38',
-    fontSize: 11,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  featureDescription: {
-    color: '#8A8B92',
-    fontSize: 8,
-    lineHeight: 13,
+  featuredCurrentPriceWrap: {
+    alignSelf: 'flex-start',
+    borderBottomColor: '#BFFF00',
+    borderBottomWidth: 2,
     marginTop: 3,
-    textAlign: 'right',
   },
-  sectionHeading: {
-    alignItems: 'flex-start',
+  featuredCurrentPrice: {
+    color: '#202020',
+    fontSize: 10.5,
+    fontWeight: '500',
+    lineHeight: 13,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+  featuredOldPrice: {
+    alignSelf: 'flex-start',
+    color: '#858585',
+    fontSize: 9,
+    lineHeight: 11,
+    marginTop: 1,
+    textAlign: 'left',
+    textDecorationLine: 'line-through',
+    writingDirection: 'ltr',
+  },
+  cartBarFloatingWrapper: {
+    bottom: 12,
+    left: 18,
+    position: 'absolute',
+    right: 18,
+    zIndex: 999,
+  },
+  cartBar: {
+    alignItems: 'center',
+    backgroundColor: '#00B956',
+    borderRadius: 34,
+    elevation: 20,
     flexDirection: 'row',
+    height: 64,
     justifyContent: 'space-between',
-    marginTop: 28,
+    paddingHorizontal: 9,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    width: '100%',
   },
-  productCountBadge: {
-    backgroundColor: '#FFF2CF',
-    borderRadius: 999,
-    color: '#7B5B12',
-    fontSize: 10,
-    fontWeight: '900',
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+  cartBarPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
   },
-  sectionHeadingCopy: {
+  cartCountBadge: {
+    alignItems: 'center',
+    backgroundColor: '#009D49',
+    borderRadius: 24,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  cartCountText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  cartBarRight: {
     alignItems: 'flex-end',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
-  sectionHeadingTitle: {
-    color: '#202330',
-    fontSize: 20,
-    fontWeight: '900',
+  cartBarText: {
+    color: '#FFFFFF',
+    fontSize: 15.5,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
-  sectionHeadingDescription: {
-    color: '#878992',
-    fontSize: 11,
-    marginTop: 4,
-  },
-  sectionChips: {
-    marginHorizontal: -20,
-    marginTop: 14,
-  },
-  sectionChipsContent: {
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  sectionChip: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E0E1E6',
-    borderRadius: 14,
-    borderWidth: 1,
+  closedOverlay: {
+    backgroundColor: '#252525',
+    left: 16,
     paddingHorizontal: 15,
     paddingVertical: 10,
+    position: 'absolute',
+    right: 16,
+    top: 68,
+    zIndex: 50,
   },
-  sectionChipActive: {
-    backgroundColor: BOOKSTORE_ACCENT,
-    borderColor: BOOKSTORE_ACCENT,
-  },
-  sectionChipText: {
-    color: '#666974',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  sectionChipTextActive: {
+  closedOverlayText: {
     color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
-  sectionsList: {
-    gap: 26,
-    marginTop: 24,
-  },
-  productsSection: {
-    gap: 13,
-  },
-  productsSectionHeader: {
+  stateScreen: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
   },
-  productsSectionTitle: {
-    color: '#242733',
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'right',
+  stateEmoji: {
+    fontSize: 50,
   },
-  productsSectionCount: {
-    color: '#8B8D95',
-    fontSize: 10,
+  stateTitle: {
+    color: '#202020',
+    fontSize: 21,
     fontWeight: '800',
-  },
-  productsGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  productCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E2E6',
-    borderRadius: 21,
-    borderWidth: 1,
-    minWidth: 146,
-    padding: 11,
-    width: '48.4%',
-  },
-  productArtworkWrap: {
-    alignItems: 'center',
-  },
-  productName: {
-    color: '#242733',
-    fontSize: 12,
-    fontWeight: '900',
-    marginTop: 10,
-    minHeight: 34,
-    textAlign: 'right',
-  },
-  productDescription: {
-    color: '#858790',
-    fontSize: 9,
-    lineHeight: 14,
-    marginTop: 4,
-    minHeight: 29,
-    textAlign: 'right',
-  },
-  productPriceRow: {
-    alignItems: 'flex-end',
-    marginTop: 9,
-  },
-  productPriceBox: {
-    alignItems: 'flex-end',
-  },
-  productPrice: {
-    color: BOOKSTORE_DARK,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  comparePrice: {
-    color: '#A2A3A9',
-    fontSize: 8,
-    marginTop: 2,
-    textDecorationLine: 'line-through',
-  },
-  quantityWrap: {
-    alignItems: 'flex-start',
-    marginTop: 11,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E2E6',
-    borderRadius: 22,
-    borderWidth: 1,
-    marginTop: 24,
-    padding: 28,
-  },
-  emptyIcon: {
-    fontSize: 40,
-  },
-  emptyTitle: {
-    color: '#242733',
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 11,
-  },
-  emptyDescription: {
-    color: '#858790',
-    fontSize: 11,
-    lineHeight: 18,
-    marginTop: 6,
+    marginTop: 15,
     textAlign: 'center',
   },
-  pressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.985 }],
+  stateDescription: {
+    color: '#777777',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 8,
+    maxWidth: 330,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#222222',
+    borderRadius: 14,
+    marginTop: 22,
+    minWidth: 150,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  errorBackButton: {
+    borderColor: '#E0E0E0',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 10,
+    minWidth: 150,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  errorBackButtonText: {
+    color: '#222222',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  generalPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }],
   },
 });

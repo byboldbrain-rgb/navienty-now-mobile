@@ -32,9 +32,10 @@ import {
   isRestaurantCartCategory,
   useCartStore,
 } from '../../store/cart-store';
-
-const BRAND_GREEN = '#00B14F';
-const BRAND_GREEN_DARK = '#009A45';
+import {
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
+} from '../../theme/navienty-now-theme';
 
 function isImageUri(
   value: string | null | undefined,
@@ -88,6 +89,28 @@ function getProductImage(
   return firstImage?.imageUrl ?? null;
 }
 
+function BackArrowIcon() {
+  return (
+    <View style={styles.backArrowCanvas}>
+      <View style={styles.backArrowStem} />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
 export default function StoreScreen() {
   const router = useRouter();
 
@@ -115,9 +138,6 @@ export default function StoreScreen() {
       null,
     );
 
-
-  const [appName, setAppName] =
-    useState('');
 
   const [
     currencySymbol,
@@ -235,11 +255,6 @@ export default function StoreScreen() {
 
       setCatalog(loadedCatalog);
 
-      setAppName(
-        loadedBootstrap.settings
-          .app_name,
-      );
-
       setCurrencySymbol(
         loadedBootstrap.settings
           .currency_symbol || 'EGP',
@@ -276,7 +291,7 @@ export default function StoreScreen() {
       <View style={styles.stateScreen}>
         <ActivityIndicator
           size="large"
-          color={BRAND_GREEN}
+          color={NAVIENTY_NOW_COLORS.primary}
         />
 
         <Text style={styles.stateTitle}>
@@ -303,7 +318,7 @@ export default function StoreScreen() {
           <Ionicons
             name="restaurant-outline"
             size={34}
-            color={BRAND_GREEN}
+            color={NAVIENTY_NOW_COLORS.primary}
           />
         </View>
 
@@ -759,26 +774,6 @@ export default function StoreScreen() {
     });
   }
 
-  function openExistingRestaurantCart() {
-    clearPendingCartRequest();
-
-    if (!conflictingRestaurantCart) {
-      return;
-    }
-
-    setActiveCart(
-      conflictingRestaurantCart.storeId,
-    );
-
-    router.push({
-      pathname: '/cart',
-      params: {
-        storeId:
-          conflictingRestaurantCart.storeId,
-      },
-    });
-  }
-
   function handleSectionLayout(
     sectionId: string,
     event: LayoutChangeEvent,
@@ -817,6 +812,21 @@ export default function StoreScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.topHeader}>
+        <Pressable
+          accessibilityLabel="العودة"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed &&
+              styles.headerButtonPressed,
+          ]}
+          onPress={() => router.back()}
+        >
+          <BackArrowIcon />
+        </Pressable>
+      </View>
+
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
@@ -829,6 +839,7 @@ export default function StoreScreen() {
           false
         }
       >
+        <View style={styles.container}>
         {/* HERO */}
 
         <View style={styles.hero}>
@@ -878,28 +889,6 @@ export default function StoreScreen() {
             </View>
           )}
 
-          {/* TOP BUTTONS */}
-
-          <View style={styles.topBar}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.topCircleButton,
-
-                pressed &&
-                  styles.topCircleButtonPressed,
-              ]}
-              onPress={() =>
-                router.back()
-              }
-            >
-              <Ionicons
-                name="arrow-back"
-                size={25}
-                color="#242424"
-              />
-            </Pressable>
-
-          </View>
         </View>
 
         {/* STORE CARD */}
@@ -1079,7 +1068,7 @@ export default function StoreScreen() {
               <Ionicons
                 name="restaurant-outline"
                 size={34}
-                color={BRAND_GREEN}
+                color={NAVIENTY_NOW_COLORS.primary}
               />
             </View>
 
@@ -1363,7 +1352,7 @@ export default function StoreScreen() {
                                   name="chevron-forward"
                                   size={31}
                                   color={
-                                    BRAND_GREEN
+                                    NAVIENTY_NOW_COLORS.primary
                                   }
                                 />
                               </Pressable>
@@ -1399,7 +1388,7 @@ export default function StoreScreen() {
                                   name="add"
                                   size={30}
                                   color={
-                                    BRAND_GREEN
+                                    NAVIENTY_NOW_COLORS.primary
                                   }
                                 />
                               </Pressable>
@@ -1489,6 +1478,7 @@ export default function StoreScreen() {
             ),
           )
         )}
+        </View>
       </ScrollView>
 
       {/* PRODUCT OPTIONS MODAL */}
@@ -1830,7 +1820,7 @@ export default function StoreScreen() {
                         name="add"
                         size={29}
                         color={
-                          BRAND_GREEN
+                          NAVIENTY_NOW_COLORS.primary
                         }
                       />
                     </Pressable>
@@ -1935,150 +1925,58 @@ export default function StoreScreen() {
         </View>
       ) : null}
 
-      {/* DIFFERENT STORE MODAL */}
+      {/* DIFFERENT RESTAURANT CART MODAL */}
 
       <Modal
-        visible={
-          pendingProduct !== null
-        }
+        visible={pendingProduct !== null}
         transparent
         animationType="fade"
-        onRequestClose={
-          clearPendingCartRequest
-        }
+        statusBarTranslucent
+        onRequestClose={clearPendingCartRequest}
       >
-        <View
-          style={
-            styles.modalOverlay
-          }
-        >
-          <View
-            style={styles.modalCard}
-          >
-            <View
-              style={
-                styles.modalIconContainer
-              }
-            >
-              <Ionicons
-                name="cart-outline"
-                size={34}
-                color={BRAND_GREEN}
-              />
-            </View>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={clearPendingCartRequest}
+          />
 
-            <Text
-              style={
-                styles.modalTitle
-              }
-            >
-              لديك سلة من مطعم آخر
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              بدء سلة جديدة؟
             </Text>
 
-            <Text
-              style={
-                styles.modalDescription
-              }
-            >
-              لديك منتجات بالفعل من{' '}
+            <Text style={styles.modalDescription}>
+              عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من "
               {conflictingRestaurantCart?.storeName ??
-                'مطعم آخر'}
-              .{'\n'}
-              يسمح{' '}
-              {appName ||
-                'التطبيق'}{' '}
-              بمطعم واحد فقط في نفس الوقت،
-              بينما تظل سلال السوبر ماركت
-              والصيدلية والمكتبة منفصلة كما هي.
+                'المطعم السابق'}
+              ".
             </Text>
 
-            {pendingProduct && (
-              <View
-                style={
-                  styles.pendingProduct
-                }
+            <View style={styles.modalActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.confirmNewCartButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={replaceCartAndAddProduct}
               >
-                <Text
-                  style={
-                    styles.pendingProductName
-                  }
-                >
-                  {pendingVariant
-                    ? `${pendingProduct.name} - ${pendingVariant.name}`
-                    : pendingProduct.name}
+                <Text style={styles.confirmNewCartButtonText}>
+                  تأكيد البدء
                 </Text>
+              </Pressable>
 
-                <Text
-                  style={
-                    styles.pendingProductLabel
-                  }
-                >
-                  المنتج الذي تحاول
-                  إضافته
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={clearPendingCartRequest}
+              >
+                <Text style={styles.cancelButtonText}>
+                  إلغاء
                 </Text>
-              </View>
-            )}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.replaceCartButton,
-
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-              onPress={
-                replaceCartAndAddProduct
-              }
-            >
-              <Text
-                style={
-                  styles.replaceCartButtonText
-                }
-              >
-                إفراغ سلة المطعم والبدء من
-                هذا المطعم
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.viewCartButton,
-
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-              onPress={
-                openExistingRestaurantCart
-              }
-            >
-              <Text
-                style={
-                  styles.viewCartButtonText
-                }
-              >
-                عرض سلة المطعم الحالية
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.cancelButton,
-
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-              onPress={
-                clearPendingCartRequest
-              }
-            >
-              <Text
-                style={
-                  styles.cancelButtonText
-                }
-              >
-                إلغاء
-              </Text>
-            </Pressable>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2088,8 +1986,100 @@ export default function StoreScreen() {
 
 const styles = StyleSheet.create({
   screen: {
+    backgroundColor: '#FFFFFF',
     flex: 1,
-    backgroundColor: '#ffffff',
+  },
+
+  topHeader: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderBottomColor: '#ECECEF',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 100,
+    paddingBottom: 14,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingTop: 34,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    zIndex: 10,
+  },
+
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
+
+  headerButtonPressed: {
+    backgroundColor: '#F7F7F7',
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
+  backArrowCanvas: {
+    height: 23,
+    position: 'relative',
+    width: 24,
+  },
+
+  backArrowStem: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2.2,
+    left: 3,
+    position: 'absolute',
+    top: 10.3,
+    width: 19,
+  },
+
+  backArrowDiagonal: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2.2,
+    left: 2,
+    position: 'absolute',
+    width: 10,
+  },
+
+  backArrowTop: {
+    top: 7,
+    transform: [
+      {
+        rotate: '-42deg',
+      },
+    ],
+  },
+
+  backArrowBottom: {
+    top: 14,
+    transform: [
+      {
+        rotate: '42deg',
+      },
+    ],
+  },
+
+  container: {
+    alignSelf: 'center',
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    width: '100%',
   },
 
   pageContent: {
@@ -2130,7 +2120,7 @@ const styles = StyleSheet.create({
   heroFallback: {
     alignItems: 'center',
     backgroundColor:
-      BRAND_GREEN,
+      NAVIENTY_NOW_COLORS.primary,
     height: '100%',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -2162,43 +2152,6 @@ const styles = StyleSheet.create({
     fontSize: 120,
   },
 
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent:
-      'space-between',
-    left: 0,
-    paddingHorizontal: 22,
-    paddingTop: 52,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-
-
-  topCircleButton: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor:
-      'rgba(0,0,0,0.08)',
-    borderRadius: 32,
-    borderWidth: 1,
-    height: 58,
-    justifyContent: 'center',
-
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-
-    elevation: 4,
-
-    width: 58,
-  },
-
   topCircleButtonPressed: {
     opacity: 0.88,
     transform: [
@@ -2213,14 +2166,15 @@ const styles = StyleSheet.create({
   /* ---------------------------------- */
 
   storeCardWrapper: {
-    marginHorizontal: 18,
-    marginTop: -88,
+    marginHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    marginTop: -72,
   },
 
   storeCard: {
     backgroundColor: '#ffffff',
-    borderColor: '#ededed',
-    borderRadius: 28,
+    borderColor: '#ECECEF',
+    borderRadius: 22,
     borderWidth: 1,
     paddingBottom: 19,
     paddingHorizontal: 18,
@@ -2231,8 +2185,8 @@ const styles = StyleSheet.create({
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
 
     elevation: 5,
   },
@@ -2283,7 +2237,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff1f0',
     borderRadius: 13,
     flexDirection: 'row',
-    marginHorizontal: 20,
+    marginHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
     marginTop: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -2387,7 +2342,8 @@ const styles = StyleSheet.create({
     fontSize: 23,
     fontWeight: '900',
     marginBottom: 4,
-    paddingHorizontal: 21,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
     textAlign: 'right',
   },
 
@@ -2401,7 +2357,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: 'row',
     minHeight: 190,
-    paddingHorizontal: 21,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
     paddingVertical: 18,
   },
 
@@ -2450,7 +2407,7 @@ const styles = StyleSheet.create({
   },
 
   productVariantHint: {
-    color: BRAND_GREEN,
+    color: NAVIENTY_NOW_COLORS.primary,
     fontSize: 12,
     fontWeight: '800',
     marginTop: 6,
@@ -2556,7 +2513,7 @@ const styles = StyleSheet.create({
   productQuantityContainer: {
     alignItems: 'center',
     backgroundColor:
-      BRAND_GREEN,
+      NAVIENTY_NOW_COLORS.primary,
     borderRadius: 28,
     bottom: -5,
     flexDirection: 'row',
@@ -2729,8 +2686,8 @@ const styles = StyleSheet.create({
   },
 
   variantCardSelected: {
-    borderColor: BRAND_GREEN,
-    backgroundColor: '#EAF9F0',
+    borderColor: NAVIENTY_NOW_COLORS.primary,
+    backgroundColor: '#EAF8F0',
   },
 
   variantCardPressed: {
@@ -2751,11 +2708,11 @@ const styles = StyleSheet.create({
   },
 
   variantRadioSelected: {
-    borderColor: BRAND_GREEN,
+    borderColor: NAVIENTY_NOW_COLORS.primary,
   },
 
   variantRadioDot: {
-    backgroundColor: BRAND_GREEN,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
     borderRadius: 5,
     height: 10,
     width: 10,
@@ -2840,7 +2797,7 @@ const styles = StyleSheet.create({
 
   modalAddItemButton: {
     alignItems: 'center',
-    backgroundColor: BRAND_GREEN,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
     borderRadius: 32,
     flex: 1,
     height: 64,
@@ -2853,7 +2810,8 @@ const styles = StyleSheet.create({
   },
 
   modalAddItemButtonPressed: {
-    backgroundColor: BRAND_GREEN_DARK,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    opacity: 0.9,
     transform: [
       {
         scale: 0.99,
@@ -2902,8 +2860,8 @@ const styles = StyleSheet.create({
   cartBar: {
     alignItems: 'center',
     backgroundColor:
-      BRAND_GREEN,
-    borderRadius: 35,
+      NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 999,
     flexDirection: 'row',
     height: 70,
     paddingHorizontal: 14,
@@ -2911,7 +2869,8 @@ const styles = StyleSheet.create({
 
   cartBarPressed: {
     backgroundColor:
-      BRAND_GREEN_DARK,
+      NAVIENTY_NOW_COLORS.primary,
+    opacity: 0.9,
 
     transform: [
       {
@@ -2923,7 +2882,7 @@ const styles = StyleSheet.create({
   cartCountCircle: {
     alignItems: 'center',
     backgroundColor:
-      'rgba(0,126,56,0.55)',
+      'rgba(255,255,255,0.18)',
     borderRadius: 25,
     height: 50,
     justifyContent: 'center',
@@ -2963,7 +2922,7 @@ const styles = StyleSheet.create({
 
   emptyCatalogIconContainer: {
     alignItems: 'center',
-    backgroundColor: '#EAF9F0',
+    backgroundColor: '#EAF8F0',
     borderRadius: 35,
     height: 70,
     justifyContent: 'center',
@@ -2992,113 +2951,87 @@ const styles = StyleSheet.create({
 
   modalOverlay: {
     alignItems: 'center',
-    backgroundColor:
-      'rgba(0,0,0,0.52)',
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+  },
+
+  modalBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
 
   modalCard: {
-    alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 27,
-    maxWidth: 440,
-    padding: 24,
+    borderRadius: 28,
+    maxWidth: 540,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 30,
     width: '100%',
-  },
-
-  modalIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#EAF9F0',
-    borderRadius: 38,
-    height: 76,
-    justifyContent: 'center',
-    width: 76,
   },
 
   modalTitle: {
     color: '#222222',
-    fontSize: 21,
+    fontSize: 24,
     fontWeight: '900',
-    marginTop: 17,
-    textAlign: 'center',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   modalDescription: {
     color: '#777777',
-    fontSize: 13,
-    lineHeight: 22,
-    marginTop: 9,
-    textAlign: 'center',
-  },
-
-  pendingProduct: {
-    alignSelf: 'stretch',
-    backgroundColor: '#f7f7f7',
-    borderRadius: 15,
-    marginTop: 18,
-    padding: 14,
-  },
-
-  pendingProductName: {
-    color: '#252525',
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 16,
+    lineHeight: 28,
+    marginTop: 12,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
-  pendingProductLabel: {
-    color: '#888888',
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: 'right',
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 26,
   },
 
-  replaceCartButton: {
+  confirmNewCartButton: {
     alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor:
-      BRAND_GREEN,
-    borderRadius: 16,
-    marginTop: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 999,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: 14,
   },
 
-  replaceCartButtonText: {
+  confirmNewCartButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '900',
     textAlign: 'center',
-  },
-
-  viewCartButton: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#E8F8EF',
-    borderRadius: 16,
-    marginTop: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-
-  viewCartButtonText: {
-    color: BRAND_GREEN,
-    fontSize: 14,
-    fontWeight: '900',
   },
 
   cancelButton: {
-    marginTop: 14,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E3E3E6',
+    borderRadius: 999,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: 14,
   },
 
   cancelButtonText: {
-    color: '#777777',
-    fontSize: 13,
-    fontWeight: '700',
+    color: '#222222',
+    fontSize: 16,
+    fontWeight: '800',
+    textAlign: 'center',
   },
 
   /* ---------------------------------- */
@@ -3107,15 +3040,15 @@ const styles = StyleSheet.create({
 
   stateScreen: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 28,
   },
 
   stateIconContainer: {
     alignItems: 'center',
-    backgroundColor: '#EAF9F0',
+    backgroundColor: '#EAF8F0',
     borderRadius: 40,
     height: 80,
     justifyContent: 'center',
@@ -3123,15 +3056,15 @@ const styles = StyleSheet.create({
   },
 
   stateTitle: {
-    color: '#222222',
-    fontSize: 22,
+    color: '#17171A',
+    fontSize: 21,
     fontWeight: '900',
-    marginTop: 16,
+    marginTop: 17,
     textAlign: 'center',
   },
 
   stateDescription: {
-    color: '#777777',
+    color: '#73737A',
     fontSize: 13,
     lineHeight: 21,
     marginTop: 8,
@@ -3141,7 +3074,7 @@ const styles = StyleSheet.create({
 
   retryButton: {
     backgroundColor:
-      BRAND_GREEN,
+      NAVIENTY_NOW_COLORS.primary,
     borderRadius: 15,
     marginTop: 22,
     paddingHorizontal: 22,
@@ -3165,12 +3098,17 @@ const styles = StyleSheet.create({
   },
 
   errorButtonText: {
-    color: BRAND_GREEN,
+    color: NAVIENTY_NOW_COLORS.primary,
     fontSize: 14,
     fontWeight: '800',
   },
 
   buttonPressed: {
-    opacity: 0.74,
+    opacity: 0.76,
+    transform: [
+      {
+        scale: 0.985,
+      },
+    ],
   },
 });

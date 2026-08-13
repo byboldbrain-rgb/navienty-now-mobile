@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase';
 export type StoreCategorySlug =
   | 'restaurants'
   | 'supermarket'
-  | 'pharmacy';
+  | 'pharmacy'
+  | 'bookstore'
+  | 'bookstores';
 
 type NumericValue =
   | number
@@ -61,6 +63,25 @@ function normalizeSlug(
     .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function getStoreCategoryAliases(
+  categorySlug: StoreCategorySlug,
+): string[] {
+  const normalizedSlug =
+    normalizeSlug(categorySlug);
+
+  if (
+    normalizedSlug === 'bookstore' ||
+    normalizedSlug === 'bookstores'
+  ) {
+    return [
+      'bookstore',
+      'bookstores',
+    ];
+  }
+
+  return [normalizedSlug];
 }
 
 /* ============================================================
@@ -1679,7 +1700,7 @@ export async function listStores(
       options.categorySlug;
   }
 
-  const { data, error } =
+  const primaryResult =
     Object.keys(
       rpcArguments,
     ).length === 0
@@ -1691,23 +1712,104 @@ export async function listStores(
           rpcArguments,
         );
 
-  if (error) {
+  if (primaryResult.error) {
     throw new Error(
-      `Loading stores failed: ${error.message}`,
+      `Loading stores failed: ${primaryResult.error.message}`,
+    );
+  }
+
+  const primaryRows =
+    Array.isArray(
+      primaryResult.data,
+    )
+      ? (
+          primaryResult.data as RawStoreSummary[]
+        )
+      : [];
+
+  if (
+    primaryRows.length > 0 ||
+    !options.categorySlug
+  ) {
+    return primaryRows.map(
+      mapStoreSummary,
+    );
+  }
+
+  /**
+   * Defensive fallback:
+   *
+   * بعض نسخ list_stores القديمة قد تكون
+   * لا تتعامل مع bookstore/bookstores في
+   * p_category_slug، رغم أن المتجر نفسه
+   * يظهر عند جلب متاجر منطقة الخدمة كلها.
+   *
+   * لذلك لو الفلترة من الـRPC رجعت صفر:
+   * 1. نعيد نفس الاستعلام لنفس Service Area
+   *    بدون فلتر Category.
+   * 2. نفلتر محليًا بالـslug.
+   *
+   * مهم:
+   * لا نتجاهل Service Area، وبالتالي لن
+   * نعرض متجرًا غير قابل للتوصيل للمنطقة.
+   */
+  const fallbackArguments: {
+    p_service_area_id?: string;
+  } = {};
+
+  if (
+    options.serviceAreaId
+  ) {
+    fallbackArguments.p_service_area_id =
+      options.serviceAreaId;
+  }
+
+  const fallbackResult =
+    Object.keys(
+      fallbackArguments,
+    ).length === 0
+      ? await supabase.rpc(
+          'list_stores',
+        )
+      : await supabase.rpc(
+          'list_stores',
+          fallbackArguments,
+        );
+
+  if (fallbackResult.error) {
+    throw new Error(
+      `Loading stores fallback failed: ${fallbackResult.error.message}`,
     );
   }
 
   if (
-    !Array.isArray(data)
+    !Array.isArray(
+      fallbackResult.data,
+    )
   ) {
     return [];
   }
 
+  const categoryAliases =
+    new Set(
+      getStoreCategoryAliases(
+        options.categorySlug,
+      ),
+    );
+
   return (
-    data as RawStoreSummary[]
-  ).map(
-    mapStoreSummary,
-  );
+    fallbackResult.data as RawStoreSummary[]
+  )
+    .filter((store) =>
+      categoryAliases.has(
+        normalizeSlug(
+          store.category_slug,
+        ),
+      ),
+    )
+    .map(
+      mapStoreSummary,
+    );
 }
 
 /* ============================================================

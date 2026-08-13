@@ -820,10 +820,27 @@ export default function CartScreen() {
 
     setActiveCart(storeId);
 
+    /**
+     * Guest checkout is allowed.
+     *
+     * The app creates a persistent anonymous Supabase
+     * session in the root layout, so checkout does not
+     * require a visible Login step.
+     */
+
+    /**
+     * Delivery location is required before checkout.
+     *
+     * The customer always sees the map first. The selected coordinates
+     * and reverse-geocoded address are saved in customer-store, then
+     * location-picker forwards the customer to checkout.
+     */
     router.push({
-      pathname: '/checkout',
+      pathname: '/location-picker',
       params: {
         storeId,
+
+        source: 'cart',
 
         paymentProcessingFee:
           paymentProcessingFee.toFixed(2),

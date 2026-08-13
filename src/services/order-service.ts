@@ -1,9 +1,9 @@
 import { supabase } from '../lib/supabase';
 import type {
-    CreateWhatsAppOrderInput,
-    Order,
-    OrderStatus,
-    PaymentStatus,
+  CreateWhatsAppOrderInput,
+  Order,
+  OrderStatus,
+  PaymentStatus,
 } from '../types/supabase-order';
 
 type NumericValue =
@@ -424,6 +424,10 @@ function getErrorMessage(
     [string, string]
   > = [
     [
+      'authentication_required',
+      'تعذر تحديد حساب الجهاز. أغلق التطبيق وافتحه مرة أخرى ثم حاول مجددًا.',
+    ],
+    [
       'orders_disabled',
       'استقبال الطلبات متوقف حاليًا من إعدادات Supabase.',
     ],
@@ -493,6 +497,44 @@ function getErrorMessage(
     matchedError?.[1] ||
     message ||
     fallbackMessage
+  );
+}
+
+/**
+ * Loads the complete server-side order history for the
+ * currently authenticated Supabase user.
+ *
+ * Anonymous Supabase users are also `authenticated`, so the
+ * RPC can safely use auth.uid() to return only this device/user's
+ * orders.
+ */
+export async function getMyOrders():
+  Promise<Order[]> {
+  const { data, error } =
+    await supabase.rpc(
+      'get_my_orders',
+    );
+
+  if (error) {
+    throw new Error(
+      getErrorMessage(error),
+    );
+  }
+
+  if (data == null) {
+    return [];
+  }
+
+  if (!Array.isArray(data)) {
+    throw new Error(
+      'استجابة سجل الطلبات من Supabase غير صالحة.',
+    );
+  }
+
+  return data.map((rawOrder) =>
+    mapOrder(
+      rawOrder as unknown as RawOrderDetails,
+    ),
   );
 }
 

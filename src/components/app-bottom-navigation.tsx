@@ -1,20 +1,20 @@
 import { useRouter } from 'expo-router';
 import {
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 import {
-    selectCartItemCount,
-    useCartStore,
+  selectCartItemCount,
+  useCartStore,
 } from '../store/cart-store';
 import { useOrdersStore } from '../store/orders-store';
 import {
-    NAVIENTY_NOW_COLORS,
-    NAVIENTY_NOW_LAYOUT,
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
 } from '../theme/navienty-now-theme';
 
 type MainTab =
@@ -25,7 +25,13 @@ type MainTab =
 
 type AppBottomNavigationProps = {
   activeTab: MainTab;
-  isSignedIn: boolean;
+
+  /**
+   * Kept optional for backwards compatibility with screens
+   * that still pass this prop. The Account tab is now always
+   * available, even for anonymous users.
+   */
+  isSignedIn?: boolean;
 };
 
 type TabIconKind = MainTab;
@@ -207,7 +213,6 @@ function TabIcon({
 
 export default function AppBottomNavigation({
   activeTab,
-  isSignedIn,
 }: AppBottomNavigationProps) {
   const router = useRouter();
 
@@ -249,12 +254,9 @@ export default function AppBottomNavigation({
     },
     {
       key: 'account',
-      label: isSignedIn
-        ? 'حسابي'
-        : 'دخول',
-      accessibilityLabel: isSignedIn
-        ? 'الانتقال إلى الحساب'
-        : 'الانتقال إلى تسجيل الدخول',
+      label: 'حسابي',
+      accessibilityLabel:
+        'الانتقال إلى حسابي وبيانات التوصيل',
       route: '/account',
       icon: 'account',
       badgeCount: 0,

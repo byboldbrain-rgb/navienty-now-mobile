@@ -593,6 +593,28 @@ function StoreArtwork({
   );
 }
 
+function BackArrowIcon() {
+  return (
+    <View style={styles.backArrowCanvas}>
+      <View style={styles.backArrowStem} />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
 export default function RestaurantsScreen() {
   const router = useRouter();
 
@@ -919,37 +941,15 @@ export default function RestaurantsScreen() {
           accessibilityLabel="العودة"
           accessibilityRole="button"
           style={({ pressed }) => [
-            styles.headerCircleButton,
+            styles.backButton,
             pressed &&
-              styles.pressed,
+              styles.headerButtonPressed,
           ]}
           onPress={() =>
             router.back()
           }
         >
-          <View
-            style={
-              styles.headerBackIcon
-            }
-          >
-            <View
-              style={
-                styles.headerBackArrowShaft
-              }
-            />
-
-            <View
-              style={
-                styles.headerBackArrowHeadTop
-              }
-            />
-
-            <View
-              style={
-                styles.headerBackArrowHeadBottom
-              }
-            />
-          </View>
+          <BackArrowIcon />
         </Pressable>
       </View>
 
@@ -1766,61 +1766,67 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
 
-  headerCircleButton: {
+  backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#E4E4E7',
-    borderRadius: 28,
+    borderColor: '#E1E1E1',
+    borderRadius: 24,
     borderWidth: 1,
-    height: 56,
+    height: 46,
     justifyContent: 'center',
-    width: 56,
+    width: 46,
   },
 
-  headerBackIcon: {
-    height: 22,
+  headerButtonPressed: {
+    backgroundColor: '#F7F7F7',
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
+  backArrowCanvas: {
+    height: 23,
     position: 'relative',
-    width: 28,
+    width: 24,
   },
 
-  headerBackArrowShaft: {
-    backgroundColor: '#19191C',
-    borderRadius: 999,
-    height: 3.5,
-    left: 8,
-    position: 'absolute',
-    top: 9.25,
-    width: 18,
-  },
-
-  headerBackArrowHeadTop: {
-    backgroundColor: '#19191C',
-    borderRadius: 999,
-    height: 3.5,
+  backArrowStem: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2.2,
     left: 3,
     position: 'absolute',
-    top: 6,
-    transform: [
-      {
-        rotate: '-45deg',
-      },
-    ],
-    width: 12,
+    top: 10.3,
+    width: 19,
   },
 
-  headerBackArrowHeadBottom: {
-    backgroundColor: '#19191C',
-    borderRadius: 999,
-    height: 3.5,
-    left: 3,
+  backArrowDiagonal: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2.2,
+    left: 2,
     position: 'absolute',
-    top: 12.5,
+    width: 10,
+  },
+
+  backArrowTop: {
+    top: 7,
     transform: [
       {
-        rotate: '45deg',
+        rotate: '-42deg',
       },
     ],
-    width: 12,
+  },
+
+  backArrowBottom: {
+    top: 14,
+    transform: [
+      {
+        rotate: '42deg',
+      },
+    ],
   },
 
   pageContent: {

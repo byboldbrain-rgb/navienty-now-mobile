@@ -1,3 +1,4 @@
+// NAVIENTY_BIKE_HEADER_V8_24H_JOURNEY_2026_08_11
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -8,6 +9,8 @@ import {
   useState,
 } from 'react';
 import {
+  Animated,
+  Easing,
   Image,
   type LayoutChangeEvent,
   Linking,
@@ -48,6 +51,8 @@ import {
 } from '../theme/navienty-now-theme';
 
 const navientyNowLogo = require('../assets/images/navienty-now-logo.jpg');
+const navientyDeliveryBike = require('../assets/images/navienty-now-delivery-bike-transparent.png');
+const navienty24hMoodBackground = require('../assets/images/navienty-now-24h-mood-background.png');
 
 type BootstrapCategory =
   AppBootstrap['store_categories'][number] & {
@@ -368,43 +373,270 @@ function StoreArtwork({
   );
 }
 
-// Premium curved divider: a cleaner, softer wave made from large
-// circular cut-outs and a small base strip. This keeps the same brand
-// color while making the bottom edge feel more refined and intentional.
-function HeaderWave() {
+// 24/7 Journey: the courier crosses the complete header in one direction,
+// passing through night, morning, daytime, and sunset without ever reversing.
+// The reset happens only while the bike is fully off-screen, so the loop feels
+// like a continuous delivery route rather than a ping-pong animation.
+function DeliveryBikeHero() {
+  const { width: viewportWidth } = useWindowDimensions();
+  const rideX = useRef(new Animated.Value(0)).current;
+  const bounceY = useRef(new Animated.Value(0)).current;
+  const bikeLean = useRef(new Animated.Value(0)).current;
+
+  const leanRotation = bikeLean.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: ['-0.55deg', '0deg', '0.55deg'],
+  });
+
+  useEffect(() => {
+    rideX.setValue(0);
+    bounceY.setValue(0);
+    bikeLean.setValue(0);
+
+    const travelDistance = Math.max(
+      620,
+      viewportWidth + 360,
+    );
+
+    const rideAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(420),
+
+        Animated.parallel([
+          Animated.timing(rideX, {
+            toValue: -travelDistance,
+            duration: 9000,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.sequence([
+            Animated.timing(bikeLean, {
+              toValue: -0.38,
+              duration: 720,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(bikeLean, {
+              toValue: 0,
+              duration: 1250,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.delay(4750),
+            Animated.timing(bikeLean, {
+              toValue: 0.22,
+              duration: 650,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+            Animated.timing(bikeLean, {
+              toValue: 0,
+              duration: 900,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+
+        Animated.timing(rideX, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    const bounceAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceY, {
+          toValue: -1.45,
+          duration: 260,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceY, {
+          toValue: 0.65,
+          duration: 300,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bounceY, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    rideAnimation.start();
+    bounceAnimation.start();
+
+    return () => {
+      rideAnimation.stop();
+      bounceAnimation.stop();
+    };
+  }, [
+    bikeLean,
+    bounceY,
+    rideX,
+    viewportWidth,
+  ]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.deliveryBikeTrack,
+        {
+          transform: [{ translateX: rideX }],
+        },
+      ]}
+    >
+      <Animated.View
+        style={{
+          transform: [
+            { translateY: bounceY },
+            { rotate: leanRotation },
+          ],
+        }}
+      >
+        <View style={styles.deliveryBikeShadow} />
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="contain"
+          source={navientyDeliveryBike}
+          style={styles.deliveryBikeImage}
+        />
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+// One panoramic 24/7 world lives behind the same road at the same time.
+// Left = night, then morning, then the bright brand-green daytime centre,
+// and the far right finishes with a restrained warm sunset.
+function HeaderTimeMoods() {
   return (
     <View
       pointerEvents="none"
-      style={styles.headerWaveContainer}
+      style={styles.headerTimeMoodLayer}
     >
-      <View style={styles.headerWaveBase} />
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="stretch"
+        source={navienty24hMoodBackground}
+        style={styles.headerTimeMoodBackground}
+      />
 
+      <View style={styles.nightMoon}>
+        <View style={styles.nightMoonCutout} />
+      </View>
       <View
         style={[
-          styles.waveCircle,
-          styles.waveCircleOne,
+          styles.nightStar,
+          styles.nightStarOne,
         ]}
       />
       <View
         style={[
-          styles.waveCircle,
-          styles.waveCircleTwo,
+          styles.nightStar,
+          styles.nightStarTwo,
         ]}
       />
       <View
         style={[
-          styles.waveCircle,
-          styles.waveCircleThree,
+          styles.nightStar,
+          styles.nightStarThree,
         ]}
       />
-      <View
-        style={[
-          styles.waveCircle,
-          styles.waveCircleFour,
-        ]}
-      />
+
+      <View style={styles.morningGlow} />
+      <View style={styles.morningSun} />
+
+      <View style={styles.dayGlow} />
+
+      <View style={styles.sunsetGlow} />
+      <View style={styles.sunsetSun} />
+
+      <View style={styles.moodHorizonVeil} />
     </View>
   );
+}
+
+// A restrained abstract road keeps the delivery story clear without turning
+// the hero into a literal street illustration. The lane markers move in one
+// direction forever, so the courier feels like it is continuously travelling.
+function HeaderRoad() {
+  const roadOffset = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    roadOffset.setValue(0);
+
+    // The dash pattern repeats every 96 px. Ending each cycle on a multiple
+    // of that spacing makes the reset visually seamless.
+    const roadAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(roadOffset, {
+          toValue: 96,
+          duration: 1350,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(roadOffset, {
+          toValue: 192,
+          duration: 1120,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.timing(roadOffset, {
+          toValue: 288,
+          duration: 1280,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    roadAnimation.start();
+
+    return () => {
+      roadAnimation.stop();
+    };
+  }, [roadOffset]);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={styles.headerRoadLayer}
+    >
+      <View style={styles.headerRoadSurface} />
+      <View style={styles.headerRoadHighlight} />
+
+      <Animated.View
+        style={[
+          styles.headerRoadDashTrack,
+          {
+            transform: [{ translateX: roadOffset }],
+          },
+        ]}
+      >
+        {Array.from({ length: 14 }).map((_, index) => (
+          <View
+            key={`road-dash-${index}`}
+            style={styles.headerRoadDash}
+          />
+        ))}
+      </Animated.View>
+    </View>
+  );
+}
+
+// Keep the hero's lower edge perfectly straight.
+// The previous organic white cut is intentionally disabled so the green
+// background/road finishes as one clean horizontal line across the header.
+function HeaderWave() {
+  return null;
 }
 
 function HomeHeader() {
@@ -420,40 +652,13 @@ function HomeHeader() {
       style={[
         styles.header,
         {
-          minHeight: topInset + 88,
+          minHeight: topInset + 158,
         },
       ]}
     >
-      <View
-        pointerEvents="none"
-        style={styles.headerDecorLayer}
-      >
-        <View
-          style={[
-            styles.headerGlow,
-            styles.headerGlowPrimary,
-          ]}
-        />
-        <View
-          style={[
-            styles.headerGlow,
-            styles.headerGlowSecondary,
-          ]}
-        />
-        <View
-          style={[
-            styles.headerStroke,
-            styles.headerStrokeOne,
-          ]}
-        />
-        <View
-          style={[
-            styles.headerStroke,
-            styles.headerStrokeTwo,
-          ]}
-        />
-      </View>
-
+      <HeaderTimeMoods />
+      <HeaderRoad />
+      <DeliveryBikeHero />
       <HeaderWave />
     </View>
   );
@@ -553,8 +758,24 @@ function HomeBannerCarousel({
     useState(false);
 
   const carouselWidth = Math.max(1, width);
+
+  // Keep only a small visible slice of the NEXT banner inside the viewport.
+  // The carousel itself is forced to LTR below so an Arabic/RTL app does not
+  // mirror the rail and accidentally expose a large part of the previous card.
+  const bannerPeekWidth =
+    banners.length > 1 ? 28 : 0;
+  const bannerGap =
+    banners.length > 1 ? 10 : 0;
+  const bannerCardWidth = Math.max(
+    1,
+    carouselWidth -
+      bannerPeekWidth -
+      bannerGap,
+  );
+  const bannerSnapInterval =
+    bannerCardWidth + bannerGap;
   const bannerHeight = Math.round(
-    carouselWidth * (9 / 16),
+    bannerCardWidth * (9 / 16),
   );
 
   const carouselItems = useMemo(() => {
@@ -562,10 +783,14 @@ function HomeBannerCarousel({
       return banners;
     }
 
+    // The extra second item at the end keeps the "next banner" preview
+    // visible even while the infinite carousel is sitting on its cloned
+    // first slide just before the invisible reset.
     return [
       banners[banners.length - 1]!,
       ...banners,
       banners[0]!,
+      banners[1] ?? banners[0]!,
     ];
   }, [banners]);
 
@@ -586,11 +811,50 @@ function HomeBannerCarousel({
 
       scrollViewRef.current?.scrollTo({
         animated,
-        x: nextPhysicalIndex * carouselWidth,
+        x:
+          nextPhysicalIndex *
+          bannerSnapInterval,
         y: 0,
       });
     },
-    [carouselWidth],
+    [bannerSnapInterval],
+  );
+
+  const syncActiveDotWithScroll = useCallback(
+    (offsetX: number) => {
+      if (banners.length <= 1) {
+        if (activeIndexRef.current !== 0) {
+          setLogicalIndex(0);
+        }
+        return;
+      }
+
+      const nearestPhysicalIndex = Math.round(
+        offsetX / bannerSnapInterval,
+      );
+
+      let nextLogicalIndex: number;
+
+      if (nearestPhysicalIndex <= 0) {
+        nextLogicalIndex = banners.length - 1;
+      } else {
+        nextLogicalIndex =
+          (nearestPhysicalIndex - 1) %
+          banners.length;
+      }
+
+      if (
+        nextLogicalIndex !==
+        activeIndexRef.current
+      ) {
+        setLogicalIndex(nextLogicalIndex);
+      }
+    },
+    [
+      banners.length,
+      bannerSnapInterval,
+      setLogicalIndex,
+    ],
   );
 
   useEffect(() => {
@@ -661,7 +925,7 @@ function HomeBannerCarousel({
     };
   }, [
     banners.length,
-    carouselWidth,
+    bannerSnapInterval,
     scrollToPhysicalIndex,
   ]);
 
@@ -674,13 +938,12 @@ function HomeBannerCarousel({
     }
 
     const autoPlayTimer = setTimeout(() => {
-      const nextLogicalIndex =
-        (activeIndexRef.current + 1) %
-        banners.length;
       const nextPhysicalIndex =
         physicalIndexRef.current + 1;
 
-      setLogicalIndex(nextLogicalIndex);
+      // Do not move the dot before the banner starts moving.
+      // onScroll keeps the indicator synchronized with the
+      // banner that is actually visible on screen.
       scrollToPhysicalIndex(
         nextPhysicalIndex,
         true,
@@ -695,8 +958,15 @@ function HomeBannerCarousel({
     banners.length,
     isUserInteracting,
     scrollToPhysicalIndex,
-    setLogicalIndex,
   ]);
+
+  function handleScroll(
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) {
+    syncActiveDotWithScroll(
+      event.nativeEvent.contentOffset.x,
+    );
+  }
 
   function handleScrollEnd(
     event: NativeSyntheticEvent<NativeScrollEvent>,
@@ -710,7 +980,7 @@ function HomeBannerCarousel({
 
     const rawPhysicalIndex = Math.round(
       event.nativeEvent.contentOffset.x /
-        carouselWidth,
+        bannerSnapInterval,
     );
 
     if (rawPhysicalIndex <= 0) {
@@ -726,8 +996,15 @@ function HomeBannerCarousel({
       rawPhysicalIndex >=
       banners.length + 1
     ) {
-      setLogicalIndex(0);
-      scrollToPhysicalIndex(1, false);
+      const wrappedLogicalIndex =
+        (rawPhysicalIndex - 1) %
+        banners.length;
+
+      setLogicalIndex(wrappedLogicalIndex);
+      scrollToPhysicalIndex(
+        wrappedLogicalIndex + 1,
+        false,
+      );
     } else {
       physicalIndexRef.current =
         rawPhysicalIndex;
@@ -779,7 +1056,7 @@ function HomeBannerCarousel({
             styles.homeBannerLoadingCard,
             {
               height: bannerHeight,
-              width: carouselWidth,
+              width: bannerCardWidth,
             },
           ]}
         />
@@ -814,31 +1091,35 @@ function HomeBannerCarousel({
         alwaysBounceHorizontal={false}
         bounces={false}
         contentContainerStyle={{
+          direction: 'ltr',
+          flexDirection: 'row',
           height: bannerHeight,
         }}
         contentOffset={{
           x:
             banners.length > 1
-              ? carouselWidth
+              ? bannerSnapInterval
               : 0,
           y: 0,
         }}
         decelerationRate="fast"
+        disableIntervalMomentum
         nestedScrollEnabled
         overScrollMode="never"
-        pagingEnabled
         scrollEventThrottle={16}
         showsHorizontalScrollIndicator={false}
         snapToAlignment="start"
-        snapToInterval={carouselWidth}
+        snapToInterval={bannerSnapInterval}
         style={[
           styles.homeBannerScroll,
           {
+            direction: 'ltr',
             height: bannerHeight,
             width: carouselWidth,
           },
         ]}
         onMomentumScrollEnd={handleScrollEnd}
+        onScroll={handleScroll}
         onScrollBeginDrag={() => {
           setIsUserInteracting(true);
         }}
@@ -864,7 +1145,8 @@ function HomeBannerCarousel({
                 styles.homeBannerCard,
                 {
                   height: bannerHeight,
-                  width: carouselWidth,
+                  marginRight: bannerGap,
+                  width: bannerCardWidth,
                 },
                 pressed &&
                   banner.linkUrl &&
@@ -884,7 +1166,7 @@ function HomeBannerCarousel({
                   styles.homeBannerImage,
                   {
                     height: bannerHeight,
-                    width: carouselWidth,
+                    width: bannerCardWidth,
                   },
                 ]}
                 onError={(event) => {
@@ -1775,8 +2057,19 @@ export default function HomeScreen() {
     void loadStores();
   }, [loadStores]);
 
+  /**
+   * Anonymous users have a real Supabase session and can use
+   * the complete shopping flow without a visible Login step.
+   *
+   * isSignedIn means a permanent linked account only.
+   * hasAppSession includes both permanent and anonymous users.
+   */
   const isSignedIn =
     authState.status === 'signedIn';
+
+  const hasAppSession =
+    authState.status === 'signedIn' ||
+    authState.status === 'anonymous';
 
   const userDisplayName =
     getUserDisplayName(authState);
@@ -1842,8 +2135,24 @@ export default function HomeScreen() {
   function openCategory(
     categorySlug: string,
   ) {
-    if (categorySlug === 'supermarket') {
+    const normalizedSlug = categorySlug
+      .trim()
+      .toLowerCase();
+
+    if (normalizedSlug === 'supermarket') {
       router.push('/category/supermarket');
+      return;
+    }
+
+    if (
+      normalizedSlug === 'bookstore' ||
+      normalizedSlug === 'bookstores' ||
+      normalizedSlug === 'book-store' ||
+      normalizedSlug === 'library' ||
+      normalizedSlug === 'books' ||
+      normalizedSlug === 'stationery'
+    ) {
+      router.push('/category/bookstore');
       return;
     }
 
@@ -1961,7 +2270,7 @@ export default function HomeScreen() {
             width={bannerContentWidth}
           />
 
-          {isSignedIn &&
+          {hasAppSession &&
             !isStoresLoading &&
             !storesError && (
               <DealsRailSection
@@ -1975,7 +2284,7 @@ export default function HomeScreen() {
               />
             )}
 
-          {isSignedIn &&
+          {hasAppSession &&
             !isStoresLoading &&
             !storesError && (
               <DiscoveryRail
@@ -2015,112 +2324,241 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    minHeight: 112,
+    minHeight: 172,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
   },
 
-  headerDecorLayer: {
+  headerTimeMoodLayer: {
     ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+    zIndex: 1,
   },
 
-  headerGlow: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+  headerTimeMoodBackground: {
+    ...StyleSheet.absoluteFillObject,
+    height: '100%',
+    width: '100%',
+  },
+
+  nightMoon: {
+    backgroundColor: 'rgba(235,255,244,0.94)',
     borderRadius: 999,
+    height: 22,
+    left: '8%',
     position: 'absolute',
+    top: 31,
+    width: 22,
   },
 
-  headerGlowPrimary: {
-    height: 230,
-    right: -36,
-    top: 10,
-    width: 230,
+  nightMoonCutout: {
+    backgroundColor: '#0B463F',
+    borderRadius: 999,
+    height: 20,
+    left: 7,
+    position: 'absolute',
+    top: -2,
+    width: 20,
   },
 
-  headerGlowSecondary: {
-    height: 160,
-    left: -34,
-    top: 78,
-    width: 160,
+  nightStar: {
+    backgroundColor: 'rgba(235,255,244,0.82)',
+    borderRadius: 999,
+    height: 3,
+    position: 'absolute',
+    width: 3,
   },
 
-  headerStroke: {
-    borderColor: 'rgba(255,255,255,0.13)',
+  nightStarOne: {
+    left: '16%',
+    top: 24,
+  },
+
+  nightStarTwo: {
+    height: 2,
+    left: '20%',
+    top: 43,
+    width: 2,
+  },
+
+  nightStarThree: {
+    height: 2,
+    left: '12%',
+    top: 58,
+    width: 2,
+  },
+
+  morningGlow: {
+    backgroundColor: 'rgba(221,255,190,0.10)',
+    borderRadius: 999,
+    height: 122,
+    left: '23%',
+    position: 'absolute',
+    top: -48,
+    width: 122,
+  },
+
+  morningSun: {
+    backgroundColor: 'rgba(232,255,203,0.78)',
+    borderColor: 'rgba(255,255,255,0.42)',
     borderRadius: 999,
     borderWidth: 1,
+    height: 17,
+    left: '31%',
     position: 'absolute',
+    top: 29,
+    width: 17,
   },
 
-  headerStrokeOne: {
-    height: 216,
-    right: -88,
+  dayGlow: {
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderRadius: 999,
+    height: 220,
+    left: '41%',
+    position: 'absolute',
+    top: -108,
+    width: 220,
+  },
+
+  sunsetGlow: {
+    backgroundColor: 'rgba(255,183,118,0.10)',
+    borderRadius: 999,
+    height: 178,
+    position: 'absolute',
+    right: -28,
     top: -48,
-    width: 216,
+    width: 178,
   },
 
-  headerStrokeTwo: {
-    height: 138,
-    left: -44,
-    top: 28,
-    width: 138,
+  sunsetSun: {
+    backgroundColor: 'rgba(255,202,137,0.72)',
+    borderColor: 'rgba(255,233,202,0.48)',
+    borderRadius: 999,
+    borderWidth: 1,
+    bottom: 76,
+    height: 19,
+    position: 'absolute',
+    right: '12%',
+    width: 19,
   },
 
-  // Premium bottom curve using softer, wider circular cut-outs.
+  moodHorizonVeil: {
+    backgroundColor: 'rgba(0,69,43,0.055)',
+    bottom: 58,
+    height: 22,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+
+  // Abstract road: a darker green ribbon with very soft lane markers.
+  // It is intentionally subtle so the courier remains the visual focus.
+  headerRoadLayer: {
+    bottom: 12,
+    height: 58,
+    left: -22,
+    position: 'absolute',
+    right: -22,
+    zIndex: 2,
+  },
+
+  headerRoadSurface: {
+    backgroundColor: 'rgba(0,50,39,0.29)',
+    borderColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 999,
+    borderWidth: 1,
+    bottom: 0,
+    height: 48,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+
+  headerRoadHighlight: {
+    backgroundColor: 'rgba(255,255,255,0.075)',
+    borderRadius: 999,
+    height: 1,
+    left: 28,
+    position: 'absolute',
+    right: 28,
+    top: 9,
+  },
+
+  headerRoadDashTrack: {
+    flexDirection: 'row',
+    left: -384,
+    position: 'absolute',
+    top: 30,
+    width: 1344,
+  },
+
+  headerRoadDash: {
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    borderRadius: 999,
+    height: 3,
+    marginRight: 62,
+    width: 34,
+  },
+
+  // The bike begins fully beyond the right edge, crosses every 24h mood,
+  // then exits beyond the left edge before the invisible loop reset.
+  deliveryBikeTrack: {
+    bottom: 11,
+    height: 132,
+    position: 'absolute',
+    right: -176,
+    width: 166,
+    zIndex: 6,
+  },
+
+  deliveryBikeShadow: {
+    backgroundColor: 'rgba(0,45,28,0.18)',
+    borderRadius: 999,
+    bottom: 8,
+    height: 9,
+    left: 25,
+    position: 'absolute',
+    right: 17,
+    transform: [{ scaleX: 0.9 }],
+  },
+
+  deliveryBikeImage: {
+    height: 132,
+    width: 166,
+  },
+
   headerWaveContainer: {
     bottom: 0,
-    height: 56,
+    height: 34,
     left: 0,
     overflow: 'hidden',
     position: 'absolute',
     right: 0,
+    zIndex: 8,
   },
 
-  headerWaveBase: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.page,
-    bottom: 0,
-    height: 14,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-  },
-
-  waveCircle: {
+  headerWaveSurface: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.page,
     borderRadius: 999,
+    bottom: -54,
+    height: 78,
+    left: -50,
     position: 'absolute',
+    right: 58,
+    transform: [{ rotate: '-1deg' }],
   },
 
-  waveCircleOne: {
-    height: 164,
-    left: -42,
-    top: 18,
-    width: 164,
-  },
-
-  waveCircleTwo: {
-    height: 196,
-    left: '28%',
-    marginLeft: -98,
-    top: 12,
-    width: 196,
-  },
-
-  waveCircleThree: {
-    height: 196,
-    left: '72%',
-    marginLeft: -98,
-    top: 12,
-    width: 196,
-  },
-
-  waveCircleFour: {
-    height: 164,
-    right: -42,
-    top: 18,
-    width: 164,
+  headerWaveAccent: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.page,
+    borderRadius: 999,
+    bottom: -59,
+    height: 80,
+    position: 'absolute',
+    right: -36,
+    width: 188,
   },
 
   contentShell: {
@@ -2137,41 +2575,43 @@ const styles = StyleSheet.create({
   },
 
   categoryListContent: {
+    alignItems: 'flex-start',
     flexDirection: 'row-reverse',
+    flexGrow: 1,
+    justifyContent: 'space-between',
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
 
   categoryItem: {
     alignItems: 'center',
-    marginLeft: 11,
-    width: 82,
+    width: 90,
   },
 
   categoryItemPressed: {
-    opacity: 0.68,
-    transform: [{ scale: 0.97 }],
+    opacity: 0.72,
+    transform: [{ scale: 0.975 }],
   },
 
   categoryArtwork: {
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.white,
-    borderRadius: 21,
-    height: 82,
+    borderRadius: 23,
+    height: 90,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 82,
+    width: 90,
   },
 
   categoryImage: {
-    height: '88%',
-    width: '88%',
+    height: '96%',
+    width: '96%',
   },
 
   categoryFallbackIcon: {
-    fontSize: 35,
+    fontSize: 40,
   },
 
   categoryLabel: {
@@ -2179,7 +2619,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
-    marginTop: 9,
+    marginTop: 8,
     minHeight: 36,
     textAlign: 'center',
     writingDirection: 'rtl',
@@ -2228,24 +2668,22 @@ const styles = StyleSheet.create({
 
   homeBannerDots: {
     alignItems: 'center',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 12,
-    minHeight: 7,
+    marginTop: 14,
+    minHeight: 12,
   },
 
   homeBannerDot: {
-    backgroundColor: '#D9DBDF',
+    backgroundColor: '#D9D9D9',
     borderRadius: 999,
-    height: 7,
-    marginHorizontal: 3,
-    width: 7,
+    height: 12,
+    marginHorizontal: 5,
+    width: 12,
   },
 
   homeBannerDotActive: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    width: 18,
+    backgroundColor: '#2B2B2B',
   },
 
   primaryButtonPressed: {
@@ -3092,29 +3530,29 @@ const styles = StyleSheet.create({
 
   loadingCategories: {
     flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
     marginTop: 27,
     overflow: 'hidden',
   },
 
   loadingCategoryItem: {
     alignItems: 'center',
-    marginLeft: 11,
-    width: 82,
+    width: 90,
   },
 
   loadingCategoryTile: {
     backgroundColor: '#EEEEF0',
-    borderRadius: 21,
-    height: 82,
-    width: 82,
+    borderRadius: 23,
+    height: 90,
+    width: 90,
   },
 
   loadingCategoryLabel: {
     backgroundColor: '#F0F0F2',
     borderRadius: 5,
     height: 12,
-    marginTop: 10,
-    width: 54,
+    marginTop: 9,
+    width: 58,
   },
 
   loadingMainCard: {

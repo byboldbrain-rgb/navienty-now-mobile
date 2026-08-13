@@ -36,6 +36,10 @@ import {
 } from '../services/order-service';
 
 import {
+  ensureAppSession,
+} from '../services/anonymous-auth-service';
+
+import {
   useCartStore,
 } from '../store/cart-store';
 
@@ -260,6 +264,14 @@ export default function CheckoutScreen() {
     requestedStoreId ??
     activeStoreId;
 
+  /**
+   * Guest checkout is intentionally allowed.
+   *
+   * A persistent anonymous Supabase session is created
+   * when the app starts, so the user can continue without
+   * seeing a Login screen.
+   */
+
   const checkoutCart =
     checkoutStoreId
       ? carts[
@@ -359,6 +371,24 @@ export default function CheckoutScreen() {
     useCustomerStore(
       (state) =>
         state.address,
+    );
+
+  const locationAddress =
+    useCustomerStore(
+      (state) =>
+        state.locationAddress,
+    );
+
+  const locationLatitude =
+    useCustomerStore(
+      (state) =>
+        state.locationLatitude,
+    );
+
+  const locationLongitude =
+    useCustomerStore(
+      (state) =>
+        state.locationLongitude,
     );
 
   const landmark =
@@ -616,11 +646,42 @@ export default function CheckoutScreen() {
     )}`;
   }
 
+  const hasDeliveryLocation =
+    typeof locationLatitude ===
+      'number' &&
+    Number.isFinite(
+      locationLatitude,
+    ) &&
+    typeof locationLongitude ===
+      'number' &&
+    Number.isFinite(
+      locationLongitude,
+    );
+
+  function editDeliveryLocation() {
+    if (!storeId) {
+      return;
+    }
+
+    router.push({
+      pathname:
+        '/location-picker',
+
+      params: {
+        storeId,
+        source: 'checkout',
+      },
+    });
+  }
+
   /* -------------------------------- */
   /* VALIDATION                       */
   /* -------------------------------- */
 
   const validation = {
+    location:
+      hasDeliveryLocation,
+
     customerName:
       customerName
         .trim()
@@ -939,6 +1000,13 @@ export default function CheckoutScreen() {
         true,
       );
 
+      /**
+       * Normally the root layout has already created this session.
+       * Calling this again is safe and makes direct/deep-link
+       * checkout resilient if the stored session was lost.
+       */
+      await ensureAppSession();
+
       if (pendingOrder) {
         try {
           await cancelPendingWhatsAppOrder(
@@ -989,12 +1057,32 @@ export default function CheckoutScreen() {
           ),
         });
 
+      /**
+       * Open WhatsApp with a very short, ready-to-send confirmation
+       * message that includes the payment method selected by the
+       * customer.
+       *
+       * Example:
+       * اكد الاوردر وهدفع عن طريق انستا باي
+       */
+      const whatsappPaymentMessage =
+        `اكد الاوردر وهدفع عن طريق ${
+          createdOrder.paymentMethodTitle ||
+          selectedPaymentMethod.name_ar
+        }`;
+
+      const orderForWhatsApp = {
+        ...createdOrder,
+        whatsappMessage:
+          whatsappPaymentMessage,
+      };
+
       setPendingOrder(
-        createdOrder,
+        orderForWhatsApp,
       );
 
       await openOrderInWhatsApp(
-        createdOrder,
+        orderForWhatsApp,
       );
 
       router.push(
@@ -1322,6 +1410,99 @@ export default function CheckoutScreen() {
             عنوان التوصيل
           </Text>
 
+          {/* MAP LOCATION */}
+
+          <View
+            style={[
+              styles.mapLocationCard,
+
+              !hasDeliveryLocation &&
+                styles.mapLocationCardMissing,
+            ]}
+          >
+            <View
+              style={
+                styles.mapLocationIconContainer
+              }
+            >
+              <Ionicons
+                name={
+                  hasDeliveryLocation
+                    ? 'location'
+                    : 'location-outline'
+                }
+                size={25}
+                color={
+                  hasDeliveryLocation
+                    ? BRAND_GREEN
+                    : '#8b8b8b'
+                }
+              />
+            </View>
+
+            <View
+              style={
+                styles.mapLocationContent
+              }
+            >
+              <Text
+                style={
+                  styles.mapLocationLabel
+                }
+              >
+                الموقع على الخريطة
+              </Text>
+
+              <Text
+                numberOfLines={2}
+                style={
+                  styles.mapLocationValue
+                }
+              >
+                {hasDeliveryLocation
+                  ? locationAddress ||
+                    'تم تحديد موقع التوصيل على الخريطة'
+                  : 'حدد موقع التوصيل على الخريطة أولًا'}
+              </Text>
+            </View>
+
+            <Pressable
+              style={({
+                pressed,
+              }) => [
+                styles.changeLocationButton,
+
+                pressed &&
+                  styles.buttonPressed,
+              ]}
+              onPress={
+                editDeliveryLocation
+              }
+            >
+              <Text
+                style={
+                  styles.changeLocationButtonText
+                }
+              >
+                {hasDeliveryLocation
+                  ? 'تغيير'
+                  : 'تحديد'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {submitted &&
+            !validation.location && (
+              <Text
+                style={
+                  styles.locationErrorText
+                }
+              >
+                حدد موقع التوصيل على الخريطة
+                قبل إرسال الطلب.
+              </Text>
+            )}
+
           {/* AREA */}
 
           <View
@@ -1385,6 +1566,17 @@ export default function CheckoutScreen() {
               }
             >
               العنوان بالتفصيل
+            </Text>
+
+            <Text
+              style={
+                styles.addressHelperText
+              }
+            >
+              تم تعبئة العنوان تلقائيًا
+              من موقعك على الخريطة.
+              يمكنك إضافة رقم العمارة
+              والدور والشقة إذا لزم.
             </Text>
 
             <View
@@ -1860,9 +2052,11 @@ export default function CheckoutScreen() {
               }
             >
               بعد الضغط على إرسال
-              الطلب سيتم فتح واتساب.
-              أرسل الرسالة وانتظر
-              تأكيد الطلب من فريق{' '}
+              الطلب سيتم فتح واتساب
+              برسالة جاهزة لتأكيد الأوردر
+              وطريقة الدفع التي اخترتها.
+              اضغط إرسال داخل واتساب
+              وانتظر تأكيد فريق{' '}
               {appName}.
             </Text>
           </View>
@@ -2253,6 +2447,137 @@ const styles =
       lineHeight: 17,
 
       marginTop: 7,
+
+      textAlign: 'right',
+    },
+
+    /* -------------------------------- */
+    /* MAP LOCATION                     */
+    /* -------------------------------- */
+
+    mapLocationCard: {
+      alignItems: 'center',
+
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+
+      borderColor: '#d6f0e1',
+
+      borderRadius: 18,
+
+      borderWidth: 1,
+
+      flexDirection: 'row',
+
+      marginBottom: 12,
+
+      padding: 15,
+    },
+
+    mapLocationCardMissing: {
+      backgroundColor: '#f7f7f7',
+
+      borderColor: '#e0e0e0',
+    },
+
+    mapLocationIconContainer: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderRadius: 21,
+
+      height: 42,
+
+      justifyContent:
+        'center',
+
+      width: 42,
+    },
+
+    mapLocationContent: {
+      flex: 1,
+
+      marginHorizontal: 13,
+    },
+
+    mapLocationLabel: {
+      color: '#638370',
+
+      fontSize: 11,
+
+      textAlign: 'right',
+    },
+
+    mapLocationValue: {
+      color: '#1c5334',
+
+      fontSize: 13,
+
+      fontWeight: '700',
+
+      lineHeight: 19,
+
+      marginTop: 4,
+
+      textAlign: 'right',
+    },
+
+    changeLocationButton: {
+      alignItems: 'center',
+
+      backgroundColor:
+        '#ffffff',
+
+      borderColor:
+        BRAND_GREEN,
+
+      borderRadius: 15,
+
+      borderWidth: 1,
+
+      justifyContent:
+        'center',
+
+      minHeight: 38,
+
+      minWidth: 62,
+
+      paddingHorizontal: 12,
+    },
+
+    changeLocationButtonText: {
+      color:
+        BRAND_GREEN_DARK,
+
+      fontSize: 12,
+
+      fontWeight: '800',
+    },
+
+    locationErrorText: {
+      color: '#d64b4b',
+
+      fontSize: 11,
+
+      lineHeight: 17,
+
+      marginBottom: 12,
+
+      textAlign: 'right',
+    },
+
+    addressHelperText: {
+      color: '#8a8a8a',
+
+      fontSize: 11,
+
+      lineHeight: 18,
+
+      marginBottom: 9,
+
+      marginTop: -3,
 
       textAlign: 'right',
     },
