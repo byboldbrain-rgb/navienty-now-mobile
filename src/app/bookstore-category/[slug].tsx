@@ -10,7 +10,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -22,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   getBookstoreCategoryImage,
 } from '../../config/bookstore-category-images';
@@ -229,10 +229,6 @@ function CategoryFilterVisual({
       section.slug,
     );
 
-  /**
-   * Always prefer bundled local artwork so category/subcategory
-   * thumbnails appear immediately without a network request.
-   */
   if (localImage) {
     return (
       <Image
@@ -451,8 +447,10 @@ export default function BookstoreCategoryScreen() {
     useState('');
   const [isLoading, setIsLoading] =
     useState(true);
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState<string | null>(null);
 
   const carts = useCartStore(
     (state) => state.carts,
@@ -492,7 +490,7 @@ export default function BookstoreCategoryScreen() {
 
         if (bookstores.length === 0) {
           throw new Error(
-            'No bookstore is currently available.',
+            'لا توجد مكتبة متاحة حاليًا.',
           );
         }
 
@@ -510,10 +508,11 @@ export default function BookstoreCategoryScreen() {
         storeId = bookstore.id;
       }
 
-      const loadedCatalog = await getStoreCatalog(
-        storeId,
-        serviceAreaId,
-      );
+      const loadedCatalog =
+        await getStoreCatalog(
+          storeId,
+          serviceAreaId,
+        );
 
       const section = findCatalogSectionBySlug(
         loadedCatalog,
@@ -522,7 +521,7 @@ export default function BookstoreCategoryScreen() {
 
       if (!section) {
         throw new Error(
-          'This bookstore category was not found.',
+          'لم يتم العثور على فئة المكتبة المطلوبة.',
         );
       }
 
@@ -539,7 +538,7 @@ export default function BookstoreCategoryScreen() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Unable to load this bookstore category.',
+          : 'تعذر تحميل فئة المكتبة.',
       );
     } finally {
       setIsLoading(false);
@@ -645,18 +644,7 @@ export default function BookstoreCategoryScreen() {
   ]);
 
   if (isLoading) {
-    return (
-      <SafeAreaView style={styles.stateScreen}>
-        <StatusBar style="dark" />
-        <ActivityIndicator
-          size="large"
-          color="#111111"
-        />
-        <Text style={styles.stateTitle}>
-          جاري تحميل المنتجات
-        </Text>
-      </SafeAreaView>
-    );
+    return <ProductGridScreenSkeleton />;
   }
 
   if (
@@ -1073,9 +1061,7 @@ export default function BookstoreCategoryScreen() {
 
                     {child.children.length > 0 && (
                       <View
-                        style={
-                          styles.hasChildrenBadge
-                        }
+                        style={styles.hasChildrenBadge}
                       >
                         <Ionicons
                           name="chevron-forward"

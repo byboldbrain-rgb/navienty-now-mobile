@@ -1,22 +1,21 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
+import { OrderDetailsScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
-    cancelPendingWhatsAppOrder,
-    confirmWhatsAppOrderSent,
+  cancelPendingWhatsAppOrder,
+  confirmWhatsAppOrderSent,
 } from '../services/order-service';
-import {
-    useCartStore,
-} from '../store/cart-store';
+import { useCartStore } from '../store/cart-store';
 import { useOrdersStore } from '../store/orders-store';
 
 export default function OrderConfirmationScreen() {
@@ -140,25 +139,7 @@ export default function OrderConfirmationScreen() {
   }
 
   if (!hasHydrated) {
-    return (
-      <View style={styles.emptyScreen}>
-        <ActivityIndicator
-          size="large"
-          color="#6d56df"
-        />
-
-        <Text style={styles.emptyTitle}>
-          جاري تحميل الطلب
-        </Text>
-
-        <Text
-          style={styles.emptyDescription}
-        >
-          يتم استعادة الطلب المعلّق من
-          الجهاز.
-        </Text>
-      </View>
-    );
+    return <OrderDetailsScreenSkeleton />;
   }
 
   if (!pendingOrder) {
@@ -216,12 +197,8 @@ export default function OrderConfirmationScreen() {
   const displayedTotal =
     pendingOrder.total;
 
-  const appName =
-    pendingOrder.appName;
-
   const currencySymbol =
     pendingOrder.currencySymbol;
-
 
   return (
     <ScrollView
@@ -327,30 +304,28 @@ export default function OrderConfirmationScreen() {
             </View>
           </View>
 
-          {pendingOrder && (
-            <View
+          <View
+            style={
+              styles.pendingOrderIdCard
+            }
+          >
+            <Text
               style={
-                styles.pendingOrderIdCard
+                styles.pendingOrderIdLabel
               }
             >
-              <Text
-                style={
-                  styles.pendingOrderIdLabel
-                }
-              >
-                رقم الطلب
-              </Text>
+              رقم الطلب
+            </Text>
 
-              <Text
-                style={
-                  styles.pendingOrderIdValue
-                }
-                selectable
-              >
-                {pendingOrder.orderCode}
-              </Text>
-            </View>
-          )}
+            <Text
+              style={
+                styles.pendingOrderIdValue
+              }
+              selectable
+            >
+              {pendingOrder.orderCode}
+            </Text>
+          </View>
 
           <View
             style={styles.orderDivider}
@@ -436,13 +411,20 @@ export default function OrderConfirmationScreen() {
               styles.confirmButtonIconContainer
             }
           >
-            <Text
-              style={
-                styles.confirmButtonIcon
-              }
-            >
-              ✓
-            </Text>
+            {isConfirming ? (
+              <ActivityIndicator
+                color="#25a952"
+                size="small"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.confirmButtonIcon
+                }
+              >
+                ✓
+              </Text>
+            )}
           </View>
 
           <View
@@ -455,9 +437,7 @@ export default function OrderConfirmationScreen() {
                 styles.confirmButtonText
               }
             >
-              {isConfirming
-                ? 'جاري تأكيد الطلب...'
-                : 'تم إرسال الطلب'}
+              تم إرسال الطلب
             </Text>
 
             <Text
@@ -475,12 +455,14 @@ export default function OrderConfirmationScreen() {
           style={({ pressed }) => [
             styles.notSentButton,
             pressed &&
+              !isConfirming &&
+              !isCancelling &&
               styles.buttonPressed,
           ]}
           disabled={isConfirming || isCancelling}
           onPress={() => {
-              void returnToCheckout();
-            }}
+            void returnToCheckout();
+          }}
         >
           <View
             style={
@@ -492,9 +474,7 @@ export default function OrderConfirmationScreen() {
                 styles.notSentButtonText
               }
             >
-              {isCancelling
-                ? 'جاري إلغاء الطلب...'
-                : 'لم أرسل الطلب بعد'}
+              لم أرسل الطلب بعد
             </Text>
 
             <Text
@@ -507,11 +487,18 @@ export default function OrderConfirmationScreen() {
             </Text>
           </View>
 
-          <Text
-            style={styles.notSentArrow}
-          >
-            ‹
-          </Text>
+          {isCancelling ? (
+            <ActivityIndicator
+              color="#6d56df"
+              size="small"
+            />
+          ) : (
+            <Text
+              style={styles.notSentArrow}
+            >
+              ‹
+            </Text>
+          )}
         </Pressable>
       </View>
     </ScrollView>

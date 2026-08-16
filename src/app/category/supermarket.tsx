@@ -7,7 +7,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Image,
   type ImageSourcePropType,
@@ -20,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
@@ -32,16 +32,10 @@ import {
   listSupermarketPromotionBanners,
   type SupermarketPromotionBanner,
 } from '../../services/supermarket-banner-service';
-import {
-  useCartStore,
-} from '../../store/cart-store';
+import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 
 const CATEGORY_ROWS = 3;
-
-/**
- * Interactive Categories Indicator
- */
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
 const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
 
@@ -75,9 +69,6 @@ type FeaturedProductCardProps = {
   onDecrease: () => void;
 };
 
-/**
- * Supermarket Categories
- */
 const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
   {
     key: 'fruit-veg',
@@ -341,8 +332,7 @@ function getProductImage(
 function getDiscountPercent(
   product: CatalogProduct,
 ): number | null {
-  const compareAtPrice =
-    product.compareAtPrice;
+  const compareAtPrice = product.compareAtPrice;
 
   if (
     compareAtPrice === null ||
@@ -363,18 +353,14 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${currencyCode} ${amount.toFixed(
-    2,
-  )}`;
+  return `${currencyCode} ${amount.toFixed(2)}`;
 }
 
 function getArabicCurrencyLabel(
   currencyCode: string,
 ) {
   if (
-    currencyCode
-      .trim()
-      .toUpperCase() === 'EGP'
+    currencyCode.trim().toUpperCase() === 'EGP'
   ) {
     return 'ج.م';
   }
@@ -438,8 +424,7 @@ function findSectionForCategory(
 function makeCategoryColumns(
   categories: CategoryDisplayItem[],
 ) {
-  const columns: CategoryDisplayItem[][] =
-    [];
+  const columns: CategoryDisplayItem[][] = [];
 
   for (
     let index = 0;
@@ -461,14 +446,12 @@ function BackArrowIcon() {
   return (
     <View style={styles.backArrowCanvas}>
       <View style={styles.backArrowStem} />
-
       <View
         style={[
           styles.backArrowDiagonal,
           styles.backArrowTop,
         ]}
       />
-
       <View
         style={[
           styles.backArrowDiagonal,
@@ -495,19 +478,6 @@ function CategoryVisual({
   );
 }
 
-/**
- * Promotion Product Card
- *
- * Compact layout matching the second
- * reference screenshot:
- *
- * - small square image card
- * - lime discount badge
- * - compact circular add button
- * - small English product title
- * - current price + lime underline
- * - struck-through old price
- */
 function FeaturedProductCard({
   product,
   currencyCode,
@@ -518,19 +488,14 @@ function FeaturedProductCard({
   onIncrease,
   onDecrease,
 }: FeaturedProductCardProps) {
-  const imageUrl =
-    getProductImage(product);
-
-  const discount =
-    getDiscountPercent(product);
+  const imageUrl = getProductImage(product);
+  const discount = getDiscountPercent(product);
 
   return (
     <View
       style={[
         styles.featuredProductCard,
-        {
-          width: cardWidth,
-        },
+        { width: cardWidth },
       ]}
     >
       <View
@@ -544,19 +509,13 @@ function FeaturedProductCard({
       >
         {imageUrl ? (
           <Image
-            source={{
-              uri: imageUrl,
-            }}
-            style={
-              styles.featuredProductImage
-            }
+            source={{ uri: imageUrl }}
+            style={styles.featuredProductImage}
             resizeMode="contain"
           />
         ) : (
           <Text
-            style={
-              styles.featuredProductFallback
-            }
+            style={styles.featuredProductFallback}
           >
             {product.icon || '🛒'}
           </Text>
@@ -564,14 +523,10 @@ function FeaturedProductCard({
 
         {discount !== null && (
           <View
-            style={
-              styles.featuredDiscountBadge
-            }
+            style={styles.featuredDiscountBadge}
           >
             <Text
-              style={
-                styles.featuredDiscountText
-              }
+              style={styles.featuredDiscountText}
               numberOfLines={1}
             >
               Save {discount}%
@@ -594,24 +549,18 @@ function FeaturedProductCard({
             onPress={onAdd}
           >
             <Text
-              style={
-                styles.featuredAddButtonText
-              }
+              style={styles.featuredAddButtonText}
             >
               +
             </Text>
           </Pressable>
         ) : (
           <View
-            style={
-              styles.featuredQuantityPill
-            }
+            style={styles.featuredQuantityPill}
           >
             <Pressable
               hitSlop={4}
-              style={
-                styles.featuredQuantityButton
-              }
+              style={styles.featuredQuantityButton}
               onPress={onDecrease}
             >
               <Text
@@ -624,9 +573,7 @@ function FeaturedProductCard({
             </Pressable>
 
             <Text
-              style={
-                styles.featuredQuantityValue
-              }
+              style={styles.featuredQuantityValue}
             >
               {quantity}
             </Text>
@@ -634,9 +581,7 @@ function FeaturedProductCard({
             <Pressable
               disabled={isStoreClosed}
               hitSlop={4}
-              style={
-                styles.featuredQuantityButton
-              }
+              style={styles.featuredQuantityButton}
               onPress={onIncrease}
             >
               <Text
@@ -655,19 +600,14 @@ function FeaturedProductCard({
         style={styles.featuredProductName}
         numberOfLines={2}
       >
-        {product.nameEn?.trim() ||
-          product.name}
+        {product.nameEn?.trim() || product.name}
       </Text>
 
       <View
-        style={
-          styles.featuredCurrentPriceWrap
-        }
+        style={styles.featuredCurrentPriceWrap}
       >
         <Text
-          style={
-            styles.featuredCurrentPrice
-          }
+          style={styles.featuredCurrentPrice}
           numberOfLines={1}
         >
           {formatMoney(
@@ -678,12 +618,9 @@ function FeaturedProductCard({
       </View>
 
       {product.compareAtPrice !== null &&
-        product.compareAtPrice >
-          product.price && (
+        product.compareAtPrice > product.price && (
           <Text
-            style={
-              styles.featuredOldPrice
-            }
+            style={styles.featuredOldPrice}
             numberOfLines={1}
           >
             {formatMoney(
@@ -698,7 +635,6 @@ function FeaturedProductCard({
 
 export default function SupermarketScreen() {
   const router = useRouter();
-
   const { width: windowWidth } =
     useWindowDimensions();
 
@@ -722,14 +658,12 @@ export default function SupermarketScreen() {
   const [
     promotionBanners,
     setPromotionBanners,
-  ] = useState<
-    SupermarketPromotionBanner[]
-  >([]);
+  ] = useState<SupermarketPromotionBanner[]>(
+    [],
+  );
 
-  const [
-    currencyCode,
-    setCurrencyCode,
-  ] = useState('EGP');
+  const [currencyCode, setCurrencyCode] =
+    useState('EGP');
 
   const [isLoading, setIsLoading] =
     useState(true);
@@ -746,16 +680,10 @@ export default function SupermarketScreen() {
     );
 
   const cartStore = useCartStore();
-
-  const cartItems =
-    cartStore.items;
-
-  const addItem =
-    cartStore.addItem;
-
+  const cartItems = cartStore.items;
+  const addItem = cartStore.addItem;
   const increaseItem =
     cartStore.increaseItem;
-
   const decreaseItem =
     cartStore.decreaseItem;
 
@@ -780,11 +708,9 @@ export default function SupermarketScreen() {
             defaultServiceAreaId,
         });
 
-      if (
-        supermarketStores.length === 0
-      ) {
+      if (supermarketStores.length === 0) {
         throw new Error(
-          'No supermarket is currently available.',
+          'لا يوجد سوبر ماركت متاح حاليًا.',
         );
       }
 
@@ -815,30 +741,25 @@ export default function SupermarketScreen() {
             'Unable to load supermarket banners:',
             bannerError,
           );
-
           return [];
         }),
       ]);
 
       setCatalog(loadedCatalog);
-
       setPromotionBanners(
         loadedPromotionBanners,
       );
-
       setCurrencyCode(
         bootstrap.settings.currency_code ||
           'EGP',
       );
     } catch (error) {
       setCatalog(null);
-
       setPromotionBanners([]);
-
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Unable to load the supermarket.',
+          : 'تعذر تحميل السوبر ماركت.',
       );
     } finally {
       setIsLoading(false);
@@ -852,27 +773,23 @@ export default function SupermarketScreen() {
   const categories = useMemo<
     CategoryDisplayItem[]
   >(() => {
-    const sections =
-      catalog?.sections ?? [];
+    const sections = catalog?.sections ?? [];
 
     return SUPERMARKET_CATEGORIES.map(
       (definition) => ({
         key: definition.key,
         label: definition.label,
-        imageSource:
-          definition.imageSource,
-        section:
-          findSectionForCategory(
-            definition,
-            sections,
-          ),
+        imageSource: definition.imageSource,
+        section: findSectionForCategory(
+          definition,
+          sections,
+        ),
       }),
     );
   }, [catalog]);
 
   const categoryColumns = useMemo(
-    () =>
-      makeCategoryColumns(categories),
+    () => makeCategoryColumns(categories),
     [categories],
   );
 
@@ -888,10 +805,7 @@ export default function SupermarketScreen() {
 
   const categoryIndicatorTranslateX =
     categoryScrollX.interpolate({
-      inputRange: [
-        0,
-        categoryMaxScroll,
-      ],
+      inputRange: [0, categoryMaxScroll],
       outputRange: [
         0,
         categoryIndicatorTravel,
@@ -899,131 +813,76 @@ export default function SupermarketScreen() {
       extrapolate: 'clamp',
     });
 
-  const catalogProductsById =
-    useMemo(() => {
-      const productsById = new Map<
-        string,
-        CatalogProduct
-      >();
+  const catalogProductsById = useMemo(() => {
+    const productsById =
+      new Map<string, CatalogProduct>();
 
-      for (const section of
-        catalog?.sections ?? []) {
-        for (const product of
-          section.products) {
-          productsById.set(
-            product.id,
-            product,
-          );
-        }
+    for (const section of catalog?.sections ?? []) {
+      for (const product of section.products) {
+        productsById.set(product.id, product);
       }
+    }
 
-      return productsById;
-    }, [catalog]);
+    return productsById;
+  }, [catalog]);
 
-  const resolvedPromotionBanners =
-    useMemo<
-      ResolvedPromotionBanner[]
-    >(() => {
-      return promotionBanners
-        .map((banner) => ({
-          ...banner,
-          products: banner.productIds
-            .map((productId) =>
-              catalogProductsById.get(
-                productId,
-              ),
-            )
-            .filter(
-              (
-                product,
-              ): product is CatalogProduct =>
-                Boolean(product),
+  const resolvedPromotionBanners = useMemo<
+    ResolvedPromotionBanner[]
+  >(() => {
+    return promotionBanners
+      .map((banner) => ({
+        ...banner,
+        products: banner.productIds
+          .map((productId) =>
+            catalogProductsById.get(
+              productId,
             ),
-        }))
-        .filter(
-          (banner) =>
-            Boolean(
-              banner.imageUrl.trim(),
-            ),
-        );
-    }, [
-      catalogProductsById,
-      promotionBanners,
-    ]);
+          )
+          .filter(
+            (
+              product,
+            ): product is CatalogProduct =>
+              Boolean(product),
+          ),
+      }))
+      .filter((banner) =>
+        Boolean(banner.imageUrl.trim()),
+      );
+  }, [
+    catalogProductsById,
+    promotionBanners,
+  ]);
 
-  /**
-   * Maximum application content width.
-   */
   const pageWidth = Math.min(
     windowWidth,
     560,
   );
 
-  /**
-   * Compact cards similar to
-   * the second screenshot.
-   *
-   * Mobile phones display roughly
-   * 3 cards at once.
-   */
   const featuredCardWidth = Math.min(
     116,
-    Math.max(
-      92,
-      pageWidth * 0.3,
-    ),
+    Math.max(92, pageWidth * 0.3),
   );
 
-  /**
-   * Reference design banner has a much
-   * taller aspect ratio than the old UI.
-   *
-   * 9px on each side gives the same
-   * narrow margin visible in the screenshot.
-   */
   const promotionBannerWidth = Math.max(
     pageWidth - 18,
     1,
   );
 
-  const promotionBannerHeight =
-    Math.round(
-      promotionBannerWidth * 0.64,
-    );
+  const promotionBannerHeight = Math.round(
+    promotionBannerWidth * 0.64,
+  );
 
-  /**
-   * Products float deep inside the
-   * bottom part of the banner.
-   */
-  const promotionProductsOverlap =
-    Math.round(
-      promotionBannerHeight * 0.49,
-    );
+  const promotionProductsOverlap = Math.round(
+    promotionBannerHeight * 0.49,
+  );
 
   if (isLoading) {
-    return (
-      <SafeAreaView
-        style={styles.stateScreen}
-      >
-        <StatusBar style="dark" />
-
-        <ActivityIndicator
-          size="large"
-          color="#111111"
-        />
-
-        <Text style={styles.stateTitle}>
-          Loading supermarket
-        </Text>
-      </SafeAreaView>
-    );
+    return <CatalogHomeScreenSkeleton />;
   }
 
   if (!catalog || errorMessage) {
     return (
-      <SafeAreaView
-        style={styles.stateScreen}
-      >
+      <SafeAreaView style={styles.stateScreen}>
         <StatusBar style="dark" />
 
         <Text style={styles.stateEmoji}>
@@ -1031,21 +890,20 @@ export default function SupermarketScreen() {
         </Text>
 
         <Text style={styles.stateTitle}>
-          Supermarket unavailable
+          السوبر ماركت غير متاح
         </Text>
 
         <Text
           style={styles.stateDescription}
         >
           {errorMessage ??
-            'Unable to load supermarket.'}
+            'تعذر تحميل السوبر ماركت.'}
         </Text>
 
         <Pressable
           style={({ pressed }) => [
             styles.retryButton,
-            pressed &&
-              styles.generalPressed,
+            pressed && styles.generalPressed,
           ]}
           onPress={() => {
             void loadSupermarket();
@@ -1054,15 +912,14 @@ export default function SupermarketScreen() {
           <Text
             style={styles.retryButtonText}
           >
-            Try again
+            إعادة المحاولة
           </Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [
             styles.errorBackButton,
-            pressed &&
-              styles.generalPressed,
+            pressed && styles.generalPressed,
           ]}
           onPress={() => router.back()}
         >
@@ -1071,7 +928,7 @@ export default function SupermarketScreen() {
               styles.errorBackButtonText
             }
           >
-            Go back
+            رجوع
           </Text>
         </Pressable>
       </SafeAreaView>
@@ -1080,7 +937,6 @@ export default function SupermarketScreen() {
 
   const currentStore = catalog.store;
   const delivery = catalog.delivery;
-
   const isStoreClosed =
     currentStore.isManuallyClosed;
 
@@ -1094,8 +950,7 @@ export default function SupermarketScreen() {
   const currentStoreSubtotal =
     cartItems.reduce(
       (total, item) =>
-        total +
-        item.price * item.quantity,
+        total + item.price * item.quantity,
       0,
     );
 
@@ -1140,8 +995,7 @@ export default function SupermarketScreen() {
       {
         id: product.id,
         name: product.name,
-        description:
-          product.description,
+        description: product.description,
         price: product.price,
         icon: product.icon,
       },
@@ -1155,11 +1009,9 @@ export default function SupermarketScreen() {
       return;
     }
 
-    const existingItem =
-      cartItems.find(
-        (item) =>
-          item.id === product.id,
-      );
+    const existingItem = cartItems.find(
+      (item) => item.id === product.id,
+    );
 
     if (existingItem) {
       increaseItem(product.id);
@@ -1172,11 +1024,9 @@ export default function SupermarketScreen() {
   function decreaseFeaturedProduct(
     productId: string,
   ) {
-    const existingItem =
-      cartItems.find(
-        (item) =>
-          item.id === productId,
-      );
+    const existingItem = cartItems.find(
+      (item) => item.id === productId,
+    );
 
     if (!existingItem) {
       return;
@@ -1190,8 +1040,7 @@ export default function SupermarketScreen() {
   ) {
     return (
       cartItems.find(
-        (item) =>
-          item.id === productId,
+        (item) => item.id === productId,
       )?.quantity ?? 0
     );
   }
@@ -1224,24 +1073,16 @@ export default function SupermarketScreen() {
             shouldShowCartBar &&
               styles.mainContentWithCart,
           ]}
-          showsVerticalScrollIndicator={
-            false
-          }
+          showsVerticalScrollIndicator={false}
         >
-          <View
-            style={styles.categoriesSection}
-          >
-            <Text
-              style={styles.categoriesTitle}
-            >
+          <View style={styles.categoriesSection}>
+            <Text style={styles.categoriesTitle}>
               تسوق حسب الفئة
             </Text>
 
             <Animated.ScrollView
               horizontal
-              showsHorizontalScrollIndicator={
-                false
-              }
+              showsHorizontalScrollIndicator={false}
               scrollEventThrottle={16}
               contentContainerStyle={
                 styles.categoriesRail
@@ -1251,12 +1092,8 @@ export default function SupermarketScreen() {
                   event.nativeEvent.layout.width,
                 );
               }}
-              onContentSizeChange={(
-                width,
-              ) => {
-                setCategoryContentWidth(
-                  width,
-                );
+              onContentSizeChange={(width) => {
+                setCategoryContentWidth(width);
               }}
               onScroll={Animated.event(
                 [
@@ -1268,21 +1105,14 @@ export default function SupermarketScreen() {
                     },
                   },
                 ],
-                {
-                  useNativeDriver: true,
-                },
+                { useNativeDriver: true },
               )}
             >
               {categoryColumns.map(
-                (
-                  column,
-                  columnIndex,
-                ) => (
+                (column, columnIndex) => (
                   <View
                     key={`category-column-${columnIndex}`}
-                    style={
-                      styles.categoryColumn
-                    }
+                    style={styles.categoryColumn}
                   >
                     {column.map((item) => (
                       <Pressable
@@ -1296,14 +1126,9 @@ export default function SupermarketScreen() {
                           openCategory(item)
                         }
                       >
-                        <CategoryVisual
-                          item={item}
-                        />
-
+                        <CategoryVisual item={item} />
                         <Text
-                          style={
-                            styles.categoryLabel
-                          }
+                          style={styles.categoryLabel}
                           numberOfLines={2}
                         >
                           {item.label}
@@ -1315,11 +1140,7 @@ export default function SupermarketScreen() {
               )}
             </Animated.ScrollView>
 
-            <View
-              style={
-                styles.categoryPagination
-              }
-            >
+            <View style={styles.categoryPagination}>
               <Animated.View
                 style={[
                   styles.categoryPaginationActive,
@@ -1337,10 +1158,7 @@ export default function SupermarketScreen() {
           </View>
 
           {resolvedPromotionBanners.map(
-            (
-              banner,
-              bannerIndex,
-            ) => (
+            (banner, bannerIndex) => (
               <View
                 key={banner.id}
                 style={[
@@ -1352,14 +1170,10 @@ export default function SupermarketScreen() {
                 ]}
               >
                 <View
-                  style={
-                    styles.promotionBannerFrame
-                  }
+                  style={styles.promotionBannerFrame}
                 >
                   <Image
-                    source={{
-                      uri: banner.imageUrl,
-                    }}
+                    source={{ uri: banner.imageUrl }}
                     style={[
                       styles.promotionBanner,
                       {
@@ -1375,13 +1189,10 @@ export default function SupermarketScreen() {
                   />
                 </View>
 
-                {banner.products.length >
-                  0 && (
+                {banner.products.length > 0 && (
                   <ScrollView
                     horizontal
-                    showsHorizontalScrollIndicator={
-                      false
-                    }
+                    showsHorizontalScrollIndicator={false}
                     directionalLockEnabled
                     contentContainerStyle={
                       styles.promotionProductsRail
@@ -1399,12 +1210,8 @@ export default function SupermarketScreen() {
                         <FeaturedProductCard
                           key={`${banner.id}-${product.id}`}
                           product={product}
-                          currencyCode={
-                            currencyCode
-                          }
-                          cardWidth={
-                            featuredCardWidth
-                          }
+                          currencyCode={currencyCode}
+                          cardWidth={featuredCardWidth}
                           quantity={getProductQuantity(
                             product.id,
                           )}
@@ -1412,9 +1219,7 @@ export default function SupermarketScreen() {
                             isStoreClosed
                           }
                           onAdd={() =>
-                            addFeaturedProduct(
-                              product,
-                            )
+                            addFeaturedProduct(product)
                           }
                           onIncrease={() =>
                             increaseFeaturedProduct(
@@ -1437,16 +1242,12 @@ export default function SupermarketScreen() {
         </ScrollView>
 
         {isStoreClosed && (
-          <View
-            style={styles.closedOverlay}
-          >
+          <View style={styles.closedOverlay}>
             <Text
-              style={
-                styles.closedOverlayText
-              }
+              style={styles.closedOverlayText}
             >
               {currentStore.manualClosedNote ??
-                'The supermarket is currently closed.'}
+                'السوبر ماركت مغلق حاليًا.'}
             </Text>
           </View>
         )}
@@ -1466,36 +1267,25 @@ export default function SupermarketScreen() {
               )}`}
               style={({ pressed }) => [
                 styles.cartBar,
-                pressed &&
-                  styles.cartBarPressed,
+                pressed && styles.cartBarPressed,
               ]}
               onPress={() => {
                 router.push('/cart');
               }}
             >
               <View
-                style={
-                  styles.cartCountBadge
-                }
+                style={styles.cartCountBadge}
               >
                 <Text
-                  style={
-                    styles.cartCountText
-                  }
+                  style={styles.cartCountText}
                 >
                   {currentStoreItemCount}
                 </Text>
               </View>
 
-              <View
-                style={
-                  styles.cartBarRight
-                }
-              >
+              <View style={styles.cartBarRight}>
                 <Text
-                  style={
-                    styles.cartBarText
-                  }
+                  style={styles.cartBarText}
                   numberOfLines={1}
                 >
                   {formatCartMoney(
@@ -1518,7 +1308,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     flex: 1,
   },
-
   pageShell: {
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
@@ -1527,7 +1316,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: '100%',
   },
-
   header: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1537,7 +1325,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     zIndex: 10,
   },
-
   backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1548,22 +1335,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
-
   headerButtonPressed: {
     backgroundColor: '#F7F7F7',
-    transform: [
-      {
-        scale: 0.97,
-      },
-    ],
+    transform: [{ scale: 0.97 }],
   },
-
   backArrowCanvas: {
     height: 23,
     position: 'relative',
     width: 24,
   },
-
   backArrowStem: {
     backgroundColor: '#242424',
     borderRadius: 2,
@@ -1573,7 +1353,6 @@ const styles = StyleSheet.create({
     top: 10.3,
     width: 19,
   },
-
   backArrowDiagonal: {
     backgroundColor: '#242424',
     borderRadius: 2,
@@ -1582,43 +1361,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 10,
   },
-
   backArrowTop: {
     top: 7,
-    transform: [
-      {
-        rotate: '-42deg',
-      },
-    ],
+    transform: [{ rotate: '-42deg' }],
   },
-
   backArrowBottom: {
     top: 14,
-    transform: [
-      {
-        rotate: '42deg',
-      },
-    ],
+    transform: [{ rotate: '42deg' }],
   },
-
   mainScrollView: {
     flex: 1,
   },
-
   mainContent: {
     backgroundColor: '#FFFFFF',
     paddingBottom: 30,
   },
-
   mainContentWithCart: {
     paddingBottom: 115,
   },
-
   categoriesSection: {
     backgroundColor: '#FFFFFF',
     paddingTop: 1,
   },
-
   categoriesTitle: {
     color: '#202020',
     fontSize: 21,
@@ -1627,31 +1391,22 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingHorizontal: 16,
   },
-
   categoriesRail: {
     gap: 7,
     paddingHorizontal: 16,
   },
-
   categoryColumn: {
     gap: 15,
     width: 85,
   },
-
   categoryItem: {
     alignItems: 'center',
     width: 85,
   },
-
   categoryItemPressed: {
     opacity: 0.68,
-    transform: [
-      {
-        scale: 0.97,
-      },
-    ],
+    transform: [{ scale: 0.97 }],
   },
-
   categoryImageBox: {
     alignItems: 'center',
     backgroundColor: '#F5F5F5',
@@ -1661,12 +1416,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: 80,
   },
-
   categoryImage: {
     height: '92%',
     width: '92%',
   },
-
   categoryLabel: {
     color: '#202020',
     fontSize: 13.5,
@@ -1679,7 +1432,6 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     width: 85,
   },
-
   categoryPagination: {
     alignSelf: 'center',
     backgroundColor: '#E6E6E6',
@@ -1691,7 +1443,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: CATEGORY_INDICATOR_TRACK_WIDTH,
   },
-
   categoryPaginationActive: {
     backgroundColor: '#151515',
     borderRadius: 3,
@@ -1701,38 +1452,26 @@ const styles = StyleSheet.create({
     top: 0,
     width: CATEGORY_INDICATOR_THUMB_WIDTH,
   },
-
-  /**
-   * --------------------------------------------------
-   * PROMOTION SECTION
-   * --------------------------------------------------
-   */
-
   promotionSection: {
     backgroundColor: '#FFFFFF',
     marginBottom: 22,
     overflow: 'visible',
     width: '100%',
   },
-
   promotionSectionLast: {
     marginBottom: 0,
   },
-
   promotionBannerFrame: {
     marginHorizontal: 9,
     overflow: 'hidden',
   },
-
   promotionBanner: {
     backgroundColor: '#F4F4F4',
     width: '100%',
   },
-
   promotionProductsScroll: {
     overflow: 'visible',
   },
-
   promotionProductsRail: {
     alignItems: 'flex-start',
     gap: 7,
@@ -1740,18 +1479,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 21,
     paddingTop: 0,
   },
-
-  /**
-   * --------------------------------------------------
-   * FEATURED PRODUCT CARD
-   * --------------------------------------------------
-   */
-
   featuredProductCard: {
     backgroundColor: 'transparent',
     overflow: 'visible',
   },
-
   featuredProductImageBox: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1762,16 +1493,13 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     position: 'relative',
   },
-
   featuredProductImage: {
     height: '68%',
     width: '68%',
   },
-
   featuredProductFallback: {
     fontSize: 34,
   },
-
   featuredDiscountBadge: {
     alignItems: 'center',
     backgroundColor: '#BFFF00',
@@ -1785,14 +1513,12 @@ const styles = StyleSheet.create({
     top: 6,
     zIndex: 5,
   },
-
   featuredDiscountText: {
     color: '#111111',
     fontSize: 8.5,
     fontWeight: '500',
     lineHeight: 11,
   },
-
   featuredAddButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1806,29 +1532,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 6,
     shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
     width: 34,
     zIndex: 8,
   },
-
   featuredAddButtonPressed: {
     backgroundColor: '#F8F8F8',
-    transform: [
-      {
-        scale: 0.94,
-      },
-    ],
+    transform: [{ scale: 0.94 }],
   },
-
   featuredAddButtonDisabled: {
     opacity: 0.45,
   },
-
   featuredAddButtonText: {
     color: '#F04A00',
     fontSize: 25,
@@ -1836,7 +1552,6 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     marginTop: -2,
   },
-
   featuredQuantityPill: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1850,29 +1565,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 6,
     shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
     zIndex: 8,
   },
-
   featuredQuantityButton: {
     alignItems: 'center',
     height: 32,
     justifyContent: 'center',
     width: 25,
   },
-
   featuredQuantityButtonText: {
     color: '#F04A00',
     fontSize: 18,
     fontWeight: '500',
     lineHeight: 20,
   },
-
   featuredQuantityValue: {
     color: '#202020',
     fontSize: 10,
@@ -1880,7 +1589,6 @@ const styles = StyleSheet.create({
     minWidth: 14,
     textAlign: 'center',
   },
-
   featuredProductName: {
     color: '#202020',
     fontSize: 10.5,
@@ -1892,14 +1600,12 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     writingDirection: 'ltr',
   },
-
   featuredCurrentPriceWrap: {
     alignSelf: 'flex-start',
     borderBottomColor: '#BFFF00',
     borderBottomWidth: 2,
     marginTop: 3,
   },
-
   featuredCurrentPrice: {
     color: '#202020',
     fontSize: 10.5,
@@ -1908,7 +1614,6 @@ const styles = StyleSheet.create({
     textAlign: 'left',
     writingDirection: 'ltr',
   },
-
   featuredOldPrice: {
     alignSelf: 'flex-start',
     color: '#858585',
@@ -1919,7 +1624,6 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     writingDirection: 'ltr',
   },
-
   cartBarFloatingWrapper: {
     bottom: 12,
     left: 18,
@@ -1927,7 +1631,6 @@ const styles = StyleSheet.create({
     right: 18,
     zIndex: 999,
   },
-
   cartBar: {
     alignItems: 'center',
     backgroundColor: '#00B956',
@@ -1938,24 +1641,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 9,
     shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.16,
     shadowRadius: 8,
     width: '100%',
   },
-
   cartBarPressed: {
     opacity: 0.92,
-    transform: [
-      {
-        scale: 0.985,
-      },
-    ],
+    transform: [{ scale: 0.985 }],
   },
-
   cartCountBadge: {
     alignItems: 'center',
     backgroundColor: '#009D49',
@@ -1964,21 +1658,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 48,
   },
-
   cartCountText: {
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '800',
     textAlign: 'center',
   },
-
   cartBarRight: {
     alignItems: 'flex-end',
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
-
   cartBarText: {
     color: '#FFFFFF',
     fontSize: 15.5,
@@ -1986,7 +1677,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-
   closedOverlay: {
     backgroundColor: '#252525',
     left: 16,
@@ -1997,14 +1687,13 @@ const styles = StyleSheet.create({
     top: 68,
     zIndex: 50,
   },
-
   closedOverlayText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
+    writingDirection: 'rtl',
   },
-
   stateScreen: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -2012,11 +1701,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
-
   stateEmoji: {
     fontSize: 50,
   },
-
   stateTitle: {
     color: '#202020',
     fontSize: 21,
@@ -2024,7 +1711,6 @@ const styles = StyleSheet.create({
     marginTop: 15,
     textAlign: 'center',
   },
-
   stateDescription: {
     color: '#777777',
     fontSize: 13,
@@ -2033,7 +1719,6 @@ const styles = StyleSheet.create({
     maxWidth: 330,
     textAlign: 'center',
   },
-
   retryButton: {
     backgroundColor: '#222222',
     borderRadius: 14,
@@ -2042,14 +1727,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 13,
   },
-
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
   },
-
   errorBackButton: {
     borderColor: '#E0E0E0',
     borderRadius: 14,
@@ -2059,20 +1742,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
-
   errorBackButtonText: {
     color: '#222222',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
   },
-
   generalPressed: {
     opacity: 0.72,
-    transform: [
-      {
-        scale: 0.98,
-      },
-    ],
+    transform: [{ scale: 0.98 }],
   },
 });

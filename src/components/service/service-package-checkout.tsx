@@ -1,7 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import {
-  useRouter,
-} from 'expo-router';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
   useEffect,
@@ -43,37 +41,27 @@ import getServicePackageById, {
   type ServicePackage,
 } from '../../services/service-packages-service';
 import { useCustomerStore } from '../../store/customer-store';
+import { CheckoutScreenSkeleton } from '../ui/loading-skeleton';
 
 type ServicePackageCheckoutProps = {
   servicePackageId: string;
 };
 
-/* ---------------------------------- */
-/* BRAND                              */
-/* ---------------------------------- */
-
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_DARK = '#009B45';
 const BRAND_GREEN_SOFT = '#EAF8F0';
-
-/* ---------------------------------- */
-/* PAYMENT METHOD IMAGES              */
-/* ---------------------------------- */
 
 const PAYMENT_METHOD_IMAGES:
   Record<string, ImageSourcePropType> = {
     'vodafone-cash': require(
       '../../../assets/payment-methods/vodafone-cash.png',
     ),
-
     'orange-cash': require(
       '../../../assets/payment-methods/orange-cash.png',
     ),
-
     'etisalat-cash': require(
       '../../../assets/payment-methods/etisalat-cash.png',
     ),
-
     instapay: require(
       '../../../assets/payment-methods/instapay.png',
     ),
@@ -91,10 +79,7 @@ function formatPrice(
 }
 
 function isRemoteImageUri(
-  value:
-    | string
-    | null
-    | undefined,
+  value: string | null | undefined,
 ) {
   if (!value) {
     return false;
@@ -113,97 +98,59 @@ export default function ServicePackageCheckout({
 }: ServicePackageCheckoutProps) {
   const router = useRouter();
 
-  const customerName =
-    useCustomerStore(
-      (state) => state.customerName,
-    );
-
-  const phoneNumber =
-    useCustomerStore(
-      (state) => state.phoneNumber,
-    );
-
-  const address =
-    useCustomerStore(
-      (state) => state.address,
-    );
-
-  const landmark =
-    useCustomerStore(
-      (state) => state.landmark,
-    );
-
-  const paymentMethod =
-    useCustomerStore(
-      (state) => state.paymentMethod,
-    );
-
+  const customerName = useCustomerStore(
+    (state) => state.customerName,
+  );
+  const phoneNumber = useCustomerStore(
+    (state) => state.phoneNumber,
+  );
+  const address = useCustomerStore(
+    (state) => state.address,
+  );
+  const landmark = useCustomerStore(
+    (state) => state.landmark,
+  );
+  const paymentMethod = useCustomerStore(
+    (state) => state.paymentMethod,
+  );
   const locationServiceAreaName =
     useCustomerStore(
       (state) =>
         state.locationServiceAreaName,
     );
 
-  const setCustomerName =
-    useCustomerStore(
-      (state) => state.setCustomerName,
-    );
-
-  const setPhoneNumber =
-    useCustomerStore(
-      (state) => state.setPhoneNumber,
-    );
-
-  const setAddress =
-    useCustomerStore(
-      (state) => state.setAddress,
-    );
-
-  const setLandmark =
-    useCustomerStore(
-      (state) => state.setLandmark,
-    );
-
-  const setPaymentMethod =
-    useCustomerStore(
-      (state) => state.setPaymentMethod,
-    );
-
-  const [
-    bootstrap,
-    setBootstrap,
-  ] = useState<AppBootstrap | null>(
-    null,
+  const setCustomerName = useCustomerStore(
+    (state) => state.setCustomerName,
+  );
+  const setPhoneNumber = useCustomerStore(
+    (state) => state.setPhoneNumber,
+  );
+  const setAddress = useCustomerStore(
+    (state) => state.setAddress,
+  );
+  const setLandmark = useCustomerStore(
+    (state) => state.setLandmark,
+  );
+  const setPaymentMethod = useCustomerStore(
+    (state) => state.setPaymentMethod,
   );
 
+  const [bootstrap, setBootstrap] =
+    useState<AppBootstrap | null>(null);
   const [
     servicePackage,
     setServicePackage,
-  ] = useState<ServicePackage | null>(
-    null,
-  );
-
-  const [
-    isLoading,
-    setIsLoading,
-  ] = useState(true);
-
-  const [
-    isSubmitting,
-    setIsSubmitting,
-  ] = useState(false);
-
+  ] = useState<ServicePackage | null>(null);
+  const [isLoading, setIsLoading] =
+    useState(true);
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState<string | null>(
-    null,
-  );
-
-  const [
-    submitted,
-    setSubmitted,
-  ] = useState(false);
+  ] = useState<string | null>(null);
+  const [submitted, setSubmitted] =
+    useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,23 +174,17 @@ export default function ServicePackageCheckout({
           return;
         }
 
-        setBootstrap(
-          loadedBootstrap,
-        );
+        setBootstrap(loadedBootstrap);
 
         if (!loadedPackage) {
           setServicePackage(null);
-
           setErrorMessage(
             'الخدمة غير متاحة حاليًا.',
           );
-
           return;
         }
 
-        setServicePackage(
-          loadedPackage,
-        );
+        setServicePackage(loadedPackage);
       } catch (error) {
         if (cancelled) {
           return;
@@ -251,7 +192,6 @@ export default function ServicePackageCheckout({
 
         setBootstrap(null);
         setServicePackage(null);
-
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -272,10 +212,7 @@ export default function ServicePackageCheckout({
   }, [servicePackageId]);
 
   useEffect(() => {
-    if (
-      !bootstrap ||
-      !paymentMethod
-    ) {
+    if (!bootstrap || !paymentMethod) {
       return;
     }
 
@@ -297,18 +234,14 @@ export default function ServicePackageCheckout({
   const paymentMethods =
     bootstrap?.payment_methods ?? [];
 
-  const selectedPaymentMethod =
-    useMemo(
-      () =>
-        paymentMethods.find(
-          (method) =>
-            method.id === paymentMethod,
-        ) ?? null,
-      [
-        paymentMethod,
-        paymentMethods,
-      ],
-    );
+  const selectedPaymentMethod = useMemo(
+    () =>
+      paymentMethods.find(
+        (method) =>
+          method.id === paymentMethod,
+      ) ?? null,
+    [paymentMethod, paymentMethods],
+  );
 
   const normalizedPhone =
     phoneNumber.replace(/\D/g, '');
@@ -316,15 +249,12 @@ export default function ServicePackageCheckout({
   const validation = {
     customerName:
       customerName.trim().length >= 2,
-
     phoneNumber:
       /^01[0125]\d{8}$/.test(
         normalizedPhone,
       ),
-
     address:
       address.trim().length >= 5,
-
     paymentMethod:
       selectedPaymentMethod !== null,
   };
@@ -349,10 +279,8 @@ export default function ServicePackageCheckout({
     }
 
     const whatsappNumber =
-      bootstrap.settings
-        .support_whatsapp ||
-      bootstrap.settings
-        .whatsapp_number ||
+      bootstrap.settings.support_whatsapp ||
+      bootstrap.settings.whatsapp_number ||
       '';
 
     if (!whatsappNumber) {
@@ -360,117 +288,73 @@ export default function ServicePackageCheckout({
         'رقم واتساب غير متاح',
         'لم يتم إعداد رقم واتساب للحجوزات في إعدادات التطبيق.',
       );
-
       return;
     }
 
-    /**
-     * The customer asked for a short WhatsApp message.
-     *
-     * Example:
-     * عاوز اكد حجز باقة غسيل الأسبوع وهدفع من خلال انستا باي
-     */
     const whatsappMessage =
       `عاوز اكد حجز ${servicePackage.nameAr} وهدفع من خلال ${selectedPaymentMethod.name_ar}`;
 
-    const whatsappUrl =
-      buildWhatsAppUrl(
-        whatsappNumber,
-        whatsappMessage,
-      );
+    const whatsappUrl = buildWhatsAppUrl(
+      whatsappNumber,
+      whatsappMessage,
+    );
 
     if (!whatsappUrl) {
       Alert.alert(
         'تعذر فتح واتساب',
         'رقم واتساب غير صالح.',
       );
-
       return;
     }
 
     let createdBooking:
       ServiceBooking | null = null;
-
     let whatsappOpened = false;
 
     try {
       setIsSubmitting(true);
 
-      /**
-       * Service bookings use the same persistent anonymous Supabase
-       * session model as normal Navienty Now orders.
-       */
       await ensureAppSession();
 
-      /**
-       * IMPORTANT:
-       * Save the booking BEFORE opening WhatsApp.
-       *
-       * This gives /order-success a real persisted booking ID and lets
-       * the service flow survive app restarts / returning from WhatsApp.
-       */
       createdBooking =
         await createServiceBooking({
           servicePackageId:
             servicePackage.id,
-
           packageSlug:
             servicePackage.slug,
-
           packageNameAr:
             servicePackage.nameAr,
-
           packageNameEn:
             servicePackage.nameEn,
-
           packagePrice:
             servicePackage.price,
-
           currencyCode:
             servicePackage.currencyCode,
-
           currencySymbol:
             servicePackage.currencySymbol,
-
           packageImageUrl:
             servicePackage.imageUrl,
-
           paymentMethodId:
             selectedPaymentMethod.id,
-
           paymentMethodNameAr:
             selectedPaymentMethod.name_ar,
-
           customerName:
             customerName.trim(),
-
           customerPhone:
             normalizedPhone,
-
           address:
             address.trim(),
-
           landmark:
             landmark.trim() || null,
-
           serviceAreaName:
             locationServiceAreaName?.trim() ||
             null,
-
           whatsappNumber,
         });
 
-      await Linking.openURL(
-        whatsappUrl,
-      );
-
+      await Linking.openURL(whatsappUrl);
       whatsappOpened = true;
 
-      /**
-       * The OS confirmed that the WhatsApp deep link opened.
-       * As with the normal order flow, the app cannot inspect whether
-       * the user pressed Send inside WhatsApp.
-       */
       try {
         createdBooking =
           await markServiceBookingWhatsAppOpened(
@@ -483,25 +367,14 @@ export default function ServicePackageCheckout({
         );
       }
 
-      /**
-       * Keep Order Success as the active route behind WhatsApp.
-       * When the customer returns to the app, they immediately see
-       * the booking tracking screen.
-       */
       router.replace({
         pathname: '/order-success',
-
         params: {
           serviceBookingId:
             createdBooking.id,
         },
       });
     } catch (error) {
-      /**
-       * Only cancel automatically when WhatsApp never opened.
-       * Once WhatsApp has opened, the customer may already have sent
-       * the confirmation message, so we must never silently cancel.
-       */
       if (
         createdBooking &&
         !whatsappOpened
@@ -520,7 +393,6 @@ export default function ServicePackageCheckout({
         whatsappOpened
           ? 'تم فتح واتساب'
           : 'تعذر إرسال الحجز',
-
         error instanceof Error
           ? error.message
           : 'حاول مرة أخرى.',
@@ -531,26 +403,10 @@ export default function ServicePackageCheckout({
   }
 
   if (isLoading) {
-    return (
-      <View style={styles.stateScreen}>
-        <StatusBar style="dark" />
-
-        <ActivityIndicator
-          color={BRAND_GREEN}
-          size="small"
-        />
-
-        <Text style={styles.stateText}>
-          جاري تحميل بيانات الطلب...
-        </Text>
-      </View>
-    );
+    return <CheckoutScreenSkeleton />;
   }
 
-  if (
-    !bootstrap ||
-    !servicePackage
-  ) {
+  if (!bootstrap || !servicePackage) {
     return (
       <View style={styles.stateScreen}>
         <StatusBar style="dark" />
@@ -575,18 +431,11 @@ export default function ServicePackageCheckout({
         <Pressable
           style={({ pressed }) => [
             styles.stateButton,
-            pressed &&
-              styles.buttonPressed,
+            pressed && styles.buttonPressed,
           ]}
-          onPress={() =>
-            router.back()
-          }
+          onPress={() => router.back()}
         >
-          <Text
-            style={
-              styles.stateButtonText
-            }
-          >
+          <Text style={styles.stateButtonText}>
             رجوع
           </Text>
         </Pressable>
@@ -594,11 +443,10 @@ export default function ServicePackageCheckout({
     );
   }
 
-  const formattedPrice =
-    formatPrice(
-      servicePackage.price,
-      servicePackage.currencySymbol,
-    );
+  const formattedPrice = formatPrice(
+    servicePackage.price,
+    servicePackage.currencySymbol,
+  );
 
   return (
     <KeyboardAvoidingView
@@ -612,16 +460,10 @@ export default function ServicePackageCheckout({
       <StatusBar style="dark" />
 
       <ScrollView
-        contentContainerStyle={
-          styles.pageContent
-        }
+        contentContainerStyle={styles.pageContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          false
-        }
+        showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
-
         <View style={styles.header}>
           <Pressable
             accessibilityLabel="رجوع"
@@ -629,13 +471,9 @@ export default function ServicePackageCheckout({
             hitSlop={8}
             style={({ pressed }) => [
               styles.backButton,
-
-              pressed &&
-                styles.buttonPressed,
+              pressed && styles.buttonPressed,
             ]}
-            onPress={() =>
-              router.back()
-            }
+            onPress={() => router.back()}
           >
             <Ionicons
               name="arrow-back"
@@ -644,21 +482,12 @@ export default function ServicePackageCheckout({
             />
           </Pressable>
 
-          <View
-            style={
-              styles.headerContent
-            }
-          >
-            <Text
-              style={styles.pageTitle}
-            >
+          <View style={styles.headerContent}>
+            <Text style={styles.pageTitle}>
               إتمام الطلب
             </Text>
-
             <Text
-              style={
-                styles.pageSubtitle
-              }
+              style={styles.pageSubtitle}
               numberOfLines={1}
             >
               {servicePackage.nameAr}
@@ -666,18 +495,8 @@ export default function ServicePackageCheckout({
           </View>
         </View>
 
-        {/* SERVICE */}
-
-        <View
-          style={
-            styles.orderStoreSection
-          }
-        >
-          <View
-            style={
-              styles.storeIconContainer
-            }
-          >
+        <View style={styles.orderStoreSection}>
+          <View style={styles.storeIconContainer}>
             {servicePackage.imageUrl ? (
               <Image
                 accessibilityIgnoresInvertColors
@@ -696,27 +515,17 @@ export default function ServicePackageCheckout({
             )}
           </View>
 
-          <View
-            style={
-              styles.storeContent
-            }
-          >
-            <Text
-              style={styles.storeLabel}
-            >
+          <View style={styles.storeContent}>
+            <Text style={styles.storeLabel}>
               طلبك من
             </Text>
-
             <Text
               style={styles.storeName}
               numberOfLines={1}
             >
               Navienty Now
             </Text>
-
-            <Text
-              style={styles.storeMeta}
-            >
+            <Text style={styles.storeMeta}>
               {servicePackage.nameAr}
               {' • '}
               {formattedPrice}
@@ -724,32 +533,18 @@ export default function ServicePackageCheckout({
           </View>
         </View>
 
-        {/* CUSTOMER DETAILS */}
-
         <View style={styles.section}>
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
+          <Text style={styles.sectionTitle}>
             بيانات العميل
           </Text>
 
-          {/* NAME */}
-
           <View style={styles.field}>
-            <Text
-              style={
-                styles.fieldLabel
-              }
-            >
+            <Text style={styles.fieldLabel}>
               الاسم بالكامل
             </Text>
-
             <View
               style={[
                 styles.inputContainer,
-
                 submitted &&
                   !validation.customerName &&
                   styles.inputContainerError,
@@ -760,44 +555,30 @@ export default function ServicePackageCheckout({
                 size={17}
                 color="#777777"
               />
-
               <TextInput
                 style={styles.input}
                 value={customerName}
-                onChangeText={
-                  setCustomerName
-                }
+                onChangeText={setCustomerName}
                 placeholder="اكتب اسمك بالكامل"
                 placeholderTextColor="#a1a1a1"
                 textAlign="right"
               />
             </View>
-
             {submitted &&
             !validation.customerName ? (
-              <Text
-                style={styles.errorText}
-              >
+              <Text style={styles.errorText}>
                 اكتب الاسم بالكامل.
               </Text>
             ) : null}
           </View>
 
-          {/* PHONE */}
-
           <View style={styles.field}>
-            <Text
-              style={
-                styles.fieldLabel
-              }
-            >
+            <Text style={styles.fieldLabel}>
               رقم الهاتف
             </Text>
-
             <View
               style={[
                 styles.inputContainer,
-
                 submitted &&
                   !validation.phoneNumber &&
                   styles.inputContainerError,
@@ -808,90 +589,52 @@ export default function ServicePackageCheckout({
                 size={17}
                 color="#777777"
               />
-
               <TextInput
                 style={styles.input}
                 value={phoneNumber}
-                onChangeText={
-                  setPhoneNumber
-                }
+                onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
                 placeholder="01xxxxxxxxx"
                 placeholderTextColor="#a1a1a1"
                 textAlign="right"
               />
             </View>
-
             {submitted &&
             !validation.phoneNumber ? (
-              <Text
-                style={styles.errorText}
-              >
+              <Text style={styles.errorText}>
                 اكتب رقم موبايل مصري صحيح.
               </Text>
             ) : null}
           </View>
 
-          {/* AREA */}
-
           {locationServiceAreaName ? (
-            <View
-              style={styles.areaCard}
-            >
-              <View
-                style={
-                  styles.areaIconContainer
-                }
-              >
+            <View style={styles.areaCard}>
+              <View style={styles.areaIconContainer}>
                 <Ionicons
                   name="location-outline"
                   size={17}
                   color={BRAND_GREEN}
                 />
               </View>
-
-              <View
-                style={
-                  styles.areaContent
-                }
-              >
-                <Text
-                  style={
-                    styles.areaLabel
-                  }
-                >
+              <View style={styles.areaContent}>
+                <Text style={styles.areaLabel}>
                   منطقة الخدمة
                 </Text>
-
-                <Text
-                  style={
-                    styles.areaValue
-                  }
-                >
-                  {
-                    locationServiceAreaName
-                  }
+                <Text style={styles.areaValue}>
+                  {locationServiceAreaName}
                 </Text>
               </View>
             </View>
           ) : null}
 
-          {/* ADDRESS */}
-
           <View style={styles.field}>
-            <Text
-              style={
-                styles.fieldLabel
-              }
-            >
+            <Text style={styles.fieldLabel}>
               عنوان الاستلام
             </Text>
-
             <View
               style={[
                 styles.inputContainer,
                 styles.multilineContainer,
-
                 submitted &&
                   !validation.address &&
                   styles.inputContainerError,
@@ -901,20 +644,15 @@ export default function ServicePackageCheckout({
                 name="home-outline"
                 size={17}
                 color="#777777"
-                style={
-                  styles.multilineIcon
-                }
+                style={styles.multilineIcon}
               />
-
               <TextInput
                 style={[
                   styles.input,
                   styles.multilineInput,
                 ]}
                 value={address}
-                onChangeText={
-                  setAddress
-                }
+                onChangeText={setAddress}
                 placeholder="شارع، رقم العمارة، الدور، رقم الشقة"
                 placeholderTextColor="#a1a1a1"
                 multiline
@@ -923,46 +661,28 @@ export default function ServicePackageCheckout({
                 textAlignVertical="top"
               />
             </View>
-
             {submitted &&
             !validation.address ? (
-              <Text
-                style={styles.errorText}
-              >
-                اكتب عنوانًا واضحًا
-                ومفصلًا للاستلام.
+              <Text style={styles.errorText}>
+                اكتب عنوانًا واضحًا ومفصلًا للاستلام.
               </Text>
             ) : null}
           </View>
 
-          {/* LANDMARK */}
-
           <View style={styles.field}>
-            <Text
-              style={
-                styles.fieldLabel
-              }
-            >
+            <Text style={styles.fieldLabel}>
               علامة مميزة
             </Text>
-
-            <View
-              style={
-                styles.inputContainer
-              }
-            >
+            <View style={styles.inputContainer}>
               <Ionicons
                 name="navigate-outline"
                 size={17}
                 color="#777777"
               />
-
               <TextInput
                 style={styles.input}
                 value={landmark}
-                onChangeText={
-                  setLandmark
-                }
+                onChangeText={setLandmark}
                 placeholder="اختياري"
                 placeholderTextColor="#a1a1a1"
                 textAlign="right"
@@ -971,281 +691,151 @@ export default function ServicePackageCheckout({
           </View>
         </View>
 
-        {/* PAYMENT */}
-
         <View style={styles.section}>
-          <Text
-            style={
-              styles.sectionTitle
-            }
-          >
+          <Text style={styles.sectionTitle}>
             طريقة الدفع
           </Text>
-
-          <Text
-            style={
-              styles.sectionDescription
-            }
-          >
-            اختر طريقة الدفع المناسبة
-            لإتمام الطلب.
+          <Text style={styles.sectionDescription}>
+            اختر طريقة الدفع المناسبة لإتمام الطلب.
           </Text>
 
-          <View
-            style={
-              styles.paymentMethods
-            }
-          >
-            {paymentMethods.map(
-              (method) => {
-                const selected =
-                  paymentMethod ===
-                  method.id;
+          <View style={styles.paymentMethods}>
+            {paymentMethods.map((method) => {
+              const selected =
+                paymentMethod === method.id;
 
-                const localImage =
-                  PAYMENT_METHOD_IMAGES[
-                    method.code
-                  ] ?? null;
+              const localImage =
+                PAYMENT_METHOD_IMAGES[
+                  method.code
+                ] ?? null;
 
-                const remoteImage =
-                  !localImage &&
-                  isRemoteImageUri(
-                    method.icon_url,
-                  )
-                    ? method.icon_url
-                    : null;
+              const remoteImage =
+                !localImage &&
+                isRemoteImageUri(method.icon_url)
+                  ? method.icon_url
+                  : null;
 
-                return (
-                  <Pressable
-                    key={method.id}
-                    accessibilityRole="button"
-                    style={({
-                      pressed,
-                    }) => [
-                      styles.paymentMethod,
-
-                      selected &&
-                        styles.paymentMethodSelected,
-
-                      pressed &&
-                        styles.paymentMethodPressed,
-                    ]}
-                    onPress={() => {
-                      setPaymentMethod(
-                        method.id,
-                      );
-                    }}
+              return (
+                <Pressable
+                  key={method.id}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.paymentMethod,
+                    selected &&
+                      styles.paymentMethodSelected,
+                    pressed &&
+                      styles.paymentMethodPressed,
+                  ]}
+                  onPress={() => {
+                    setPaymentMethod(method.id);
+                  }}
+                >
+                  <View
+                    style={styles.paymentIconContainer}
                   >
-                    <View
-                      style={
-                        styles.paymentIconContainer
-                      }
-                    >
-                      {localImage ? (
-                        <Image
-                          source={
-                            localImage
-                          }
-                          style={
-                            styles.paymentMethodImage
-                          }
-                          resizeMode="cover"
-                        />
-                      ) : remoteImage ? (
-                        <Image
-                          source={{
-                            uri: remoteImage,
-                          }}
-                          style={
-                            styles.paymentMethodImage
-                          }
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <Text
-                          style={
-                            styles.paymentIcon
-                          }
-                        >
-                          {method.icon ??
-                            '💳'}
-                        </Text>
-                      )}
-                    </View>
-
-                    <View
-                      style={
-                        styles.paymentContent
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.paymentTitle
-                        }
-                      >
-                        {method.name_ar}
+                    {localImage ? (
+                      <Image
+                        source={localImage}
+                        style={styles.paymentMethodImage}
+                        resizeMode="cover"
+                      />
+                    ) : remoteImage ? (
+                      <Image
+                        source={{ uri: remoteImage }}
+                        style={styles.paymentMethodImage}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Text style={styles.paymentIcon}>
+                        {method.icon ?? '💳'}
                       </Text>
-                    </View>
+                    )}
+                  </View>
 
-                    <View
-                      style={[
-                        styles.radioOuter,
+                  <View style={styles.paymentContent}>
+                    <Text style={styles.paymentTitle}>
+                      {method.name_ar}
+                    </Text>
+                  </View>
 
-                        selected &&
-                          styles.radioOuterSelected,
-                      ]}
-                    >
-                      {selected ? (
-                        <View
-                          style={
-                            styles.radioInner
-                          }
-                        />
-                      ) : null}
-                    </View>
-                  </Pressable>
-                );
-              },
-            )}
+                  <View
+                    style={[
+                      styles.radioOuter,
+                      selected &&
+                        styles.radioOuterSelected,
+                    ]}
+                  >
+                    {selected ? (
+                      <View style={styles.radioInner} />
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
 
           {submitted &&
           !validation.paymentMethod ? (
-            <Text
-              style={
-                styles.paymentError
-              }
-            >
+            <Text style={styles.paymentError}>
               اختر طريقة الدفع المناسبة.
             </Text>
           ) : null}
         </View>
 
-        {/* ORDER DETAILS */}
-
-        <View
-          style={
-            styles.orderSummarySection
-          }
-        >
-          <Text
-            style={
-              styles.orderSummaryTitle
-            }
-          >
+        <View style={styles.orderSummarySection}>
+          <Text style={styles.orderSummaryTitle}>
             تفاصيل الطلب
           </Text>
 
-          <View
-            style={
-              styles.itemsSummary
-            }
-          >
-            <View
-              style={
-                styles.summaryItem
-              }
-            >
-              <View
-                style={
-                  styles.summaryItemContent
-                }
-              >
+          <View style={styles.itemsSummary}>
+            <View style={styles.summaryItem}>
+              <View style={styles.summaryItemContent}>
                 <Text
-                  style={
-                    styles.summaryItemName
-                  }
+                  style={styles.summaryItemName}
                   numberOfLines={2}
                 >
                   {servicePackage.nameAr}
                 </Text>
-
                 <Text
-                  style={
-                    styles.summaryItemQuantity
-                  }
+                  style={styles.summaryItemQuantity}
                 >
                   الكمية: 1
                 </Text>
               </View>
-
-              <Text
-                style={
-                  styles.summaryItemPrice
-                }
-              >
+              <Text style={styles.summaryItemPrice}>
                 {formattedPrice}
               </Text>
             </View>
           </View>
 
-          <View
-            style={
-              styles.itemsDivider
-            }
-          />
+          <View style={styles.itemsDivider} />
 
-          <View
-            style={styles.totalRow}
-          >
-            <Text
-              style={
-                styles.totalLabel
-              }
-            >
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>
               الإجمالي
             </Text>
-
-            <Text
-              style={
-                styles.totalValue
-              }
-            >
+            <Text style={styles.totalValue}>
               {formattedPrice}
             </Text>
           </View>
         </View>
 
-        {/* WHATSAPP */}
-
-        <View
-          style={
-            styles.whatsAppNotice
-          }
-        >
-          <View
-            style={
-              styles.whatsAppIconContainer
-            }
-          >
+        <View style={styles.whatsAppNotice}>
+          <View style={styles.whatsAppIconContainer}>
             <Ionicons
               name="logo-whatsapp"
               size={20}
               color={BRAND_GREEN}
             />
           </View>
-
-          <View
-            style={
-              styles.whatsAppNoticeContent
-            }
-          >
-            <Text
-              style={
-                styles.whatsAppNoticeTitle
-              }
-            >
+          <View style={styles.whatsAppNoticeContent}>
+            <Text style={styles.whatsAppNoticeTitle}>
               تأكيد الطلب عبر واتساب
             </Text>
-
             <Text
-              style={
-                styles.whatsAppNoticeDescription
-              }
+              style={styles.whatsAppNoticeDescription}
             >
-              بعد الضغط على إرسال الطلب
-              سيتم فتح واتساب برسالة
-              جاهزة لتأكيد الحجز.
+              بعد الضغط على إرسال الطلب سيتم فتح واتساب برسالة جاهزة لتأكيد الحجز.
             </Text>
           </View>
         </View>
@@ -1253,27 +843,12 @@ export default function ServicePackageCheckout({
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* FIXED CTA */}
-
       <View style={styles.bottomBar}>
-        <View
-          style={
-            styles.bottomTotalRow
-          }
-        >
-          <Text
-            style={
-              styles.bottomTotalLabel
-            }
-          >
+        <View style={styles.bottomTotalRow}>
+          <Text style={styles.bottomTotalLabel}>
             الإجمالي
           </Text>
-
-          <Text
-            style={
-              styles.bottomTotalValue
-            }
-          >
+          <Text style={styles.bottomTotalValue}>
             {formattedPrice}
           </Text>
         </View>
@@ -1282,11 +857,9 @@ export default function ServicePackageCheckout({
           disabled={isSubmitting}
           style={({ pressed }) => [
             styles.submitButton,
-
             pressed &&
               !isSubmitting &&
               styles.submitButtonPressed,
-
             isSubmitting &&
               styles.submitButtonDisabled,
           ]}
@@ -1294,21 +867,22 @@ export default function ServicePackageCheckout({
             void submitBooking();
           }}
         >
-          <Text
-            style={
-              styles.submitButtonText
-            }
-          >
-            {isSubmitting
-              ? 'جاري الفتح...'
-              : 'إرسال الطلب'}
+          <Text style={styles.submitButtonText}>
+            إرسال الطلب
           </Text>
 
-          <Ionicons
-            name="logo-whatsapp"
-            size={18}
-            color="#ffffff"
-          />
+          {isSubmitting ? (
+            <ActivityIndicator
+              color="#ffffff"
+              size="small"
+            />
+          ) : (
+            <Ionicons
+              name="logo-whatsapp"
+              size={18}
+              color="#ffffff"
+            />
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -1320,11 +894,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     flex: 1,
   },
-
   pageContent: {
     paddingBottom: 132,
   },
-
   stateScreen: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1332,7 +904,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
-
   stateIcon: {
     alignItems: 'center',
     backgroundColor: '#FDECEC',
@@ -1342,14 +913,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     width: 50,
   },
-
   stateTitle: {
     color: '#202020',
     fontSize: 19,
     fontWeight: '800',
     textAlign: 'center',
   },
-
   stateText: {
     color: '#858585',
     fontSize: 12,
@@ -1357,7 +926,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-
   stateButton: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN,
@@ -1367,17 +935,11 @@ const styles = StyleSheet.create({
     minHeight: 46,
     paddingHorizontal: 24,
   },
-
   stateButtonText: {
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',
   },
-
-  /* -------------------------------- */
-  /* HEADER                           */
-  /* -------------------------------- */
-
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1385,7 +947,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 48,
   },
-
   backButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1396,28 +957,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
-
   headerContent: {
     flex: 1,
     marginLeft: 14,
   },
-
   pageTitle: {
     color: '#202020',
     fontSize: 20,
     fontWeight: '800',
   },
-
   pageSubtitle: {
     color: '#8a8a8a',
     fontSize: 12,
     marginTop: 2,
   },
-
-  /* -------------------------------- */
-  /* SERVICE                          */
-  /* -------------------------------- */
-
   orderStoreSection: {
     alignItems: 'center',
     borderBottomColor: '#eeeeee',
@@ -1429,7 +982,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
   },
-
   storeIconContainer: {
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
@@ -1441,39 +993,29 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: 52,
   },
-
   storeImage: {
     height: '100%',
     width: '100%',
   },
-
   storeContent: {
     flex: 1,
     marginLeft: 12,
   },
-
   storeLabel: {
     color: '#929292',
     fontSize: 9.5,
   },
-
   storeName: {
     color: '#242424',
     fontSize: 15,
     fontWeight: '800',
     marginTop: 2,
   },
-
   storeMeta: {
     color: '#818181',
     fontSize: 10.5,
     marginTop: 4,
   },
-
-  /* -------------------------------- */
-  /* SECTIONS                         */
-  /* -------------------------------- */
-
   section: {
     borderBottomColor: '#f0f0f0',
     borderBottomWidth: 1,
@@ -1481,7 +1023,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 23,
   },
-
   sectionTitle: {
     color: '#242424',
     fontSize: 18,
@@ -1489,7 +1030,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'right',
   },
-
   sectionDescription: {
     color: '#858585',
     fontSize: 11.5,
@@ -1497,15 +1037,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     textAlign: 'right',
   },
-
-  /* -------------------------------- */
-  /* FIELDS                           */
-  /* -------------------------------- */
-
   field: {
     marginBottom: 16,
   },
-
   fieldLabel: {
     color: '#373737',
     fontSize: 12,
@@ -1513,7 +1047,6 @@ const styles = StyleSheet.create({
     marginBottom: 7,
     textAlign: 'right',
   },
-
   inputContainer: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1524,11 +1057,9 @@ const styles = StyleSheet.create({
     minHeight: 50,
     paddingHorizontal: 13,
   },
-
   inputContainerError: {
     borderColor: '#d64b4b',
   },
-
   input: {
     color: '#242424',
     flex: 1,
@@ -1538,21 +1069,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     writingDirection: 'rtl',
   },
-
   multilineContainer: {
     alignItems: 'flex-start',
     minHeight: 104,
   },
-
   multilineInput: {
     minHeight: 100,
     paddingTop: 13,
   },
-
   multilineIcon: {
     marginTop: 14,
   },
-
   errorText: {
     color: '#d64b4b',
     fontSize: 10,
@@ -1560,11 +1087,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'right',
   },
-
-  /* -------------------------------- */
-  /* AREA                             */
-  /* -------------------------------- */
-
   areaCard: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN_SOFT,
@@ -1575,7 +1097,6 @@ const styles = StyleSheet.create({
     marginBottom: 17,
     padding: 12,
   },
-
   areaIconContainer: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1584,18 +1105,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 36,
   },
-
   areaContent: {
     flex: 1,
     marginHorizontal: 11,
   },
-
   areaLabel: {
     color: '#638370',
     fontSize: 9.5,
     textAlign: 'right',
   },
-
   areaValue: {
     color: '#1c5334',
     fontSize: 12,
@@ -1603,15 +1121,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
     textAlign: 'right',
   },
-
-  /* -------------------------------- */
-  /* PAYMENT                          */
-  /* -------------------------------- */
-
   paymentMethods: {
     gap: 9,
   },
-
   paymentMethod: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1623,17 +1135,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 10,
   },
-
   paymentMethodSelected: {
     backgroundColor: BRAND_GREEN_SOFT,
     borderColor: BRAND_GREEN,
     borderWidth: 1.25,
   },
-
   paymentMethodPressed: {
     opacity: 0.78,
   },
-
   paymentIconContainer: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1643,28 +1152,23 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: 40,
   },
-
   paymentMethodImage: {
     height: '100%',
     width: '100%',
   },
-
   paymentIcon: {
     fontSize: 19,
   },
-
   paymentContent: {
     flex: 1,
     marginHorizontal: 11,
   },
-
   paymentTitle: {
     color: '#262626',
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'right',
   },
-
   radioOuter: {
     alignItems: 'center',
     borderColor: '#b7b7b7',
@@ -1674,36 +1178,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 18,
   },
-
   radioOuterSelected: {
     borderColor: BRAND_GREEN,
   },
-
   radioInner: {
     backgroundColor: BRAND_GREEN,
     borderRadius: 4.5,
     height: 9,
     width: 9,
   },
-
   paymentError: {
     color: '#d64b4b',
     fontSize: 10,
     marginTop: 7,
     textAlign: 'right',
   },
-
-  /* -------------------------------- */
-  /* SUMMARY                          */
-  /* -------------------------------- */
-
   orderSummarySection: {
     borderBottomColor: '#f0f0f0',
     borderBottomWidth: 1,
     paddingHorizontal: 20,
     paddingVertical: 23,
   },
-
   orderSummaryTitle: {
     color: '#242424',
     fontSize: 18,
@@ -1711,70 +1206,55 @@ const styles = StyleSheet.create({
     marginBottom: 17,
     textAlign: 'right',
   },
-
   itemsSummary: {
     gap: 13,
   },
-
   summaryItem: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-
   summaryItemContent: {
     flex: 1,
     marginRight: 13,
   },
-
   summaryItemName: {
     color: '#343434',
     fontSize: 12.5,
     fontWeight: '600',
     textAlign: 'right',
   },
-
   summaryItemQuantity: {
     color: '#939393',
     fontSize: 9.5,
     marginTop: 3,
     textAlign: 'right',
   },
-
   summaryItemPrice: {
     color: '#343434',
     fontSize: 11.5,
     fontWeight: '700',
   },
-
   itemsDivider: {
     backgroundColor: '#eeeeee',
     height: 1,
     marginVertical: 17,
   },
-
   totalRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-
   totalLabel: {
     color: '#202020',
     fontSize: 14.5,
     fontWeight: '800',
   },
-
   totalValue: {
     color: '#202020',
     fontSize: 16,
     fontWeight: '900',
   },
-
-  /* -------------------------------- */
-  /* WHATSAPP                         */
-  /* -------------------------------- */
-
   whatsAppNotice: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN_SOFT,
@@ -1786,7 +1266,6 @@ const styles = StyleSheet.create({
     marginTop: 17,
     padding: 13,
   },
-
   whatsAppIconContainer: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -1795,19 +1274,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
-
   whatsAppNoticeContent: {
     flex: 1,
     marginLeft: 11,
   },
-
   whatsAppNoticeTitle: {
     color: '#1e3d2c',
     fontSize: 12,
     fontWeight: '800',
     textAlign: 'right',
   },
-
   whatsAppNoticeDescription: {
     color: '#638370',
     fontSize: 10.5,
@@ -1815,15 +1291,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
     textAlign: 'right',
   },
-
   bottomSpacer: {
     height: 28,
   },
-
-  /* -------------------------------- */
-  /* FIXED CTA                        */
-  /* -------------------------------- */
-
   bottomBar: {
     backgroundColor: '#ffffff',
     borderTopColor: '#eeeeee',
@@ -1836,25 +1306,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
   },
-
   bottomTotalRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 7,
   },
-
   bottomTotalLabel: {
     color: '#777777',
     fontSize: 10.5,
   },
-
   bottomTotalValue: {
     color: '#202020',
     fontSize: 14,
     fontWeight: '900',
   },
-
   submitButton: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN,
@@ -1864,21 +1330,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 52,
   },
-
   submitButtonPressed: {
     backgroundColor: BRAND_GREEN_DARK,
   },
-
   submitButtonDisabled: {
     opacity: 0.65,
   },
-
   submitButtonText: {
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '900',
   },
-
   buttonPressed: {
     opacity: 0.7,
   },

@@ -1,26 +1,27 @@
 import {
-    useFocusEffect,
-    useLocalSearchParams,
-    useRouter,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
 } from 'expo-router';
 import {
-    useCallback,
-    useState,
+  useCallback,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
+import { OrderDetailsScreenSkeleton } from '../../components/ui/loading-skeleton';
 import { getOrderByToken } from '../../services/order-service';
 import {
-    type OrderStatus,
-    useOrdersStore,
+  type OrderStatus,
+  useOrdersStore,
 } from '../../store/orders-store';
 import { openOrderInWhatsApp } from '../../utils/order-whatsapp';
 
@@ -380,25 +381,7 @@ export default function OrderDetailsScreen() {
     !hasHydrated ||
     (isRefreshing && !order)
   ) {
-    return (
-      <View style={styles.emptyScreen}>
-        <ActivityIndicator
-          size="large"
-          color="#6d56df"
-        />
-
-        <Text style={styles.emptyTitle}>
-          جاري تحميل الطلب
-        </Text>
-
-        <Text
-          style={styles.emptyDescription}
-        >
-          يتم جلب أحدث حالة وتفاصيل
-          الطلب من Supabase.
-        </Text>
-      </View>
-    );
+    return <OrderDetailsScreenSkeleton />;
   }
 
   if (!order) {
@@ -483,7 +466,6 @@ export default function OrderDetailsScreen() {
 
   const status =
     statusPresentation[order.status];
-
 
   return (
     <ScrollView
@@ -950,13 +932,20 @@ export default function OrderDetailsScreen() {
                   styles.whatsAppButtonIconContainer
                 }
               >
-                <Text
-                  style={
-                    styles.whatsAppButtonIcon
-                  }
-                >
-                  💬
-                </Text>
+                {isOpeningWhatsApp ? (
+                  <ActivityIndicator
+                    color="#25a952"
+                    size="small"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.whatsAppButtonIcon
+                    }
+                  >
+                    💬
+                  </Text>
+                )}
               </View>
 
               <Text
@@ -964,9 +953,7 @@ export default function OrderDetailsScreen() {
                   styles.whatsAppButtonText
                 }
               >
-                {isOpeningWhatsApp
-                  ? 'جاري فتح واتساب...'
-                  : 'إعادة فتح الطلب على واتساب'}
+                إعادة فتح الطلب على واتساب
               </Text>
             </Pressable>
           )}
@@ -1526,7 +1513,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-
   refreshButton: {
     alignItems: 'center',
     backgroundColor: '#eeeafd',
@@ -1567,5 +1553,4 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginLeft: 9,
   },
-
 });

@@ -10,7 +10,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Image,
   type ImageSourcePropType,
   Pressable,
@@ -23,6 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap from '../../services/bootstrap-service';
 
 import {
@@ -755,7 +755,7 @@ export default function SupermarketCategoryScreen() {
           0
         ) {
           throw new Error(
-            'No supermarket is currently available.',
+            'لا يوجد سوبر ماركت متاح حاليًا.',
           );
         }
 
@@ -793,7 +793,7 @@ export default function SupermarketCategoryScreen() {
 
       if (!section) {
         throw new Error(
-          'This supermarket category was not found.',
+          'لم يتم العثور على فئة السوبر ماركت المطلوبة.',
         );
       }
 
@@ -831,7 +831,7 @@ export default function SupermarketCategoryScreen() {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : 'Unable to load this category.',
+          : 'تعذر تحميل هذه الفئة.',
       );
     } finally {
       setIsLoading(false);
@@ -1012,30 +1012,7 @@ export default function SupermarketCategoryScreen() {
    */
 
   if (isLoading) {
-    return (
-      <SafeAreaView
-        style={
-          styles.stateScreen
-        }
-      >
-        <StatusBar
-          style="dark"
-        />
-
-        <ActivityIndicator
-          size="large"
-          color="#111111"
-        />
-
-        <Text
-          style={
-            styles.stateTitle
-          }
-        >
-          جاري تحميل المنتجات
-        </Text>
-      </SafeAreaView>
-    );
+    return <ProductGridScreenSkeleton />;
   }
 
   /* ==========================================================
