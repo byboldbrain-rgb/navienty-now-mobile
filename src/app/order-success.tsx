@@ -907,15 +907,15 @@ function StoreOrderSuccessScreen() {
                 NAVIENTY_NOW_COLORS.white
               }
             />
-          ) : (
-            <Text
-              style={
-                styles.statePrimaryButtonText
-              }
-            >
-              إعادة المحاولة
-            </Text>
-          )}
+          ) : null}
+
+          <Text
+            style={
+              styles.statePrimaryButtonText
+            }
+          >
+            إعادة المحاولة
+          </Text>
         </Pressable>
 
         <Pressable
@@ -1686,24 +1686,22 @@ function StoreOrderSuccessScreen() {
                     }
                   />
                 ) : (
-                  <>
-                    <Ionicons
-                      name="close-circle-outline"
-                      size={18}
-                      color={
-                        NAVIENTY_NOW_COLORS.error
-                      }
-                    />
-
-                    <Text
-                      style={
-                        styles.cancelOrderButtonText
-                      }
-                    >
-                      إلغاء الطلب
-                    </Text>
-                  </>
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={18}
+                    color={
+                      NAVIENTY_NOW_COLORS.error
+                    }
+                  />
                 )}
+
+                <Text
+                  style={
+                    styles.cancelOrderButtonText
+                  }
+                >
+                  إلغاء الطلب
+                </Text>
               </Pressable>
 
               <Text
@@ -2505,6 +2503,9 @@ const styles =
       backgroundColor:
         BRAND_GREEN,
       borderRadius: 20,
+      flexDirection:
+        'row-reverse',
+      gap: 8,
       justifyContent:
         'center',
       marginTop: 20,

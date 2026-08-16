@@ -14,10 +14,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -513,6 +515,61 @@ export default function LoginScreen() {
 
   const authState =
     useAuthSession();
+
+  const authLoadingPulse = useRef(
+    new Animated.Value(0.76),
+  ).current;
+
+  useEffect(() => {
+    const shouldAnimate =
+      authState.status === 'loading' ||
+      authState.status === 'signedIn';
+
+    if (!shouldAnimate) {
+      authLoadingPulse.stopAnimation();
+      authLoadingPulse.setValue(1);
+      return;
+    }
+
+    authLoadingPulse.setValue(0.76);
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(
+          authLoadingPulse,
+          {
+            toValue: 1,
+            duration: 650,
+            useNativeDriver: true,
+          },
+        ),
+        Animated.timing(
+          authLoadingPulse,
+          {
+            toValue: 0.76,
+            duration: 650,
+            useNativeDriver: true,
+          },
+        ),
+      ]),
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [
+    authLoadingPulse,
+    authState.status,
+  ]);
+
+  const authLoadingScale =
+    authLoadingPulse.interpolate({
+      inputRange: [0.76, 1],
+      outputRange: [0.985, 1],
+      extrapolate: 'clamp',
+    });
 
   const {
     height: screenHeight,
@@ -1178,22 +1235,26 @@ export default function LoginScreen() {
           style="dark"
         />
 
-        <Image
+        <Animated.Image
           accessibilityLabel="شعار Navienty Now"
           fadeDuration={0}
           resizeMode="contain"
           source={
             navientyNowHero
           }
-          style={
-            styles.loadingLogo
-          }
-        />
-
-        <ActivityIndicator
-          color={NAVIENTY_NOW_COLORS.primary}
-          size="small"
-          style={styles.loadingIndicator}
+          style={[
+            styles.loadingLogo,
+            {
+              opacity:
+                authLoadingPulse,
+              transform: [
+                {
+                  scale:
+                    authLoadingScale,
+                },
+              ],
+            },
+          ]}
         />
       </View>
     );
@@ -1735,33 +1796,34 @@ export default function LoginScreen() {
                     void sendOtp();
                   }}
                 >
-                  {isSubmitting ? (
-                    <ActivityIndicator
-                      color={
-                        NAVIENTY_NOW_COLORS.white
-                      }
-                    />
-                  ) : (
-                    <View
+                  <View
+                    style={
+                      styles.primaryButtonContent
+                    }
+                  >
+                    <Text
                       style={
-                        styles.primaryButtonContent
+                        styles.primaryButtonText
                       }
                     >
-                      <Text
-                        style={
-                          styles.primaryButtonText
-                        }
-                      >
-                        إرسال الرمز عبر WhatsApp
-                      </Text>
+                      إرسال الرمز عبر WhatsApp
+                    </Text>
 
+                    {isSubmitting ? (
+                      <ActivityIndicator
+                        color={
+                          NAVIENTY_NOW_COLORS.white
+                        }
+                        size="small"
+                      />
+                    ) : (
                       <FontAwesome
                         color="#FFFFFF"
                         name="whatsapp"
                         size={23}
                       />
-                    </View>
-                  )}
+                    )}
+                  </View>
                 </Pressable>
 
                 <Pressable
@@ -1923,13 +1985,11 @@ export default function LoginScreen() {
                     void verifyOtp();
                   }}
                 >
-                  {isSubmitting ? (
-                    <ActivityIndicator
-                      color={
-                        NAVIENTY_NOW_COLORS.white
-                      }
-                    />
-                  ) : (
+                  <View
+                    style={
+                      styles.primaryButtonContent
+                    }
+                  >
                     <Text
                       style={
                         styles.primaryButtonText
@@ -1937,7 +1997,22 @@ export default function LoginScreen() {
                     >
                       تأكيد الدخول
                     </Text>
-                  )}
+
+                    {isSubmitting ? (
+                      <ActivityIndicator
+                        color={
+                          NAVIENTY_NOW_COLORS.white
+                        }
+                        size="small"
+                      />
+                    ) : (
+                      <Ionicons
+                        color="#FFFFFF"
+                        name="checkmark-circle-outline"
+                        size={22}
+                      />
+                    )}
+                  </View>
                 </Pressable>
 
                 <Pressable
@@ -2804,10 +2879,5 @@ const styles =
 
       width:
         340,
-    },
-
-    loadingIndicator: {
-      marginTop:
-        17,
     },
   });

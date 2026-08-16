@@ -47,42 +47,36 @@ const statusPresentation: Record<
     textColor: '#7a5a13',
     dotColor: '#e5a328',
   },
-
   'waiting-confirmation': {
     title: 'في انتظار التأكيد',
     backgroundColor: '#f1efff',
     textColor: '#4f3db8',
     dotColor: '#6d56df',
   },
-
   confirmed: {
     title: 'تم التأكيد',
     backgroundColor: '#e9f7ee',
     textColor: '#246343',
     dotColor: '#25a952',
   },
-
   preparing: {
     title: 'جاري التجهيز',
     backgroundColor: '#fff3d6',
     textColor: '#7a5a13',
     dotColor: '#e5a328',
   },
-
   'out-for-delivery': {
     title: 'خرج للتوصيل',
     backgroundColor: '#eaf4ff',
     textColor: '#245f91',
     dotColor: '#3d8fd1',
   },
-
   delivered: {
     title: 'تم التوصيل',
     backgroundColor: '#e9f7ee',
     textColor: '#246343',
     dotColor: '#25a952',
   },
-
   cancelled: {
     title: 'ملغي',
     backgroundColor: '#fdecec',
@@ -109,44 +103,24 @@ const arabicMonthNames = [
 function formatOrderDate(
   isoDate: string,
 ): string {
-  const date = new Date(
-    isoDate,
-  );
+  const date = new Date(isoDate);
 
-  if (
-    Number.isNaN(
-      date.getTime(),
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return 'تاريخ غير متاح';
   }
 
-  const day =
-    date.getDate();
-
+  const day = date.getDate();
   const month =
-    arabicMonthNames[
-      date.getMonth()
-    ];
+    arabicMonthNames[date.getMonth()];
+  const year = date.getFullYear();
 
-  const year =
-    date.getFullYear();
-
-  let hours =
-    date.getHours();
-
-  const minutes =
-    String(
-      date.getMinutes(),
-    ).padStart(
-      2,
-      '0',
-    );
+  let hours = date.getHours();
+  const minutes = String(
+    date.getMinutes(),
+  ).padStart(2, '0');
 
   const period =
-    hours >= 12
-      ? 'م'
-      : 'ص';
+    hours >= 12 ? 'م' : 'ص';
 
   hours %= 12;
 
@@ -165,19 +139,13 @@ function OrderCard({
   onPress: () => void;
 }) {
   const status =
-    statusPresentation[
-      order.status
-    ];
+    statusPresentation[order.status];
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={
-        `فتح تفاصيل الطلب ${order.orderCode}`
-      }
-      style={( {
-        pressed,
-      }) => [
+      accessibilityLabel={`فتح تفاصيل الطلب ${order.orderCode}`}
+      style={({ pressed }) => [
         styles.orderCard,
         pressed &&
           styles.orderCardPressed,
@@ -185,22 +153,15 @@ function OrderCard({
       onPress={onPress}
     >
       <View
-        style={
-          styles.orderCardHeader
-        }
+        style={styles.orderCardHeader}
       >
         <View
           style={
             styles.storeIconContainer
           }
         >
-          <Text
-            style={
-              styles.storeIcon
-            }
-          >
-            {order.storeIcon ||
-              '🏪'}
+          <Text style={styles.storeIcon}>
+            {order.storeIcon || '🏪'}
           </Text>
         </View>
 
@@ -211,18 +172,14 @@ function OrderCard({
         >
           <Text
             numberOfLines={1}
-            style={
-              styles.storeName
-            }
+            style={styles.storeName}
           >
             {order.storeName}
           </Text>
 
           <Text
             numberOfLines={1}
-            style={
-              styles.orderDate
-            }
+            style={styles.orderDate}
           >
             {formatOrderDate(
               order.submittedAt ??
@@ -233,9 +190,7 @@ function OrderCard({
       </View>
 
       <View
-        style={
-          styles.orderNumberRow
-        }
+        style={styles.orderNumberRow}
       >
         <Text
           selectable
@@ -256,62 +211,44 @@ function OrderCard({
       </View>
 
       <View
-        style={
-          styles.orderDivider
-        }
+        style={styles.orderDivider}
       />
 
       <View
-        style={
-          styles.orderMetaRow
-        }
+        style={styles.orderMetaRow}
       >
         <View
-          style={
-            styles.orderMetaItem
-          }
+          style={styles.orderMetaItem}
         >
           <Text
-            style={
-              styles.orderMetaValue
-            }
+            style={styles.orderMetaValue}
           >
             {order.itemCount}
           </Text>
 
           <Text
-            style={
-              styles.orderMetaLabel
-            }
+            style={styles.orderMetaLabel}
           >
             عدد المنتجات
           </Text>
         </View>
 
         <View
-          style={
-            styles.orderMetaDivider
-          }
+          style={styles.orderMetaDivider}
         />
 
         <View
-          style={
-            styles.orderMetaItem
-          }
+          style={styles.orderMetaItem}
         >
           <Text
-            style={
-              styles.orderMetaValue
-            }
+            style={styles.orderMetaValue}
           >
             {order.total}{' '}
             {order.currencySymbol}
           </Text>
 
           <Text
-            style={
-              styles.orderMetaLabel
-            }
+            style={styles.orderMetaLabel}
           >
             الإجمالي
           </Text>
@@ -319,9 +256,7 @@ function OrderCard({
       </View>
 
       <View
-        style={
-          styles.orderFooter
-        }
+        style={styles.orderFooter}
       >
         <View
           style={[
@@ -356,9 +291,7 @@ function OrderCard({
         </View>
 
         <View
-          style={
-            styles.detailsLink
-          }
+          style={styles.detailsLink}
         >
           <Text
             style={
@@ -382,17 +315,12 @@ function OrderCard({
 }
 
 export default function OrdersScreen() {
-  const router =
-    useRouter();
+  const router = useRouter();
+  const authState = useAuthSession();
 
-  const authState =
-    useAuthSession();
-
-  const orders =
-    useOrdersStore(
-      (state) =>
-        state.orders,
-    );
+  const orders = useOrdersStore(
+    (state) => state.orders,
+  );
 
   const pendingOrder =
     useOrdersStore(
@@ -412,28 +340,23 @@ export default function OrdersScreen() {
   ] = useState(false);
 
   const [
+    hasCompletedInitialSync,
+    setHasCompletedInitialSync,
+  ] = useState(false);
+
+  const [
     refreshMessage,
     setRefreshMessage,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(null);
 
   const currentUserId =
     authState.status ===
       'anonymous' ||
     authState.status ===
       'signedIn'
-      ? authState.session
-          .user.id
+      ? authState.session.user.id
       : null;
 
-  /**
-   * Scope the persisted cache to the current Supabase identity.
-   *
-   * This is especially important now that anonymous users are real
-   * authenticated Supabase users. If the identity ever changes, a
-   * previous user's cached orders must not remain visible.
-   */
   useEffect(() => {
     if (
       !hasHydrated ||
@@ -447,30 +370,29 @@ export default function OrdersScreen() {
       .prepareForUser(
         currentUserId,
       );
+
+    setHasCompletedInitialSync(false);
   }, [
     currentUserId,
     hasHydrated,
   ]);
 
-  /**
-   * Server-first sync:
-   *
-   * - Supabase now.get_my_orders() is the source of truth.
-   * - Zustand/AsyncStorage remains the offline cache.
-   * - If the request fails, the last local copy remains visible.
-   */
+  useEffect(() => {
+    if (
+      authState.status === 'error'
+    ) {
+      setHasCompletedInitialSync(true);
+    }
+  }, [authState.status]);
+
   const refreshOrders =
     useCallback(
       async () => {
-        if (
-          !hasHydrated
-        ) {
+        if (!hasHydrated) {
           return;
         }
 
-        if (
-          !currentUserId
-        ) {
+        if (!currentUserId) {
           if (
             authState.status ===
             'error'
@@ -481,25 +403,20 @@ export default function OrdersScreen() {
             );
           }
 
+          setHasCompletedInitialSync(true);
           return;
         }
 
         const store =
-          useOrdersStore
-            .getState();
+          useOrdersStore.getState();
 
         store.prepareForUser(
           currentUserId,
         );
 
         try {
-          setIsRefreshing(
-            true,
-          );
-
-          setRefreshMessage(
-            null,
-          );
+          setIsRefreshing(true);
+          setRefreshMessage(null);
 
           const serverOrders =
             await getMyOrders();
@@ -520,9 +437,8 @@ export default function OrdersScreen() {
             `${message} يتم عرض آخر نسخة محفوظة على الجهاز إن وجدت.`,
           );
         } finally {
-          setIsRefreshing(
-            false,
-          );
+          setIsRefreshing(false);
+          setHasCompletedInitialSync(true);
         }
       },
       [
@@ -596,28 +512,28 @@ export default function OrdersScreen() {
     router.push({
       pathname:
         '/order/[id]',
-
       params: {
-        id:
-          orderId,
+        id: orderId,
       },
     });
   }
 
-  if (
+  const shouldShowInitialSkeleton =
     !hasHydrated ||
     authState.status ===
-      'loading'
-  ) {
+      'loading' ||
+    (
+      !hasCompletedInitialSync &&
+      sortedOrders.length === 0 &&
+      !pendingOrder
+    );
+
+  if (shouldShowInitialSkeleton) {
     return <OrdersScreenSkeleton />;
   }
 
   return (
-    <View
-      style={
-        styles.screen
-      }
-    >
+    <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={
           styles.pageContent
@@ -626,20 +542,12 @@ export default function OrdersScreen() {
           false
         }
       >
-        <View
-          style={
-            styles.container
-          }
-        >
-          <View
-            style={
-              styles.topBar
-            }
-          >
+        <View style={styles.container}>
+          <View style={styles.topBar}>
             <Pressable
-              style={( {
-                pressed,
-              }) => [
+              accessibilityLabel="العودة"
+              accessibilityRole="button"
+              style={({ pressed }) => [
                 styles.backButton,
                 pressed &&
                   styles.buttonPressed,
@@ -648,32 +556,20 @@ export default function OrdersScreen() {
                 router.back()
               }
             >
-              <Text
-                style={
-                  styles.backIcon
-                }
-              >
+              <Text style={styles.backIcon}>
                 ›
               </Text>
             </Pressable>
 
             <View
-              style={
-                styles.titleContainer
-              }
+              style={styles.titleContainer}
             >
-              <Text
-                style={
-                  styles.pageTitle
-                }
-              >
+              <Text style={styles.pageTitle}>
                 طلباتي
               </Text>
 
               <Text
-                style={
-                  styles.pageSubtitle
-                }
+                style={styles.pageSubtitle}
               >
                 محفوظة على Supabase
                 ومحدثة لهذا الحساب
@@ -681,20 +577,18 @@ export default function OrdersScreen() {
             </View>
 
             <Pressable
+              accessibilityLabel="تحديث الطلبات"
+              accessibilityRole="button"
               disabled={
                 isRefreshing ||
                 !currentUserId
               }
-              style={( {
-                pressed,
-              }) => [
+              style={({ pressed }) => [
                 styles.refreshButton,
-
                 pressed &&
                   !isRefreshing &&
                   currentUserId &&
                   styles.buttonPressed,
-
                 !currentUserId &&
                   styles.refreshButtonDisabled,
               ]}
@@ -709,9 +603,7 @@ export default function OrdersScreen() {
                 />
               ) : (
                 <Text
-                  style={
-                    styles.refreshIcon
-                  }
+                  style={styles.refreshIcon}
                 >
                   ↻
                 </Text>
@@ -721,24 +613,16 @@ export default function OrdersScreen() {
 
           {refreshMessage && (
             <View
-              style={
-                styles.warningCard
-              }
+              style={styles.warningCard}
             >
               <Text
-                style={
-                  styles.warningText
-                }
+                style={styles.warningText}
               >
-                {
-                  refreshMessage
-                }
+                {refreshMessage}
               </Text>
 
               <Text
-                style={
-                  styles.warningIcon
-                }
+                style={styles.warningIcon}
               >
                 ⚠️
               </Text>
@@ -747,9 +631,7 @@ export default function OrdersScreen() {
 
           {pendingOrder && (
             <View
-              style={
-                styles.pendingCard
-              }
+              style={styles.pendingCard}
             >
               <View
                 style={
@@ -806,9 +688,7 @@ export default function OrdersScreen() {
                     styles.pendingOrderValue
                   }
                 >
-                  {
-                    pendingOrder.orderCode
-                  }
+                  {pendingOrder.orderCode}
                 </Text>
 
                 <Text
@@ -821,11 +701,9 @@ export default function OrdersScreen() {
               </View>
 
               <Pressable
-                style={( {
-                  pressed,
-                }) => [
+                accessibilityRole="button"
+                style={({ pressed }) => [
                   styles.pendingButton,
-
                   pressed &&
                     styles.buttonPressed,
                 ]}
@@ -847,29 +725,19 @@ export default function OrdersScreen() {
           {sortedOrders.length >
             0 && (
             <View
-              style={
-                styles.summaryCard
-              }
+              style={styles.summaryCard}
             >
               <View
-                style={
-                  styles.summaryItem
-                }
+                style={styles.summaryItem}
               >
                 <Text
-                  style={
-                    styles.summaryValue
-                  }
+                  style={styles.summaryValue}
                 >
-                  {
-                    orders.length
-                  }
+                  {orders.length}
                 </Text>
 
                 <Text
-                  style={
-                    styles.summaryLabel
-                  }
+                  style={styles.summaryLabel}
                 >
                   إجمالي الطلبات
                 </Text>
@@ -882,24 +750,16 @@ export default function OrdersScreen() {
               />
 
               <View
-                style={
-                  styles.summaryItem
-                }
+                style={styles.summaryItem}
               >
                 <Text
-                  style={
-                    styles.summaryValue
-                  }
+                  style={styles.summaryValue}
                 >
-                  {
-                    activeOrdersCount
-                  }
+                  {activeOrdersCount}
                 </Text>
 
                 <Text
-                  style={
-                    styles.summaryLabel
-                  }
+                  style={styles.summaryLabel}
                 >
                   طلبات نشطة
                 </Text>
@@ -907,105 +767,71 @@ export default function OrdersScreen() {
             </View>
           )}
 
-          {sortedOrders.length ===
-          0 ? (
-            <View
-              style={
-                styles.emptyCard
-              }
-            >
-              {isRefreshing ? (
-                <ActivityIndicator
-                  size="large"
-                  color="#6d56df"
-                />
-              ) : (
-                <>
-                  <View
-                    style={
-                      styles.emptyIconContainer
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.emptyIcon
-                      }
-                    >
-                      🧾
-                    </Text>
-                  </View>
+          {sortedOrders.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View
+                style={
+                  styles.emptyIconContainer
+                }
+              >
+                <Text
+                  style={styles.emptyIcon}
+                >
+                  🧾
+                </Text>
+              </View>
 
-                  <Text
-                    style={
-                      styles.emptyTitle
-                    }
-                  >
-                    لا توجد طلبات
-                  </Text>
+              <Text style={styles.emptyTitle}>
+                لا توجد طلبات
+              </Text>
 
-                  <Text
-                    style={
-                      styles.emptyDescription
-                    }
-                  >
-                    بعد إنشاء أول طلب
-                    سيظهر هنا تلقائيًا،
-                    وسيتم حفظه على
-                    Supabase لهذا الحساب.
-                  </Text>
+              <Text
+                style={
+                  styles.emptyDescription
+                }
+              >
+                بعد إنشاء أول طلب
+                سيظهر هنا تلقائيًا،
+                وسيتم حفظه على
+                Supabase لهذا الحساب.
+              </Text>
 
-                  <Pressable
-                    style={( {
-                      pressed,
-                    }) => [
-                      styles.shopButton,
-
-                      pressed &&
-                        styles.buttonPressed,
-                    ]}
-                    onPress={
-                      returnToHome
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.shopButtonText
-                      }
-                    >
-                      العودة للتسوق
-                    </Text>
-                  </Pressable>
-                </>
-              )}
+              <Pressable
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.shopButton,
+                  pressed &&
+                    styles.buttonPressed,
+                ]}
+                onPress={returnToHome}
+              >
+                <Text
+                  style={
+                    styles.shopButtonText
+                  }
+                >
+                  العودة للتسوق
+                </Text>
+              </Pressable>
             </View>
           ) : (
             <View
-              style={
-                styles.ordersSection
-              }
+              style={styles.ordersSection}
             >
               <Text
-                style={
-                  styles.sectionTitle
-                }
+                style={styles.sectionTitle}
               >
                 سجل الطلبات
               </Text>
 
               <View
-                style={
-                  styles.ordersList
-                }
+                style={styles.ordersList}
               >
                 {sortedOrders.map(
                   (order) => (
                     <OrderCard
-                      key={
-                        order.id
-                      }
-                      order={
-                        order
-                      }
+                      key={order.id}
+                      order={order}
                       onPress={() =>
                         openOrderDetails(
                           order.id,
@@ -1032,876 +858,477 @@ const styles =
     screen: {
       backgroundColor:
         '#f7f7fa',
-
       flex: 1,
     },
 
     pageContent: {
       flexGrow: 1,
-
       paddingBottom:
         NAVIENTY_NOW_LAYOUT
           .bottomNavigationHeight +
         58,
-
-      paddingHorizontal:
-        18,
-
-      paddingTop:
-        42,
+      paddingHorizontal: 18,
+      paddingTop: 42,
     },
 
     container: {
-      alignSelf:
-        'center',
-
-      maxWidth:
-        520,
-
-      width:
-        '100%',
+      alignSelf: 'center',
+      maxWidth: 520,
+      width: '100%',
     },
 
     topBar: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
+      alignItems: 'center',
+      flexDirection: 'row',
       justifyContent:
         'space-between',
     },
 
     backButton: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#eeeafd',
-
-      borderRadius:
-        14,
-
-      height:
-        44,
-
-      justifyContent:
-        'center',
-
-      width:
-        44,
+      borderRadius: 14,
+      height: 44,
+      justifyContent: 'center',
+      width: 44,
     },
 
     backIcon: {
-      color:
-        '#5d47d2',
-
-      fontSize:
-        33,
-
-      lineHeight:
-        35,
+      color: '#5d47d2',
+      fontSize: 33,
+      lineHeight: 35,
     },
 
     titleContainer: {
-      alignItems:
-        'center',
-
-      flex:
-        1,
-
-      marginHorizontal:
-        12,
+      alignItems: 'center',
+      flex: 1,
+      marginHorizontal: 12,
     },
 
     pageTitle: {
-      color:
-        '#202025',
-
-      fontSize:
-        23,
-
-      fontWeight:
-        '900',
-
-      textAlign:
-        'center',
+      color: '#202025',
+      fontSize: 23,
+      fontWeight: '900',
+      textAlign: 'center',
     },
 
     pageSubtitle: {
-      color:
-        '#898992',
-
-      fontSize:
-        10,
-
-      marginTop:
-        4,
-
-      textAlign:
-        'center',
+      color: '#898992',
+      fontSize: 10,
+      marginTop: 4,
+      textAlign: 'center',
     },
 
     pendingCard: {
       backgroundColor:
         '#fff3d6',
-
-      borderColor:
-        '#f1d58f',
-
-      borderRadius:
-        22,
-
-      borderWidth:
-        1,
-
-      marginTop:
-        25,
-
-      padding:
-        17,
+      borderColor: '#f1d58f',
+      borderRadius: 22,
+      borderWidth: 1,
+      marginTop: 25,
+      padding: 17,
     },
 
     pendingCardHeader: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
+      alignItems: 'center',
+      flexDirection: 'row',
     },
 
     pendingIconContainer: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#ffffff',
-
-      borderRadius:
-        15,
-
-      height:
-        52,
-
-      justifyContent:
-        'center',
-
-      width:
-        52,
+      borderRadius: 15,
+      height: 52,
+      justifyContent: 'center',
+      width: 52,
     },
 
     pendingIcon: {
-      fontSize:
-        25,
+      fontSize: 25,
     },
 
     pendingCardContent: {
-      flex:
-        1,
-
-      marginLeft:
-        13,
+      flex: 1,
+      marginLeft: 13,
     },
 
     pendingTitle: {
-      color:
-        '#7a5a13',
-
-      fontSize:
-        15,
-
-      fontWeight:
-        '900',
-
-      textAlign:
-        'right',
+      color: '#7a5a13',
+      fontSize: 15,
+      fontWeight: '900',
+      textAlign: 'right',
     },
 
     pendingDescription: {
-      color:
-        '#977329',
-
-      fontSize:
-        10,
-
-      lineHeight:
-        17,
-
-      marginTop:
-        4,
-
-      textAlign:
-        'right',
+      color: '#977329',
+      fontSize: 10,
+      lineHeight: 17,
+      marginTop: 4,
+      textAlign: 'right',
     },
 
     pendingOrderRow: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#fff9ec',
-
-      borderRadius:
-        13,
-
-      flexDirection:
-        'row',
-
+      borderRadius: 13,
+      flexDirection: 'row',
       justifyContent:
         'space-between',
-
-      marginTop:
-        14,
-
-      paddingHorizontal:
-        12,
-
-      paddingVertical:
-        10,
+      marginTop: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
 
     pendingOrderValue: {
-      color:
-        '#7a5a13',
-
-      fontSize:
-        11,
-
-      fontWeight:
-        '900',
+      color: '#7a5a13',
+      fontSize: 11,
+      fontWeight: '900',
     },
 
     pendingOrderLabel: {
-      color:
-        '#977329',
-
-      fontSize:
-        10,
+      color: '#977329',
+      fontSize: 10,
     },
 
     pendingButton: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#e5a328',
-
-      borderRadius:
-        14,
-
-      marginTop:
-        12,
-
-      paddingHorizontal:
-        16,
-
-      paddingVertical:
-        12,
+      borderRadius: 14,
+      marginTop: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
     },
 
     pendingButtonText: {
-      color:
-        '#ffffff',
-
-      fontSize:
-        13,
-
-      fontWeight:
-        '900',
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '900',
     },
 
     summaryCard: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#6d56df',
-
-      borderRadius:
-        22,
-
-      flexDirection:
-        'row',
-
-      marginTop:
-        20,
-
-      paddingVertical:
-        18,
+      borderRadius: 22,
+      flexDirection: 'row',
+      marginTop: 20,
+      paddingVertical: 18,
     },
 
     summaryItem: {
-      alignItems:
-        'center',
-
-      flex:
-        1,
+      alignItems: 'center',
+      flex: 1,
     },
 
     summaryValue: {
-      color:
-        '#ffffff',
-
-      fontSize:
-        21,
-
-      fontWeight:
-        '900',
+      color: '#ffffff',
+      fontSize: 21,
+      fontWeight: '900',
     },
 
     summaryLabel: {
-      color:
-        '#e6e2ff',
-
-      fontSize:
-        10,
-
-      marginTop:
-        4,
+      color: '#e6e2ff',
+      fontSize: 10,
+      marginTop: 4,
     },
 
     summaryDivider: {
       backgroundColor:
         '#8e7ae8',
-
-      height:
-        38,
-
-      width:
-        1,
+      height: 38,
+      width: 1,
     },
 
     ordersSection: {
-      marginTop:
-        27,
+      marginTop: 27,
     },
 
     sectionTitle: {
-      color:
-        '#202025',
-
-      fontSize:
-        20,
-
-      fontWeight:
-        '900',
-
-      marginBottom:
-        14,
-
-      textAlign:
-        'right',
+      color: '#202025',
+      fontSize: 20,
+      fontWeight: '900',
+      marginBottom: 14,
+      textAlign: 'right',
     },
 
     ordersList: {
-      gap:
-        14,
+      gap: 14,
     },
 
     orderCard: {
       backgroundColor:
         '#ffffff',
-
-      borderColor:
-        '#ececf1',
-
-      borderRadius:
-        22,
-
-      borderWidth:
-        1,
-
-      padding:
-        17,
+      borderColor: '#ececf1',
+      borderRadius: 22,
+      borderWidth: 1,
+      padding: 17,
     },
 
     orderCardPressed: {
-      opacity:
-        0.78,
-
+      opacity: 0.78,
       transform: [
         {
-          scale:
-            0.99,
+          scale: 0.99,
         },
       ],
     },
 
     orderCardHeader: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
+      alignItems: 'center',
+      flexDirection: 'row',
     },
 
     storeIconContainer: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#f1efff',
-
-      borderRadius:
-        16,
-
-      height:
-        58,
-
-      justifyContent:
-        'center',
-
-      width:
-        58,
+      borderRadius: 16,
+      height: 58,
+      justifyContent: 'center',
+      width: 58,
     },
 
     storeIcon: {
-      fontSize:
-        28,
+      fontSize: 28,
     },
 
     orderHeaderContent: {
-      flex:
-        1,
-
-      marginLeft:
-        13,
+      flex: 1,
+      marginLeft: 13,
     },
 
     storeName: {
-      color:
-        '#24242a',
-
-      fontSize:
-        16,
-
-      fontWeight:
-        '900',
-
-      textAlign:
-        'right',
+      color: '#24242a',
+      fontSize: 16,
+      fontWeight: '900',
+      textAlign: 'right',
     },
 
     orderDate: {
-      color:
-        '#898992',
-
-      fontSize:
-        9,
-
-      marginTop:
-        5,
-
-      textAlign:
-        'right',
+      color: '#898992',
+      fontSize: 9,
+      marginTop: 5,
+      textAlign: 'right',
     },
 
     orderNumberRow: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#f7f7fa',
-
-      borderRadius:
-        13,
-
-      flexDirection:
-        'row',
-
+      borderRadius: 13,
+      flexDirection: 'row',
       justifyContent:
         'space-between',
-
-      marginTop:
-        14,
-
-      paddingHorizontal:
-        12,
-
-      paddingVertical:
-        10,
+      marginTop: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
 
     orderNumberValue: {
-      color:
-        '#5d47d2',
-
-      fontSize:
-        11,
-
-      fontWeight:
-        '900',
+      color: '#5d47d2',
+      fontSize: 11,
+      fontWeight: '900',
     },
 
     orderNumberLabel: {
-      color:
-        '#898992',
-
-      fontSize:
-        10,
+      color: '#898992',
+      fontSize: 10,
     },
 
     orderDivider: {
       backgroundColor:
         '#eeeeF2',
-
-      height:
-        1,
-
-      marginVertical:
-        15,
+      height: 1,
+      marginVertical: 15,
     },
 
     orderMetaRow: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
+      alignItems: 'center',
+      flexDirection: 'row',
     },
 
     orderMetaItem: {
-      alignItems:
-        'center',
-
-      flex:
-        1,
+      alignItems: 'center',
+      flex: 1,
     },
 
     orderMetaValue: {
-      color:
-        '#303036',
-
-      fontSize:
-        15,
-
-      fontWeight:
-        '900',
+      color: '#303036',
+      fontSize: 15,
+      fontWeight: '900',
     },
 
     orderMetaLabel: {
-      color:
-        '#898992',
-
-      fontSize:
-        9,
-
-      marginTop:
-        4,
+      color: '#898992',
+      fontSize: 9,
+      marginTop: 4,
     },
 
     orderMetaDivider: {
       backgroundColor:
         '#e5e5eb',
-
-      height:
-        32,
-
-      width:
-        1,
+      height: 32,
+      width: 1,
     },
 
     orderFooter: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
-
+      alignItems: 'center',
+      flexDirection: 'row',
       justifyContent:
         'space-between',
-
-      marginTop:
-        15,
+      marginTop: 15,
     },
 
     statusBadge: {
-      alignItems:
-        'center',
-
-      borderRadius:
-        13,
-
-      flexDirection:
-        'row',
-
-      paddingHorizontal:
-        11,
-
-      paddingVertical:
-        8,
+      alignItems: 'center',
+      borderRadius: 13,
+      flexDirection: 'row',
+      paddingHorizontal: 11,
+      paddingVertical: 8,
     },
 
     statusDot: {
-      borderRadius:
-        4,
-
-      height:
-        8,
-
-      marginRight:
-        7,
-
-      width:
-        8,
+      borderRadius: 4,
+      height: 8,
+      marginRight: 7,
+      width: 8,
     },
 
     statusText: {
-      fontSize:
-        10,
-
-      fontWeight:
-        '900',
+      fontSize: 10,
+      fontWeight: '900',
     },
 
     detailsLink: {
-      alignItems:
-        'center',
-
-      flexDirection:
-        'row',
+      alignItems: 'center',
+      flexDirection: 'row',
     },
 
     detailsLinkText: {
-      color:
-        '#6d56df',
-
-      fontSize:
-        10,
-
-      fontWeight:
-        '900',
+      color: '#6d56df',
+      fontSize: 10,
+      fontWeight: '900',
     },
 
     detailsLinkArrow: {
-      color:
-        '#6d56df',
-
-      fontSize:
-        22,
-
-      lineHeight:
-        24,
-
-      marginLeft:
-        5,
+      color: '#6d56df',
+      fontSize: 22,
+      lineHeight: 24,
+      marginLeft: 5,
     },
 
     emptyCard: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#ffffff',
-
-      borderRadius:
-        26,
-
-      marginTop:
-        30,
-
-      minHeight:
-        230,
-
-      justifyContent:
-        'center',
-
-      padding:
-        25,
+      borderRadius: 26,
+      justifyContent: 'center',
+      marginTop: 30,
+      minHeight: 230,
+      padding: 25,
     },
 
     emptyIconContainer: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#eeeafd',
-
-      borderRadius:
-        42,
-
-      height:
-        84,
-
-      justifyContent:
-        'center',
-
-      width:
-        84,
+      borderRadius: 42,
+      height: 84,
+      justifyContent: 'center',
+      width: 84,
     },
 
     emptyIcon: {
-      fontSize:
-        39,
+      fontSize: 39,
     },
 
     emptyTitle: {
-      color:
-        '#222228',
-
-      fontSize:
-        22,
-
-      fontWeight:
-        '900',
-
-      marginTop:
-        19,
-
-      textAlign:
-        'center',
+      color: '#222228',
+      fontSize: 22,
+      fontWeight: '900',
+      marginTop: 19,
+      textAlign: 'center',
     },
 
     emptyDescription: {
-      color:
-        '#777781',
-
-      fontSize:
-        12,
-
-      lineHeight:
-        20,
-
-      marginTop:
-        8,
-
-      maxWidth:
-        340,
-
-      textAlign:
-        'center',
+      color: '#777781',
+      fontSize: 12,
+      lineHeight: 20,
+      marginTop: 8,
+      maxWidth: 340,
+      textAlign: 'center',
     },
 
     shopButton: {
-      alignItems:
-        'center',
-
-      alignSelf:
-        'stretch',
-
+      alignItems: 'center',
+      alignSelf: 'stretch',
       backgroundColor:
         '#6d56df',
-
-      borderRadius:
-        16,
-
-      marginTop:
-        21,
-
-      paddingHorizontal:
-        18,
-
-      paddingVertical:
-        14,
+      borderRadius: 16,
+      marginTop: 21,
+      paddingHorizontal: 18,
+      paddingVertical: 14,
     },
 
     shopButtonText: {
-      color:
-        '#ffffff',
-
-      fontSize:
-        14,
-
-      fontWeight:
-        '900',
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '900',
     },
 
     buttonPressed: {
-      opacity:
-        0.75,
+      opacity: 0.75,
     },
 
     refreshButton: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#eeeafd',
-
-      borderRadius:
-        14,
-
-      height:
-        44,
-
-      justifyContent:
-        'center',
-
-      width:
-        44,
+      borderRadius: 14,
+      height: 44,
+      justifyContent: 'center',
+      width: 44,
     },
 
     refreshButtonDisabled: {
-      opacity:
-        0.45,
+      opacity: 0.45,
     },
 
     refreshIcon: {
-      color:
-        '#5d47d2',
-
-      fontSize:
-        24,
-
-      fontWeight:
-        '900',
-
-      lineHeight:
-        27,
+      color: '#5d47d2',
+      fontSize: 24,
+      fontWeight: '900',
+      lineHeight: 27,
     },
 
     warningCard: {
-      alignItems:
-        'center',
-
+      alignItems: 'center',
       backgroundColor:
         '#fff3d6',
-
-      borderRadius:
-        15,
-
-      flexDirection:
-        'row',
-
+      borderRadius: 15,
+      flexDirection: 'row',
       justifyContent:
         'flex-end',
-
-      marginTop:
-        18,
-
-      paddingHorizontal:
-        14,
-
-      paddingVertical:
-        12,
+      marginTop: 18,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
 
     warningText: {
-      color:
-        '#7a5a13',
-
-      flex:
-        1,
-
-      fontSize:
-        10,
-
-      fontWeight:
-        '600',
-
-      lineHeight:
-        17,
-
-      textAlign:
-        'right',
+      color: '#7a5a13',
+      flex: 1,
+      fontSize: 10,
+      fontWeight: '600',
+      lineHeight: 17,
+      textAlign: 'right',
     },
 
     warningIcon: {
-      fontSize:
-        18,
-
-      marginLeft:
-        9,
+      fontSize: 18,
+      marginLeft: 9,
     },
   });

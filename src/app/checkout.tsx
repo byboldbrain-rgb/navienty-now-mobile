@@ -2339,23 +2339,21 @@ function StoreCheckoutScreen() {
                 color="#ffffff"
               />
             ) : (
-              <>
-                <Ionicons
-                  name="logo-whatsapp"
-                  size={22}
-                  color="#ffffff"
-                />
-
-                <Text
-                  style={
-                    styles.submitButtonText
-                  }
-                  numberOfLines={1}
-                >
-                  إرسال الطلب
-                </Text>
-              </>
+              <Ionicons
+                name="logo-whatsapp"
+                size={22}
+                color="#ffffff"
+              />
             )}
+
+            <Text
+              style={
+                styles.submitButtonText
+              }
+              numberOfLines={1}
+            >
+              إرسال الطلب
+            </Text>
           </Pressable>
         </View>
       </View>
