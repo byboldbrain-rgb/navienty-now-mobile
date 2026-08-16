@@ -35,6 +35,7 @@ import {
 import {
   useCartStore,
 } from '../../store/cart-store';
+import { useCustomerStore } from '../../store/customer-store';
 
 const CATEGORY_ROWS = 3;
 
@@ -738,6 +739,12 @@ export default function SupermarketScreen() {
     setErrorMessage,
   ] = useState<string | null>(null);
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const cartStore = useCartStore();
 
   const cartItems =
@@ -761,6 +768,7 @@ export default function SupermarketScreen() {
         await getAppBootstrap();
 
       const defaultServiceAreaId =
+        savedServiceAreaId ??
         bootstrap.settings
           .default_service_area_id ??
         undefined;
@@ -839,7 +847,7 @@ export default function SupermarketScreen() {
 
   useEffect(() => {
     void loadSupermarket();
-  }, []);
+  }, [savedServiceAreaId]);
 
   const categories = useMemo<
     CategoryDisplayItem[]
@@ -1711,10 +1719,6 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
 
-  /**
-   * Small horizontal margin exactly like
-   * the reference design.
-   */
   promotionBannerFrame: {
     marginHorizontal: 9,
     overflow: 'hidden',
@@ -1725,13 +1729,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
-  /**
-   * Negative margin is supplied dynamically
-   * from promotionProductsOverlap.
-   *
-   * This places the cards inside the
-   * lower portion of the banner.
-   */
   promotionProductsScroll: {
     overflow: 'visible',
   },
@@ -1775,9 +1772,6 @@ const styles = StyleSheet.create({
     fontSize: 34,
   },
 
-  /**
-   * Compact lime "Save X%" badge.
-   */
   featuredDiscountBadge: {
     alignItems: 'center',
     backgroundColor: '#BFFF00',
@@ -1799,9 +1793,6 @@ const styles = StyleSheet.create({
     lineHeight: 11,
   },
 
-  /**
-   * Compact circular + button.
-   */
   featuredAddButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1846,9 +1837,6 @@ const styles = StyleSheet.create({
     marginTop: -2,
   },
 
-  /**
-   * Compact quantity controller.
-   */
   featuredQuantityPill: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1893,10 +1881,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  /**
-   * Small product typography to match
-   * the second reference screenshot.
-   */
   featuredProductName: {
     color: '#202020',
     fontSize: 10.5,
@@ -1935,12 +1919,6 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     writingDirection: 'ltr',
   },
-
-  /**
-   * --------------------------------------------------
-   * CART
-   * --------------------------------------------------
-   */
 
   cartBarFloatingWrapper: {
     bottom: 12,
@@ -2026,12 +2004,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-
-  /**
-   * --------------------------------------------------
-   * STATES
-   * --------------------------------------------------
-   */
 
   stateScreen: {
     alignItems: 'center',

@@ -5,34 +5,41 @@ import {
   persist,
 } from 'zustand/middleware';
 
-export type PaymentMethodId =
-  string;
+export type PaymentMethodId = string;
+
+export type AddressType =
+  | 'apartment'
+  | 'home'
+  | 'office';
 
 export type CustomerData = {
   customerName: string;
   phoneNumber: string;
 
-  /**
-   * Editable checkout address.
-   *
-   * location-picker fills this automatically using reverse geocoding.
-   * The customer can still append building / floor / apartment details
-   * later from checkout.
-   */
+  /** Final editable address that is submitted with the order. */
   address: string;
 
-  /**
-   * Address returned directly from reverse geocoding for the selected
-   * map pin. Kept separately from `address` so manual checkout edits do
-   * not lose the original mapped address.
-   */
+  /** Reverse-geocoded address for the selected map pin. */
   locationAddress: string;
 
-  /**
-   * Exact map pin selected by the customer.
-   */
+  /** Exact delivery pin selected by the customer. */
   locationLatitude: number | null;
   locationLongitude: number | null;
+
+  /** Server-resolved delivery area for the selected pin. */
+  locationServiceAreaId: string | null;
+  locationServiceAreaName: string;
+  locationCityId: string | null;
+  locationCityName: string;
+
+  /** Structured delivery-address details collected after the map pin. */
+  addressType: AddressType;
+  buildingName: string;
+  apartmentNumber: string;
+  floor: string;
+  street: string;
+  deliveryInstructions: string;
+  addressLabel: string;
 
   landmark: string;
 
@@ -44,10 +51,14 @@ export type DeliveryLocation = {
   latitude: number;
   longitude: number;
   address: string;
+
+  serviceAreaId?: string | null;
+  serviceAreaName?: string | null;
+  cityId?: string | null;
+  cityName?: string | null;
 };
 
-type CustomerField =
-  keyof CustomerData;
+type CustomerField = keyof CustomerData;
 
 type CustomerState =
   CustomerData & {
@@ -107,6 +118,17 @@ const initialCustomerState:
     locationAddress: '',
     locationLatitude: null,
     locationLongitude: null,
+    locationServiceAreaId: null,
+    locationServiceAreaName: '',
+    locationCityId: null,
+    locationCityName: '',
+    addressType: 'apartment',
+    buildingName: '',
+    apartmentNumber: '',
+    floor: '',
+    street: '',
+    deliveryInstructions: '',
+    addressLabel: '',
     landmark: '',
     paymentMethod: null,
   };
@@ -122,54 +144,50 @@ export const useCustomerStore =
         setCustomerName: (
           customerName,
         ) => {
-          set({
-            customerName,
-          });
+          set({ customerName });
         },
 
         setPhoneNumber: (
           phoneNumber,
         ) => {
-          set({
-            phoneNumber,
-          });
+          set({ phoneNumber });
         },
 
         setAddress: (address) => {
-          set({
-            address,
-          });
+          set({ address });
         },
 
         setLandmark: (landmark) => {
-          set({
-            landmark,
-          });
+          set({ landmark });
         },
 
         setPaymentMethod: (
           paymentMethod,
         ) => {
-          set({
-            paymentMethod,
-          });
+          set({ paymentMethod });
         },
 
         setDeliveryLocation: (
           location,
         ) => {
           set({
-            address:
-              location.address,
-
+            address: location.address,
             locationAddress:
               location.address,
-
             locationLatitude:
               location.latitude,
-
             locationLongitude:
               location.longitude,
+            locationServiceAreaId:
+              location.serviceAreaId ??
+              null,
+            locationServiceAreaName:
+              location.serviceAreaName ??
+              '',
+            locationCityId:
+              location.cityId ?? null,
+            locationCityName:
+              location.cityName ?? '',
           });
         },
 
@@ -179,6 +197,18 @@ export const useCustomerStore =
             locationAddress: '',
             locationLatitude: null,
             locationLongitude: null,
+            locationServiceAreaId: null,
+            locationServiceAreaName: '',
+            locationCityId: null,
+            locationCityName: '',
+            addressType: 'apartment',
+            buildingName: '',
+            apartmentNumber: '',
+            floor: '',
+            street: '',
+            deliveryInstructions: '',
+            addressLabel: '',
+            landmark: '',
           });
         },
 
@@ -227,6 +257,55 @@ export const useCustomerStore =
                 .locationLongitude ??
               state.locationLongitude,
 
+            locationServiceAreaId:
+              customerData
+                .locationServiceAreaId ??
+              state.locationServiceAreaId,
+
+            locationServiceAreaName:
+              customerData
+                .locationServiceAreaName ??
+              state.locationServiceAreaName,
+
+            locationCityId:
+              customerData
+                .locationCityId ??
+              state.locationCityId,
+
+            locationCityName:
+              customerData
+                .locationCityName ??
+              state.locationCityName,
+
+            addressType:
+              customerData.addressType ??
+              state.addressType,
+
+            buildingName:
+              customerData.buildingName ??
+              state.buildingName,
+
+            apartmentNumber:
+              customerData.apartmentNumber ??
+              state.apartmentNumber,
+
+            floor:
+              customerData.floor ??
+              state.floor,
+
+            street:
+              customerData.street ??
+              state.street,
+
+            deliveryInstructions:
+              customerData
+                .deliveryInstructions ??
+              state.deliveryInstructions,
+
+            addressLabel:
+              customerData.addressLabel ??
+              state.addressLabel,
+
             landmark:
               customerData.landmark ??
               state.landmark,
@@ -247,9 +326,7 @@ export const useCustomerStore =
         setHasHydrated: (
           hasHydrated,
         ) => {
-          set({
-            hasHydrated,
-          });
+          set({ hasHydrated });
         },
       }),
 
@@ -281,6 +358,39 @@ export const useCustomerStore =
 
           locationLongitude:
             state.locationLongitude,
+
+          locationServiceAreaId:
+            state.locationServiceAreaId,
+
+          locationServiceAreaName:
+            state.locationServiceAreaName,
+
+          locationCityId:
+            state.locationCityId,
+
+          locationCityName:
+            state.locationCityName,
+
+          addressType:
+            state.addressType,
+
+          buildingName:
+            state.buildingName,
+
+          apartmentNumber:
+            state.apartmentNumber,
+
+          floor:
+            state.floor,
+
+          street:
+            state.street,
+
+          deliveryInstructions:
+            state.deliveryInstructions,
+
+          addressLabel:
+            state.addressLabel,
 
           landmark:
             state.landmark,
@@ -336,6 +446,65 @@ export const useCustomerStore =
                     .locationLongitude
                 : null,
 
+            locationServiceAreaId:
+              typeof previous
+                .locationServiceAreaId ===
+                'string'
+                ? previous
+                    .locationServiceAreaId
+                : null,
+
+            locationServiceAreaName:
+              previous
+                .locationServiceAreaName ??
+              '',
+
+            locationCityId:
+              typeof previous
+                .locationCityId ===
+                'string'
+                ? previous
+                    .locationCityId
+                : null,
+
+            locationCityName:
+              previous
+                .locationCityName ??
+              '',
+
+            addressType:
+              previous.addressType ===
+                'home' ||
+              previous.addressType ===
+                'office' ||
+              previous.addressType ===
+                'apartment'
+                ? previous.addressType
+                : 'apartment',
+
+            buildingName:
+              previous.buildingName ??
+              '',
+
+            apartmentNumber:
+              previous.apartmentNumber ??
+              '',
+
+            floor:
+              previous.floor ?? '',
+
+            street:
+              previous.street ?? '',
+
+            deliveryInstructions:
+              previous
+                .deliveryInstructions ??
+              '',
+
+            addressLabel:
+              previous.addressLabel ??
+              '',
+
             landmark:
               previous.landmark ??
               '',
@@ -353,7 +522,7 @@ export const useCustomerStore =
             );
           },
 
-        version: 3,
+        version: 5,
       },
     ),
   );

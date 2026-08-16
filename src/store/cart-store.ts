@@ -1067,7 +1067,27 @@ export const useCartStore = create<CartState>()(
         storeId,
       ) => {
         set((state) => {
+          /**
+           * IMPORTANT:
+           * This action must be idempotent. Multiple screens can stay
+           * mounted at the same time when Expo Router uses modal/transparent
+           * presentations. Returning a brand-new Zustand state when the
+           * requested cart is already active can create an update feedback
+           * loop between those mounted screens.
+           */
           if (!storeId) {
+            const fallbackStoreId =
+              getFirstCartStoreId(
+                state.carts,
+              );
+
+            if (
+              state.activeStoreId ===
+              fallbackStoreId
+            ) {
+              return state;
+            }
+
             return {
               ...state,
 
@@ -1079,6 +1099,13 @@ export const useCartStore = create<CartState>()(
           }
 
           if (!state.carts[storeId]) {
+            return state;
+          }
+
+          if (
+            state.activeStoreId ===
+            storeId
+          ) {
             return state;
           }
 

@@ -36,6 +36,7 @@ import {
 import {
   useCartStore,
 } from '../../store/cart-store';
+import { useCustomerStore } from '../../store/customer-store';
 
 const CATEGORY_ROWS = 3;
 
@@ -731,6 +732,12 @@ export default function PharmacyScreen() {
     null,
   );
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const carts = useCartStore(
     (state) => state.carts,
   );
@@ -766,6 +773,7 @@ export default function PharmacyScreen() {
         await getAppBootstrap();
 
       const defaultServiceAreaId =
+        savedServiceAreaId ??
         bootstrap.settings
           .default_service_area_id ??
         undefined;
@@ -850,7 +858,7 @@ export default function PharmacyScreen() {
 
   useEffect(() => {
     void loadPharmacy();
-  }, []);
+  }, [savedServiceAreaId]);
 
   /**
    * Categories

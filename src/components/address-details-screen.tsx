@@ -13,33 +13,29 @@ import {
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_SOFT = '#EAF8F0';
 
-export default function LocationPickerWebScreen() {
+export default function AddressDetailsWebScreen() {
   const router = useRouter();
 
   return (
     <View style={styles.screen}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.card}>
         <View style={styles.iconContainer}>
           <Ionicons
-            name="map-outline"
+            name="location-outline"
             size={42}
             color={BRAND_GREEN}
           />
         </View>
 
         <Text style={styles.title}>
-          تحديد موقع التوصيل متاح على الموبايل
+          إضافة عنوان التوصيل متاحة على الموبايل
         </Text>
 
         <Text style={styles.description}>
-          افتح التطبيق على Android أو iPhone لاختيار موقع التوصيل من الخريطة.
-          نسخة الويب لا تقوم بتحميل مكتبة الخرائط الأصلية.
+          افتح تطبيق Navienty Now على Android أو iPhone لتحديد الـPin
+          وإضافة تفاصيل عنوان التوصيل.
         </Text>
 
         <Pressable
@@ -49,14 +45,8 @@ export default function LocationPickerWebScreen() {
           ]}
           onPress={() => router.back()}
         >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color="#ffffff"
-          />
-
           <Text style={styles.buttonText}>
-            العودة إلى السلة
+            رجوع
           </Text>
         </Pressable>
       </View>
@@ -72,7 +62,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-
   card: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
@@ -83,7 +72,6 @@ const styles = StyleSheet.create({
     padding: 28,
     width: '100%',
   },
-
   iconContainer: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN_SOFT,
@@ -92,7 +80,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 72,
   },
-
   title: {
     color: '#202020',
     fontSize: 22,
@@ -100,7 +87,6 @@ const styles = StyleSheet.create({
     marginTop: 18,
     textAlign: 'center',
   },
-
   description: {
     color: '#6f6f6f',
     fontSize: 14,
@@ -108,24 +94,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-
   button: {
     alignItems: 'center',
     alignSelf: 'stretch',
     backgroundColor: BRAND_GREEN,
     borderRadius: 18,
-    flexDirection: 'row',
-    gap: 8,
     justifyContent: 'center',
     marginTop: 24,
     minHeight: 58,
-    paddingHorizontal: 18,
   },
-
   buttonPressed: {
     opacity: 0.78,
   },
-
   buttonText: {
     color: '#ffffff',
     fontSize: 15,

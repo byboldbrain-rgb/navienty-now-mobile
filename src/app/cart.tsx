@@ -32,17 +32,16 @@ import {
   useCartStore,
 } from '../store/cart-store';
 
+import ServicePackageCart from '../components/service/service-package-cart';
+
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_SOFT = '#EAF8F0';
 
 /**
- * Navienty Now fixed checkout fees.
- *
- * Electronic payment fee: EGP 10 per order.
- * Delivery fee: EGP 25 per order.
+ * Electronic payment fee remains fixed for now.
+ * Delivery fee is store/area-specific and comes from the cart/catalog.
  */
 const FIXED_PAYMENT_PROCESSING_FEE = 10;
-const FIXED_DELIVERY_FEE = 25;
 
 /**
  * Multi-cart bottom sheet swipe-to-dismiss settings.
@@ -50,6 +49,19 @@ const FIXED_DELIVERY_FEE = 25;
 const CART_PICKER_CLOSE_DISTANCE = 95;
 const CART_PICKER_CLOSE_VELOCITY = 0.75;
 const CART_PICKER_OFFSCREEN_Y = 900;
+
+/**
+ * Keep route options referentially stable.
+ * Recreating modal options during every render can cause unnecessary
+ * navigation updates while the cart screen is mounted.
+ */
+const CART_SCREEN_OPTIONS = {
+  headerShown: false,
+  presentation: 'transparentModal' as const,
+  contentStyle: {
+    backgroundColor: 'transparent',
+  },
+};
 
 function getSingleParam(
   value:
@@ -164,6 +176,32 @@ function formatCartItemCount(
 }
 
 export default function CartScreen() {
+  const params =
+    useLocalSearchParams<{
+      servicePackageId?:
+        | string
+        | string[];
+    }>();
+
+  const servicePackageId =
+    getSingleParam(
+      params.servicePackageId,
+    )?.trim();
+
+  if (servicePackageId) {
+    return (
+      <ServicePackageCart
+        servicePackageId={
+          servicePackageId
+        }
+      />
+    );
+  }
+
+  return <StoreCartScreen />;
+}
+
+function StoreCartScreen() {
   const router = useRouter();
 
   const params =
@@ -231,10 +269,6 @@ export default function CartScreen() {
 
   const carts = useCartStore(
     (state) => state.carts,
-  );
-
-  const activeStoreId = useCartStore(
-    (state) => state.activeStoreId,
   );
 
   const addItem = useCartStore(
@@ -408,90 +442,46 @@ export default function CartScreen() {
   ]);
 
   /**
-   * If there is only one cart, open it directly just like the old
-   * cart screen.
+   * IMPORTANT:
+   * Do not synchronize the active cart from an effect while this screen
+   * is opening. This route is presented as a transparent modal, so the
+   * previous screen can still be mounted underneath it. If both screens
+   * try to keep `activeStoreId` in sync, they can bounce Zustand updates
+   * between each other and React eventually throws
+   * "Maximum update depth exceeded".
    *
-   * If there are multiple carts, no cart is selected initially so
-   * the "All shopping carts" bottom sheet is displayed.
+   * Instead, derive the cart that should be displayed without writing to
+   * Zustand. `setActiveCart` is only called from explicit user actions
+   * such as choosing a cart, continuing shopping, or checking out.
    */
-  useEffect(() => {
-    if (availableCarts.length === 0) {
-      if (selectedStoreId !== null) {
-        setSelectedStoreId(null);
-      }
-
-      return;
-    }
-
-    if (availableCarts.length === 1) {
-      const onlyStoreId =
-        availableCarts[0].storeId;
-
-      if (
-        selectedStoreId !== onlyStoreId
-      ) {
-        setSelectedStoreId(
-          onlyStoreId,
-        );
-      }
-
-      if (
-        activeStoreId !== onlyStoreId
-      ) {
-        setActiveCart(
-          onlyStoreId,
-        );
-      }
-
-      return;
-    }
-
-    if (
-      selectedStoreId &&
-      !carts[selectedStoreId]
-    ) {
-      setSelectedStoreId(null);
-    }
-  }, [
-    activeStoreId,
-    availableCarts,
-    carts,
-    selectedStoreId,
-    setActiveCart,
-  ]);
-
-  /**
-   * requestedStoreId is useful when this screen is opened while
-   * there is only one cart. When there are multiple carts we always
-   * start with the carts chooser, matching the requested UX.
-   */
-  useEffect(() => {
-    if (
-      hasMultipleCarts ||
-      !requestedStoreId ||
-      !carts[requestedStoreId]
-    ) {
-      return;
-    }
-
-    setSelectedStoreId(
-      requestedStoreId,
-    );
-
-    setActiveCart(
-      requestedStoreId,
-    );
-  }, [
-    carts,
-    hasMultipleCarts,
-    requestedStoreId,
-    setActiveCart,
-  ]);
-
-  const currentCart =
-    selectedStoreId
-      ? carts[selectedStoreId] ?? null
+  const singleCartStoreId =
+    availableCarts.length === 1
+      ? availableCarts[0].storeId
       : null;
+
+  const validSelectedStoreId =
+    selectedStoreId &&
+    carts[selectedStoreId] &&
+    carts[selectedStoreId].items.length > 0
+      ? selectedStoreId
+      : null;
+
+  const requestedCartStoreId =
+    !hasMultipleCarts &&
+    requestedStoreId &&
+    carts[requestedStoreId] &&
+    carts[requestedStoreId].items.length > 0
+      ? requestedStoreId
+      : null;
+
+  const resolvedStoreId =
+    validSelectedStoreId ??
+    requestedCartStoreId ??
+    singleCartStoreId;
+
+  const currentCart = resolvedStoreId
+    ? carts[resolvedStoreId] ?? null
+    : null;
 
   const items =
     currentCart?.items ?? [];
@@ -517,7 +507,7 @@ export default function CartScreen() {
     FIXED_PAYMENT_PROCESSING_FEE;
 
   const deliveryFee =
-    FIXED_DELIVERY_FEE;
+    Number(currentCart?.deliveryFee ?? 0);
 
   const grandTotal =
     Number(subtotal ?? 0) +
@@ -882,7 +872,7 @@ export default function CartScreen() {
         categorySlug:
           currentCart.categorySlug,
         deliveryFee:
-          FIXED_DELIVERY_FEE,
+          Number(currentCart.deliveryFee ?? 0),
         minimumOrder:
           Number(minimumOrder ?? 0),
       },
@@ -908,15 +898,7 @@ export default function CartScreen() {
   if (availableCarts.length === 0) {
     return (
       <View style={styles.emptyScreen}>
-        <Stack.Screen
-          options={{
-            headerShown: false,
-            presentation: 'transparentModal',
-            contentStyle: {
-              backgroundColor: 'transparent',
-            },
-          }}
-        />
+        <Stack.Screen options={CART_SCREEN_OPTIONS} />
 
         <Pressable
           style={({ pressed }) => [
@@ -929,7 +911,7 @@ export default function CartScreen() {
         >
           <Ionicons
             name="arrow-back"
-            size={27}
+            size={22}
             color="#222222"
           />
         </Pressable>
@@ -944,7 +926,7 @@ export default function CartScreen() {
           >
             <Ionicons
               name="cart-outline"
-              size={44}
+              size={36}
               color={BRAND_GREEN}
             />
           </View>
@@ -998,21 +980,13 @@ export default function CartScreen() {
 
   if (
     hasMultipleCarts &&
-    !selectedStoreId
+    !validSelectedStoreId
   ) {
     return (
       <View
         style={styles.cartPickerScreen}
       >
-        <Stack.Screen
-          options={{
-            headerShown: false,
-            presentation: 'transparentModal',
-            contentStyle: {
-              backgroundColor: 'transparent',
-            },
-          }}
-        />
+        <Stack.Screen options={CART_SCREEN_OPTIONS} />
 
         <Pressable
           style={styles.cartPickerBackdrop}
@@ -1056,7 +1030,7 @@ export default function CartScreen() {
               >
                 <Ionicons
                   name="close"
-                  size={31}
+                  size={23}
                   color="#171717"
                 />
               </Pressable>
@@ -1236,15 +1210,7 @@ export default function CartScreen() {
 
   return (
     <View style={styles.screen}>
-      <Stack.Screen
-        options={{
-          headerShown: false,
-          presentation: 'transparentModal',
-          contentStyle: {
-            backgroundColor: 'transparent',
-          },
-        }}
-      />
+      <Stack.Screen options={CART_SCREEN_OPTIONS} />
 
       <ScrollView
         contentContainerStyle={
@@ -1268,7 +1234,7 @@ export default function CartScreen() {
           >
             <Ionicons
               name="arrow-back"
-              size={28}
+              size={23}
               color="#262626"
             />
           </Pressable>
@@ -1391,7 +1357,7 @@ export default function CartScreen() {
                     >
                       <Ionicons
                         name="pencil-outline"
-                        size={22}
+                        size={17}
                         color={BRAND_GREEN}
                       />
 
@@ -1458,7 +1424,7 @@ export default function CartScreen() {
                         ) : (
                           <Ionicons
                             name="restaurant-outline"
-                            size={45}
+                            size={36}
                             color="#bbbbbb"
                           />
                         )}
@@ -1513,8 +1479,8 @@ export default function CartScreen() {
                           }
                           size={
                             item.quantity <= 1
-                              ? 22
-                              : 24
+                              ? 18
+                              : 20
                           }
                           color={BRAND_GREEN}
                         />
@@ -1550,7 +1516,7 @@ export default function CartScreen() {
                       >
                         <Ionicons
                           name="add"
-                          size={28}
+                          size={22}
                           color={BRAND_GREEN}
                         />
                       </Pressable>
@@ -1648,7 +1614,7 @@ export default function CartScreen() {
                             ) : (
                               <Ionicons
                                 name="image-outline"
-                                size={40}
+                                size={32}
                                 color="#b5b5b5"
                               />
                             )}
@@ -1676,8 +1642,8 @@ export default function CartScreen() {
                             }
                             size={
                               hasVariants
-                                ? 25
-                                : 31
+                                ? 19
+                                : 23
                             }
                             color={BRAND_GREEN}
                           />
@@ -1780,7 +1746,7 @@ export default function CartScreen() {
 
               <Ionicons
                 name="information-circle-outline"
-                size={16}
+                size={14}
                 color="#8a8a8a"
               />
             </View>
@@ -1830,7 +1796,7 @@ export default function CartScreen() {
             >
               <Ionicons
                 name="information-circle-outline"
-                size={22}
+                size={18}
                 color="#8a6519"
               />
 
@@ -1908,22 +1874,23 @@ export default function CartScreen() {
 
       {/* CLEAR CART MODAL */}
 
-      <Modal
-        visible={clearModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() =>
-          setClearModalVisible(false)
-        }
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      {clearModalVisible ? (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() =>
+            setClearModalVisible(false)
+          }
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
             <View
               style={styles.modalDangerIcon}
             >
               <Ionicons
                 name="trash-outline"
-                size={34}
+                size={26}
                 color="#d64b4b"
               />
             </View>
@@ -1981,9 +1948,10 @@ export default function CartScreen() {
                 إلغاء
               </Text>
             </Pressable>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -2007,13 +1975,13 @@ const styles = StyleSheet.create({
 
   cartPickerSheet: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 34,
-    borderTopRightRadius: 34,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     maxHeight: '76%',
-    minHeight: 390,
+    minHeight: 340,
     overflow: 'hidden',
     paddingBottom: 13,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 0,
 
     shadowColor: '#000000',
@@ -2028,24 +1996,24 @@ const styles = StyleSheet.create({
   },
 
   sheetDragArea: {
-    marginHorizontal: -24,
-    paddingHorizontal: 24,
-    paddingTop: 9,
+    marginHorizontal: -20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
 
   sheetHandle: {
     alignSelf: 'center',
     backgroundColor: '#e5e5e5',
     borderRadius: 3,
-    height: 5,
+    height: 4,
     marginTop: 3,
-    width: 70,
+    width: 52,
   },
 
   sheetTopRow: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    height: 73,
+    height: 58,
     justifyContent: 'flex-start',
   },
 
@@ -2053,11 +2021,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e1e1e1',
-    borderRadius: 34,
+    borderRadius: 24,
     borderWidth: 1,
-    height: 64,
+    height: 48,
     justifyContent: 'center',
-    width: 64,
+    width: 48,
   },
 
   sheetCloseButtonPressed: {
@@ -2071,10 +2039,10 @@ const styles = StyleSheet.create({
 
   cartPickerTitle: {
     color: '#1e1e1e',
-    fontSize: 31,
+    fontSize: 24,
     fontWeight: '900',
-    lineHeight: 42,
-    marginBottom: 19,
+    lineHeight: 32,
+    marginBottom: 14,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -2090,8 +2058,8 @@ const styles = StyleSheet.create({
   cartPickerRow: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    minHeight: 128,
-    paddingVertical: 14,
+    minHeight: 104,
+    paddingVertical: 11,
   },
 
   cartPickerRowBorder: {
@@ -2107,12 +2075,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
     borderColor: '#eeeeee',
-    borderRadius: 13,
+    borderRadius: 12,
     borderWidth: 1,
-    height: 91,
+    height: 72,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 91,
+    width: 72,
   },
 
   cartPickerLogo: {
@@ -2121,36 +2089,36 @@ const styles = StyleSheet.create({
   },
 
   cartPickerLogoFallback: {
-    fontSize: 43,
+    fontSize: 34,
   },
 
   cartPickerStoreContent: {
     flex: 1,
-    marginHorizontal: 17,
+    marginHorizontal: 14,
   },
 
   cartPickerStoreName: {
     color: '#1d1d1d',
-    fontSize: 21,
+    fontSize: 17,
     fontWeight: '700',
-    lineHeight: 28,
+    lineHeight: 23,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
 
   cartPickerItemCount: {
     color: '#444444',
-    fontSize: 17,
-    marginTop: 8,
+    fontSize: 14,
+    marginTop: 5,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
 
   cartPickerPrice: {
     color: '#1d1d1d',
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: '700',
-    minWidth: 120,
+    minWidth: 94,
     textAlign: 'left',
   },
 
@@ -2164,8 +2132,8 @@ const styles = StyleSheet.create({
 
   cartPickerNoteText: {
     color: '#858585',
-    fontSize: 15,
-    lineHeight: 25,
+    fontSize: 13,
+    lineHeight: 20,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
@@ -2190,7 +2158,7 @@ const styles = StyleSheet.create({
   },
 
   pageContent: {
-    paddingBottom: 150,
+    paddingBottom: 126,
   },
 
   /* ---------------------------------- */
@@ -2200,47 +2168,47 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingTop: 54,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    paddingBottom: 20,
   },
 
   backButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e5e5e5',
-    borderRadius: 31,
+    borderRadius: 24,
     borderWidth: 1,
-    height: 62,
+    height: 48,
     justifyContent: 'center',
-    width: 62,
+    width: 48,
   },
 
   headerContent: {
     flex: 1,
-    marginLeft: 18,
+    marginLeft: 14,
   },
 
   pageTitle: {
     color: '#202020',
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: '800',
   },
 
   headerStoreName: {
     color: '#8a8a8a',
-    fontSize: 14,
-    marginTop: 3,
+    fontSize: 12,
+    marginTop: 2,
   },
 
   clearCartButton: {
-    paddingHorizontal: 7,
-    paddingVertical: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 7,
   },
 
   clearCartButtonText: {
     color: '#777777',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
 
@@ -2249,14 +2217,14 @@ const styles = StyleSheet.create({
   /* ---------------------------------- */
 
   itemsSection: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
 
   itemRow: {
     flexDirection: 'row',
-    minHeight: 245,
-    paddingBottom: 26,
-    paddingTop: 11,
+    minHeight: 218,
+    paddingBottom: 22,
+    paddingTop: 9,
     borderBottomColor: '#e8e8e8',
     borderBottomWidth: 1,
   },
@@ -2268,21 +2236,21 @@ const styles = StyleSheet.create({
   itemContent: {
     flex: 1,
     justifyContent: 'flex-start',
-    paddingRight: 20,
+    paddingRight: 16,
   },
 
   itemName: {
     color: '#242424',
-    fontSize: 21,
+    fontSize: 17,
     fontWeight: '700',
-    lineHeight: 28,
+    lineHeight: 23,
     textAlign: 'left',
   },
 
   variantName: {
     color: '#777777',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 2,
     textAlign: 'left',
     width: '100%',
@@ -2292,27 +2260,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     flexDirection: 'row',
-    marginTop: 13,
-    paddingVertical: 3,
+    marginTop: 10,
+    paddingVertical: 2,
   },
 
   editButtonText: {
     borderBottomColor: BRAND_GREEN,
     borderBottomWidth: 1,
     color: BRAND_GREEN,
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '600',
-    marginLeft: 7,
+    marginLeft: 5,
   },
 
   itemPriceContainer: {
     marginTop: 'auto',
-    paddingBottom: 8,
+    paddingBottom: 6,
   },
 
   itemPrice: {
     color: '#242424',
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: '600',
   },
 
@@ -2339,18 +2307,18 @@ const styles = StyleSheet.create({
   },
 
   itemEmoji: {
-    fontSize: 59,
+    fontSize: 48,
   },
 
   quantityControl: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e4e4e4',
-    borderRadius: 31,
+    borderRadius: 24,
     borderWidth: 1,
-    bottom: -11,
+    bottom: -8,
     flexDirection: 'row',
-    height: 60,
+    height: 46,
     justifyContent: 'space-between',
     left: 7,
     paddingHorizontal: 4,
@@ -2370,15 +2338,15 @@ const styles = StyleSheet.create({
 
   quantityButton: {
     alignItems: 'center',
-    borderRadius: 26,
-    height: 50,
+    borderRadius: 20,
+    height: 38,
     justifyContent: 'center',
-    width: 50,
+    width: 38,
   },
 
   quantityText: {
     color: '#242424',
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: '600',
     minWidth: 34,
     textAlign: 'center',
@@ -2391,21 +2359,21 @@ const styles = StyleSheet.create({
   recommendationsSection: {
     backgroundColor: '#faf8f4',
     marginTop: 8,
-    paddingBottom: 27,
-    paddingTop: 29,
+    paddingBottom: 22,
+    paddingTop: 23,
   },
 
   recommendationsTitle: {
     color: '#242424',
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: '800',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
 
   recommendationsScroll: {
-    gap: 14,
-    paddingHorizontal: 14,
-    paddingTop: 23,
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingTop: 18,
   },
 
   recommendationCard: {
@@ -2439,21 +2407,21 @@ const styles = StyleSheet.create({
   },
 
   recommendationEmoji: {
-    fontSize: 49,
+    fontSize: 40,
   },
 
   recommendationAddButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#e5e5e5',
-    borderRadius: 29,
+    borderRadius: 22,
     borderWidth: 1,
-    bottom: 10,
-    height: 57,
+    bottom: 9,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
-    right: 10,
-    width: 57,
+    right: 9,
+    width: 44,
 
     shadowColor: '#000000',
     shadowOffset: {
@@ -2476,16 +2444,16 @@ const styles = StyleSheet.create({
 
   recommendationName: {
     color: '#252525',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    lineHeight: 21,
-    marginTop: 13,
+    lineHeight: 19,
+    marginTop: 10,
   },
 
   recommendationPrice: {
     color: '#363636',
-    fontSize: 15,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 4,
   },
 
   /* ---------------------------------- */
@@ -2495,33 +2463,33 @@ const styles = StyleSheet.create({
   orderSummarySection: {
     borderTopColor: '#f1f1f1',
     borderTopWidth: 1,
-    marginTop: 23,
-    paddingHorizontal: 24,
-    paddingTop: 26,
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingTop: 22,
   },
 
   orderSummaryTitle: {
     color: '#242424',
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: '800',
-    marginBottom: 20,
+    marginBottom: 16,
   },
 
   summaryRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 15,
+    marginBottom: 12,
   },
 
   summaryLabel: {
     color: '#696969',
-    fontSize: 15,
+    fontSize: 13,
   },
 
   summaryValue: {
     color: '#303030',
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
   },
 
@@ -2533,9 +2501,9 @@ const styles = StyleSheet.create({
 
   paymentFeeDescription: {
     color: '#8a8a8a',
-    fontSize: 11,
-    lineHeight: 17,
-    marginBottom: 16,
+    fontSize: 10,
+    lineHeight: 15,
+    marginBottom: 13,
     marginTop: -6,
   },
 
@@ -2547,32 +2515,32 @@ const styles = StyleSheet.create({
 
   totalLabel: {
     color: '#202020',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
   },
 
   totalValue: {
     color: '#202020',
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '800',
   },
 
   minimumNotice: {
     alignItems: 'center',
     backgroundColor: '#fff8e7',
-    borderRadius: 14,
+    borderRadius: 12,
     flexDirection: 'row',
-    marginHorizontal: 24,
-    marginTop: 15,
-    padding: 13,
+    marginHorizontal: 20,
+    marginTop: 13,
+    padding: 11,
   },
 
   minimumNoticeText: {
     color: '#82651f',
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 7,
   },
 
   /* ---------------------------------- */
@@ -2585,9 +2553,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    paddingBottom: 20,
-    paddingHorizontal: 24,
-    paddingTop: 18,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 14,
     position: 'absolute',
     right: 0,
 
@@ -2604,32 +2572,32 @@ const styles = StyleSheet.create({
 
   checkoutBar: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
 
   addItemsButton: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#252525',
-    borderRadius: 31,
+    borderRadius: 27,
     borderWidth: 1.5,
     flex: 1,
-    height: 64,
+    height: 54,
     justifyContent: 'center',
   },
 
   addItemsButtonText: {
     color: '#242424',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
   },
 
   checkoutButton: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN,
-    borderRadius: 31,
+    borderRadius: 27,
     flex: 1,
-    height: 64,
+    height: 54,
     justifyContent: 'center',
   },
 
@@ -2639,7 +2607,7 @@ const styles = StyleSheet.create({
 
   checkoutButtonText: {
     color: '#ffffff',
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
   },
 
@@ -2672,33 +2640,33 @@ const styles = StyleSheet.create({
   modalCard: {
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 25,
-    maxWidth: 430,
-    padding: 25,
+    borderRadius: 22,
+    maxWidth: 400,
+    padding: 22,
     width: '100%',
   },
 
   modalDangerIcon: {
     alignItems: 'center',
     backgroundColor: '#fff1f1',
-    borderRadius: 40,
-    height: 78,
+    borderRadius: 30,
+    height: 60,
     justifyContent: 'center',
-    width: 78,
+    width: 60,
   },
 
   modalTitle: {
     color: '#242424',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
-    marginTop: 18,
+    marginTop: 14,
   },
 
   modalDescription: {
     color: '#777777',
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 9,
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 8,
     textAlign: 'center',
   },
 
@@ -2706,14 +2674,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
     backgroundColor: '#d84a4a',
-    borderRadius: 16,
-    marginTop: 23,
-    paddingVertical: 15,
+    borderRadius: 14,
+    marginTop: 20,
+    paddingVertical: 12,
   },
 
   dangerButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
 
@@ -2721,14 +2689,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
     backgroundColor: '#f2f2f2',
-    borderRadius: 16,
-    marginTop: 10,
-    paddingVertical: 15,
+    borderRadius: 14,
+    marginTop: 9,
+    paddingVertical: 12,
   },
 
   modalCancelButtonText: {
     color: '#555555',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
 
@@ -2744,44 +2712,44 @@ const styles = StyleSheet.create({
   emptyBackButton: {
     alignItems: 'center',
     borderColor: '#e4e4e4',
-    borderRadius: 30,
+    borderRadius: 24,
     borderWidth: 1,
-    height: 60,
+    height: 48,
     justifyContent: 'center',
-    left: 24,
+    left: 20,
     position: 'absolute',
-    top: 54,
-    width: 60,
+    top: 48,
+    width: 48,
   },
 
   emptyContainer: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
   },
 
   emptyIconContainer: {
     alignItems: 'center',
     backgroundColor:
       BRAND_GREEN_SOFT,
-    borderRadius: 48,
-    height: 96,
+    borderRadius: 39,
+    height: 78,
     justifyContent: 'center',
-    width: 96,
+    width: 78,
   },
 
   emptyTitle: {
     color: '#242424',
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: '800',
-    marginTop: 22,
+    marginTop: 18,
   },
 
   emptyDescription: {
     color: '#7c7c7c',
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 12,
+    lineHeight: 19,
     marginTop: 8,
     textAlign: 'center',
   },
@@ -2789,16 +2757,16 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: 'center',
     backgroundColor: BRAND_GREEN,
-    borderRadius: 29,
-    marginTop: 24,
-    minWidth: 220,
-    paddingHorizontal: 30,
-    paddingVertical: 16,
+    borderRadius: 25,
+    marginTop: 20,
+    minWidth: 190,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
   },
 
   primaryButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
 

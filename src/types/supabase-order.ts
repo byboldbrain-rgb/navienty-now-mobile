@@ -101,7 +101,17 @@ export type Order = {
 
 export type CreateWhatsAppOrderInput = {
   storeId: string;
-  serviceAreaId: string;
+
+  /**
+   * Compatibility fallback while geofencing is disabled in Supabase.
+   * Once location_geofencing_enabled = true, the server ignores this
+   * value and resolves the service area from the coordinates below.
+   */
+  serviceAreaId?: string | null;
+
+  deliveryLatitude: number;
+  deliveryLongitude: number;
+
   paymentMethodId: string;
 
   customerName: string;

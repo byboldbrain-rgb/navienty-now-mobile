@@ -387,6 +387,15 @@ export default function RootLayout() {
               headerShown: false,
             }}
           />
+
+          <Stack.Screen
+            name="promo/[id]"
+            options={{
+              animation: 'slide_from_right',
+              gestureEnabled: true,
+              headerShown: false,
+            }}
+          />
         </Stack>
       ) : null}
 

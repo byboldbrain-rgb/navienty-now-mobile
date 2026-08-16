@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  type ImageSourcePropType,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -20,6 +19,7 @@ import {
   Text,
   TextInput,
   View,
+  type ImageSourcePropType,
 } from 'react-native';
 
 import getAppBootstrap, {
@@ -31,7 +31,14 @@ import {
 } from '../services/catalog-service';
 
 import {
+  getDeliveryLocationErrorMessage,
+  resolveDeliveryLocation,
+  type DeliveryLocationResolution,
+} from '../services/delivery-location-service';
+
+import {
   cancelPendingWhatsAppOrder,
+  confirmWhatsAppOrderSent,
   createWhatsAppOrder,
 } from '../services/order-service';
 
@@ -50,6 +57,8 @@ import {
 import {
   useOrdersStore,
 } from '../store/orders-store';
+
+import ServicePackageCheckout from '../components/service/service-package-checkout';
 
 import {
   openOrderInWhatsApp,
@@ -102,10 +111,9 @@ const PAYMENT_METHOD_IMAGES:
   };
 
 /* ---------------------------------- */
-/* FIXED FEES                         */
+/* FEES                               */
 /* ---------------------------------- */
 
-const FIXED_DELIVERY_FEE = 25;
 const PAYMENT_PROCESSING_FEE = 10;
 
 /* ---------------------------------- */
@@ -197,6 +205,32 @@ function getDefaultArea(
 /* ---------------------------------- */
 
 export default function CheckoutScreen() {
+  const params =
+    useLocalSearchParams<{
+      servicePackageId?:
+        | string
+        | string[];
+    }>();
+
+  const servicePackageId =
+    getSingleParam(
+      params.servicePackageId,
+    )?.trim();
+
+  if (servicePackageId) {
+    return (
+      <ServicePackageCheckout
+        servicePackageId={
+          servicePackageId
+        }
+      />
+    );
+  }
+
+  return <StoreCheckoutScreen />;
+}
+
+function StoreCheckoutScreen() {
   const router = useRouter();
 
   const params =
@@ -235,6 +269,25 @@ export default function CheckoutScreen() {
     null,
   );
 
+  const [
+    deliveryResolution,
+    setDeliveryResolution,
+  ] = useState<DeliveryLocationResolution | null>(
+    null,
+  );
+
+  const [
+    isResolvingDelivery,
+    setIsResolvingDelivery,
+  ] = useState(false);
+
+  const [
+    deliveryResolutionError,
+    setDeliveryResolutionError,
+  ] = useState<string | null>(
+    null,
+  );
+
   /* -------------------------------- */
   /* CART                             */
   /*
@@ -258,6 +311,12 @@ export default function CheckoutScreen() {
     useCartStore(
       (state) =>
         state.setActiveCart,
+    );
+
+  const clearCart =
+    useCartStore(
+      (state) =>
+        state.clearCart,
     );
 
   const checkoutStoreId =
@@ -313,13 +372,12 @@ export default function CheckoutScreen() {
     );
 
   /*
-   * Navienty Now fixed fees
-   *
-   * Delivery = EGP 25
-   * Electronic payment fee = EGP 10
+   * Delivery fee is resolved from the selected delivery pin + store.
+   * Until that RPC finishes, fall back to the cart snapshot.
    */
   const deliveryFee =
-    FIXED_DELIVERY_FEE;
+    deliveryResolution?.deliveryFee ??
+    Number(checkoutCart?.deliveryFee ?? 0);
 
   const paymentProcessingFee =
     PAYMENT_PROCESSING_FEE;
@@ -343,6 +401,12 @@ export default function CheckoutScreen() {
     useOrdersStore(
       (state) =>
         state.setPendingOrder,
+    );
+
+  const confirmPendingOrder =
+    useOrdersStore(
+      (state) =>
+        state.confirmPendingOrder,
     );
 
   const discardPendingOrder =
@@ -658,6 +722,78 @@ export default function CheckoutScreen() {
       locationLongitude,
     );
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshDeliveryResolution() {
+      if (
+        !storeId ||
+        !hasDeliveryLocation ||
+        typeof locationLatitude !== 'number' ||
+        typeof locationLongitude !== 'number'
+      ) {
+        setDeliveryResolution(null);
+        setDeliveryResolutionError(null);
+        return;
+      }
+
+      try {
+        setIsResolvingDelivery(true);
+        setDeliveryResolutionError(null);
+
+        const resolution =
+          await resolveDeliveryLocation({
+            latitude: locationLatitude,
+            longitude: locationLongitude,
+            storeId,
+          });
+
+        if (cancelled) {
+          return;
+        }
+
+        setDeliveryResolution(resolution);
+
+        if (
+          !resolution.serviceable ||
+          resolution.storeAvailable === false
+        ) {
+          setDeliveryResolutionError(
+            getDeliveryLocationErrorMessage(
+              resolution.reason,
+            ),
+          );
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setDeliveryResolution(null);
+        setDeliveryResolutionError(
+          error instanceof Error
+            ? error.message
+            : 'تعذر التحقق من منطقة التوصيل.',
+        );
+      } finally {
+        if (!cancelled) {
+          setIsResolvingDelivery(false);
+        }
+      }
+    }
+
+    void refreshDeliveryResolution();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    storeId,
+    hasDeliveryLocation,
+    locationLatitude,
+    locationLongitude,
+  ]);
+
   function editDeliveryLocation() {
     if (!storeId) {
       return;
@@ -701,10 +837,16 @@ export default function CheckoutScreen() {
       paymentMethod !== null,
   };
 
+  const deliveryIsAvailable =
+    deliveryResolution?.serviceable === true &&
+    deliveryResolution.storeAvailable === true;
+
   const formIsValid =
     Object.values(
       validation,
-    ).every(Boolean);
+    ).every(Boolean) &&
+    deliveryIsAvailable &&
+    !isResolvingDelivery;
 
   /* -------------------------------- */
   /* EMPTY CART                       */
@@ -840,7 +982,6 @@ export default function CheckoutScreen() {
 
   if (
     !bootstrap ||
-    !defaultArea ||
     bootstrapError
   ) {
     return (
@@ -875,7 +1016,7 @@ export default function CheckoutScreen() {
           }
         >
           {bootstrapError ??
-            'منطقة التوصيل غير مضبوطة في Supabase.'}
+            'تعذر تحميل إعدادات الطلب من Supabase.'}
         </Text>
 
         <Pressable
@@ -929,13 +1070,39 @@ export default function CheckoutScreen() {
       return;
     }
 
-    if (
-      !bootstrap ||
-      !defaultArea
-    ) {
+    if (!bootstrap) {
       Alert.alert(
         'بيانات الطلب غير مكتملة',
-        'تعذر تحميل إعدادات التطبيق أو منطقة التوصيل من Supabase.',
+        'تعذر تحميل إعدادات التطبيق من Supabase.',
+      );
+
+      return;
+    }
+
+    if (
+      !hasDeliveryLocation ||
+      typeof locationLatitude !== 'number' ||
+      typeof locationLongitude !== 'number'
+    ) {
+      Alert.alert(
+        'حدد موقع التوصيل',
+        'اختر موقع التوصيل من الخريطة قبل إرسال الطلب.',
+      );
+
+      return;
+    }
+
+    if (
+      !deliveryResolution ||
+      !deliveryResolution.serviceable ||
+      deliveryResolution.storeAvailable !== true
+    ) {
+      Alert.alert(
+        'التوصيل غير متاح',
+        deliveryResolutionError ??
+          getDeliveryLocationErrorMessage(
+            deliveryResolution?.reason,
+          ),
       );
 
       return;
@@ -943,9 +1110,6 @@ export default function CheckoutScreen() {
 
     const activeStoreId =
       storeId;
-
-    const activeArea =
-      defaultArea;
 
     const activeBootstrap =
       bootstrap;
@@ -1030,7 +1194,13 @@ export default function CheckoutScreen() {
             activeStoreId,
 
           serviceAreaId:
-            activeArea.id,
+            deliveryResolution.serviceAreaId,
+
+          deliveryLatitude:
+            locationLatitude,
+
+          deliveryLongitude:
+            locationLongitude,
 
           paymentMethodId:
             selectedPaymentMethod.id,
@@ -1081,13 +1251,78 @@ export default function CheckoutScreen() {
         orderForWhatsApp,
       );
 
+      /*
+       * We cannot read WhatsApp's internal "message sent" state.
+       * The best no-extra-screen flow is:
+       *
+       * 1) open WhatsApp with the prepared message;
+       * 2) once the deep link opens successfully, mark the order as
+       *    submitted on Supabase;
+       * 3) move it from pendingOrder to the normal orders history;
+       * 4) clear the cart;
+       * 5) prepare the live order-flow screen in the background.
+       *
+       * When the customer comes back from WhatsApp, /order-success is
+       * already the active route, so the old confirmation screen is
+       * completely skipped.
+       */
       await openOrderInWhatsApp(
         orderForWhatsApp,
       );
 
-      router.push(
-        '/order-confirmation',
-      );
+      /*
+       * WhatsApp opened successfully. From this point on, never cancel
+       * the order automatically: the customer may already have pressed
+       * Send inside WhatsApp.
+       */
+      try {
+        const confirmedOrder =
+          await confirmWhatsAppOrderSent(
+            orderForWhatsApp.accessToken,
+          );
+
+        confirmPendingOrder(
+          confirmedOrder,
+        );
+
+        clearCart();
+
+        /*
+         * The order is no longer pending and must never be cancelled by
+         * the outer recovery block.
+         */
+        createdOrder = null;
+
+        router.replace({
+          pathname: '/order-success',
+          params: {
+            id: confirmedOrder.id,
+          },
+        });
+      } catch (confirmationError) {
+        /*
+         * This is only a technical fallback. The normal customer flow
+         * never sees /order-confirmation. If Supabase could not record
+         * the submission after WhatsApp opened, keep the pending order
+         * instead of risking cancellation of a message that may have
+         * actually been sent.
+         */
+        const confirmationMessage =
+          confirmationError instanceof Error
+            ? confirmationError.message
+            : 'تعذر تحديث حالة الطلب تلقائيًا.';
+
+        Alert.alert(
+          'تعذر تحديث حالة الطلب',
+          `${confirmationMessage}\n\nحاول مرة أخرى من شاشة تأكيد الإرسال.`,
+        );
+
+        router.replace(
+          '/order-confirmation',
+        );
+
+        return;
+      }
     } catch (error) {
       if (createdOrder) {
         try {
@@ -1542,7 +1777,15 @@ export default function CheckoutScreen() {
                   styles.areaValue
                 }
               >
-                {defaultArea.name}
+                {deliveryResolution?.serviceAreaName
+                  ? `${deliveryResolution.serviceAreaName}${
+                      deliveryResolution.cityName
+                        ? `، ${deliveryResolution.cityName}`
+                        : ''
+                    }`
+                  : defaultArea?.name ??
+                    locationAddress ??
+                    'موقع التوصيل'}
               </Text>
             </View>
 

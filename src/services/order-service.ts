@@ -444,6 +444,18 @@ function getErrorMessage(
       'الكتالوج متوقف حاليًا.',
     ],
     [
+      'delivery_location_required',
+      'حدد موقع التوصيل من الخريطة قبل إتمام الطلب.',
+    ],
+    [
+      'invalid_delivery_coordinates',
+      'إحداثيات موقع التوصيل غير صالحة. اختر الموقع مرة أخرى.',
+    ],
+    [
+      'outside_service_area',
+      'الموقع المحدد خارج نطاق توصيل Navienty Now حاليًا.',
+    ],
+    [
       'store_not_available_in_service_area',
       'المتجر غير متاح في منطقة التوصيل الحالية.',
     ],
@@ -500,14 +512,6 @@ function getErrorMessage(
   );
 }
 
-/**
- * Loads the complete server-side order history for the
- * currently authenticated Supabase user.
- *
- * Anonymous Supabase users are also `authenticated`, so the
- * RPC can safely use auth.uid() to return only this device/user's
- * orders.
- */
 export async function getMyOrders():
   Promise<Order[]> {
   const { data, error } =
@@ -576,8 +580,19 @@ export async function createWhatsAppOrder(
 
     store_id: input.storeId,
 
+    /**
+     * Compatibility only. When Supabase geofencing is enabled,
+     * create_whatsapp_order ignores this and resolves the area
+     * from delivery_latitude / delivery_longitude.
+     */
     service_area_id:
-      input.serviceAreaId,
+      input.serviceAreaId ?? null,
+
+    delivery_latitude:
+      input.deliveryLatitude,
+
+    delivery_longitude:
+      input.deliveryLongitude,
 
     payment_method_id:
       input.paymentMethodId,

@@ -27,6 +27,7 @@ import {
   listStores,
   type StoreSummary,
 } from '../../services/catalog-service';
+import { useCustomerStore } from '../../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
   NAVIENTY_NOW_LAYOUT,
@@ -618,6 +619,12 @@ function BackArrowIcon() {
 export default function RestaurantsScreen() {
   const router = useRouter();
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const [, setCategory] =
     useState<BootstrapCategory | null>(
       null,
@@ -664,6 +671,9 @@ export default function RestaurantsScreen() {
         listStores({
           categorySlug:
             RESTAURANTS_SLUG,
+          serviceAreaId:
+            savedServiceAreaId ??
+            undefined,
         }),
       ]);
 
@@ -695,7 +705,7 @@ export default function RestaurantsScreen() {
 
   useEffect(() => {
     void loadRestaurants();
-  }, []);
+  }, [savedServiceAreaId]);
 
   const previewCuisines =
     useMemo(

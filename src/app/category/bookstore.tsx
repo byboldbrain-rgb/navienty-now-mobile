@@ -37,6 +37,7 @@ import {
   type StoreCatalog,
 } from '../../services/catalog-service';
 import { useCartStore } from '../../store/cart-store';
+import { useCustomerStore } from '../../store/customer-store';
 
 const CATEGORY_ROWS = 3;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
@@ -537,6 +538,12 @@ export default function BookstoreScreen() {
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const carts = useCartStore(
     (state) => state.carts,
   );
@@ -565,6 +572,7 @@ export default function BookstoreScreen() {
       const bootstrap = await getAppBootstrap();
 
       const defaultServiceAreaId =
+        savedServiceAreaId ??
         bootstrap.settings.default_service_area_id ??
         undefined;
 
@@ -631,7 +639,7 @@ export default function BookstoreScreen() {
 
   useEffect(() => {
     void loadBookstore();
-  }, []);
+  }, [savedServiceAreaId]);
 
   const categories = useMemo<
     CategoryDisplayItem[]

@@ -1,34 +1,35 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    Image,
-    KeyboardAvoidingView,
-    StatusBar as NativeStatusBar,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Image,
+  KeyboardAvoidingView,
+  StatusBar as NativeStatusBar,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 
 import getAppBootstrap, {
-    type AppBootstrap,
+  type AppBootstrap,
 } from '../services/bootstrap-service';
 import {
-    type StoreSummary,
-    listStores,
+  type StoreSummary,
+  listStores,
 } from '../services/catalog-service';
+import { useCustomerStore } from '../store/customer-store';
 import {
-    NAVIENTY_NOW_COLORS,
-    NAVIENTY_NOW_LAYOUT,
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
 } from '../theme/navienty-now-theme';
 
 type SearchDataState =
@@ -248,6 +249,12 @@ export default function SearchScreen() {
   const inputRef = useRef<TextInput | null>(null);
   const isMountedRef = useRef(true);
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const [query, setQuery] = useState('');
   const [dataState, setDataState] =
     useState<SearchDataState>({
@@ -277,6 +284,7 @@ export default function SearchScreen() {
 
       const stores = await listStores({
         serviceAreaId:
+          savedServiceAreaId ??
           getDefaultServiceAreaId(
             bootstrap,
           ),
@@ -319,7 +327,7 @@ export default function SearchScreen() {
     return () => {
       clearTimeout(focusTimer);
     };
-  }, []);
+  }, [savedServiceAreaId]);
 
   const filteredStores = useMemo(() => {
     if (dataState.status !== 'ready') {

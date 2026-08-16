@@ -24,6 +24,7 @@ import {
   type StoreCategorySlug,
   type StoreSummary,
 } from '../../services/catalog-service';
+import { useCustomerStore } from '../../store/customer-store';
 import BookstoreScreen from './bookstore';
 import PharmacyScreen from './pharmacy';
 import RestaurantsScreen from './restaurants';
@@ -112,6 +113,12 @@ function GenericCategoryScreen({
 }) {
   const router = useRouter();
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const [category, setCategory] =
     useState<BootstrapCategory | null>(null);
   const [stores, setStores] = useState<
@@ -143,6 +150,8 @@ function GenericCategoryScreen({
           listStores({
             categorySlug:
               categorySlug as StoreCategorySlug,
+            serviceAreaId:
+              savedServiceAreaId ?? undefined,
           }),
         ]);
 
@@ -177,7 +186,10 @@ function GenericCategoryScreen({
 
   useEffect(() => {
     void loadCategoryData();
-  }, [categorySlug]);
+  }, [
+    categorySlug,
+    savedServiceAreaId,
+  ]);
 
   if (isLoading) {
     return (

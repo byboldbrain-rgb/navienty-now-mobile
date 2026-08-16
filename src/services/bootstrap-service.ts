@@ -75,6 +75,11 @@ export type AppBootstrap = {
   payment_methods: PaymentMethod[];
 };
 
+export type ResolvedServiceArea = {
+  city: City;
+  area: ServiceArea;
+};
+
 type ServiceCategoryRow = {
   id: number | string;
   slug: string;
@@ -138,6 +143,31 @@ async function getBookstoreCategory():
     icon: data.icon,
     image_url: null,
   };
+}
+
+function findServiceAreaById(
+  bootstrap: AppBootstrap,
+  serviceAreaId: string | null | undefined,
+): ResolvedServiceArea | null {
+  if (!serviceAreaId) {
+    return null;
+  }
+
+  for (const city of bootstrap.cities) {
+    const area = city.areas.find(
+      (currentArea) =>
+        currentArea.id === serviceAreaId,
+    );
+
+    if (area) {
+      return {
+        city,
+        area,
+      };
+    }
+  }
+
+  return null;
 }
 
 async function getAppBootstrap():
@@ -207,5 +237,8 @@ async function getAppBootstrap():
   };
 }
 
-export { getAppBootstrap };
+export {
+  findServiceAreaById,
+  getAppBootstrap
+};
 export default getAppBootstrap;

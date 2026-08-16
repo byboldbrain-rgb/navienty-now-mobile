@@ -1,43 +1,44 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-    useLocalSearchParams,
-    useRouter,
+  useLocalSearchParams,
+  useRouter,
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-    useEffect,
-    useMemo,
-    useState,
+  useEffect,
+  useMemo,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import getAppBootstrap from '../../services/bootstrap-service';
 
 import {
-    type CatalogProduct,
-    type CatalogSection,
-    findCatalogSectionBySlug,
-    getCatalogSectionOffers,
-    getCatalogSectionProducts,
-    getStoreCatalog,
-    listStores,
-    type StoreCatalog,
+  type CatalogProduct,
+  type CatalogSection,
+  findCatalogSectionBySlug,
+  getCatalogSectionOffers,
+  getCatalogSectionProducts,
+  getStoreCatalog,
+  listStores,
+  type StoreCatalog,
 } from '../../services/catalog-service';
 
 import {
-    useCartStore,
+  useCartStore,
 } from '../../store/cart-store';
+import { useCustomerStore } from '../../store/customer-store';
 
 /* ============================================================
  * TYPES
@@ -488,6 +489,12 @@ function ProductCard({
 export default function PharmacyCategoryScreen() {
   const router = useRouter();
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const {
     width: windowWidth,
   } = useWindowDimensions();
@@ -642,6 +649,7 @@ export default function PharmacyCategoryScreen() {
         await getAppBootstrap();
 
       const serviceAreaId =
+        savedServiceAreaId ??
         bootstrap.settings
           .default_service_area_id ??
         undefined;

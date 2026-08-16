@@ -32,6 +32,7 @@ import {
   isRestaurantCartCategory,
   useCartStore,
 } from '../../store/cart-store';
+import { useCustomerStore } from '../../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
   NAVIENTY_NOW_LAYOUT,
@@ -113,6 +114,12 @@ function BackArrowIcon() {
 
 export default function StoreScreen() {
   const router = useRouter();
+
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
 
   const params =
     useLocalSearchParams<{
@@ -245,13 +252,20 @@ export default function StoreScreen() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const [
-        loadedCatalog,
-        loadedBootstrap,
-      ] = await Promise.all([
-        getStoreCatalog(rawId),
-        getAppBootstrap(),
-      ]);
+      const loadedBootstrap =
+        await getAppBootstrap();
+
+      const serviceAreaId =
+        savedServiceAreaId ??
+        loadedBootstrap.settings
+          .default_service_area_id ??
+        undefined;
+
+      const loadedCatalog =
+        await getStoreCatalog(
+          rawId,
+          serviceAreaId,
+        );
 
       setCatalog(loadedCatalog);
 
@@ -283,7 +297,7 @@ export default function StoreScreen() {
 
   useEffect(() => {
     void loadStoreData();
-  }, [rawId]);
+  }, [rawId, savedServiceAreaId]);
 
 
   if (isLoading) {

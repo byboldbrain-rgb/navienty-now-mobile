@@ -1,42 +1,43 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-    useLocalSearchParams,
-    useRouter,
+  useLocalSearchParams,
+  useRouter,
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-    useEffect,
-    useMemo,
-    useState,
+  useEffect,
+  useMemo,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-    getBookstoreCategoryImage,
+  getBookstoreCategoryImage,
 } from '../../config/bookstore-category-images';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
-    type CatalogProduct,
-    type CatalogSection,
-    findCatalogSectionBySlug,
-    getCatalogSectionOffers,
-    getCatalogSectionProducts,
-    getStoreCatalog,
-    listStores,
-    type StoreCatalog,
+  type CatalogProduct,
+  type CatalogSection,
+  findCatalogSectionBySlug,
+  getCatalogSectionOffers,
+  getCatalogSectionProducts,
+  getStoreCatalog,
+  listStores,
+  type StoreCatalog,
 } from '../../services/catalog-service';
 import { useCartStore } from '../../store/cart-store';
+import { useCustomerStore } from '../../store/customer-store';
 
 type ProductFilterKey =
   | 'all'
@@ -424,6 +425,12 @@ export default function BookstoreCategoryScreen() {
     params.label,
   );
 
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const [catalog, setCatalog] =
     useState<StoreCatalog | null>(null);
   const [
@@ -471,6 +478,7 @@ export default function BookstoreCategoryScreen() {
       const bootstrap = await getAppBootstrap();
 
       const serviceAreaId =
+        savedServiceAreaId ??
         bootstrap.settings.default_service_area_id ??
         undefined;
 
@@ -540,7 +548,11 @@ export default function BookstoreCategoryScreen() {
 
   useEffect(() => {
     void loadCategory();
-  }, [requestedStoreId, sectionSlug]);
+  }, [
+    requestedStoreId,
+    sectionSlug,
+    savedServiceAreaId,
+  ]);
 
   const childCategories = useMemo(() => {
     if (!selectedSection) {

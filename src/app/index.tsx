@@ -1,7 +1,12 @@
+import { Ionicons } from '@expo/vector-icons';
 // NAVIENTY_BIKE_HEADER_V8_24H_JOURNEY_2026_08_11
-import { useRouter } from 'expo-router';
+import {
+  useFocusEffect,
+  useRouter,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -13,7 +18,6 @@ import {
   Easing,
   Image,
   type LayoutChangeEvent,
-  Linking,
   type NativeScrollEvent,
   StatusBar as NativeStatusBar,
   type NativeSyntheticEvent,
@@ -44,7 +48,17 @@ import {
   type HomeBannerPlacement,
   listHomeBanners,
 } from '../services/home-banners-service';
-import { useOrdersStore } from '../store/orders-store';
+import { getOrderByToken } from '../services/order-service';
+import {
+  canOpenHomeBanner,
+  openHomeBannerAction,
+} from '../services/promo-action-service';
+import { useCustomerStore } from '../store/customer-store';
+import {
+  type Order,
+  type OrderStatus,
+  useOrdersStore,
+} from '../store/orders-store';
 import {
   NAVIENTY_NOW_COLORS,
   NAVIENTY_NOW_LAYOUT,
@@ -53,6 +67,8 @@ import {
 const navientyNowLogo = require('../assets/images/navienty-now-logo.jpg');
 const navientyDeliveryBike = require('../assets/images/navienty-now-delivery-bike-transparent.png');
 const navienty24hMoodBackground = require('../assets/images/navienty-now-24h-mood-background.png');
+
+const HOME_ORDER_POLL_INTERVAL_MS = 8000;
 
 type BootstrapCategory =
   AppBootstrap['store_categories'][number] & {
@@ -189,6 +205,28 @@ function locationFromArea(
     fullName:
       `${area.name_ar}، ${city.name_ar}`,
   };
+}
+
+function resolveLocationByAreaId(
+  bootstrap: AppBootstrap,
+  areaId: string | null,
+): ResolvedLocation | null {
+  if (!areaId) {
+    return null;
+  }
+
+  for (const city of bootstrap.cities) {
+    const area = city.areas.find(
+      (currentArea) =>
+        currentArea.id === areaId,
+    );
+
+    if (area) {
+      return locationFromArea(city, area);
+    }
+  }
+
+  return null;
 }
 
 function isLocationStillAvailable(
@@ -735,6 +773,8 @@ function HomeBannerCarousel({
   audience,
   placement,
   title,
+  serviceAreaId,
+  fallbackWhatsAppNumber,
 }: {
   width: number;
   audience: Exclude<
@@ -743,7 +783,10 @@ function HomeBannerCarousel({
   >;
   placement: HomeBannerPlacement;
   title?: string;
+  serviceAreaId?: string | null;
+  fallbackWhatsAppNumber?: string | null;
 }) {
+  const router = useRouter();
   const scrollViewRef =
     useRef<ScrollView | null>(null);
   const activeIndexRef = useRef(0);
@@ -868,6 +911,7 @@ function HomeBannerCarousel({
           await listHomeBanners(
             audience,
             placement,
+            serviceAreaId,
           );
 
         if (!isCancelled) {
@@ -901,7 +945,11 @@ function HomeBannerCarousel({
     return () => {
       isCancelled = true;
     };
-  }, [audience, placement]);
+  }, [
+    audience,
+    placement,
+    serviceAreaId,
+  ]);
 
   useEffect(() => {
     if (banners.length === 0) {
@@ -1019,15 +1067,40 @@ function HomeBannerCarousel({
   async function openBanner(
     banner: HomeBanner,
   ) {
-    if (!banner.linkUrl) {
+    if (!canOpenHomeBanner(banner)) {
+      return;
+    }
+
+    if (
+      banner.presentationType ===
+      'detail_screen'
+    ) {
+      router.push({
+        pathname: '/promo/[id]',
+        params: {
+          id: banner.id,
+        },
+      });
       return;
     }
 
     try {
-      await Linking.openURL(banner.linkUrl);
+      const opened =
+        await openHomeBannerAction({
+          banner,
+          router,
+          fallbackWhatsAppNumber,
+        });
+
+      if (!opened) {
+        console.warn(
+          'Home banner has no valid action.',
+          banner.id,
+        );
+      }
     } catch (error) {
       console.warn(
-        'Unable to open home banner link.',
+        'Unable to open home banner action.',
         error,
       );
     }
@@ -1138,9 +1211,11 @@ function HomeBannerCarousel({
                 'إعلان Navienty Now'
               }
               accessibilityRole={
-                banner.linkUrl ? 'link' : 'image'
+                canOpenHomeBanner(banner)
+                  ? 'link'
+                  : 'image'
               }
-              disabled={!banner.linkUrl}
+              disabled={!canOpenHomeBanner(banner)}
               style={({ pressed }) => [
                 styles.homeBannerCard,
                 {
@@ -1149,7 +1224,7 @@ function HomeBannerCarousel({
                   width: bannerCardWidth,
                 },
                 pressed &&
-                  banner.linkUrl &&
+                  canOpenHomeBanner(banner) &&
                   styles.homeBannerPressed,
               ]}
               onPress={() => {
@@ -1416,6 +1491,244 @@ function PromoCarousel({
         </View>
       )}
     </View>
+  );
+}
+
+type HomeOrderTrackingStep = {
+  key:
+    | 'confirmation'
+    | 'preparing'
+    | 'delivery'
+    | 'delivered';
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+
+const HOME_ORDER_TRACKING_STEPS:
+  HomeOrderTrackingStep[] = [
+  {
+    key: 'confirmation',
+    title: 'جاري تأكيد الطلب',
+    icon: 'checkmark',
+  },
+  {
+    key: 'preparing',
+    title: 'جاري تحضير الطلب',
+    icon: 'bag-handle-outline',
+  },
+  {
+    key: 'delivery',
+    title: 'الطلب في الطريق',
+    icon: 'bicycle-outline',
+  },
+  {
+    key: 'delivered',
+    title: 'تم استلام الطلب',
+    icon: 'home-outline',
+  },
+];
+
+function getHomeOrderTrackingStage(
+  status: OrderStatus,
+): number {
+  switch (status) {
+    case 'awaiting-whatsapp-send':
+    case 'waiting-confirmation':
+      return 0;
+
+    case 'confirmed':
+    case 'preparing':
+      return 1;
+
+    case 'out-for-delivery':
+      return 2;
+
+    case 'delivered':
+      return 3;
+
+    case 'cancelled':
+      return -1;
+
+    default:
+      return 0;
+  }
+}
+
+function ActiveOrderStoreArtwork({
+  order,
+  store,
+}: {
+  order: Order;
+  store: StoreSummary | null;
+}) {
+  const [imageFailed, setImageFailed] =
+    useState(false);
+
+  const logoUrl =
+    store?.logoUrl?.trim() ?? '';
+
+  const coverImageUrl =
+    store?.coverImageUrl?.trim() ?? '';
+
+  const imageUrl =
+    logoUrl || coverImageUrl;
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageUrl]);
+
+  const canShowImage =
+    imageUrl.length > 0 &&
+    !imageFailed;
+
+  return (
+    <View style={styles.activeOrderStoreArtwork}>
+      {canShowImage ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          accessibilityLabel={`صورة ${order.storeName}`}
+          resizeMode={
+            logoUrl ? 'contain' : 'cover'
+          }
+          source={{ uri: imageUrl }}
+          style={styles.activeOrderStoreImage}
+          onError={() => {
+            setImageFailed(true);
+          }}
+        />
+      ) : (
+        <Text style={styles.activeOrderStoreFallback}>
+          {order.storeIcon || '🏪'}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function ActiveOrderTrackingCard({
+  order,
+  store,
+  cardWidth,
+  onPress,
+}: {
+  order: Order;
+  store: StoreSummary | null;
+  cardWidth: number;
+  onPress: () => void;
+}) {
+  const currentStage =
+    getHomeOrderTrackingStage(
+      order.status,
+    );
+
+  return (
+    <Pressable
+      accessibilityLabel={`متابعة الطلب الحالي من ${order.storeName}`}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.activeOrderCard,
+        {
+          width: cardWidth,
+        },
+        pressed && styles.activeOrderCardPressed,
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.activeOrderTopRow}>
+        <ActiveOrderStoreArtwork
+          order={order}
+          store={store}
+        />
+
+        <View style={styles.activeOrderHeading}>
+          <Text style={styles.activeOrderEyebrow}>
+            طلبك الحالي
+          </Text>
+
+          <Text
+            numberOfLines={1}
+            style={styles.activeOrderStoreName}
+          >
+            {order.storeName}
+          </Text>
+        </View>
+
+        <View style={styles.activeOrderArrow}>
+          <Text style={styles.activeOrderArrowText}>
+            ‹
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.activeOrderFlow}>
+        <View style={styles.activeOrderFlowRow}>
+          {HOME_ORDER_TRACKING_STEPS.map(
+            (step, index) => {
+              const completed =
+                currentStage > index;
+
+              const active =
+                currentStage === index;
+
+              const reached =
+                completed || active;
+
+              return (
+                <Fragment key={step.key}>
+                  <View style={styles.activeOrderFlowStep}>
+                    <View
+                      style={[
+                        styles.activeOrderFlowCircle,
+                        reached &&
+                          styles.activeOrderFlowCircleReached,
+                        active &&
+                          styles.activeOrderFlowCircleActive,
+                      ]}
+                    >
+                      <Ionicons
+                        name={
+                          completed
+                            ? 'checkmark'
+                            : step.icon
+                        }
+                        size={14}
+                        color={
+                          reached
+                            ? NAVIENTY_NOW_COLORS.white
+                            : '#A6ACA8'
+                        }
+                      />
+                    </View>
+
+                    <Text
+                      numberOfLines={2}
+                      style={[
+                        styles.activeOrderFlowLabel,
+                        reached &&
+                          styles.activeOrderFlowLabelReached,
+                      ]}
+                    >
+                      {step.title}
+                    </Text>
+                  </View>
+
+                  {index <
+                    HOME_ORDER_TRACKING_STEPS.length - 1 ? (
+                    <View
+                      style={[
+                        styles.activeOrderConnector,
+                        currentStage > index &&
+                          styles.activeOrderConnectorReached,
+                      ]}
+                    />
+                  ) : null}
+                </Fragment>
+              );
+            },
+          )}
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -1928,6 +2241,13 @@ export default function HomeScreen() {
   const { width: windowWidth } =
     useWindowDimensions();
   const authState = useAuthSession();
+
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const isMountedRef = useRef(true);
 
   const [bootstrap, setBootstrap] =
@@ -1946,9 +2266,59 @@ export default function HomeScreen() {
   const [storesError, setStoresError] =
     useState<string | null>(null);
 
-  const ordersCount = useOrdersStore(
-    (state) => state.orders.length,
+  const orders = useOrdersStore(
+    (state) => state.orders,
   );
+
+  const pendingOrder = useOrdersStore(
+    (state) => state.pendingOrder,
+  );
+
+  const ordersCount = orders.length;
+
+  const activeOrders = useMemo(() => {
+    /*
+     * Keep every active order visible on Home.
+     *
+     * A pending order may also exist in the persisted orders array
+     * after a server refresh, so a Map prevents the same order from
+     * being rendered twice.
+     */
+    const uniqueOrders =
+      new Map<string, Order>();
+
+    orders.forEach((order) => {
+      uniqueOrders.set(
+        order.id,
+        order,
+      );
+    });
+
+    if (pendingOrder) {
+      uniqueOrders.set(
+        pendingOrder.id,
+        pendingOrder,
+      );
+    }
+
+    return Array.from(
+      uniqueOrders.values(),
+    )
+      .filter(
+        (order) =>
+          order.status !== 'delivered' &&
+          order.status !== 'cancelled',
+      )
+      .sort(
+        (firstOrder, secondOrder) =>
+          new Date(
+            secondOrder.createdAt,
+          ).getTime() -
+          new Date(
+            firstOrder.createdAt,
+          ).getTime(),
+      );
+  }, [orders, pendingOrder]);
 
   useEffect(() => {
     return () => {
@@ -1972,6 +2342,16 @@ export default function HomeScreen() {
         setBootstrap(loadedBootstrap);
         setSelectedLocation(
           (currentLocation) => {
+            const savedLocation =
+              resolveLocationByAreaId(
+                loadedBootstrap,
+                savedServiceAreaId,
+              );
+
+            if (savedLocation) {
+              return savedLocation;
+            }
+
             if (
               currentLocation &&
               isLocationStillAvailable(
@@ -2005,7 +2385,7 @@ export default function HomeScreen() {
         }
       }
     },
-    [],
+    [savedServiceAreaId],
   );
 
   useEffect(() => {
@@ -2056,6 +2436,150 @@ export default function HomeScreen() {
   useEffect(() => {
     void loadStores();
   }, [loadStores]);
+
+  const refreshActiveOrders =
+    useCallback(async () => {
+      const currentState =
+        useOrdersStore.getState();
+
+      const uniqueOrders =
+        new Map<string, Order>();
+
+      currentState.orders.forEach(
+        (order) => {
+          uniqueOrders.set(
+            order.id,
+            order,
+          );
+        },
+      );
+
+      if (
+        currentState.pendingOrder
+      ) {
+        uniqueOrders.set(
+          currentState.pendingOrder.id,
+          currentState.pendingOrder,
+        );
+      }
+
+      const ordersToRefresh =
+        Array.from(
+          uniqueOrders.values(),
+        ).filter(
+          (order) =>
+            order.status !==
+              'delivered' &&
+            order.status !==
+              'cancelled',
+        );
+
+      if (
+        ordersToRefresh.length === 0
+      ) {
+        return;
+      }
+
+      /*
+       * Refresh every active order independently.
+       *
+       * Promise.allSettled is intentional: a temporary failure while
+       * refreshing one order must not prevent the remaining active
+       * orders from receiving their latest Supabase status.
+       */
+      const results =
+        await Promise.allSettled(
+          ordersToRefresh.map(
+            (order) =>
+              getOrderByToken(
+                order.accessToken,
+              ),
+          ),
+        );
+
+      results.forEach(
+        (
+          result,
+          index,
+        ) => {
+          if (
+            result.status ===
+            'rejected'
+          ) {
+            console.warn(
+              'Unable to refresh active home order.',
+              ordersToRefresh[
+                index
+              ]?.id,
+              result.reason,
+            );
+
+            return;
+          }
+
+          const latestOrder =
+            result.value;
+
+          const orderStore =
+            useOrdersStore.getState();
+
+          if (
+            orderStore
+              .pendingOrder
+              ?.id ===
+            latestOrder.id
+          ) {
+            if (
+              latestOrder.status ===
+              'awaiting-whatsapp-send'
+            ) {
+              orderStore.setPendingOrder(
+                latestOrder,
+              );
+            } else {
+              orderStore.confirmPendingOrder(
+                latestOrder,
+              );
+            }
+
+            return;
+          }
+
+          orderStore.upsertOrder(
+            latestOrder,
+          );
+        },
+      );
+    }, []);
+
+  /*
+   * Keep every compact Home order flow synchronized with Supabase.
+   * There is deliberately no manual refresh button: all active orders
+   * are refreshed immediately and then every 8 seconds.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (
+        activeOrders.length === 0
+      ) {
+        return;
+      }
+
+      void refreshActiveOrders();
+
+      const timer =
+        setInterval(() => {
+          void refreshActiveOrders();
+        }, HOME_ORDER_POLL_INTERVAL_MS);
+
+      return () => {
+        clearInterval(timer);
+      };
+    }, [
+      activeOrders.length,
+      refreshActiveOrders,
+    ]),
+  );
 
   /**
    * Anonymous users have a real Supabase session and can use
@@ -2119,6 +2643,22 @@ export default function HomeScreen() {
       NAVIENTY_NOW_LAYOUT.pageGutter * 2,
   );
 
+  /*
+   * Active orders live in a horizontal rail.
+   *
+   * The card is intentionally a little narrower than the available
+   * content width so the next active order peeks into view and makes
+   * the horizontal interaction obvious.
+   */
+  const activeOrderCardWidth =
+    Math.min(
+      360,
+      Math.max(
+        302,
+        bannerContentWidth - 20,
+      ),
+    );
+
   const bannerAudience: Exclude<
     HomeBannerAudience,
     'all'
@@ -2181,6 +2721,17 @@ export default function HomeScreen() {
     router.push('/orders');
   }
 
+  function openActiveOrder(
+    orderId: string,
+  ) {
+    router.push({
+      pathname: '/order-success',
+      params: {
+        id: orderId,
+      },
+    });
+  }
+
   if (
     isBootstrapLoading ||
     authState.status === 'loading'
@@ -2232,6 +2783,55 @@ export default function HomeScreen() {
             onPressCategory={openCategory}
           />
 
+          {activeOrders.length > 0 ? (
+            <ScrollView
+              horizontal
+              alwaysBounceHorizontal={false}
+              bounces={false}
+              contentContainerStyle={
+                styles.activeOrdersRailContent
+              }
+              decelerationRate="fast"
+              directionalLockEnabled
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator={false}
+              snapToAlignment="start"
+              snapToInterval={
+                activeOrderCardWidth + 12
+              }
+              style={
+                styles.activeOrdersRail
+              }
+            >
+              {activeOrders.map(
+                (order) => {
+                  const orderStore =
+                    stores.find(
+                      (store) =>
+                        store.id ===
+                        order.storeId,
+                    ) ?? null;
+
+                  return (
+                    <ActiveOrderTrackingCard
+                      key={order.id}
+                      cardWidth={
+                        activeOrderCardWidth
+                      }
+                      order={order}
+                      store={orderStore}
+                      onPress={() => {
+                        openActiveOrder(
+                          order.id,
+                        );
+                      }}
+                    />
+                  );
+                },
+              )}
+            </ScrollView>
+          ) : null}
+
           {isSignedIn ? (
             <>
               <PromoCarousel
@@ -2258,14 +2858,32 @@ export default function HomeScreen() {
           ) : (
             <HomeBannerCarousel
               audience="signed_out"
+              fallbackWhatsAppNumber={
+                bootstrap.settings
+                  .support_whatsapp ||
+                bootstrap.settings
+                  .whatsapp_number
+              }
               placement="main"
+              serviceAreaId={
+                effectiveLocation.areaId
+              }
               width={bannerContentWidth}
             />
           )}
 
           <HomeBannerCarousel
             audience={bannerAudience}
+            fallbackWhatsAppNumber={
+              bootstrap.settings
+                .support_whatsapp ||
+              bootstrap.settings
+                .whatsapp_number
+            }
             placement="exclusive_offers"
+            serviceAreaId={
+              effectiveLocation.areaId
+            }
             title="عروض حصرية"
             width={bannerContentWidth}
           />
@@ -2905,6 +3523,201 @@ const styles = StyleSheet.create({
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
     width: 19,
+  },
+
+  /* ================================= */
+  /* ACTIVE ORDER TRACKING               */
+  /* ================================= */
+
+  activeOrdersRail: {
+    marginHorizontal:
+      -NAVIENTY_NOW_LAYOUT.pageGutter,
+    marginTop: 24,
+  },
+
+  activeOrdersRailContent: {
+    flexDirection: 'row-reverse',
+    gap: 12,
+    paddingBottom: 5,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+  },
+
+  activeOrderCard: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.cardRadius,
+    borderWidth: 1,
+    elevation: 3,
+    flexShrink: 0,
+    paddingBottom: 15,
+    paddingHorizontal: 15,
+    paddingTop: 14,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 9,
+  },
+
+  activeOrderCardPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.993 }],
+  },
+
+  activeOrderTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+  },
+
+  activeOrderStoreArtwork: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 50,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 50,
+  },
+
+  activeOrderStoreImage: {
+    height: '100%',
+    width: '100%',
+  },
+
+  activeOrderStoreFallback: {
+    fontSize: 23,
+  },
+
+  activeOrderHeading: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 11,
+  },
+
+  activeOrderEyebrow: {
+    color:
+      NAVIENTY_NOW_COLORS.primaryDark,
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  activeOrderStoreName: {
+    color:
+      NAVIENTY_NOW_COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 3,
+    textAlign: 'right',
+    width: '100%',
+    writingDirection: 'rtl',
+  },
+
+  activeOrderArrow: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+    borderRadius: 15,
+    height: 30,
+    justifyContent: 'center',
+    marginLeft: 8,
+    width: 30,
+  },
+
+  activeOrderArrowText: {
+    color:
+      NAVIENTY_NOW_COLORS.primaryDark,
+    fontSize: 23,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+
+  activeOrderFlow: {
+    borderTopColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderTopWidth:
+      StyleSheet.hairlineWidth,
+    marginTop: 13,
+    paddingTop: 14,
+  },
+
+  activeOrderFlowRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+  },
+
+  activeOrderFlowStep: {
+    alignItems: 'center',
+    width: 62,
+  },
+
+  activeOrderFlowCircle: {
+    alignItems: 'center',
+    backgroundColor: '#EEF1EF',
+    borderColor: '#E3E7E4',
+    borderRadius: 16,
+    borderWidth: 2,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+
+  activeOrderFlowCircleReached: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    borderColor:
+      NAVIENTY_NOW_COLORS.primary,
+  },
+
+  activeOrderFlowCircleActive: {
+    borderColor:
+      NAVIENTY_NOW_COLORS.primaryDark,
+    borderWidth: 3,
+  },
+
+
+  activeOrderFlowLabel: {
+    color:
+      NAVIENTY_NOW_COLORS.textMuted,
+    fontSize: 8.5,
+    fontWeight: '700',
+    lineHeight: 13,
+    marginTop: 6,
+    minHeight: 27,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  activeOrderFlowLabelReached: {
+    color:
+      NAVIENTY_NOW_COLORS.text,
+    fontWeight: '800',
+  },
+
+  activeOrderConnector: {
+    backgroundColor: '#E3E7E4',
+    borderRadius: 2,
+    flex: 1,
+    height: 3,
+    marginHorizontal: -2,
+    marginTop: 15,
+    minWidth: 8,
+  },
+
+  activeOrderConnectorReached: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
   },
 
   welcomeBanner: {
