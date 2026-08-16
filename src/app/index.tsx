@@ -95,15 +95,6 @@ type PromoCard = {
   decoration: 'logo' | 'bags' | 'route';
 };
 
-// Optional, purely-cosmetic fields for the "deals rail" cards.
-// These are read defensively (with fallbacks) because the current
-// catalog service does not guarantee they exist yet.
-type DealsStore = StoreSummary & {
-  discountLabel?: string | null;
-  reviewsCountLabel?: string | null;
-  averagePriceLabel?: string | null;
-  distanceLabel?: string | null;
-};
 
 const HOME_PROMO_CARDS: PromoCard[] = [
   {
@@ -288,20 +279,6 @@ function getUserDisplayName(
   return null;
 }
 
-function formatCurrency(
-  value: number,
-  currencySymbol: string,
-): string {
-  const formattedValue =
-    new Intl.NumberFormat('ar-EG', {
-      maximumFractionDigits: 0,
-    }).format(value);
-
-  return `${formattedValue} ${
-    currencySymbol || 'ج.م'
-  }`;
-}
-
 function CategoryArtwork({
   category,
 }: {
@@ -341,72 +318,6 @@ function CategoryArtwork({
           }
         }}
       />
-    </View>
-  );
-}
-
-function StoreArtwork({
-  store,
-  large = false,
-  flushEdge = false,
-}: {
-  store: StoreSummary;
-  large?: boolean;
-  flushEdge?: boolean;
-}) {
-  const [imageFailed, setImageFailed] =
-    useState(false);
-
-  const imageUrl =
-    store.logoUrl ?? store.coverImageUrl;
-
-  const canShowImage =
-    Boolean(imageUrl) && !imageFailed;
-
-  return (
-    <View
-      style={[
-        styles.storeArtwork,
-        large && styles.storeArtworkLarge,
-        flushEdge && styles.storeArtworkFlush,
-      ]}
-    >
-      {canShowImage ? (
-        <Image
-          accessibilityIgnoresInvertColors
-          accessibilityLabel={
-            `صورة ${store.name}`
-          }
-          resizeMode={
-            store.logoUrl ? 'contain' : 'cover'
-          }
-          source={{
-            uri: imageUrl ?? '',
-          }}
-          style={styles.storeImage}
-          onError={() => {
-            setImageFailed(true);
-          }}
-        />
-      ) : (
-        <Text
-          style={[
-            styles.storeFallbackIcon,
-            large &&
-              styles.storeFallbackIconLarge,
-          ]}
-        >
-          {store.icon || '🏪'}
-        </Text>
-      )}
-
-      {store.isManuallyClosed && (
-        <View style={styles.closedOverlay}>
-          <Text style={styles.closedOverlayText}>
-            مغلق
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -1837,283 +1748,6 @@ function SectionHeader({
   );
 }
 
-// A promo banner (title + tagline + "see more" arrow) followed by a
-// horizontally-scrolling rail of deal cards: cover image, a discount
-// chip, a small round logo badge, name, rating and an average-price
-// line. Any field the catalog service doesn't supply yet is simply
-// omitted rather than faked.
-function DealsBanner({
-  onPressViewAll,
-}: {
-  onPressViewAll: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel="عروض توفير على المطاعم القريبة"
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.dealsBanner,
-        pressed && styles.cardPressed,
-      ]}
-      onPress={onPressViewAll}
-    >
-      <View style={styles.dealsBannerArrow}>
-        <Text
-          style={styles.dealsBannerArrowText}
-        >
-          ‹
-        </Text>
-      </View>
-
-      <View style={styles.dealsBannerCopy}>
-        <Text style={styles.dealsBannerTitle}>
-          وفّر في كل خروجة
-        </Text>
-        <Text
-          style={styles.dealsBannerSubtitle}
-        >
-          خصومات على أشهر المطاعم القريبة منك
-        </Text>
-      </View>
-
-      <View style={styles.dealsBannerBadge}>
-        <Text style={styles.dealsBannerBadgeText}>
-          %
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function DealCard({
-  store,
-  currencySymbol,
-  onPress,
-}: {
-  store: DealsStore;
-  currencySymbol: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={
-        `فتح ${store.name}`
-      }
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.dealCard,
-        pressed && styles.cardPressed,
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.dealCardImageWrap}>
-        <StoreArtwork
-          large
-          store={store}
-        />
-
-        {store.discountLabel ? (
-          <View style={styles.dealDiscountChip}>
-            <Text
-              style={styles.dealDiscountChipText}
-            >
-              {store.discountLabel}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.dealCardCopy}>
-        <Text
-          numberOfLines={1}
-          style={styles.dealCardTitle}
-        >
-          {store.name}
-        </Text>
-
-        <View style={styles.dealCardFooter}>
-          {store.rating > 0 ? (
-            <Text style={styles.discoveryRating}>
-              ★ {store.rating.toFixed(1)}
-              {store.reviewsCountLabel
-                ? ` (${store.reviewsCountLabel})`
-                : ''}
-            </Text>
-          ) : (
-            <Text
-              style={styles.discoveryMutedMeta}
-            >
-              بدون تقييم بعد
-            </Text>
-          )}
-
-          {store.distanceLabel ? (
-            <Text style={styles.dealCardDistance}>
-              {store.distanceLabel}
-            </Text>
-          ) : null}
-        </View>
-
-        <Text
-          numberOfLines={1}
-          style={styles.dealCardPrice}
-        >
-          {store.averagePriceLabel ||
-            (store.deliveryFee > 0
-              ? `التوصيل ${formatCurrency(
-                  store.deliveryFee,
-                  currencySymbol,
-                )}`
-              : 'تفاصيل الأسعار داخل المتجر')}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function DealsRailSection({
-  stores,
-  currencySymbol,
-  onPressStore,
-  onPressViewAll,
-}: {
-  stores: DealsStore[];
-  currencySymbol: string;
-  onPressStore: (storeId: string) => void;
-  onPressViewAll: () => void;
-}) {
-  if (stores.length === 0) {
-    return null;
-  }
-
-  return (
-    <View style={styles.discoverySection}>
-      <DealsBanner
-        onPressViewAll={onPressViewAll}
-      />
-
-      <ScrollView
-        horizontal
-        contentContainerStyle={
-          styles.discoveryListContent
-        }
-        directionalLockEnabled
-        showsHorizontalScrollIndicator={false}
-      >
-        {stores.map((store) => (
-          <DealCard
-            key={store.id}
-            currencySymbol={currencySymbol}
-            store={store}
-            onPress={() => {
-              onPressStore(store.id);
-            }}
-          />
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-function DiscoveryRail({
-  stores,
-  currencySymbol,
-  onPressStore,
-}: {
-  stores: StoreSummary[];
-  currencySymbol: string;
-  onPressStore: (storeId: string) => void;
-}) {
-  if (stores.length === 0) {
-    return null;
-  }
-
-  return (
-    <View style={styles.discoverySection}>
-      <SectionHeader title="اكتشف المزيد" />
-
-      <ScrollView
-        horizontal
-        contentContainerStyle={
-          styles.discoveryListContent
-        }
-        directionalLockEnabled
-        showsHorizontalScrollIndicator={false}
-      >
-        {stores.map((store) => (
-          <Pressable
-            key={store.id}
-            accessibilityLabel={
-              `فتح ${store.name}`
-            }
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.discoveryCard,
-              pressed && styles.cardPressed,
-            ]}
-            onPress={() => {
-              onPressStore(store.id);
-            }}
-          >
-            <StoreArtwork
-              large
-              store={store}
-            />
-
-            <View
-              style={styles.discoveryCardCopy}
-            >
-              <Text
-                numberOfLines={1}
-                style={styles.discoveryCardTitle}
-              >
-                {store.name}
-              </Text>
-
-              <Text
-                numberOfLines={1}
-                style={styles.discoveryCardCategory}
-              >
-                {store.categoryName}
-              </Text>
-
-              <View
-                style={styles.discoveryCardFooter}
-              >
-                {store.rating > 0 ? (
-                  <Text
-                    style={styles.discoveryRating}
-                  >
-                    ★{' '}
-                    {store.rating.toFixed(1)}
-                  </Text>
-                ) : (
-                  <Text
-                    style={styles.discoveryMutedMeta}
-                  >
-                    بدون تقييم بعد
-                  </Text>
-                )}
-
-                <Text
-                  style={styles.discoveryDelivery}
-                >
-                  {store.deliveryFee > 0
-                    ? formatCurrency(
-                        store.deliveryFee,
-                        currencySymbol,
-                      )
-                    : 'تفاصيل التوصيل داخل المتجر'}
-                </Text>
-              </View>
-            </View>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
 function HomeLoadingSkeleton() {
   return (
     <View style={styles.screen}>
@@ -2261,10 +1895,6 @@ export default function HomeScreen() {
     useState<ResolvedLocation | null>(null);
   const [stores, setStores] =
     useState<StoreSummary[]>([]);
-  const [isStoresLoading, setIsStoresLoading] =
-    useState(false);
-  const [storesError, setStoresError] =
-    useState<string | null>(null);
 
   const orders = useOrdersStore(
     (state) => state.orders,
@@ -2399,9 +2029,6 @@ export default function HomeScreen() {
       }
 
       try {
-        setIsStoresLoading(true);
-        setStoresError(null);
-
         const loadedStores = await listStores({
           serviceAreaId:
             selectedLocation.areaId ??
@@ -2419,15 +2046,10 @@ export default function HomeScreen() {
         }
 
         setStores([]);
-        setStoresError(
-          error instanceof Error
-            ? error.message
-            : 'تعذر تحميل الأماكن.',
+        console.warn(
+          'Unable to load Home stores.',
+          error,
         );
-      } finally {
-        if (isMountedRef.current) {
-          setIsStoresLoading(false);
-        }
       }
     },
     [selectedLocation],
@@ -2582,18 +2204,11 @@ export default function HomeScreen() {
   );
 
   /**
-   * Anonymous users have a real Supabase session and can use
-   * the complete shopping flow without a visible Login step.
-   *
    * isSignedIn means a permanent linked account only.
-   * hasAppSession includes both permanent and anonymous users.
+   * Anonymous sessions can still use the shopping flow.
    */
   const isSignedIn =
     authState.status === 'signedIn';
-
-  const hasAppSession =
-    authState.status === 'signedIn' ||
-    authState.status === 'anonymous';
 
   const userDisplayName =
     getUserDisplayName(authState);
@@ -2604,33 +2219,6 @@ export default function HomeScreen() {
     [bootstrap],
   );
 
-
-  // Reuses whichever stores are flagged as featured for the deals
-  // rail; falls back to the first few stores if none are featured.
-  const dealsStores = useMemo(() => {
-    const featured = stores.filter(
-      (store) => store.isFeatured,
-    );
-
-    const source =
-      featured.length > 0
-        ? featured
-        : stores;
-
-    return source.slice(0, 6) as DealsStore[];
-  }, [stores]);
-
-  const discoveryStores = useMemo(() => {
-    const featured = stores.filter(
-      (store) => store.isFeatured,
-    );
-
-    if (featured.length > 0) {
-      return featured.slice(0, 6);
-    }
-
-    return stores.slice(0, 6);
-  }, [stores]);
 
   const contentWidth = Math.min(
     windowWidth,
@@ -2713,9 +2301,6 @@ export default function HomeScreen() {
     });
   }
 
-  function openSearch() {
-    router.push('/search');
-  }
 
   function openOrders() {
     router.push('/orders');
@@ -2888,32 +2473,6 @@ export default function HomeScreen() {
             width={bannerContentWidth}
           />
 
-          {hasAppSession &&
-            !isStoresLoading &&
-            !storesError && (
-              <DealsRailSection
-                currencySymbol={
-                  bootstrap.settings
-                    .currency_symbol
-                }
-                stores={dealsStores}
-                onPressStore={openStore}
-                onPressViewAll={openSearch}
-              />
-            )}
-
-          {hasAppSession &&
-            !isStoresLoading &&
-            !storesError && (
-              <DiscoveryRail
-                currencySymbol={
-                  bootstrap.settings
-                    .currency_symbol
-                }
-                stores={discoveryStores}
-                onPressStore={openStore}
-              />
-            )}
         </View>
       </ScrollView>
 
@@ -3861,65 +3420,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  storeArtwork: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderRadius: 15,
-    height: 90,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-    width: 90,
-  },
-
-  storeArtworkLarge: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderRadius: 20,
-    height: 142,
-    width: '100%',
-  },
-
-  storeArtworkFlush: {
-    borderBottomLeftRadius: 0,
-    borderRadius: 0,
-    borderTopLeftRadius: 0,
-    height: '100%',
-    width: 96,
-  },
-
-  storeImage: {
-    height: '100%',
-    width: '100%',
-  },
-
-  storeFallbackIcon: {
-    fontSize: 34,
-  },
-
-  storeFallbackIconLarge: {
-    fontSize: 48,
-  },
-
-  closedOverlay: {
-    alignItems: 'center',
-    backgroundColor:
-      'rgba(20,20,20,0.52)',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-
-  closedOverlayText: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-
   // "Big brands" flush-edge row: the logo tile touches the row's
   // trailing edge with no inner padding, mirroring a dense
   // brands-near-you list.
@@ -3988,223 +3488,6 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.primaryDark,
     fontSize: 9,
     fontWeight: '900',
-  },
-
-  discoverySection: {
-    marginTop: 35,
-  },
-
-  // Promo banner that introduces the deals rail below it.
-  dealsBanner: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryUltraPale,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
-    flexDirection: 'row-reverse',
-    minHeight: 74,
-    marginBottom: 15,
-    padding: 15,
-  },
-
-  dealsBannerBadge: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 20,
-    height: 44,
-    justifyContent: 'center',
-    marginRight: 12,
-    width: 44,
-  },
-
-  dealsBannerBadgeText: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-
-  dealsBannerCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-
-  dealsBannerTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 17,
-    fontWeight: '900',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  dealsBannerSubtitle: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 11,
-    lineHeight: 18,
-    marginTop: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  dealsBannerArrow: {
-    alignItems: 'center',
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 17,
-    borderWidth: 1,
-    height: 34,
-    justifyContent: 'center',
-    marginLeft: 9,
-    width: 34,
-  },
-
-  dealsBannerArrowText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 27,
-    lineHeight: 28,
-  },
-
-  dealCard: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
-    borderWidth: 1,
-    marginLeft: 13,
-    overflow: 'hidden',
-    width: 210,
-  },
-
-  dealCardImageWrap: {
-    position: 'relative',
-  },
-
-  dealDiscountChip: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 8,
-    left: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    position: 'absolute',
-    top: 10,
-  },
-
-  dealDiscountChipText: {
-    color: NAVIENTY_NOW_COLORS.white,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-
-  dealCardCopy: {
-    alignItems: 'flex-end',
-    padding: 13,
-  },
-
-  dealCardTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 15,
-    fontWeight: '900',
-    textAlign: 'right',
-    width: '100%',
-    writingDirection: 'rtl',
-  },
-
-  dealCardFooter: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    width: '100%',
-  },
-
-  dealCardDistance: {
-    color: NAVIENTY_NOW_COLORS.textMuted,
-    fontSize: 10,
-  },
-
-  dealCardPrice: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 8,
-    textAlign: 'right',
-    width: '100%',
-    writingDirection: 'rtl',
-  },
-
-  discoveryListContent: {
-    flexDirection: 'row-reverse',
-    paddingBottom: 5,
-  },
-
-  discoveryCard: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
-    borderWidth: 1,
-    marginLeft: 13,
-    overflow: 'hidden',
-    width: 246,
-  },
-
-  discoveryCardCopy: {
-    alignItems: 'flex-end',
-    padding: 14,
-  },
-
-  discoveryCardTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'right',
-    width: '100%',
-    writingDirection: 'rtl',
-  },
-
-  discoveryCardCategory: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 11,
-    marginTop: 4,
-    textAlign: 'right',
-    width: '100%',
-    writingDirection: 'rtl',
-  },
-
-  discoveryCardFooter: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    marginTop: 11,
-    width: '100%',
-  },
-
-  discoveryRating: {
-    color: '#8D6414',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-
-  discoveryMutedMeta: {
-    color: NAVIENTY_NOW_COLORS.textMuted,
-    fontSize: 10,
-  },
-
-  discoveryDelivery: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 9,
-    maxWidth: 130,
-    textAlign: 'left',
   },
 
   compactEmptyCard: {

@@ -314,7 +314,7 @@ export default function StoreScreen() {
         >
           <Ionicons
             name="restaurant-outline"
-            size={34}
+            size={28}
             color={NAVIENTY_NOW_COLORS.primary}
           />
         </View>
@@ -961,7 +961,7 @@ export default function StoreScreen() {
             >
               <Ionicons
                 name="close"
-                size={16}
+                size={13}
                 color="#ffffff"
               />
             </View>
@@ -1064,7 +1064,7 @@ export default function StoreScreen() {
             >
               <Ionicons
                 name="restaurant-outline"
-                size={34}
+                size={28}
                 color={NAVIENTY_NOW_COLORS.primary}
               />
             </View>
@@ -1310,7 +1310,7 @@ export default function StoreScreen() {
                               >
                                 <Ionicons
                                   name="image-outline"
-                                  size={42}
+                                  size={34}
                                   color="#b9b9b9"
                                 />
                               </View>
@@ -1347,7 +1347,7 @@ export default function StoreScreen() {
                               >
                                 <Ionicons
                                   name="chevron-forward"
-                                  size={31}
+                                  size={22}
                                   color={
                                     NAVIENTY_NOW_COLORS.primary
                                   }
@@ -1383,7 +1383,7 @@ export default function StoreScreen() {
                               >
                                 <Ionicons
                                   name="add"
-                                  size={30}
+                                  size={22}
                                   color={
                                     NAVIENTY_NOW_COLORS.primary
                                   }
@@ -1420,7 +1420,7 @@ export default function StoreScreen() {
                                   <Ionicons
                                     name="add"
                                     size={
-                                      21
+                                      17
                                     }
                                     color="#ffffff"
                                   />
@@ -1458,7 +1458,7 @@ export default function StoreScreen() {
                                   <Ionicons
                                     name="remove"
                                     size={
-                                      21
+                                      17
                                     }
                                     color="#ffffff"
                                   />
@@ -1547,7 +1547,7 @@ export default function StoreScreen() {
                     >
                       <Ionicons
                         name="image-outline"
-                        size={64}
+                        size={46}
                         color="#b9b9b9"
                       />
                     </View>
@@ -1568,7 +1568,7 @@ export default function StoreScreen() {
                   >
                     <Ionicons
                       name="close"
-                      size={31}
+                      size={22}
                       color="#242424"
                     />
                   </Pressable>
@@ -1782,7 +1782,7 @@ export default function StoreScreen() {
                     >
                       <Ionicons
                         name="remove"
-                        size={27}
+                        size={20}
                         color={
                           selectedProductQuantity <=
                           1
@@ -1815,7 +1815,7 @@ export default function StoreScreen() {
                     >
                       <Ionicons
                         name="add"
-                        size={29}
+                        size={21}
                         color={
                           NAVIENTY_NOW_COLORS.primary
                         }
@@ -2013,11 +2013,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E1E1E1',
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
-    height: 46,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
 
   headerButtonPressed: {
@@ -2030,32 +2030,32 @@ const styles = StyleSheet.create({
   },
 
   backArrowCanvas: {
-    height: 23,
+    height: 20,
     position: 'relative',
-    width: 24,
+    width: 21,
   },
 
   backArrowStem: {
     backgroundColor: '#242424',
     borderRadius: 2,
-    height: 2.2,
+    height: 2,
     left: 3,
     position: 'absolute',
-    top: 10.3,
-    width: 19,
+    top: 9,
+    width: 16,
   },
 
   backArrowDiagonal: {
     backgroundColor: '#242424',
     borderRadius: 2,
-    height: 2.2,
+    height: 2,
     left: 2,
     position: 'absolute',
-    width: 10,
+    width: 8,
   },
 
   backArrowTop: {
-    top: 7,
+    top: 6,
     transform: [
       {
         rotate: '-42deg',
@@ -2064,7 +2064,7 @@ const styles = StyleSheet.create({
   },
 
   backArrowBottom: {
-    top: 14,
+    top: 12,
     transform: [
       {
         rotate: '42deg',
@@ -2146,7 +2146,7 @@ const styles = StyleSheet.create({
   },
 
   heroFallbackIcon: {
-    fontSize: 120,
+    fontSize: 90,
   },
 
   topCircleButtonPressed: {
@@ -2197,12 +2197,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fafafa',
     borderColor: '#eeeeee',
-    borderRadius: 19,
+    borderRadius: 17,
     borderWidth: 1,
-    height: 86,
+    height: 72,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 86,
+    width: 72,
   },
 
   storeLogoImage: {
@@ -2211,7 +2211,7 @@ const styles = StyleSheet.create({
   },
 
   storeLogoFallback: {
-    fontSize: 43,
+    fontSize: 34,
   },
 
   storeMainContent: {
@@ -2221,7 +2221,7 @@ const styles = StyleSheet.create({
 
   storeName: {
     color: '#1e1e1e',
-    fontSize: 28,
+    fontSize: 21,
     fontWeight: '900',
   },
 
@@ -2244,17 +2244,17 @@ const styles = StyleSheet.create({
   closedNoticeIcon: {
     alignItems: 'center',
     backgroundColor: '#d7372f',
-    borderRadius: 12,
-    height: 24,
+    borderRadius: 10,
+    height: 20,
     justifyContent: 'center',
     marginRight: 10,
-    width: 24,
+    width: 20,
   },
 
   closedNoticeText: {
     color: '#9e2b25',
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     lineHeight: 20,
     textAlign: 'right',
@@ -2296,17 +2296,17 @@ const styles = StyleSheet.create({
 
   categoryTab: {
     alignItems: 'center',
-    height: 66,
+    height: 58,
     justifyContent: 'flex-end',
-    marginHorizontal: 11,
-    minWidth: 90,
+    marginHorizontal: 9,
+    minWidth: 78,
   },
 
   categoryTabText: {
     color: '#7d7d7d',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    paddingBottom: 15,
+    paddingBottom: 13,
   },
 
   categoryTabTextActive: {
@@ -2317,7 +2317,7 @@ const styles = StyleSheet.create({
   categoryUnderline: {
     backgroundColor: 'transparent',
     borderRadius: 2,
-    height: 4,
+    height: 3,
     width: '100%',
   },
 
@@ -2336,7 +2336,7 @@ const styles = StyleSheet.create({
 
   productsSectionTitle: {
     color: '#242424',
-    fontSize: 23,
+    fontSize: 20,
     fontWeight: '900',
     marginBottom: 4,
     paddingHorizontal:
@@ -2375,17 +2375,17 @@ const styles = StyleSheet.create({
 
   productName: {
     color: '#252525',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    lineHeight: 23,
+    lineHeight: 22,
     textAlign: 'right',
   },
 
   productDescription: {
     color: '#858585',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 7,
     textAlign: 'right',
   },
 
@@ -2398,16 +2398,16 @@ const styles = StyleSheet.create({
 
   productPrice: {
     color: '#303030',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'right',
   },
 
   productVariantHint: {
     color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    marginTop: 6,
+    marginTop: 5,
     textAlign: 'right',
   },
 
@@ -2456,13 +2456,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#efefef',
-    borderRadius: 30,
+    borderRadius: 22,
     borderWidth: 1,
-    bottom: -5,
-    height: 58,
+    bottom: -2,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
-    right: 10,
+    right: 8,
 
     shadowColor: '#000000',
     shadowOffset: {
@@ -2474,7 +2474,7 @@ const styles = StyleSheet.create({
 
     elevation: 5,
 
-    width: 58,
+    width: 44,
   },
 
   productAddButtonPressed: {
@@ -2489,13 +2489,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#efefef',
-    borderRadius: 30,
+    borderRadius: 22,
     borderWidth: 1,
-    bottom: -5,
-    height: 58,
+    bottom: -2,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
-    right: 10,
+    right: 8,
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
@@ -2504,21 +2504,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 5,
-    width: 58,
+    width: 44,
   },
 
   productQuantityContainer: {
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 28,
-    bottom: -5,
+    borderRadius: 22,
+    bottom: -2,
     flexDirection: 'row',
-    height: 54,
+    height: 44,
     justifyContent: 'center',
     paddingHorizontal: 5,
     position: 'absolute',
-    right: 5,
+    right: 4,
 
     shadowColor: '#000000',
     shadowOffset: {
@@ -2533,17 +2533,17 @@ const styles = StyleSheet.create({
 
   productQuantityButton: {
     alignItems: 'center',
-    borderRadius: 22,
-    height: 42,
+    borderRadius: 18,
+    height: 34,
     justifyContent: 'center',
-    width: 42,
+    width: 34,
   },
 
   productQuantityText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
-    minWidth: 30,
+    minWidth: 26,
     textAlign: 'center',
   },
 
@@ -2588,9 +2588,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: 'rgba(0,0,0,0.08)',
-    borderRadius: 31,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 60,
+    height: 44,
     justifyContent: 'center',
     left: 22,
     position: 'absolute',
@@ -2602,8 +2602,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 5,
     elevation: 5,
-    top: 52,
-    width: 60,
+    top: 50,
+    width: 44,
   },
 
   productModalBody: {
@@ -2613,16 +2613,16 @@ const styles = StyleSheet.create({
 
   productModalTitle: {
     color: '#202020',
-    fontSize: 27,
+    fontSize: 22,
     fontWeight: '900',
-    lineHeight: 35,
+    lineHeight: 30,
     textAlign: 'right',
   },
 
   productModalDescription: {
     color: '#7a7a7a',
-    fontSize: 16,
-    lineHeight: 25,
+    fontSize: 14,
+    lineHeight: 22,
     marginTop: 10,
     textAlign: 'right',
   },
@@ -2639,15 +2639,15 @@ const styles = StyleSheet.create({
 
   variantSectionTitle: {
     color: '#202020',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
     textAlign: 'right',
   },
 
   variantSectionSubtitle: {
     color: '#888888',
-    fontSize: 15,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 5,
     textAlign: 'right',
   },
 
@@ -2660,7 +2660,7 @@ const styles = StyleSheet.create({
 
   requiredBadgeText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
   },
 
@@ -2694,14 +2694,14 @@ const styles = StyleSheet.create({
   variantRadio: {
     alignItems: 'center',
     borderColor: '#e5e5e5',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1.5,
-    height: 24,
+    height: 20,
     justifyContent: 'center',
     left: 10,
     position: 'absolute',
     top: 10,
-    width: 24,
+    width: 20,
   },
 
   variantRadioSelected: {
@@ -2710,23 +2710,23 @@ const styles = StyleSheet.create({
 
   variantRadioDot: {
     backgroundColor: NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 5,
-    height: 10,
-    width: 10,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
   },
 
   variantName: {
     color: '#252525',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    marginTop: 42,
+    marginTop: 38,
     textAlign: 'right',
   },
 
   variantPrice: {
     color: '#929292',
-    fontSize: 13,
-    marginTop: 6,
+    fontSize: 12,
+    marginTop: 5,
     textAlign: 'right',
   },
 
@@ -2753,8 +2753,8 @@ const styles = StyleSheet.create({
 
   productModalRequiredHint: {
     color: '#999999',
-    fontSize: 14,
-    marginBottom: 12,
+    fontSize: 12,
+    marginBottom: 10,
     textAlign: 'center',
   },
 
@@ -2767,37 +2767,37 @@ const styles = StyleSheet.create({
   modalQuantityControl: {
     alignItems: 'center',
     borderColor: '#e2e2e2',
-    borderRadius: 34,
+    borderRadius: 27,
     borderWidth: 1,
     flexDirection: 'row',
-    height: 64,
+    height: 54,
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    width: 165,
+    width: 145,
   },
 
   modalQuantityButton: {
     alignItems: 'center',
-    borderRadius: 24,
-    height: 48,
+    borderRadius: 19,
+    height: 38,
     justifyContent: 'center',
-    width: 48,
+    width: 38,
   },
 
   modalQuantityText: {
     color: '#242424',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    minWidth: 25,
+    minWidth: 22,
     textAlign: 'center',
   },
 
   modalAddItemButton: {
     alignItems: 'center',
     backgroundColor: NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 32,
+    borderRadius: 27,
     flex: 1,
-    height: 64,
+    height: 54,
     justifyContent: 'center',
     paddingHorizontal: 14,
   },
@@ -2818,7 +2818,7 @@ const styles = StyleSheet.create({
 
   modalAddItemButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     textAlign: 'center',
   },
@@ -2860,7 +2860,7 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.primary,
     borderRadius: 999,
     flexDirection: 'row',
-    height: 70,
+    height: 58,
     paddingHorizontal: 14,
   },
 
@@ -2880,29 +2880,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor:
       'rgba(255,255,255,0.18)',
-    borderRadius: 25,
-    height: 50,
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    width: 50,
+    width: 40,
   },
 
   cartCountText: {
     color: '#ffffff',
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '900',
   },
 
   cartButtonText: {
     color: '#ffffff',
     flex: 1,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    marginLeft: 15,
+    marginLeft: 13,
   },
 
   cartPrice: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
   },
 
@@ -2920,23 +2920,23 @@ const styles = StyleSheet.create({
   emptyCatalogIconContainer: {
     alignItems: 'center',
     backgroundColor: '#EAF8F0',
-    borderRadius: 35,
-    height: 70,
+    borderRadius: 29,
+    height: 58,
     justifyContent: 'center',
-    width: 70,
+    width: 58,
   },
 
   emptyCatalogTitle: {
     color: '#222222',
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '900',
     marginTop: 16,
   },
 
   emptyCatalogDescription: {
     color: '#777777',
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 19,
     marginTop: 7,
     maxWidth: 300,
     textAlign: 'center',
@@ -2974,7 +2974,7 @@ const styles = StyleSheet.create({
 
   modalTitle: {
     color: '#222222',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
     textAlign: 'right',
     writingDirection: 'rtl',
@@ -2982,8 +2982,8 @@ const styles = StyleSheet.create({
 
   modalDescription: {
     color: '#777777',
-    fontSize: 16,
-    lineHeight: 28,
+    fontSize: 14,
+    lineHeight: 23,
     marginTop: 12,
     textAlign: 'right',
     writingDirection: 'rtl',
@@ -3001,13 +3001,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 58,
+    minHeight: 50,
     paddingHorizontal: 14,
   },
 
   confirmNewCartButtonText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
     textAlign: 'center',
   },
@@ -3020,13 +3020,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 58,
+    minHeight: 50,
     paddingHorizontal: 14,
   },
 
   cancelButtonText: {
     color: '#222222',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     textAlign: 'center',
   },
@@ -3046,15 +3046,15 @@ const styles = StyleSheet.create({
   stateIconContainer: {
     alignItems: 'center',
     backgroundColor: '#EAF8F0',
-    borderRadius: 40,
-    height: 80,
+    borderRadius: 33,
+    height: 66,
     justifyContent: 'center',
-    width: 80,
+    width: 66,
   },
 
   stateTitle: {
     color: '#17171A',
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: '900',
     marginTop: 17,
     textAlign: 'center',
@@ -3062,8 +3062,8 @@ const styles = StyleSheet.create({
 
   stateDescription: {
     color: '#73737A',
-    fontSize: 13,
-    lineHeight: 21,
+    fontSize: 12,
+    lineHeight: 19,
     marginTop: 8,
     maxWidth: 350,
     textAlign: 'center',
@@ -3080,7 +3080,7 @@ const styles = StyleSheet.create({
 
   retryButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
 
@@ -3096,7 +3096,7 @@ const styles = StyleSheet.create({
 
   errorButtonText: {
     color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
 
