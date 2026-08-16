@@ -34,6 +34,7 @@ import {
 } from '../services/order-service';
 
 import ServiceBookingSuccess from '../components/service/service-booking-success';
+import { OrderDetailsScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
   type Order,
   type OrderStatus,
@@ -831,40 +832,7 @@ function StoreOrderSuccessScreen() {
   }
 
   if (!hasHydrated) {
-    return (
-      <View
-        style={
-          styles.stateScreen
-        }
-      >
-        <StatusBar
-          style="dark"
-        />
-
-        <ActivityIndicator
-          size="large"
-          color={
-            BRAND_GREEN
-          }
-        />
-
-        <Text
-          style={
-            styles.stateTitle
-          }
-        >
-          جاري تحميل طلبك
-        </Text>
-
-        <Text
-          style={
-            styles.stateDescription
-          }
-        >
-          يتم تجهيز أحدث حالة للطلب.
-        </Text>
-      </View>
-    );
+    return <OrderDetailsScreenSkeleton />;
   }
 
   if (

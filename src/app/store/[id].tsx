@@ -9,7 +9,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Image,
   ImageBackground,
   LayoutChangeEvent,
@@ -28,6 +27,7 @@ import {
   getStoreCatalog,
 } from '../../services/catalog-service';
 
+import { StoreScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   isRestaurantCartCategory,
   useCartStore,
@@ -301,24 +301,7 @@ export default function StoreScreen() {
 
 
   if (isLoading) {
-    return (
-      <View style={styles.stateScreen}>
-        <ActivityIndicator
-          size="large"
-          color={NAVIENTY_NOW_COLORS.primary}
-        />
-
-        <Text style={styles.stateTitle}>
-          جاري تحميل المطعم
-        </Text>
-
-        <Text
-          style={styles.stateDescription}
-        >
-          يتم تحميل المنتجات والأسعار.
-        </Text>
-      </View>
-    );
+    return <StoreScreenSkeleton />;
   }
 
   if (!catalog || errorMessage) {

@@ -7,7 +7,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Image,
   type ImageSourcePropType,
@@ -20,6 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   getBookstoreCategoryImage,
 } from '../../config/bookstore-category-images';
@@ -315,10 +315,6 @@ function CategoryVisual({
 }: {
   item: CategoryDisplayItem;
 }) {
-  /**
-   * Local bundled artwork has first priority.
-   * This avoids waiting for a network image when a local asset exists.
-   */
   if (item.imageSource) {
     return (
       <View style={styles.categoryImageBox}>
@@ -331,11 +327,6 @@ function CategoryVisual({
     );
   }
 
-  /**
-   * Remote image is only a fallback.
-   * The bookstore seed keeps image_url NULL, so normally this branch
-   * will not be used unless you intentionally add a remote image later.
-   */
   if (item.section.imageUrl) {
     return (
       <View style={styles.categoryImageBox}>
@@ -778,16 +769,10 @@ export default function BookstoreScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.stateScreen}>
+      <>
         <StatusBar style="dark" />
-        <ActivityIndicator
-          size="large"
-          color="#111111"
-        />
-        <Text style={styles.stateTitle}>
-          جاري تحميل المكتبة
-        </Text>
-      </SafeAreaView>
+        <CatalogHomeScreenSkeleton />
+      </>
     );
   }
 

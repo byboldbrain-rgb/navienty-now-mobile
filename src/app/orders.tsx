@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
+import { OrdersScreenSkeleton } from '../components/ui/loading-skeleton';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { getMyOrders } from '../services/order-service';
 import {
@@ -174,7 +175,7 @@ function OrderCard({
       accessibilityLabel={
         `فتح تفاصيل الطلب ${order.orderCode}`
       }
-      style={({
+      style={( {
         pressed,
       }) => [
         styles.orderCard,
@@ -608,36 +609,7 @@ export default function OrdersScreen() {
     authState.status ===
       'loading'
   ) {
-    return (
-      <View
-        style={
-          styles.stateScreen
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color="#6d56df"
-        />
-
-        <Text
-          style={
-            styles.stateTitle
-          }
-        >
-          جاري تحميل طلباتك
-        </Text>
-
-        <Text
-          style={
-            styles.stateDescription
-          }
-        >
-          يتم استعادة آخر نسخة
-          محفوظة وتجهيز الاتصال
-          بحسابك على Supabase.
-        </Text>
-      </View>
-    );
+    return <OrdersScreenSkeleton />;
   }
 
   return (
@@ -665,7 +637,7 @@ export default function OrdersScreen() {
             }
           >
             <Pressable
-              style={({
+              style={( {
                 pressed,
               }) => [
                 styles.backButton,
@@ -713,7 +685,7 @@ export default function OrdersScreen() {
                 isRefreshing ||
                 !currentUserId
               }
-              style={({
+              style={( {
                 pressed,
               }) => [
                 styles.refreshButton,
@@ -746,30 +718,6 @@ export default function OrdersScreen() {
               )}
             </Pressable>
           </View>
-
-          {isRefreshing &&
-            sortedOrders.length >
-              0 && (
-              <View
-                style={
-                  styles.refreshingCard
-                }
-              >
-                <ActivityIndicator
-                  size="small"
-                  color="#5d47d2"
-                />
-
-                <Text
-                  style={
-                    styles.refreshingText
-                  }
-                >
-                  جاري مزامنة سجل
-                  الطلبات مع Supabase...
-                </Text>
-              </View>
-            )}
 
           {refreshMessage && (
             <View
@@ -873,7 +821,7 @@ export default function OrdersScreen() {
               </View>
 
               <Pressable
-                style={({
+                style={( {
                   pressed,
                 }) => [
                   styles.pendingButton,
@@ -967,30 +915,10 @@ export default function OrdersScreen() {
               }
             >
               {isRefreshing ? (
-                <>
-                  <ActivityIndicator
-                    size="large"
-                    color="#6d56df"
-                  />
-
-                  <Text
-                    style={
-                      styles.emptyTitle
-                    }
-                  >
-                    جاري تحميل طلباتك
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.emptyDescription
-                    }
-                  >
-                    يتم جلب سجل الطلبات
-                    المرتبط بحسابك من
-                    Supabase.
-                  </Text>
-                </>
+                <ActivityIndicator
+                  size="large"
+                  color="#6d56df"
+                />
               ) : (
                 <>
                   <View
@@ -1027,7 +955,7 @@ export default function OrdersScreen() {
                   </Text>
 
                   <Pressable
-                    style={({
+                    style={( {
                       pressed,
                     }) => [
                       styles.shopButton,
@@ -1773,6 +1701,12 @@ const styles =
       marginTop:
         30,
 
+      minHeight:
+        230,
+
+      justifyContent:
+        'center',
+
       padding:
         25,
     },
@@ -1917,49 +1851,6 @@ const styles =
         27,
     },
 
-    refreshingCard: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        '#f1efff',
-
-      borderRadius:
-        15,
-
-      flexDirection:
-        'row',
-
-      justifyContent:
-        'center',
-
-      marginTop:
-        18,
-
-      paddingHorizontal:
-        14,
-
-      paddingVertical:
-        11,
-    },
-
-    refreshingText: {
-      color:
-        '#5d47d2',
-
-      fontSize:
-        10,
-
-      fontWeight:
-        '700',
-
-      marginLeft:
-        9,
-
-      textAlign:
-        'right',
-    },
-
     warningCard: {
       alignItems:
         'center',
@@ -2012,59 +1903,5 @@ const styles =
 
       marginLeft:
         9,
-    },
-
-    stateScreen: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        '#f7f7fa',
-
-      flex:
-        1,
-
-      justifyContent:
-        'center',
-
-      padding:
-        24,
-    },
-
-    stateTitle: {
-      color:
-        '#222228',
-
-      fontSize:
-        22,
-
-      fontWeight:
-        '900',
-
-      marginTop:
-        16,
-
-      textAlign:
-        'center',
-    },
-
-    stateDescription: {
-      color:
-        '#777781',
-
-      fontSize:
-        13,
-
-      lineHeight:
-        21,
-
-      marginTop:
-        8,
-
-      maxWidth:
-        350,
-
-      textAlign:
-        'center',
     },
   });

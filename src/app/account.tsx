@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
+import { AccountScreenSkeleton } from '../components/ui/loading-skeleton';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { supabase } from '../lib/supabase';
 import {
@@ -257,20 +258,10 @@ export default function AccountScreen() {
 
   if (authState.status === 'loading') {
     return (
-      <View style={styles.loadingScreen}>
+      <>
         <StatusBar style="dark" />
-
-        <ActivityIndicator
-          color={
-            NAVIENTY_NOW_COLORS.primary
-          }
-          size="large"
-        />
-
-        <Text style={styles.loadingText}>
-          جاري تحميل بياناتك...
-        </Text>
-      </View>
+        <AccountScreenSkeleton />
+      </>
     );
   }
 
@@ -571,15 +562,22 @@ export default function AccountScreen() {
                 void signOutPermanentAccount();
               }}
             >
-              <Text
-                style={
-                  styles.signOutButtonText
-                }
-              >
-                {isSigningOut
-                  ? 'جاري تسجيل الخروج...'
-                  : 'تسجيل الخروج'}
-              </Text>
+              <View style={styles.signOutButtonContent}>
+                {isSigningOut && (
+                  <ActivityIndicator
+                    color={NAVIENTY_NOW_COLORS.error}
+                    size="small"
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.signOutButtonText
+                  }
+                >
+                  تسجيل الخروج
+                </Text>
+              </View>
             </Pressable>
           )}
         </View>
@@ -1023,25 +1021,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF5F5',
   },
 
+  signOutButtonContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+    justifyContent: 'center',
+  },
+
   signOutButtonText: {
     color: NAVIENTY_NOW_COLORS.error,
     fontSize: 13,
     fontWeight: '900',
-  },
-
-  loadingScreen: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.page,
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-
-  loadingText: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 12,
-    marginTop: 18,
   },
 });

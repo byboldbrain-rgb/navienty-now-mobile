@@ -1190,13 +1190,11 @@ export default function LoginScreen() {
           }
         />
 
-        <Text
-          style={
-            styles.loadingText
-          }
-        >
-          جاري التحقق من الحساب...
-        </Text>
+        <ActivityIndicator
+          color={NAVIENTY_NOW_COLORS.primary}
+          size="small"
+          style={styles.loadingIndicator}
+        />
       </View>
     );
   }
@@ -2808,13 +2806,7 @@ const styles =
         340,
     },
 
-    loadingText: {
-      color:
-        NAVIENTY_NOW_COLORS.textSecondary,
-
-      fontSize:
-        13,
-
+    loadingIndicator: {
       marginTop:
         17,
     },

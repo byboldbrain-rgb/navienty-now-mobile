@@ -7,7 +7,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -16,6 +15,7 @@ import {
   View,
 } from 'react-native';
 
+import { StoreListScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap, {
   type AppBootstrap,
 } from '../../services/bootstrap-service';
@@ -192,20 +192,7 @@ function GenericCategoryScreen({
   ]);
 
   if (isLoading) {
-    return (
-      <View style={styles.stateScreen}>
-        <ActivityIndicator
-          size="large"
-          color="#6D56DF"
-        />
-        <Text style={styles.stateTitle}>
-          جاري تحميل القسم
-        </Text>
-        <Text style={styles.stateDescription}>
-          يتم تحميل الأماكن المتاحة.
-        </Text>
-      </View>
-    );
+    return <StoreListScreenSkeleton />;
   }
 
   if (!category || errorMessage) {

@@ -6,7 +6,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Image,
   type ImageSourcePropType,
@@ -20,6 +19,7 @@ import {
   View,
 } from 'react-native';
 
+import { RestaurantsScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap, {
   type AppBootstrap,
 } from '../../services/bootstrap-service';
@@ -877,29 +877,7 @@ export default function RestaurantsScreen() {
     0;
 
   if (isLoading) {
-    return (
-      <View style={styles.stateScreen}>
-        <ActivityIndicator
-          size="large"
-          color={
-            NAVIENTY_NOW_COLORS.primary
-          }
-        />
-
-        <Text style={styles.stateTitle}>
-          جاري تحميل المطاعم
-        </Text>
-
-        <Text
-          style={
-            styles.stateDescription
-          }
-        >
-          يتم تجهيز المطاعم المتاحة
-          للطلب.
-        </Text>
-      </View>
-    );
+    return <RestaurantsScreenSkeleton />;
   }
 
   if (errorMessage) {

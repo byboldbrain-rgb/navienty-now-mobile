@@ -59,6 +59,7 @@ import {
 } from '../store/orders-store';
 
 import ServicePackageCheckout from '../components/service/service-package-checkout';
+import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 
 import {
   openOrderInWhatsApp,
@@ -945,35 +946,7 @@ function StoreCheckoutScreen() {
   /* -------------------------------- */
 
   if (isLoadingBootstrap) {
-    return (
-      <View
-        style={
-          styles.emptyScreen
-        }
-      >
-        <ActivityIndicator
-          size="large"
-          color={BRAND_GREEN}
-        />
-
-        <Text
-          style={
-            styles.emptyTitle
-          }
-        >
-          جاري تحميل بيانات الطلب
-        </Text>
-
-        <Text
-          style={
-            styles.emptyDescription
-          }
-        >
-          يتم تحميل الإعدادات
-          وطرق الدفع.
-        </Text>
-      </View>
-    );
+    return <CheckoutScreenSkeleton />;
   }
 
   /* -------------------------------- */

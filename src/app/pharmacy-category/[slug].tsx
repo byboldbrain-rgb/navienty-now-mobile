@@ -10,7 +10,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -35,6 +34,7 @@ import {
   type StoreCatalog,
 } from '../../services/catalog-service';
 
+import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   useCartStore,
 } from '../../store/cart-store';
@@ -932,30 +932,7 @@ export default function PharmacyCategoryScreen() {
    */
 
   if (isLoading) {
-    return (
-      <SafeAreaView
-        style={
-          styles.stateScreen
-        }
-      >
-        <StatusBar
-          style="dark"
-        />
-
-        <ActivityIndicator
-          size="large"
-          color="#111111"
-        />
-
-        <Text
-          style={
-            styles.stateTitle
-          }
-        >
-          جاري تحميل المنتجات
-        </Text>
-      </SafeAreaView>
-    );
+    return <ProductGridScreenSkeleton />;
   }
 
   /* ==========================================================

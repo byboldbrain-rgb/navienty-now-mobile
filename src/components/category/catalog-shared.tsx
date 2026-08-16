@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 import type { CatalogProduct } from '../../services/catalog-service';
+import { ProductGridScreenSkeleton } from '../ui/loading-skeleton';
 
 export function formatCurrency(
   value: number,
@@ -44,18 +44,15 @@ export function CatalogStateScreen({
   onRetry,
   onBack,
 }: StateScreenProps) {
+  if (isLoading) {
+    return <ProductGridScreenSkeleton />;
+  }
+
   return (
     <View style={sharedStyles.stateScreen}>
-      {isLoading ? (
-        <ActivityIndicator
-          size="large"
-          color={accentColor}
-        />
-      ) : (
-        <Text style={sharedStyles.stateIcon}>
-          {icon}
-        </Text>
-      )}
+      <Text style={sharedStyles.stateIcon}>
+        {icon}
+      </Text>
 
       <Text style={sharedStyles.stateTitle}>
         {title}
@@ -66,7 +63,7 @@ export function CatalogStateScreen({
         {description}
       </Text>
 
-      {!isLoading && onRetry && (
+      {onRetry && (
         <Pressable
           style={({ pressed }) => [
             sharedStyles.primaryStateButton,
@@ -87,7 +84,7 @@ export function CatalogStateScreen({
         </Pressable>
       )}
 
-      {!isLoading && onBack && (
+      {onBack && (
         <Pressable
           style={({ pressed }) => [
             sharedStyles.secondaryStateButton,
