@@ -264,7 +264,6 @@ function AppBootstrapScreen({
             overlap pixel-for-pixel so there is no visual jump. */}
         <Animated.Image
           accessibilityIgnoresInvertColors
-          pointerEvents="none"
           resizeMode="contain"
           source={bootstrapDot}
           style={[

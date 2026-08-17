@@ -31,7 +31,7 @@ type MainTab =
 
 type AppBottomNavigationProps = {
   activeTab: MainTab;
-  isSignedIn: boolean;
+  isSignedIn?: boolean;
 };
 
 type TabDefinition = {
@@ -477,7 +477,7 @@ function TabIcon({
 
 export default function AppBottomNavigation({
   activeTab,
-  isSignedIn,
+  isSignedIn = false,
 }: AppBottomNavigationProps) {
   const router = useRouter();
 

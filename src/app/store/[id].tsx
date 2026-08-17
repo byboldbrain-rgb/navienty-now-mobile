@@ -1943,10 +1943,10 @@ export default function StoreScreen() {
             </Text>
 
             <Text style={styles.modalDescription}>
-              عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من "
+              عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من “
               {conflictingRestaurantCart?.storeName ??
                 'المطعم السابق'}
-              ".
+              ”.
             </Text>
 
             <View style={styles.modalActions}>
