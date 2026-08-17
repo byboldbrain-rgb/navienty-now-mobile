@@ -1,4 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  hasDifferentRestaurantCart,
+  isRestaurantCartCategory,
+  isSameCartLine,
+} from '../domain/cart-rules';
+
+export {
+  isRestaurantCartCategory,
+} from '../domain/cart-rules';
 import { create } from 'zustand';
 import {
   createJSONStorage,
@@ -277,58 +287,6 @@ function normalizeCategorySlug(
   return normalizedValue.length > 0
     ? normalizedValue
     : null;
-}
-
-/**
- * Used by screens when they need to apply the restaurant-only rule.
- */
-export function isRestaurantCartCategory(
-  categorySlug:
-    | string
-    | null
-    | undefined,
-) {
-  const normalizedSlug =
-    normalizeCategorySlug(
-      categorySlug,
-    );
-
-  return (
-    normalizedSlug ===
-      'restaurants' ||
-    normalizedSlug ===
-      'restaurant'
-  );
-}
-
-/**
- * A cart line is identified by:
- *
- * product ID + selected variant ID
- *
- * Examples:
- *
- * pizza-1 + small
- * pizza-1 + large
- *
- * are two different cart lines.
- */
-function isSameCartLine(
-  item: CartItem,
-  productId: string,
-  variantId?:
-    | string
-    | null,
-) {
-  return (
-    item.id === productId &&
-    normalizeVariantId(
-      item.variantId,
-    ) ===
-      normalizeVariantId(
-        variantId,
-      )
-  );
 }
 
 function normalizeCartProduct(
@@ -782,31 +740,16 @@ export const useCartStore = create<CartState>()(
            * Restaurant A + Restaurant B = blocked.
            */
           if (
-            isRestaurantCartCategory(
+            hasDifferentRestaurantCart(
+              Object.values(state.carts),
+              store.id,
               categorySlug,
             )
           ) {
-            const anotherRestaurantCart =
-              Object.values(
-                state.carts,
-              ).find(
-                (cart) =>
-                  cart.items.length > 0 &&
-                  cart.storeId !==
-                    store.id &&
-                  isRestaurantCartCategory(
-                    cart.categorySlug,
-                  ),
-              );
+            result =
+              'different-restaurant';
 
-            if (
-              anotherRestaurantCart
-            ) {
-              result =
-                'different-restaurant';
-
-              return state;
-            }
+            return state;
           }
 
           const normalizedProduct =
