@@ -6,6 +6,7 @@ on:
       - cto/launch-readiness-hardening
     paths:
       - .github/workflows/sdk55-upgrade.yml
+      - eslint.config.js
       - scripts/apply-rn086-compat.mjs
       - src/types/expo-notifications-compat.d.ts
       - src/services/push-notifications-service.ts
@@ -46,7 +47,6 @@ jobs:
           npx expo-doctor@latest
           npm test
           npx tsc --noEmit
-          npm run lint
 
       - name: Advance through SDK 56
         run: |
@@ -66,11 +66,11 @@ jobs:
       - name: TypeScript on SDK 57
         run: npx tsc --noEmit
 
-      - name: Lint on SDK 57
-        run: npm run lint
-
       - name: Production dependency audit on SDK 57
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint on SDK 57
+        run: npm run lint
 
       - name: Show upgrade diff
         run: git diff -- package.json package-lock.json app.json src
