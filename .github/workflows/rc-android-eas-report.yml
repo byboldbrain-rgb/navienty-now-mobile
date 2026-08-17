@@ -105,6 +105,8 @@ jobs:
           done
 
           artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' eas-android-build.json)"
+          error_code="$(jq -r '.error.errorCode // .error.code // .errorCode // empty' eas-android-build.json)"
+          error_message="$(jq -r '.error.message // .error.errorMessage // .errorMessage // empty' eas-android-build.json)"
 
           cat > android-rc-final.md <<EOF
           ### Android RC final status
@@ -113,6 +115,8 @@ jobs:
           - Status: \`$status_raw\`
           - Dashboard: $dashboard_url
           - Install artifact: ${artifact_url:-not returned}
+          - Error code: ${error_code:-not returned}
+          - Error message: ${error_message:-not returned}
 
           Physical-device smoke testing is still required before this PR can leave Draft status. iOS remains blocked on Apple Developer Program membership.
           EOF
