@@ -182,6 +182,21 @@ jobs:
               echo 'Only error-context lines were extracted; URLs, emails, and common secret/token patterns were redacted.'
             } > eas-gradle-diagnostic.md
             gh pr comment "$TARGET_PR" --body-file eas-gradle-diagnostic.md
+
+            {
+              echo '### EAS build JSON diagnostic schema'
+              echo
+              echo 'Top-level keys:'
+              echo '```text'
+              jq -r 'keys | join(", ")' eas-android-build.json
+              echo '```'
+              echo
+              echo 'Paths related to logs/errors/build phases (field names only):'
+              echo '```text'
+              jq -r '[paths | map(tostring) | join(".")] | unique[]' eas-android-build.json | grep -Ei 'log|error|phase|artifact' | head -n 120 || true
+              echo '```'
+            } > eas-build-schema.md
+            gh pr comment "$TARGET_PR" --body-file eas-build-schema.md
           fi
 
           if [ "$status" != "finished" ]; then
