@@ -16,6 +16,11 @@ import {
   View,
 } from 'react-native';
 
+import AppLaunchBlockScreen from '../components/app-launch-block-screen';
+import {
+  getAppLaunchGate,
+  type AppLaunchGateResult,
+} from '../services/app-launch-gate-service';
 import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
@@ -303,6 +308,18 @@ export default function RootLayout() {
     setAuthBootstrapFinished,
   ] = useState(false);
 
+  const [
+    launchGate,
+    setLaunchGate,
+  ] = useState<AppLaunchGateResult | null>(
+    null,
+  );
+
+  const [
+    isRefreshingLaunchGate,
+    setIsRefreshingLaunchGate,
+  ] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -319,8 +336,8 @@ export default function RootLayout() {
       } catch (error) {
         /**
          * Do not trap the app forever on the splash screen if Auth
-         * is temporarily unavailable. Checkout/order creation can
-         * surface its own network/database error when necessary.
+         * is temporarily unavailable. The launch gate will surface
+         * a recoverable connectivity error when bootstrap also fails.
          */
         console.warn(
           'Unable to bootstrap anonymous Supabase session:',
@@ -340,14 +357,59 @@ export default function RootLayout() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!authBootstrapFinished) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function bootstrapLaunchGate() {
+      const result =
+        await getAppLaunchGate();
+
+      if (!cancelled) {
+        setLaunchGate(result);
+      }
+    }
+
+    void bootstrapLaunchGate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authBootstrapFinished]);
+
+  const refreshLaunchGate =
+    useCallback(async () => {
+      if (isRefreshingLaunchGate) {
+        return;
+      }
+
+      setIsRefreshingLaunchGate(true);
+
+      try {
+        const result =
+          await getAppLaunchGate();
+
+        setLaunchGate(result);
+      } finally {
+        setIsRefreshingLaunchGate(false);
+      }
+    }, [isRefreshingLaunchGate]);
+
   const appHasHydrated =
     cartHasHydrated &&
     customerHasHydrated &&
     ordersHasHydrated;
 
-  const appIsReady =
+  const startupHasResolved =
     appHasHydrated &&
-    authBootstrapFinished;
+    authBootstrapFinished &&
+    launchGate !== null;
+
+  const appIsAllowed =
+    launchGate?.status === 'allowed';
 
   const [
     showBootstrapScreen,
@@ -368,7 +430,7 @@ export default function RootLayout() {
         }
       />
 
-      {appIsReady ? (
+      {startupHasResolved && appIsAllowed ? (
         <Stack
           screenOptions={{
             animation: 'fade',
@@ -399,9 +461,23 @@ export default function RootLayout() {
         </Stack>
       ) : null}
 
+      {startupHasResolved &&
+      launchGate &&
+      !appIsAllowed ? (
+        <AppLaunchBlockScreen
+          gate={launchGate}
+          isRefreshing={
+            isRefreshingLaunchGate
+          }
+          onRefresh={() => {
+            void refreshLaunchGate();
+          }}
+        />
+      ) : null}
+
       {showBootstrapScreen ? (
         <AppBootstrapScreen
-          isReady={appIsReady}
+          isReady={startupHasResolved}
           onFinished={finishBootstrap}
         />
       ) : null}
