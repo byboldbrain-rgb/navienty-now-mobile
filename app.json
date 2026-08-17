@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "navienty-now-mobile",
+    "name": "Navienty Now",
     "slug": "navienty-now",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,9 +8,11 @@
     "scheme": "navientynow",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "com.navienty.now",
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.navienty.now",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
