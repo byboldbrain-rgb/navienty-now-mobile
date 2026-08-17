@@ -1,5 +1,9 @@
 import * as Notifications from 'expo-notifications';
-import { router } from 'expo-router';
+import {
+  router,
+  useGlobalSearchParams,
+  usePathname,
+} from 'expo-router';
 import { useEffect } from 'react';
 
 import { supabase } from '../lib/supabase';
@@ -25,6 +29,25 @@ type NotificationData =
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function getSingleParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+): string | null {
+  const rawValue = Array.isArray(value)
+    ? value[0]
+    : value;
+
+  if (typeof rawValue !== 'string') {
+    return null;
+  }
+
+  const normalized = rawValue.trim();
+
+  return normalized || null;
+}
 
 function getStringValue(
   data: NotificationData,
@@ -126,6 +149,31 @@ function redirectFromNotification(
 export default function PushNotificationsBridge({
   enabled,
 }: PushNotificationsBridgeProps) {
+  const pathname = usePathname();
+
+  const params =
+    useGlobalSearchParams<{
+      id?: string | string[];
+      serviceBookingId?:
+        | string
+        | string[];
+    }>();
+
+  const currentOrderId =
+    getSingleParam(params.id);
+
+  const currentServiceBookingId =
+    getSingleParam(
+      params.serviceBookingId,
+    );
+
+  const isTrackingCustomerOrder =
+    pathname === '/order-success' &&
+    (
+      isUuid(currentOrderId) ||
+      isUuid(currentServiceBookingId)
+    );
+
   useEffect(() => {
     if (!enabled) {
       return;
@@ -224,6 +272,32 @@ export default function PushNotificationsBridge({
         .unsubscribe();
     };
   }, [enabled]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      !isTrackingCustomerOrder
+    ) {
+      return;
+    }
+
+    /**
+     * Ask for notification permission only when the customer has a real
+     * order/service booking to track. This gives the system prompt clear
+     * context instead of interrupting a first-time visitor on the Home page.
+     */
+    void registerPushNotifications({
+      requestPermission: true,
+    }).catch((error) => {
+      console.warn(
+        'Unable to enable order push notifications:',
+        error,
+      );
+    });
+  }, [
+    enabled,
+    isTrackingCustomerOrder,
+  ]);
 
   return null;
 }
