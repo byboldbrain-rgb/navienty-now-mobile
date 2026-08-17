@@ -1,1 +1,1 @@
-{"phase":"DEPENDENCIES_OK"}
+{"phase": "PREBUILD_OK", "ok": true, "count": 5, "files": ["android/app/src/main/res/drawable-hdpi/splashscreen_logo.png", "android/app/src/main/res/drawable-mdpi/splashscreen_logo.png", "android/app/src/main/res/drawable-xhdpi/splashscreen_logo.png", "android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png", "android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png"], "reason": null}
