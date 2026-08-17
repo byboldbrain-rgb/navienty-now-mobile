@@ -1,4 +1,7 @@
 import { supabase } from '../lib/supabase';
+import {
+  getServicePackageById,
+} from './service-packages-service';
 
 export type ServiceBookingStatus =
   | 'awaiting-whatsapp-send'
@@ -47,6 +50,16 @@ export type ServiceBooking = {
 export type CreateServiceBookingInput = {
   servicePackageId: string;
 
+  /**
+   * Compatibility snapshots from the current Checkout UI.
+   *
+   * IMPORTANT: createServiceBooking intentionally does NOT trust these
+   * values for package identity or pricing. It reloads the active package
+   * from Supabase using servicePackageId before writing the booking.
+   * These fields remain temporarily so existing callers do not break while
+   * the Checkout contract is migrated to the smaller server-authoritative
+   * payload.
+   */
   packageSlug: string;
   packageNameAr: string;
   packageNameEn?: string | null;
@@ -275,39 +288,58 @@ function getServiceBookingsTable() {
 export async function createServiceBooking(
   input: CreateServiceBookingInput,
 ): Promise<ServiceBooking> {
+  /**
+   * Never trust package price/name/currency snapshots supplied by the app.
+   * A modified client can tamper with those values before this function is
+   * called. Reload the canonical, currently-active package from Supabase and
+   * persist only those database values.
+   *
+   * The final production boundary should still be an authenticated RPC plus
+   * restrictive RLS, so a caller cannot bypass this client service and insert
+   * directly into service_bookings.
+   */
+  const canonicalPackage =
+    await getServicePackageById(
+      input.servicePackageId,
+    );
+
+  if (!canonicalPackage) {
+    throw new Error(
+      'الخدمة غير متاحة حاليًا أو تم إيقافها.',
+    );
+  }
+
   const {
     data,
     error,
   } = await getServiceBookingsTable()
     .insert({
       service_package_id:
-        input.servicePackageId,
+        canonicalPackage.id,
 
       package_slug:
-        input.packageSlug,
+        canonicalPackage.slug,
 
       package_name_ar:
-        input.packageNameAr,
+        canonicalPackage.nameAr,
 
       package_name_en:
         normalizeNullableText(
-          input.packageNameEn,
+          canonicalPackage.nameEn,
         ),
 
       package_price:
-        Number(
-          input.packagePrice,
-        ),
+        canonicalPackage.price,
 
       currency_code:
-        input.currencyCode,
+        canonicalPackage.currencyCode,
 
       currency_symbol:
-        input.currencySymbol,
+        canonicalPackage.currencySymbol,
 
       package_image_url:
         normalizeNullableText(
-          input.packageImageUrl,
+          canonicalPackage.imageUrl,
         ),
 
       payment_method_id:
