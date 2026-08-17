@@ -1,4 +1,7 @@
-import { Stack } from 'expo-router';
+import {
+  Stack,
+  type ErrorBoundaryProps,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -11,7 +14,9 @@ import {
   Animated,
   Easing,
   Image,
+  Pressable,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -26,6 +31,7 @@ import {
 import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
+import { logMobileClientError } from '../services/mobile-error-telemetry-service';
 import { useCartStore } from '../store/cart-store';
 import { useCustomerStore } from '../store/customer-store';
 import { useOrdersStore } from '../store/orders-store';
@@ -83,10 +89,6 @@ function AppBootstrapScreen({
     new Animated.Value(0.94),
   ).current;
 
-  // This value controls the actual visible width of the logo.
-  // Unlike the previous green-cover technique, this physically clips
-  // the wordmark from 0px to its full width, so Android cannot leave
-  // a green overlay stuck above the artwork.
   const revealWidth = useRef(
     new Animated.Value(0),
   ).current;
@@ -237,8 +239,6 @@ function AppBootstrapScreen({
           },
         ]}
       >
-        {/* Real wordmark reveal: the clipping container grows from
-            0px to the full logo width. */}
         <Animated.View
           pointerEvents="none"
           style={[
@@ -260,9 +260,6 @@ function AppBootstrapScreen({
           />
         </Animated.View>
 
-        {/* Separate i-dot lands first and remains above the full logo.
-            When the full logo reveal reaches the i position, both dots
-            overlap pixel-for-pixel so there is no visual jump. */}
         <Animated.Image
           accessibilityIgnoresInvertColors
           resizeMode="contain"
@@ -286,6 +283,45 @@ function AppBootstrapScreen({
         />
       </View>
     </Animated.View>
+  );
+}
+
+export function ErrorBoundary({
+  error,
+  retry,
+}: ErrorBoundaryProps) {
+  useEffect(() => {
+    void logMobileClientError({
+      source: 'react_error_boundary',
+      error,
+    });
+  }, [error]);
+
+  return (
+    <View style={styles.errorBoundaryScreen}>
+      <Text style={styles.errorBoundaryTitle}>
+        حدث خطأ غير متوقع
+      </Text>
+
+      <Text style={styles.errorBoundaryMessage}>
+        لم نتمكن من عرض هذه الصفحة. حاول مرة أخرى، وإذا استمرت المشكلة تواصل مع الدعم.
+      </Text>
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          void retry();
+        }}
+        style={({ pressed }) => [
+          styles.errorBoundaryButton,
+          pressed && styles.errorBoundaryButtonPressed,
+        ]}
+      >
+        <Text style={styles.errorBoundaryButtonText}>
+          إعادة المحاولة
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -326,20 +362,8 @@ export default function RootLayout() {
 
     async function bootstrapAuth() {
       try {
-        /**
-         * If a permanent or anonymous session is already stored,
-         * keep it. Otherwise create one anonymous Supabase user.
-         *
-         * This happens silently: the customer never sees a Login
-         * screen just to browse, use the cart, or place an order.
-         */
         await ensureAppSession();
       } catch (error) {
-        /**
-         * Do not trap the app forever on the splash screen if Auth
-         * is temporarily unavailable. The launch gate will surface
-         * a recoverable connectivity error when bootstrap also fails.
-         */
         console.warn(
           'Unable to bootstrap anonymous Supabase session:',
           error,
@@ -525,5 +549,48 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     zIndex: 2,
+  },
+
+  errorBoundaryScreen: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.page,
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+
+  errorBoundaryTitle: {
+    color: NAVIENTY_NOW_COLORS.textPrimary,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+
+  errorBoundaryMessage: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 22,
+    textAlign: 'center',
+  },
+
+  errorBoundaryButton: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 14,
+    minWidth: 150,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+  },
+
+  errorBoundaryButtonPressed: {
+    opacity: 0.82,
+  },
+
+  errorBoundaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
