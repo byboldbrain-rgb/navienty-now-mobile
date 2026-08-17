@@ -31,6 +31,9 @@ jobs:
       - name: Validate image assets
         run: node scripts/validate-image-assets.mjs
 
+      - name: Validate release config
+        run: node scripts/validate-release-config.mjs
+
       - name: Production dependency audit policy
         run: npm run audit:prod
 
