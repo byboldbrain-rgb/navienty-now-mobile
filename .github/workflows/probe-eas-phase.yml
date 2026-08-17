@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   probe:
@@ -16,7 +18,9 @@ jobs:
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      TARGET_BUILD_COMMIT: be1fb4e6a02cefa1d24ae3694ceedaadac631ce8
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_BUILD_COMMIT: 37d383acffcbca9d6f25df571a454035ead72f8f
+      TARGET_PR: '2'
 
     steps:
       - name: Checkout hardening branch
@@ -41,102 +45,99 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$EXPO_TOKEN" ]; then
-            exit 2
-          fi
+          test -n "$EXPO_TOKEN"
           npx --yes eas-cli@latest whoami > /tmp/eas-whoami.txt
 
-      - name: Query target Android build and capture outcome
-        shell: bash
-        run: |
-          set -uo pipefail
-          mkdir -p .github/rc-status
-
-          set +e
-          npx --yes eas-cli@latest build:list \
-            --platform android \
-            --build-profile preview \
-            --git-commit-hash "$TARGET_BUILD_COMMIT" \
-            --limit 1 \
-            --json > /tmp/build-list.json 2> /tmp/build-list.err
-          list_rc=$?
-          set -e
-
-          LIST_RC="$list_rc" python - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          target = os.environ['TARGET_BUILD_COMMIT']
-          rc = int(os.environ['LIST_RC'])
-          output = Path('.github/rc-status/eas-phase.json')
-
-          def clean(text: str) -> str:
-              text = re.sub(r'https?://\S+', '[URL_REDACTED]', text)
-              text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL_REDACTED]', text)
-              text = re.sub(r'(?i)(token|secret|password|api[_-]?key)\s*[:=]\s*\S+', r'\1=[REDACTED]', text)
-              return text.strip()[:1600]
-
-          if rc != 0:
-              err = Path('/tmp/build-list.err').read_text(errors='replace') if Path('/tmp/build-list.err').exists() else ''
-              output.write_text(json.dumps({
-                  'phase': 'QUERY_ERROR',
-                  'targetCommit': target,
-                  'exitCode': rc,
-                  'error': clean(err),
-              }, ensure_ascii=False) + '\n')
-              raise SystemExit(0)
-
-          try:
-              builds = json.loads(Path('/tmp/build-list.json').read_text())
-          except Exception as exc:
-              output.write_text(json.dumps({
-                  'phase': 'QUERY_PARSE_ERROR',
-                  'targetCommit': target,
-                  'error': clean(str(exc)),
-              }) + '\n')
-              raise SystemExit(0)
-
-          if not builds:
-              output.write_text(json.dumps({
-                  'phase': 'QUERY_OK',
-                  'targetCommit': target,
-                  'found': False,
-                  'status': 'NOT_FOUND',
-              }) + '\n')
-              raise SystemExit(0)
-
-          build = builds[0]
-          output.write_text(json.dumps({
-              'phase': 'QUERY_OK',
-              'targetCommit': target,
-              'found': True,
-              'id': build.get('id'),
-              'status': build.get('status'),
-              'platform': build.get('platform'),
-              'buildProfile': build.get('buildProfile'),
-          }) + '\n')
-          PY
-
-          build_id="$(jq -r 'if (.found == true) then (.id // empty) else empty end' .github/rc-status/eas-phase.json)"
-          if [ -n "$build_id" ]; then
-            set +e
-            npx --yes eas-cli@latest build:view "$build_id" --json > /tmp/build.json 2> /tmp/build-view.err
-            view_rc=$?
-            set -e
-            if [ "$view_rc" -eq 0 ]; then
-              jq --arg phase 'QUERY_OK' --arg target "$TARGET_BUILD_COMMIT" '{phase:$phase,targetCommit:$target,found:true,id:.id,status:.status,platform:.platform,buildProfile:.buildProfile,artifactUrl:(.artifacts.buildUrl // .artifacts.applicationArchiveUrl // null),errorCode:(.error.errorCode // .error.code // .errorCode // null),errorMessage:(.error.message // .error.errorMessage // .errorMessage // null)}' /tmp/build.json > .github/rc-status/eas-phase.json
-            fi
-          fi
-
-      - name: Commit captured outcome
+      - name: Track target Android build to terminal status
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p .github/rc-status
+
+          build_id=''
+          for attempt in $(seq 1 90); do
+            npx --yes eas-cli@latest build:list \
+              --platform android \
+              --build-profile preview \
+              --git-commit-hash "$TARGET_BUILD_COMMIT" \
+              --limit 1 \
+              --json > /tmp/build-list.json
+            build_id="$(jq -r 'if length > 0 then .[0].id else empty end' /tmp/build-list.json)"
+            if [ -n "$build_id" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ -z "$build_id" ]; then
+            jq -n --arg target "$TARGET_BUILD_COMMIT" '{phase:"NOT_FOUND",targetCommit:$target,found:false}' > .github/rc-status/eas-phase.json
+            gh pr comment "$TARGET_PR" --body "Android RC tracker could not find an EAS preview build for commit \`$TARGET_BUILD_COMMIT\`."
+            exit 1
+          fi
+
+          dashboard="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/$build_id"
+          initial_status="$(jq -r '.[0].status' /tmp/build-list.json)"
+          gh pr comment "$TARGET_PR" --body "### Android RC #3 detected
+- Commit: \`$TARGET_BUILD_COMMIT\`
+- EAS Build ID: \`$build_id\`
+- Initial status: \`$initial_status\`
+- Dashboard: $dashboard"
+
+          raw_status="$initial_status"
+          normalized="$(printf '%s' "$raw_status" | tr '[:upper:]' '[:lower:]')"
+          for attempt in $(seq 1 120); do
+            npx --yes eas-cli@latest build:view "$build_id" --json > /tmp/build.json
+            raw_status="$(jq -r '.status' /tmp/build.json)"
+            normalized="$(printf '%s' "$raw_status" | tr '[:upper:]' '[:lower:]')"
+            case "$normalized" in
+              finished|errored|canceled)
+                break
+                ;;
+            esac
+            sleep 15
+          done
+
+          artifact="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' /tmp/build.json)"
+          error_code="$(jq -r '.error.errorCode // .error.code // .errorCode // empty' /tmp/build.json)"
+          error_message="$(jq -r '.error.message // .error.errorMessage // .errorMessage // empty' /tmp/build.json)"
+
+          jq -n \
+            --arg target "$TARGET_BUILD_COMMIT" \
+            --arg id "$build_id" \
+            --arg status "$raw_status" \
+            --arg artifact "$artifact" \
+            --arg errorCode "$error_code" \
+            --arg errorMessage "$error_message" \
+            '{phase:"TERMINAL",targetCommit:$target,found:true,id:$id,status:$status,platform:"ANDROID",buildProfile:"preview",artifactUrl:(if $artifact=="" then null else $artifact end),errorCode:(if $errorCode=="" then null else $errorCode end),errorMessage:(if $errorMessage=="" then null else $errorMessage end)}' \
+            > .github/rc-status/eas-phase.json
+
+          cat > /tmp/final.md <<EOF
+          ### Android RC #3 final status
+          - Commit: \`$TARGET_BUILD_COMMIT\`
+          - EAS Build ID: \`$build_id\`
+          - Status: \`$raw_status\`
+          - Dashboard: $dashboard
+          - Install artifact: ${artifact:-not returned}
+          - Error code: ${error_code:-none}
+          - Error message: ${error_message:-none}
+
+          Physical Android smoke testing remains required. iOS remains blocked on Apple Developer Program membership.
+          EOF
+          gh pr comment "$TARGET_PR" --body-file /tmp/final.md
+
+          if [ "$normalized" != 'finished' ]; then
+            exit 1
+          fi
+
+      - name: Commit captured outcome
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .github/rc-status/eas-phase.json || exit 0
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/rc-status/eas-phase.json
-          git commit -m 'ci: record EAS Android query outcome' || exit 0
+          git commit -m 'ci: record Android RC #3 terminal status' || exit 0
           git pull --rebase origin cto/launch-readiness-hardening
           git push origin HEAD:cto/launch-readiness-hardening
