@@ -199,6 +199,35 @@ export async function registerPushNotifications(
     );
   }
 
+  /**
+   * A contextual permission request must never be swallowed by a silent
+   * launch-time registration that happened to start a few milliseconds
+   * earlier. Wait for the silent attempt, reuse it if it registered, then
+   * run the permission-aware attempt if permission is still missing.
+   */
+  if (
+    options.requestPermission === true
+  ) {
+    const existingAttempt =
+      registrationPromise;
+
+    if (existingAttempt) {
+      const existingResult =
+        await existingAttempt;
+
+      if (
+        existingResult.status ===
+        'registered'
+      ) {
+        return existingResult;
+      }
+    }
+
+    return registerPushNotificationsInternal(
+      options,
+    );
+  }
+
   if (registrationPromise) {
     return registrationPromise;
   }
