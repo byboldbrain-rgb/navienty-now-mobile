@@ -28,6 +28,9 @@ export type CartProduct = {
    * Example: Small / Large / X-Large.
    */
   variantName?: string | null;
+
+  requiresPrescription?: boolean;
+  isAgeRestricted?: boolean;
 };
 
 export type CartItem = CartProduct & {
@@ -39,6 +42,8 @@ export type CartItem = CartProduct & {
    */
   variantId: string | null;
   variantName: string | null;
+  requiresPrescription: boolean;
+  isAgeRestricted: boolean;
 };
 
 export type CartStoreInformation = {
@@ -340,6 +345,12 @@ function normalizeCartProduct(
       normalizeVariantName(
         product.variantName,
       ),
+
+    requiresPrescription:
+      product.requiresPrescription === true,
+
+    isAgeRestricted:
+      product.isAgeRestricted === true,
   };
 }
 
@@ -372,6 +383,12 @@ function normalizeCartItem(
       normalizeVariantName(
         item.variantName,
       ),
+
+    requiresPrescription:
+      item.requiresPrescription === true,
+
+    isAgeRestricted:
+      item.isAgeRestricted === true,
   };
 }
 

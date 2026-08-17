@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "navientynowmobile",
+    "scheme": "navientynow",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
@@ -41,7 +41,14 @@
         {
           "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا."
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "orders"
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
