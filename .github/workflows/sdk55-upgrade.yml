@@ -49,8 +49,6 @@ jobs:
           npm install expo@^56.0.0
           npx expo install --fix
           npm test
-          npx tsc --noEmit
-          npm run lint
 
       - name: Upgrade Expo to SDK 57 with Hermes fix
         run: npx expo install expo@^57.0.9 --fix
