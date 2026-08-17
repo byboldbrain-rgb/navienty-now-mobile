@@ -289,14 +289,15 @@ export async function createServiceBooking(
   input: CreateServiceBookingInput,
 ): Promise<ServiceBooking> {
   /**
-   * Never trust package price/name/currency snapshots supplied by the app.
-   * A modified client can tamper with those values before this function is
-   * called. Reload the canonical, currently-active package from Supabase and
-   * persist only those database values.
+   * Client-side hardening only: never trust package price/name/currency
+   * snapshots supplied by Checkout. Reload the canonical active package
+   * from Supabase and persist only those database values.
    *
-   * The final production boundary should still be an authenticated RPC plus
-   * restrictive RLS, so a caller cannot bypass this client service and insert
-   * directly into service_bookings.
+   * This is intentionally NOT treated as the final security boundary.
+   * Production must move creation and customer-owned reads/transitions to
+   * authenticated database functions plus restrictive RLS. Until that
+   * database migration is applied, direct table access still depends on the
+   * policies configured in Supabase.
    */
   const canonicalPackage =
     await getServicePackageById(
