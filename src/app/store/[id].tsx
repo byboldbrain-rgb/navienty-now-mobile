@@ -556,6 +556,12 @@ export default function StoreScreen() {
 
       variantName:
         variant?.name ?? null,
+
+      requiresPrescription:
+        product.requiresPrescription,
+
+      isAgeRestricted:
+        product.isAgeRestricted,
     };
   }
 
@@ -587,6 +593,10 @@ export default function StoreScreen() {
         icon: product.icon,
         variantId: null,
         variantName: null,
+        requiresPrescription:
+          product.requiresPrescription,
+        isAgeRestricted:
+          product.isAgeRestricted,
       },
     );
 

@@ -268,6 +268,53 @@ export async function getMyPrescriptionSubmission(
       );
 }
 
+export async function getMyOpenPrescriptionSubmission(
+  storeId: string,
+): Promise<PrescriptionSubmission | null> {
+  await ensureAppSession();
+
+  const { data, error } =
+    await supabase.rpc(
+      'get_my_open_prescription_submission',
+      {
+        p_store_id: storeId,
+      },
+    );
+
+  if (error) {
+    throw new Error(
+      getPrescriptionErrorMessage(error),
+    );
+  }
+
+  return data == null
+    ? null
+    : mapPrescriptionSubmission(
+        data,
+      );
+}
+
+export async function attachPrescriptionToOrder(
+  orderId: string,
+  submissionId: string,
+): Promise<void> {
+  const { error } =
+    await supabase.rpc(
+      'attach_prescription_to_order',
+      {
+        p_order_id: orderId,
+        p_submission_id:
+          submissionId,
+      },
+    );
+
+  if (error) {
+    throw new Error(
+      getPrescriptionErrorMessage(error),
+    );
+  }
+}
+
 export async function cancelMyPrescriptionSubmission(
   submissionId: string,
 ): Promise<boolean> {
