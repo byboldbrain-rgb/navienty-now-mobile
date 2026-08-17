@@ -16,6 +16,7 @@ jobs:
     name: Android + iOS preview RC
     runs-on: ubuntu-latest
     env:
+      CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
     steps:
@@ -47,6 +48,18 @@ jobs:
 
       - name: Verify Expo project health
         run: npx expo-doctor@latest
+
+      - name: Production dependency audit policy
+        run: npm run audit:prod
+
+      - name: Business and security tests
+        run: npm test
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
 
       - name: Verify Expo authentication
         run: eas whoami
