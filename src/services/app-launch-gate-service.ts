@@ -20,6 +20,14 @@ export type AppLaunchGateResult = {
   supportWhatsapp: string | null;
 };
 
+type AppSettingsWithStoreUrls = AppSettings & {
+  ios_store_url?: string | null;
+  app_store_url?: string | null;
+  android_store_url?: string | null;
+  play_store_url?: string | null;
+  update_url?: string | null;
+};
+
 function normalizeVersion(
   value: string | null | undefined,
 ): number[] | null {
@@ -118,7 +126,7 @@ function normalizeNullableUrl(
 }
 
 function getUpdateUrl(
-  settings: AppSettings,
+  settings: AppSettingsWithStoreUrls,
 ): string | null {
   if (Platform.OS === 'ios') {
     return normalizeNullableUrl(
@@ -160,7 +168,7 @@ export async function getAppLaunchGate():
       await getAppBootstrap();
 
     const settings =
-      bootstrap.settings;
+      bootstrap.settings as AppSettingsWithStoreUrls;
 
     const currentVersion =
       getCurrentAppVersion();
