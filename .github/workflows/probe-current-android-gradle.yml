@@ -1,4 +1,4 @@
-name: Probe Current Android Gradle Error
+name: Probe Current Android Build Progress
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      BUILD_ID: 4f0f449d-8a54-4860-b618-f0909e2972f5
+      BUILD_ID: bbe28daf-c4eb-4b2a-a457-7b24ad88dc7e
 
     steps:
       - name: Checkout hardening branch
@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           npx --yes eas-cli@latest build:view "$BUILD_ID" --json > /tmp/build.json
 
-      - name: Download and extract redacted Gradle failure context
+      - name: Download and extract redacted build progress
         shell: bash
         run: |
           set -euo pipefail
@@ -82,27 +82,30 @@ jobs:
                   pass
               lines.append(line)
 
-          pattern = re.compile(
-              r'RUN_GRADLEW|FAILURE:|What went wrong|Execution failed|A problem occurred|'
-              r'AAPT|resource compilation|Could not|Caused by:|Exception|BUILD FAILED|error[: ]',
+          interesting = re.compile(
+              r'^(Start phase:|End phase:)|RUN_GRADLEW|assembleRelease|BUILD (FAILED|SUCCESSFUL)|'
+              r'FAILURE:|Execution failed|AAPT|resource compilation|Upload|Build failed|Build finished|error[: ]',
               re.I,
           )
-          hits = [i for i, line in enumerate(lines) if pattern.search(line)]
-          selected = set()
-          for i in hits:
-              for j in range(max(0, i - 5), min(len(lines), i + 9)):
-                  selected.add(j)
-          context = [lines[i] for i in sorted(selected)]
-          if not context:
-              context = ['No matching Gradle failure context found in exposed EAS log files.']
-
-          text = '\n'.join(context[-260:])
+          selected = [line for line in lines if interesting.search(line)]
+          tail = lines[-80:] if lines else []
+          combined = selected[-180:] + ['--- LOG TAIL ---'] + tail
+          text = '\n'.join(combined)
           text = re.sub(r'https?://\S+', '[URL_REDACTED]', text)
           text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL_REDACTED]', text)
           text = re.sub(r'(?i)(token|secret|password|api[_-]?key|access[_-]?key)\s*[:=]\s*\S+', r'\1=[REDACTED]', text)
           text = re.sub(r'\bsb_(?:publishable|secret)_[A-Za-z0-9_-]+', 'sb_[REDACTED]', text)
 
-          Path('.github/rc-status/android-gradle-error.txt').write_text(text[:30000] + '\n')
+          meta = json.loads(Path('/tmp/build.json').read_text())
+          header = {
+              'id': meta.get('id'),
+              'status': meta.get('status'),
+              'updatedAt': meta.get('updatedAt'),
+              'completedAt': meta.get('completedAt'),
+          }
+          Path('.github/rc-status/android-build-progress.txt').write_text(
+              json.dumps(header) + '\n' + text[-30000:] + '\n'
+          )
           PY
 
       - name: Commit diagnostic
@@ -111,7 +114,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/rc-status/android-gradle-error.txt
-          git commit -m 'ci: record current Android Gradle diagnostic' || exit 0
+          git add .github/rc-status/android-build-progress.txt
+          git commit -m 'ci: record Android RC #3 build progress' || exit 0
           git pull --rebase origin cto/launch-readiness-hardening
           git push origin HEAD:cto/launch-readiness-hardening
