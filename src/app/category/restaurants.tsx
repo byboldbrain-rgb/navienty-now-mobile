@@ -987,7 +987,7 @@ export default function RestaurantsScreen() {
               cuisine={{
                 key: 'view-all',
                 label: 'عرض الكل',
-                image: require('../../assets/cuisines/view-all.png'),
+                image: require('../../assets/cuisines/view-all.jpg'),
                 keywords: [],
               }}
               onPress={
