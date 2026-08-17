@@ -6,6 +6,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import { prepareOrderPaymentProof } from '../services/order-payment-proof-service';
+import { prepareServiceBookingPaymentProof } from '../services/service-booking-payment-proof-service';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,50 +23,110 @@ function getSingleParam(
 }
 
 /**
- * Payment proof rollout is remotely gated in Supabase.
+ * Payment proof rollouts are remotely gated in Supabase.
  *
- * Checkout keeps its existing route to /order-success, so old builds and the
- * current WhatsApp flow remain untouched while payment proof is disabled.
- * Once the server marks a newly-created order as payment_proof_required,
- * this bridge redirects only that order to the private proof-upload screen.
+ * Existing checkout flows continue to navigate to /order-success. This bridge
+ * only intercepts a newly-created store order or service booking when its
+ * server-side payment-proof snapshot says verification is required.
  */
 export default function PaymentProofRouteBridge() {
   const pathname = usePathname();
   const params = useGlobalSearchParams<{
     id?: string | string[];
+    serviceBookingId?: string | string[];
   }>();
   const router = useRouter();
 
-  const inFlightOrderIdRef =
+  const inFlightKeyRef =
     useRef<string | null>(null);
 
   useEffect(() => {
     if (pathname !== '/order-success') {
-      inFlightOrderIdRef.current = null;
+      inFlightKeyRef.current = null;
       return;
     }
+
+    const serviceBookingId =
+      getSingleParam(
+        params.serviceBookingId,
+      );
 
     const orderId =
       getSingleParam(params.id);
 
+    const hasValidServiceBookingId =
+      Boolean(
+        serviceBookingId &&
+          UUID_PATTERN.test(
+            serviceBookingId,
+          ),
+      );
+
+    const hasValidOrderId =
+      Boolean(
+        orderId &&
+          UUID_PATTERN.test(orderId),
+      );
+
     if (
-      !orderId ||
-      !UUID_PATTERN.test(orderId) ||
-      inFlightOrderIdRef.current === orderId
+      !hasValidServiceBookingId &&
+      !hasValidOrderId
     ) {
       return;
     }
 
-    const resolvedOrderId = orderId;
+    const target =
+      hasValidServiceBookingId &&
+      serviceBookingId
+        ? {
+            key:
+              `service:${serviceBookingId}`,
+            kind: 'service' as const,
+            id: serviceBookingId,
+          }
+        : {
+            key: `order:${orderId!}`,
+            kind: 'order' as const,
+            id: orderId!,
+          };
+
+    if (
+      inFlightKeyRef.current ===
+      target.key
+    ) {
+      return;
+    }
+
     let cancelled = false;
-    inFlightOrderIdRef.current =
-      resolvedOrderId;
+    inFlightKeyRef.current = target.key;
 
     async function resolvePaymentProofRoute() {
       try {
+        if (target.kind === 'service') {
+          const preparation =
+            await prepareServiceBookingPaymentProof(
+              target.id,
+            );
+
+          if (
+            !cancelled &&
+            preparation.required
+          ) {
+            router.replace({
+              pathname:
+                '/service-booking-payment-proof',
+              params: {
+                id: target.id,
+              },
+            });
+          }
+
+          return;
+        }
+
         const preparation =
           await prepareOrderPaymentProof(
-            resolvedOrderId,
+            target.id,
           );
 
         if (
@@ -75,16 +136,15 @@ export default function PaymentProofRouteBridge() {
           router.replace({
             pathname: '/payment-proof',
             params: {
-              id: resolvedOrderId,
+              id: target.id,
             },
           });
         }
       } catch (error) {
         /**
-         * Payment verification must never make order tracking unreachable.
-         * The server-side confirmation gate is authoritative; a temporary
-         * network error here leaves the customer on /order-success and the
-         * route will be re-evaluated on the next visit.
+         * Payment verification must never make tracking unreachable.
+         * Server-side confirmation guards remain authoritative; a temporary
+         * network error here leaves the customer on /order-success.
          */
         console.warn(
           'Unable to resolve payment proof route:',
@@ -98,7 +158,12 @@ export default function PaymentProofRouteBridge() {
     return () => {
       cancelled = true;
     };
-  }, [pathname, params.id, router]);
+  }, [
+    pathname,
+    params.id,
+    params.serviceBookingId,
+    router,
+  ]);
 
   return null;
 }
