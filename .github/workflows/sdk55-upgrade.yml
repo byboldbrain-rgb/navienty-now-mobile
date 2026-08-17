@@ -1,0 +1,69 @@
+name: Expo SDK 55 Upgrade
+
+on:
+  push:
+    branches:
+      - cto/launch-readiness-hardening
+    paths:
+      - .github/workflows/sdk55-upgrade.yml
+
+permissions:
+  contents: write
+
+env:
+  CI: '1'
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout upgrade branch
+        uses: actions/checkout@v4
+        with:
+          ref: cto/launch-readiness-hardening
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install current dependencies
+        run: npm ci
+
+      - name: Upgrade Expo to SDK 55
+        run: |
+          npm install expo@^55.0.0
+          npx expo install --fix
+
+      - name: Expo Doctor
+        run: npx expo-doctor@latest
+
+      - name: Business-rule tests
+        run: npm test
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Show upgrade diff
+        run: git diff -- package.json package-lock.json app.json
+
+      - name: Commit verified SDK 55 upgrade
+        run: |
+          if git diff --quiet; then
+            echo "No dependency changes to commit."
+            exit 0
+          fi
+          git config user.name "Navienty CTO Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add package.json package-lock.json app.json
+          git commit -m "chore: upgrade Expo stack to SDK 55"
+          git push origin HEAD:cto/launch-readiness-hardening
