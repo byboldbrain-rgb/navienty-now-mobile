@@ -523,7 +523,11 @@ const styles = StyleSheet.create({
   },
 
   bootstrapScreen: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,

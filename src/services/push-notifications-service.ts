@@ -115,8 +115,7 @@ async function registerPushNotificationsInternal(
     existingPermissions.status;
 
   if (
-    permissionStatus !==
-      Notifications.PermissionStatus.GRANTED &&
+    String(permissionStatus).toLowerCase() !== 'granted' &&
     options.requestPermission === true &&
     existingPermissions.canAskAgain !== false
   ) {
@@ -128,8 +127,7 @@ async function registerPushNotificationsInternal(
   }
 
   if (
-    permissionStatus !==
-    Notifications.PermissionStatus.GRANTED
+    String(permissionStatus).toLowerCase() !== 'granted'
   ) {
     return {
       status: 'permission-not-granted',
