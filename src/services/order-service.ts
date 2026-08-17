@@ -1,3 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  createClientRequestId,
+  getOrderRequestFingerprint,
+} from '../domain/order-idempotency';
 import { supabase } from '../lib/supabase';
 import type {
   CreateWhatsAppOrderInput,
@@ -371,25 +377,164 @@ function mapOrder(
   };
 }
 
-function createClientRequestId():
-  string {
+const PENDING_ORDER_ATTEMPT_STORAGE_KEY =
+  '@navienty-now/pending-order-create-v1';
+
+const PENDING_ORDER_ATTEMPT_MAX_AGE_MS =
+  10 * 60 * 1000;
+
+type PendingOrderAttempt = {
+  fingerprint: string;
+  clientRequestId: string;
+  createdAt: number;
+};
+
+let memoryPendingOrderAttempt:
+  | PendingOrderAttempt
+  | null = null;
+
+function isReusablePendingOrderAttempt(
+  attempt: PendingOrderAttempt | null,
+  fingerprint: string,
+  currentTime: number,
+): attempt is PendingOrderAttempt {
   return (
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-      .replace(/[xy]/g, (character) => {
-        const randomValue =
-          Math.floor(
-            Math.random() * 16,
-          );
-
-        const value =
-          character === 'x'
-            ? randomValue
-            : (randomValue & 0x3) |
-              0x8;
-
-        return value.toString(16);
-      })
+    attempt !== null &&
+    attempt.fingerprint === fingerprint &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      attempt.clientRequestId,
+    ) &&
+    Number.isFinite(attempt.createdAt) &&
+    attempt.createdAt > 0 &&
+    currentTime - attempt.createdAt >= 0 &&
+    currentTime - attempt.createdAt <=
+      PENDING_ORDER_ATTEMPT_MAX_AGE_MS
   );
+}
+
+function parsePendingOrderAttempt(
+  value: string | null,
+): PendingOrderAttempt | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<PendingOrderAttempt>;
+
+    if (
+      typeof parsed.fingerprint !== 'string' ||
+      typeof parsed.clientRequestId !== 'string' ||
+      typeof parsed.createdAt !== 'number'
+    ) {
+      return null;
+    }
+
+    return {
+      fingerprint: parsed.fingerprint,
+      clientRequestId: parsed.clientRequestId,
+      createdAt: parsed.createdAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getOrCreatePendingOrderAttempt(
+  input: CreateWhatsAppOrderInput,
+): Promise<PendingOrderAttempt> {
+  const fingerprint =
+    getOrderRequestFingerprint(input);
+  const currentTime = Date.now();
+
+  if (
+    isReusablePendingOrderAttempt(
+      memoryPendingOrderAttempt,
+      fingerprint,
+      currentTime,
+    )
+  ) {
+    return memoryPendingOrderAttempt;
+  }
+
+  try {
+    const persistedAttempt =
+      parsePendingOrderAttempt(
+        await AsyncStorage.getItem(
+          PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+        ),
+      );
+
+    if (
+      isReusablePendingOrderAttempt(
+        persistedAttempt,
+        fingerprint,
+        currentTime,
+      )
+    ) {
+      memoryPendingOrderAttempt =
+        persistedAttempt;
+      return persistedAttempt;
+    }
+  } catch {
+    // Idempotency still works for this process through the in-memory fallback.
+  }
+
+  const nextAttempt: PendingOrderAttempt = {
+    fingerprint,
+    clientRequestId: createClientRequestId(),
+    createdAt: currentTime,
+  };
+
+  // Set memory before awaiting persistence so two rapid taps in the same
+  // process cannot generate separate client_request_id values.
+  memoryPendingOrderAttempt = nextAttempt;
+
+  try {
+    await AsyncStorage.setItem(
+      PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+      JSON.stringify(nextAttempt),
+    );
+  } catch {
+    // The in-memory attempt still protects retries while this process lives.
+  }
+
+  return nextAttempt;
+}
+
+async function clearPendingOrderAttempt(
+  attempt: PendingOrderAttempt,
+): Promise<void> {
+  if (
+    memoryPendingOrderAttempt?.clientRequestId ===
+      attempt.clientRequestId &&
+    memoryPendingOrderAttempt.fingerprint ===
+      attempt.fingerprint
+  ) {
+    memoryPendingOrderAttempt = null;
+  }
+
+  try {
+    const persistedAttempt =
+      parsePendingOrderAttempt(
+        await AsyncStorage.getItem(
+          PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+        ),
+      );
+
+    if (
+      persistedAttempt?.clientRequestId ===
+        attempt.clientRequestId &&
+      persistedAttempt.fingerprint ===
+        attempt.fingerprint
+    ) {
+      await AsyncStorage.removeItem(
+        PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+      );
+    }
+  } catch {
+    // A stale attempt expires automatically after the short retry window.
+  }
 }
 
 function getErrorMessage(
@@ -582,9 +727,14 @@ export async function getOrderByToken(
 export async function createWhatsAppOrder(
   input: CreateWhatsAppOrderInput,
 ): Promise<Order> {
+  const pendingAttempt =
+    await getOrCreatePendingOrderAttempt(
+      input,
+    );
+
   const payload = {
     client_request_id:
-      createClientRequestId(),
+      pendingAttempt.clientRequestId,
 
     store_id: input.storeId,
 
@@ -658,9 +808,15 @@ export async function createWhatsAppOrder(
     );
   }
 
-  return getOrderByToken(
+  const order = await getOrderByToken(
     createdOrder.access_token,
   );
+
+  await clearPendingOrderAttempt(
+    pendingAttempt,
+  );
+
+  return order;
 }
 
 export async function confirmWhatsAppOrderSent(
