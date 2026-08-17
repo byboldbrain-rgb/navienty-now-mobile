@@ -6,6 +6,7 @@ on:
       - cto/launch-readiness-hardening
     paths:
       - .github/workflows/sdk55-upgrade.yml
+      - scripts/apply-rn086-compat.mjs
       - src/types/expo-notifications-compat.d.ts
       - src/services/push-notifications-service.ts
 
@@ -34,6 +35,9 @@ jobs:
 
       - name: Install current dependencies
         run: npm ci
+
+      - name: Apply React Native 0.86 source compatibility
+        run: node scripts/apply-rn086-compat.mjs
 
       - name: Validate SDK 55 migration step
         run: |
@@ -69,16 +73,24 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
       - name: Show upgrade diff
-        run: git diff -- package.json package-lock.json app.json
+        run: git diff -- package.json package-lock.json app.json src
 
       - name: Commit verified SDK 57 upgrade
         run: |
           if git diff --quiet; then
-            echo "No dependency changes to commit."
+            echo "No dependency or compatibility changes to commit."
             exit 0
           fi
           git config user.name "Navienty CTO Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add package.json package-lock.json app.json
+          git add package.json package-lock.json app.json \
+            src/app/_layout.tsx \
+            src/app/cart.tsx \
+            src/app/index.tsx \
+            src/app/login.tsx \
+            'src/app/store/[id].tsx' \
+            src/components/address-details-screen.native.tsx \
+            src/components/location-picker-screen.native.tsx \
+            src/services/push-notifications-service.ts
           git commit -m "chore: upgrade Expo stack to SDK 57"
           git push origin HEAD:cto/launch-readiness-hardening
