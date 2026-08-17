@@ -6,6 +6,7 @@ on:
       - cto/launch-readiness-hardening
     paths:
       - .github/workflows/sdk55-upgrade.yml
+      - src/types/expo-notifications-compat.d.ts
 
 permissions:
   contents: write
