@@ -4,7 +4,7 @@ import type {
 
 const DEFAULT_CATEGORY_ICON =
   require(
-    '../assets/icons/categories/default.png',
+    '../assets/icons/categories/default.jpg',
   );
 
 const CATEGORY_ICONS: Record<
