@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - agent/p0-launch-hardening
+      - cto/launch-readiness-hardening
 
 permissions:
   contents: read
@@ -26,6 +27,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Business-rule tests
+        run: npm test
 
       - name: TypeScript
         run: npx tsc --noEmit
