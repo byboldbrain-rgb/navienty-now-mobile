@@ -43,7 +43,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Query existing Android RC
+      - name: Refresh current Android RC status
         shell: bash
         run: |
           set -euo pipefail
@@ -88,6 +88,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/rc-status/android-current-once.json
-          git commit -m 'ci: record Android RC #3 current status' || exit 0
+          git commit -m 'ci: refresh Android RC #3 current status' || exit 0
           git pull --rebase origin cto/launch-readiness-hardening
           git push origin HEAD:cto/launch-readiness-hardening
