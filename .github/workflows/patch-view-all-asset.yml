@@ -1,0 +1,64 @@
+name: Patch View All Cuisine Asset
+
+on:
+  push:
+    branches:
+      - cto/launch-readiness-hardening
+    paths:
+      - .github/workflows/patch-view-all-asset.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout hardening branch
+        uses: actions/checkout@v5
+        with:
+          ref: cto/launch-readiness-hardening
+          fetch-depth: 0
+
+      - name: Verify and fix mislabeled JPEG asset
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f src/assets/cuisines/view-all.png
+          test -f src/assets/cuisines/view-all.jpg
+
+          python - <<'PY'
+          from pathlib import Path
+
+          bad = Path('src/assets/cuisines/view-all.png')
+          good = Path('src/assets/cuisines/view-all.jpg')
+          screen = Path('src/app/category/restaurants.tsx')
+
+          bad_bytes = bad.read_bytes()
+          good_bytes = good.read_bytes()
+          if not bad_bytes.startswith(b'\xff\xd8\xff'):
+              raise SystemExit('view-all.png is no longer JPEG bytes; refusing automatic patch')
+          if bad_bytes != good_bytes:
+              raise SystemExit('view-all.jpg is not byte-identical to the source asset; refusing automatic patch')
+
+          text = screen.read_text(encoding='utf-8')
+          old = "require('../../assets/cuisines/view-all.png')"
+          new = "require('../../assets/cuisines/view-all.jpg')"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one view-all.png require, found {text.count(old)}')
+          screen.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+          git rm src/assets/cuisines/view-all.png
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/app/category/restaurants.tsx src/assets/cuisines/view-all.jpg
+          git diff --cached --check
+          git commit -m 'fix(android): use correctly typed view-all JPEG asset'
+          git push origin HEAD:cto/launch-readiness-hardening
