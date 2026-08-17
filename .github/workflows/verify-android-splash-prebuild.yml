@@ -32,30 +32,73 @@ jobs:
       - name: Validate source images
         run: node scripts/validate-image-assets.mjs
 
-      - name: Generate Android native project
-        run: npx expo prebuild --platform android --clean --no-install
-
-      - name: Verify splash drawable was generated
+      - name: Record dependencies-ready phase
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .github/rc-status
-          mapfile -t matches < <(find android/app/src/main/res -type f -name 'splashscreen_logo*' -print | sort)
-          if [ "${#matches[@]}" -eq 0 ]; then
-            printf '{"ok":false,"reason":"splashscreen_logo not generated"}\n' > .github/rc-status/android-splash-prebuild.json
-            exit 1
-          fi
-          jq -n --argjson count "${#matches[@]}" --arg files "$(printf '%s\n' "${matches[@]}")" '{ok:true,count:$count,files:($files|split("\n")|map(select(length>0)))}' > .github/rc-status/android-splash-prebuild.json
+          printf '{"phase":"DEPENDENCIES_OK"}\n' > .github/rc-status/android-splash-prebuild.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/rc-status/android-splash-prebuild.json
+          git commit -m 'ci: record Android prebuild start'
+          git pull --rebase origin cto/launch-readiness-hardening
+          git push origin HEAD:cto/launch-readiness-hardening
+
+      - name: Generate and verify Android native splash resource
+        shell: bash
+        run: |
+          set -uo pipefail
+          set +e
+          npx expo prebuild --platform android --clean --no-install > /tmp/prebuild.log 2>&1
+          prebuild_rc=$?
+          set -e
+
+          PREBUILD_RC="$prebuild_rc" python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          out = Path('.github/rc-status/android-splash-prebuild.json')
+          rc = int(os.environ['PREBUILD_RC'])
+
+          def clean(text: str) -> str:
+              text = re.sub(r'https?://\S+', '[URL_REDACTED]', text)
+              text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL_REDACTED]', text)
+              text = re.sub(r'(?i)(token|secret|password|api[_-]?key)\s*[:=]\s*\S+', r'\1=[REDACTED]', text)
+              return text.strip()[-1800:]
+
+          if rc != 0:
+              log = Path('/tmp/prebuild.log').read_text(errors='replace') if Path('/tmp/prebuild.log').exists() else ''
+              out.write_text(json.dumps({
+                  'phase': 'PREBUILD_ERROR',
+                  'ok': False,
+                  'exitCode': rc,
+                  'error': clean(log),
+              }, ensure_ascii=False) + '\n')
+              raise SystemExit(0)
+
+          root = Path('android/app/src/main/res')
+          matches = sorted(str(p) for p in root.rglob('splashscreen_logo*') if p.is_file()) if root.exists() else []
+          out.write_text(json.dumps({
+              'phase': 'PREBUILD_OK',
+              'ok': bool(matches),
+              'count': len(matches),
+              'files': matches,
+              'reason': None if matches else 'splashscreen_logo not generated',
+          }) + '\n')
+          PY
 
       - name: Commit verification result
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          test -f .github/rc-status/android-splash-prebuild.json || printf '{"ok":false,"reason":"prebuild failed before resource verification"}\n' > .github/rc-status/android-splash-prebuild.json
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          test -f .github/rc-status/android-splash-prebuild.json || printf '{"phase":"UNKNOWN_ERROR","ok":false}\n' > .github/rc-status/android-splash-prebuild.json
           git add .github/rc-status/android-splash-prebuild.json
-          git commit -m 'ci: record Android splash prebuild verification' || exit 0
+          git commit -m 'ci: record Android splash prebuild verification' || true
+          git reset --hard HEAD
+          git clean -fd android || true
           git pull --rebase origin cto/launch-readiness-hardening
           git push origin HEAD:cto/launch-readiness-hardening
