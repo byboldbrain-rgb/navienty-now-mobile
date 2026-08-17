@@ -1,4 +1,4 @@
-name: Expo SDK 56 Upgrade
+name: Expo SDK 57 Upgrade
 
 on:
   push:
@@ -44,30 +44,36 @@ jobs:
           npx tsc --noEmit
           npm run lint
 
-      - name: Upgrade Expo to SDK 56
+      - name: Advance through SDK 56
         run: |
           npm install expo@^56.0.0
           npx expo install --fix
+          npm test
+          npx tsc --noEmit
+          npm run lint
 
-      - name: Expo Doctor on SDK 56
+      - name: Upgrade Expo to SDK 57 with Hermes fix
+        run: npx expo install expo@^57.0.9 --fix
+
+      - name: Expo Doctor on SDK 57
         run: npx expo-doctor@latest
 
-      - name: Business-rule tests on SDK 56
+      - name: Business-rule tests on SDK 57
         run: npm test
 
-      - name: TypeScript on SDK 56
+      - name: TypeScript on SDK 57
         run: npx tsc --noEmit
 
-      - name: Lint on SDK 56
+      - name: Lint on SDK 57
         run: npm run lint
 
-      - name: Production dependency audit on SDK 56
+      - name: Production dependency audit on SDK 57
         run: npm audit --omit=dev --audit-level=high
 
       - name: Show upgrade diff
         run: git diff -- package.json package-lock.json app.json
 
-      - name: Commit verified SDK 56 upgrade
+      - name: Commit verified SDK 57 upgrade
         run: |
           if git diff --quiet; then
             echo "No dependency changes to commit."
@@ -76,5 +82,5 @@ jobs:
           git config user.name "Navienty CTO Automation"
           git config user.email "actions@users.noreply.github.com"
           git add package.json package-lock.json app.json
-          git commit -m "chore: upgrade Expo stack to SDK 56"
+          git commit -m "chore: upgrade Expo stack to SDK 57"
           git push origin HEAD:cto/launch-readiness-hardening
