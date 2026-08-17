@@ -1194,6 +1194,9 @@ function StoreCheckoutScreen() {
               productId:
                 item.id,
 
+              variantId:
+                item.variantId ?? null,
+
               quantity:
                 item.quantity,
             }),
