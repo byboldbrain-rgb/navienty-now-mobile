@@ -21,6 +21,8 @@ export type AppLaunchGateResult = {
 };
 
 type AppSettingsWithStoreUrls = AppSettings & {
+  /** Optional future bootstrap fields. The gate remains backwards-compatible
+   * until get_app_bootstrap starts returning store URLs. */
   ios_store_url?: string | null;
   app_store_url?: string | null;
   android_store_url?: string | null;
