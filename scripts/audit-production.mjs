@@ -58,57 +58,6 @@ if (report.error) {
 }
 
 const vulnerabilities = report.vulnerabilities ?? {};
-const rootCache = new Map();
-
-function collectRootAdvisories(packageName, visiting = new Set()) {
-  if (rootCache.has(packageName)) {
-    return rootCache.get(packageName);
-  }
-
-  if (visiting.has(packageName)) {
-    return [];
-  }
-
-  const vulnerability = vulnerabilities[packageName];
-  if (!vulnerability) {
-    return [];
-  }
-
-  const nextVisiting = new Set(visiting);
-  nextVisiting.add(packageName);
-
-  const roots = [];
-
-  for (const via of vulnerability.via ?? []) {
-    if (typeof via === 'string') {
-      roots.push(...collectRootAdvisories(via, nextVisiting));
-      continue;
-    }
-
-    if (!via || typeof via !== 'object') {
-      continue;
-    }
-
-    roots.push({
-      packageName: String(via.name ?? via.dependency ?? packageName),
-      severity: String(via.severity ?? vulnerability.severity ?? ''),
-      title: String(via.title ?? 'Unknown advisory'),
-      url: typeof via.url === 'string' ? via.url : null,
-    });
-  }
-
-  const deduped = Array.from(
-    new Map(
-      roots.map((root) => [
-        `${root.packageName}|${root.url ?? root.title}|${root.severity}`,
-        root,
-      ]),
-    ).values(),
-  );
-
-  rootCache.set(packageName, deduped);
-  return deduped;
-}
 
 const highOrCriticalPackages = Object.entries(vulnerabilities)
   .filter(([, vulnerability]) => severityRank(vulnerability.severity) >= 3)
@@ -119,73 +68,162 @@ if (highOrCriticalPackages.length === 0) {
   process.exit(0);
 }
 
+/**
+ * npm's vulnerability graph can contain cycles among Metro packages. Walking
+ * `via` recursively from every affected package therefore produces ambiguous
+ * roots. Instead, first inspect every concrete advisory object globally, then
+ * prove that every high/critical affected package is reachable from the
+ * approved root through npm audit's reverse `effects` graph.
+ */
+const concreteHighAdvisories = [];
+
+for (const [packageName, vulnerability] of Object.entries(vulnerabilities)) {
+  for (const via of vulnerability.via ?? []) {
+    if (
+      !via ||
+      typeof via !== 'object' ||
+      severityRank(via.severity ?? vulnerability.severity) < 3
+    ) {
+      continue;
+    }
+
+    concreteHighAdvisories.push({
+      packageName: String(via.name ?? via.dependency ?? packageName),
+      severity: String(via.severity ?? vulnerability.severity ?? ''),
+      title: String(via.title ?? 'Unknown advisory'),
+      url: typeof via.url === 'string' ? via.url : null,
+    });
+  }
+}
+
+const dedupedConcreteHighAdvisories = Array.from(
+  new Map(
+    concreteHighAdvisories.map((advisory) => [
+      `${advisory.packageName}|${advisory.url ?? advisory.title}|${advisory.severity}`,
+      advisory,
+    ]),
+  ).values(),
+);
+
 const blockers = [];
 const approvedExceptions = new Map();
 
-for (const packageName of highOrCriticalPackages) {
-  const highRoots = collectRootAdvisories(packageName).filter(
-    (root) => severityRank(root.severity) >= 3,
+if (dedupedConcreteHighAdvisories.length === 0) {
+  blockers.push(
+    'High/critical packages exist but npm audit exposed no concrete high/critical advisory objects.',
   );
+}
 
-  if (highRoots.length === 0) {
+for (const advisory of dedupedConcreteHighAdvisories) {
+  const isApproved =
+    advisory.packageName === 'image-size' &&
+    advisory.url !== null &&
+    APPROVED_BUILD_TOOL_ADVISORIES.has(advisory.url);
+
+  if (!isApproved) {
     blockers.push(
-      `${packageName}: high/critical dependency chain could not be resolved to a concrete advisory.`,
+      `${advisory.severity} ${advisory.packageName} — ${advisory.title} (${advisory.url ?? 'no advisory URL'})`,
     );
     continue;
   }
 
-  for (const root of highRoots) {
-    const isApproved =
-      root.packageName === 'image-size' &&
-      root.url !== null &&
-      APPROVED_BUILD_TOOL_ADVISORIES.has(root.url);
-
-    if (!isApproved) {
-      blockers.push(
-        `${packageName}: ${root.severity} ${root.packageName} — ${root.title} (${root.url ?? 'no advisory URL'})`,
-      );
-      continue;
-    }
-
-    approvedExceptions.set(root.url, root);
-  }
+  approvedExceptions.set(advisory.url, advisory);
 }
 
-if (approvedExceptions.size > 0) {
-  const imageSize = vulnerabilities['image-size'];
+const imageSize = vulnerabilities['image-size'];
 
+if (approvedExceptions.size > 0) {
   if (!imageSize) {
-    blockers.push('Approved image-size advisories were found but the image-size vulnerability node is missing.');
+    blockers.push(
+      'Approved image-size advisories were found but the image-size vulnerability node is missing.',
+    );
   } else {
     if (imageSize.isDirect !== false) {
-      blockers.push('image-size exception is valid only while image-size remains an indirect dependency.');
+      blockers.push(
+        'image-size exception is valid only while image-size remains an indirect dependency.',
+      );
     }
 
-    const effects = Array.isArray(imageSize.effects)
+    const directEffects = Array.isArray(imageSize.effects)
       ? [...imageSize.effects].sort()
       : [];
 
-    if (effects.length !== 1 || effects[0] !== 'metro') {
+    if (directEffects.length !== 1 || directEffects[0] !== 'metro') {
       blockers.push(
-        `image-size exception is valid only for the Metro build-tool path; observed effects: ${
-          effects.length ? effects.join(', ') : '(none)'
+        `image-size exception is valid only when its direct affected consumer is Metro; observed effects: ${
+          directEffects.length ? directEffects.join(', ') : '(none)'
         }.`,
       );
     }
   }
 }
 
+/**
+ * Starting at the approved vulnerable root, follow `effects` outward. This
+ * creates the exact set of high/critical packages whose audit severity is
+ * inherited from image-size, without depending on the cyclic `via` graph.
+ */
+const allowedHighPackages = new Set();
+
+if (approvedExceptions.size > 0 && imageSize) {
+  allowedHighPackages.add('image-size');
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const packageName of [...allowedHighPackages]) {
+      const vulnerability = vulnerabilities[packageName];
+      const effects = Array.isArray(vulnerability?.effects)
+        ? vulnerability.effects
+        : [];
+
+      for (const effectPackage of effects) {
+        const effectVulnerability = vulnerabilities[effectPackage];
+
+        if (
+          !effectVulnerability ||
+          severityRank(effectVulnerability.severity) < 3 ||
+          allowedHighPackages.has(effectPackage)
+        ) {
+          continue;
+        }
+
+        allowedHighPackages.add(effectPackage);
+        changed = true;
+      }
+    }
+  }
+}
+
+for (const packageName of highOrCriticalPackages) {
+  if (!allowedHighPackages.has(packageName)) {
+    blockers.push(
+      `${packageName}: high/critical package is not in the Metro-only effects closure rooted at approved image-size advisories.`,
+    );
+  }
+}
+
 if (blockers.length > 0) {
-  fail(blockers.map((blocker) => `- ${blocker}`).join('\n'));
+  fail(
+    Array.from(new Set(blockers))
+      .map((blocker) => `- ${blocker}`)
+      .join('\n'),
+  );
 }
 
 console.log('Production dependency audit policy: PASS.');
 console.log(
-  'Approved temporary build-tool exceptions (image-size is indirect and affects Metro only):',
+  'Approved temporary build-tool exceptions (image-size is indirect, directly affects Metro, and all inherited high packages stay inside that effects closure):',
 );
-for (const root of approvedExceptions.values()) {
-  console.log(`- ${root.url} — ${root.title}`);
+for (const advisory of approvedExceptions.values()) {
+  console.log(`- ${advisory.url} — ${advisory.title}`);
 }
+console.log(
+  `Validated inherited high/critical package closure: ${[
+    ...allowedHighPackages,
+  ].sort().join(', ')}`,
+);
 console.log(
   'All other high/critical advisories remain blocking. Remove these exceptions as soon as an upstream patched version is available.',
 );
