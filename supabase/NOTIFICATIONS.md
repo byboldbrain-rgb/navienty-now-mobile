@@ -26,3 +26,7 @@ If Expo Push Security is enabled, configure `EXPO_ACCESS_TOKEN` as an Edge Funct
 Status changes enqueue an event inside the same database transaction, but network delivery happens asynchronously in the Edge Function. This keeps order state transitions independent from Expo Push availability.
 
 The worker retries transient failures, avoids re-sending to subscriptions that already received an Expo ticket for the same outbox event, checks receipts after a delay, and disables subscriptions that Expo reports as `DeviceNotRegistered`.
+
+## Production validation
+
+The scheduled-call path has been smoke-tested through `pg_net` against the deployed JWT-protected Edge Function and returned HTTP 200 with an `ok: true` response. A physical-device test is still required after an EAS development/production build registers a real Android/iOS Expo push token.
