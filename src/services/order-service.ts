@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { useCartStore } from '../store/cart-store';
 import type {
   CreateWhatsAppOrderInput,
   Order,
@@ -574,6 +575,21 @@ export async function getOrderByToken(
 export async function createWhatsAppOrder(
   input: CreateWhatsAppOrderInput,
 ): Promise<Order> {
+  /**
+   * Compatibility guard for the current Checkout screen.
+   *
+   * Cart lines already persist productId + variantId, but the existing
+   * Checkout mapping may omit variantId when constructing the service
+   * payload. Resolve the matching cart line by index for the same store so
+   * selected sizes/options are not silently lost before the RPC call.
+   *
+   * Explicit input.variantId always wins. This fallback can be removed once
+   * every Checkout caller forwards variantId directly.
+   */
+  const sourceCartItems =
+    useCartStore.getState()
+      .carts[input.storeId]?.items ?? [];
+
   const payload = {
     client_request_id:
       createClientRequestId(),
@@ -613,15 +629,28 @@ export async function createWhatsAppOrder(
       input.notes.trim(),
 
     items: input.items.map(
-      (item) => ({
-        product_id:
-          item.productId,
+      (item, index) => {
+        const sourceCartItem =
+          sourceCartItems[index];
 
-        variant_id:
-          item.variantId ?? null,
+        const fallbackVariantId =
+          sourceCartItem?.id ===
+          item.productId
+            ? sourceCartItem.variantId
+            : null;
 
-        quantity: item.quantity,
-      }),
+        return {
+          product_id:
+            item.productId,
+
+          variant_id:
+            item.variantId ??
+            fallbackVariantId ??
+            null,
+
+          quantity: item.quantity,
+        };
+      },
     ),
   };
 
