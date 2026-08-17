@@ -41,6 +41,12 @@
         {
           "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "orders"
+        }
       ]
     ],
     "experiments": {
