@@ -125,10 +125,25 @@ jobs:
           if [ "$status" = "errored" ]; then
             jq -r '.logFiles[]? | if type == "string" then . else (.url // .downloadUrl // empty) end' eas-android-build.json > eas-log-urls.txt
             : > eas-build-all.log
+            : > eas-log-fetch-summary.txt
+            index=0
             while IFS= read -r log_url; do
               if [ -n "$log_url" ]; then
-                curl --fail --silent --show-error --location "$log_url" >> eas-build-all.log || true
-                printf '\n' >> eas-build-all.log
+                index=$((index + 1))
+                chunk="eas-log-$index.bin"
+                if curl --compressed --fail --silent --show-error --location "$log_url" --output "$chunk"; then
+                  bytes="$(wc -c < "$chunk" | tr -d ' ')"
+                  kind="$(file -b "$chunk")"
+                  printf 'log %s: %s bytes; %s\n' "$index" "$bytes" "$kind" >> eas-log-fetch-summary.txt
+                  if gzip -t "$chunk" >/dev/null 2>&1; then
+                    gzip -dc "$chunk" >> eas-build-all.log || true
+                  else
+                    cat "$chunk" >> eas-build-all.log
+                  fi
+                  printf '\n' >> eas-build-all.log
+                else
+                  printf 'log %s: fetch failed\n' "$index" >> eas-log-fetch-summary.txt
+                fi
               fi
             done < eas-log-urls.txt
 
@@ -158,13 +173,13 @@ jobs:
           indexes = [i for i, line in enumerate(expanded) if keywords.search(line)]
           selected = set()
           for i in indexes:
-              for j in range(max(0, i - 3), min(len(expanded), i + 5)):
+              for j in range(max(0, i - 4), min(len(expanded), i + 7)):
                   selected.add(j)
           lines = [expanded[i] for i in sorted(selected)]
           if not lines:
-              lines = ['No matching Gradle failure context was exposed through EAS build log files.']
+              lines = ['No matching Gradle failure context was exposed through the downloaded EAS log content.']
 
-          out = '\n'.join(lines[-180:])
+          out = '\n'.join(lines[-220:])
           out = re.sub(r'https?://\S+', '[URL_REDACTED]', out)
           out = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL_REDACTED]', out)
           out = re.sub(r'(?i)\b(token|secret|password|api[_-]?key|access[_-]?key)\s*[:=]\s*\S+', r'\1=[REDACTED]', out)
@@ -175,6 +190,12 @@ jobs:
             {
               echo '### Android RC Gradle diagnostic (redacted)'
               echo
+              echo 'Log fetch summary:'
+              echo '```text'
+              if [ -s eas-log-fetch-summary.txt ]; then cat eas-log-fetch-summary.txt; else echo 'No EAS log URLs were returned.'; fi
+              echo '```'
+              echo
+              echo 'Failure context:'
               echo '```text'
               cat eas-gradle-diagnostic.txt
               echo '```'
@@ -182,21 +203,6 @@ jobs:
               echo 'Only error-context lines were extracted; URLs, emails, and common secret/token patterns were redacted.'
             } > eas-gradle-diagnostic.md
             gh pr comment "$TARGET_PR" --body-file eas-gradle-diagnostic.md
-
-            {
-              echo '### EAS build JSON diagnostic schema'
-              echo
-              echo 'Top-level keys:'
-              echo '```text'
-              jq -r 'keys | join(", ")' eas-android-build.json
-              echo '```'
-              echo
-              echo 'Paths related to logs/errors/build phases (field names only):'
-              echo '```text'
-              jq -r '[paths | map(tostring) | join(".")] | unique[]' eas-android-build.json | grep -Ei 'log|error|phase|artifact' | head -n 120 || true
-              echo '```'
-            } > eas-build-schema.md
-            gh pr comment "$TARGET_PR" --body-file eas-build-schema.md
           fi
 
           if [ "$status" != "finished" ]; then
