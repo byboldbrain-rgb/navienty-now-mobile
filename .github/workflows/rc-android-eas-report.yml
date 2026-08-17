@@ -78,22 +78,24 @@ jobs:
           fi
 
           dashboard_url="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/$build_id"
-          status="$(jq -r '.[0].status' eas-android-build-list.json)"
+          status_raw="$(jq -r '.[0].status' eas-android-build-list.json)"
 
           cat > android-rc-start.md <<EOF
           ### Android RC build detected
           - Commit: \`$TARGET_BUILD_COMMIT\`
           - EAS Build ID: \`$build_id\`
-          - Status: \`$status\`
+          - Status: \`$status_raw\`
           - Dashboard: $dashboard_url
 
           The Android-only RC gate is tracking this build to a terminal EAS status. iOS remains blocked on Apple Developer Program membership.
           EOF
           gh pr comment "$TARGET_PR" --body-file android-rc-start.md
 
+          status="$(printf '%s' "$status_raw" | tr '[:upper:]' '[:lower:]')"
           for attempt in $(seq 1 80); do
             eas build:view "$build_id" --json > eas-android-build.json
-            status="$(jq -r '.status' eas-android-build.json)"
+            status_raw="$(jq -r '.status' eas-android-build.json)"
+            status="$(printf '%s' "$status_raw" | tr '[:upper:]' '[:lower:]')"
             case "$status" in
               finished|errored|canceled)
                 break
@@ -108,7 +110,7 @@ jobs:
           ### Android RC final status
           - Commit: \`$TARGET_BUILD_COMMIT\`
           - EAS Build ID: \`$build_id\`
-          - Status: \`$status\`
+          - Status: \`$status_raw\`
           - Dashboard: $dashboard_url
           - Install artifact: ${artifact_url:-not returned}
 
