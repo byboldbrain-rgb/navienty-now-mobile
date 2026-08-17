@@ -1,1 +1,12 @@
-{"phase": "QUERY_ERROR", "targetCommit": "be1fb4e6a02cefa1d24ae3694ceedaadac631ce8", "exitCode": 1, "error": "Error: build:list command failed."}
+{
+  "phase": "QUERY_OK",
+  "targetCommit": "be1fb4e6a02cefa1d24ae3694ceedaadac631ce8",
+  "found": true,
+  "id": "4f0f449d-8a54-4860-b618-f0909e2972f5",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "buildProfile": "preview",
+  "artifactUrl": null,
+  "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+  "errorMessage": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+}
