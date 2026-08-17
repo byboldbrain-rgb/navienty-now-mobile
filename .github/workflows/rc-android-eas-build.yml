@@ -67,7 +67,7 @@ jobs:
       - name: Verify Expo authentication
         run: eas whoami
 
-      - name: Build Android preview RC
+      - name: Build validated Android preview RC
         shell: bash
         run: |
           set -o pipefail
