@@ -1,18 +1,17 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 
+import {
+  PRIVATE_UPLOAD_MIME_TYPES,
+  PrivateUploadValidationError,
+  assertPrivateUploadContent,
+  assertPrivateUploadSize,
+  normalizePrivateUploadMimeType,
+  type PrivateUploadMimeType,
+} from '../domain/private-upload-validation';
+
 import { supabase } from '../lib/supabase';
 import { ensureAppSession } from './anonymous-auth-service';
-
-const MAX_PAYMENT_PROOF_FILE_SIZE =
-  8 * 1024 * 1024;
-
-const ALLOWED_MIME_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'application/pdf',
-] as const;
 
 export type OrderPaymentProofStatus =
   | 'draft'
@@ -72,6 +71,71 @@ export type PaymentProofUploadResult =
       proof: OrderPaymentProof;
       fileName: string;
     };
+
+function getValidatedUploadMimeType(
+  value: string | null | undefined,
+): PrivateUploadMimeType {
+  try {
+    return normalizePrivateUploadMimeType(value);
+  } catch (error) {
+    if (
+      error instanceof PrivateUploadValidationError &&
+      error.code === 'unsupported_type'
+    ) {
+      throw new Error("اختر صورة لإثبات الدفع أو ملف PDF فقط.");
+    }
+
+    throw error;
+  }
+}
+
+function assertValidatedUploadSize(
+  size: number | null | undefined,
+): void {
+  try {
+    assertPrivateUploadSize(size);
+  } catch (error) {
+    if (error instanceof PrivateUploadValidationError) {
+      if (error.code === 'too_large') {
+        throw new Error("حجم إثبات الدفع أكبر من 8 ميجابايت.");
+      }
+
+      if (error.code === 'invalid_size') {
+        throw new Error("تعذر التحقق من حجم إثبات الدفع أو أن الملف فارغ.");
+      }
+    }
+
+    throw error;
+  }
+}
+
+function assertValidatedUploadContent(
+  mimeType: PrivateUploadMimeType,
+  buffer: ArrayBuffer,
+): void {
+  try {
+    assertPrivateUploadContent(
+      mimeType,
+      buffer,
+    );
+  } catch (error) {
+    if (error instanceof PrivateUploadValidationError) {
+      if (error.code === 'too_large') {
+        throw new Error("حجم إثبات الدفع أكبر من 8 ميجابايت.");
+      }
+
+      if (error.code === 'invalid_size') {
+        throw new Error("تعذر التحقق من حجم إثبات الدفع أو أن الملف فارغ.");
+      }
+
+      if (error.code === 'content_type_mismatch') {
+        throw new Error("محتوى ملف إثبات الدفع لا يطابق نوعه. اختر صورة JPEG أو PNG أو WebP أو ملف PDF صالح.");
+      }
+    }
+
+    throw error;
+  }
+}
 
 function nullableString(
   value: unknown,
@@ -313,7 +377,7 @@ export async function pickAndUploadOrderPaymentProof(
 ): Promise<PaymentProofUploadResult> {
   const pickerResult =
     await DocumentPicker.getDocumentAsync({
-      type: [...ALLOWED_MIME_TYPES],
+      type: [...PRIVATE_UPLOAD_MIME_TYPES],
       copyToCacheDirectory: true,
       multiple: false,
     });
@@ -335,32 +399,17 @@ export async function pickAndUploadOrderPaymentProof(
   }
 
   const mimeType =
-    asset.mimeType?.trim()
-      .toLowerCase() ?? '';
-
-  if (
-    !ALLOWED_MIME_TYPES.includes(
-      mimeType as
-        (typeof ALLOWED_MIME_TYPES)[number],
-    )
-  ) {
-    throw new Error(
-      'اختر صورة لإثبات الدفع أو ملف PDF فقط.',
+    getValidatedUploadMimeType(
+      asset.mimeType,
     );
-  }
 
   const file = new File(asset.uri);
   const fileSize =
     asset.size ?? file.size;
 
-  if (
-    typeof fileSize === 'number' &&
-    fileSize > MAX_PAYMENT_PROOF_FILE_SIZE
-  ) {
-    throw new Error(
-      'حجم إثبات الدفع أكبر من 8 ميجابايت.',
-    );
-  }
+  assertValidatedUploadSize(
+    fileSize,
+  );
 
   const preparation =
     await prepareOrderPaymentProof(orderId);
@@ -392,6 +441,11 @@ export async function pickAndUploadOrderPaymentProof(
 
   const fileBuffer =
     await file.arrayBuffer();
+
+  assertValidatedUploadContent(
+    mimeType,
+    fileBuffer,
+  );
 
   const { error: uploadError } =
     await supabase.storage
