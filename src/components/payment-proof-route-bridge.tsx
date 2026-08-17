@@ -56,14 +56,16 @@ export default function PaymentProofRouteBridge() {
       return;
     }
 
+    const resolvedOrderId = orderId;
     let cancelled = false;
-    inFlightOrderIdRef.current = orderId;
+    inFlightOrderIdRef.current =
+      resolvedOrderId;
 
     async function resolvePaymentProofRoute() {
       try {
         const preparation =
           await prepareOrderPaymentProof(
-            orderId,
+            resolvedOrderId,
           );
 
         if (
@@ -72,7 +74,9 @@ export default function PaymentProofRouteBridge() {
         ) {
           router.replace({
             pathname: '/payment-proof',
-            params: { id: orderId },
+            params: {
+              id: resolvedOrderId,
+            },
           });
         }
       } catch (error) {
