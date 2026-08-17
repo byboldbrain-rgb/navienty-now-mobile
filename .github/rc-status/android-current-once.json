@@ -7,5 +7,7 @@
   "buildProfile": "preview",
   "artifactUrl": null,
   "errorCode": null,
-  "errorMessage": null
+  "errorMessage": null,
+  "completedAt": null,
+  "updatedAt": "2026-08-17T23:39:25.201Z"
 }
