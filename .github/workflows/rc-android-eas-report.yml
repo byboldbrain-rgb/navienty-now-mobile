@@ -1,0 +1,121 @@
+name: Android RC EAS Status Report
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cto/launch-readiness-hardening
+    paths:
+      - .github/workflows/rc-android-eas-report.yml
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  report:
+    name: Report Android preview RC
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_BUILD_COMMIT: 69b9fa18a032c5c1fae26f071890f3f4c705cbc6
+      TARGET_PR: '2'
+
+    steps:
+      - name: Checkout release-candidate branch
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Require Expo access token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not configured as a GitHub Actions repository secret."
+            exit 1
+          fi
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Find and report Android RC build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          build_id=""
+          for attempt in $(seq 1 60); do
+            eas build:list \
+              --platform android \
+              --build-profile preview \
+              --git-commit-hash "$TARGET_BUILD_COMMIT" \
+              --limit 1 \
+              --json > eas-android-build-list.json
+
+            build_id="$(jq -r 'if length > 0 then .[0].id else empty end' eas-android-build-list.json)"
+            if [ -n "$build_id" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ -z "$build_id" ]; then
+            gh pr comment "$TARGET_PR" --body "Android RC status reporter could not find an EAS Android preview build for commit \`$TARGET_BUILD_COMMIT\`."
+            exit 1
+          fi
+
+          dashboard_url="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/$build_id"
+          status="$(jq -r '.[0].status' eas-android-build-list.json)"
+
+          cat > android-rc-start.md <<EOF
+          ### Android RC build detected
+          - Commit: \`$TARGET_BUILD_COMMIT\`
+          - EAS Build ID: \`$build_id\`
+          - Status: \`$status\`
+          - Dashboard: $dashboard_url
+
+          The Android-only RC gate is tracking this build to a terminal EAS status. iOS remains blocked on Apple Developer Program membership.
+          EOF
+          gh pr comment "$TARGET_PR" --body-file android-rc-start.md
+
+          for attempt in $(seq 1 80); do
+            eas build:view "$build_id" --json > eas-android-build.json
+            status="$(jq -r '.status' eas-android-build.json)"
+            case "$status" in
+              finished|errored|canceled)
+                break
+                ;;
+            esac
+            sleep 15
+          done
+
+          artifact_url="$(jq -r '.artifacts.buildUrl // .artifacts.applicationArchiveUrl // empty' eas-android-build.json)"
+
+          cat > android-rc-final.md <<EOF
+          ### Android RC final status
+          - Commit: \`$TARGET_BUILD_COMMIT\`
+          - EAS Build ID: \`$build_id\`
+          - Status: \`$status\`
+          - Dashboard: $dashboard_url
+          - Install artifact: ${artifact_url:-not returned}
+
+          Physical-device smoke testing is still required before this PR can leave Draft status. iOS remains blocked on Apple Developer Program membership.
+          EOF
+          gh pr comment "$TARGET_PR" --body-file android-rc-final.md
+
+          if [ "$status" != "finished" ]; then
+            exit 1
+          fi
