@@ -65,7 +65,9 @@ jobs:
         run: eas whoami
 
       - name: Trigger Android and iOS preview builds
+        shell: bash
         run: |
+          set -o pipefail
           eas build \
             --platform all \
             --profile preview \
