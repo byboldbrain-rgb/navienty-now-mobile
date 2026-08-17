@@ -1,0 +1,82 @@
+name: Probe EAS Phase
+
+on:
+  push:
+    branches:
+      - cto/launch-readiness-hardening
+    paths:
+      - .github/workflows/probe-eas-phase.yml
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      TARGET_BUILD_COMMIT: be1fb4e6a02cefa1d24ae3694ceedaadac631ce8
+
+    steps:
+      - name: Checkout hardening branch
+        uses: actions/checkout@v5
+        with:
+          ref: cto/launch-readiness-hardening
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Record start phase
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/rc-status
+          printf '{"phase":"STARTED"}\n' > .github/rc-status/eas-phase.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/rc-status/eas-phase.json
+          git commit -m 'ci: record EAS probe start'
+          git pull --rebase origin cto/launch-readiness-hardening
+          git push origin HEAD:cto/launch-readiness-hardening
+
+      - name: Verify EAS authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPO_TOKEN" ]; then
+            exit 2
+          fi
+          npx --yes eas-cli@latest whoami > /tmp/eas-whoami.txt
+          printf '{"phase":"AUTH_OK"}\n' > .github/rc-status/eas-phase.json
+          git add .github/rc-status/eas-phase.json
+          git commit -m 'ci: record EAS auth probe'
+          git pull --rebase origin cto/launch-readiness-hardening
+          git push origin HEAD:cto/launch-readiness-hardening
+
+      - name: Query target Android build
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes eas-cli@latest build:list \
+            --platform android \
+            --build-profile preview \
+            --git-commit-hash "$TARGET_BUILD_COMMIT" \
+            --limit 1 \
+            --json > /tmp/build-list.json
+
+          build_id="$(jq -r 'if length > 0 then .[0].id else empty end' /tmp/build-list.json)"
+          if [ -z "$build_id" ]; then
+            printf '{"phase":"QUERY_OK","targetCommit":"%s","found":false,"status":"NOT_FOUND"}\n' "$TARGET_BUILD_COMMIT" > .github/rc-status/eas-phase.json
+          else
+            npx --yes eas-cli@latest build:view "$build_id" --json > /tmp/build.json
+            jq '{phase:"QUERY_OK", targetCommit:"'"$TARGET_BUILD_COMMIT"'", found:true, id:.id, status:.status, platform:.platform, buildProfile:.buildProfile, artifactUrl:(.artifacts.buildUrl // .artifacts.applicationArchiveUrl // null), errorCode:(.error.errorCode // .error.code // .errorCode // null), errorMessage:(.error.message // .error.errorMessage // .errorMessage // null)}' /tmp/build.json > .github/rc-status/eas-phase.json
+          fi
+
+          git add .github/rc-status/eas-phase.json
+          git commit -m 'ci: record EAS Android build query'
+          git pull --rebase origin cto/launch-readiness-hardening
+          git push origin HEAD:cto/launch-readiness-hardening
