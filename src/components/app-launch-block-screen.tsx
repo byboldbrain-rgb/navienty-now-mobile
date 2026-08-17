@@ -264,7 +264,7 @@ export default function AppLaunchBlockScreen({
         {isForceUpdate &&
         !gate.updateUrl ? (
           <Text style={styles.helperText}>
-            رابط المتجر غير متاح من الإعدادات حاليًا. لن يسمح التطبيق بالدخول حتى يتم تحديث النسخة أو تعديل الحد الأدنى من لوحة الإدارة.
+            تعذر فتح صفحة التحديث تلقائيًا حاليًا. أعد المحاولة بعد قليل أو تواصل مع الدعم.
           </Text>
         ) : null}
       </View>
