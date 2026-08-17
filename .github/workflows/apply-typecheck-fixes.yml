@@ -43,7 +43,6 @@ jobs:
               text = text.replace(old, new, count)
               file_path.write_text(text, encoding='utf-8')
 
-          # Mobile TypeScript should not typecheck Deno Edge Functions.
           tsconfig_path = Path('tsconfig.json')
           tsconfig = json.loads(tsconfig_path.read_text(encoding='utf-8'))
           tsconfig['exclude'] = ['supabase/functions/**']
@@ -52,15 +51,12 @@ jobs:
               encoding='utf-8',
           )
 
-          # RN Animated.Image typings do not accept pointerEvents as a direct prop.
           replace_exact(
               'src/app/_layout.tsx',
               '        <Animated.Image\n          accessibilityIgnoresInvertColors\n          pointerEvents="none"\n',
               '        <Animated.Image\n          accessibilityIgnoresInvertColors\n',
           )
 
-          # TypeScript does not resolve RN platform suffixes by itself. Runtime still
-          # resolves .android/.ios/.native/.web first where applicable.
           location_base = Path('src/components/location-picker-screen.tsx')
           if not location_base.exists():
               location_base.write_text(
@@ -68,16 +64,12 @@ jobs:
                   encoding='utf-8',
               )
 
-          # Cart store now reports the only rejected cross-cart case explicitly.
           replace_exact(
               'src/hooks/use-catalog-cart.ts',
               "if (result === 'different-store')",
               "if (result === 'different-restaurant')",
           )
 
-          # Supabase generated select inference can surface GenericStringError for
-          # dynamic select strings. Keep runtime validation/mapping but make the
-          # intentional boundary cast explicit through unknown.
           replace_exact(
               'src/services/service-packages-service.ts',
               'const row = data as ServicePackageRow;',
@@ -113,8 +105,6 @@ jobs:
           )
           banner_path.write_text(banner_text, encoding='utf-8')
 
-          # The older category navigation still uses the auth-aware label; make the
-          # prop optional for legacy callers and retain the existing signed-out label.
           replace_exact(
               'src/category/app-bottom-navigation.tsx',
               '  isSignedIn: boolean;\n',
@@ -126,8 +116,6 @@ jobs:
               '  isSignedIn = false,\n}: AppBottomNavigationProps)',
           )
 
-          # This is an event helper, not a React Hook. Its old `use*` name caused
-          # react-hooks/rules-of-hooks to reject calls from effects/press handlers.
           location_native = Path('src/components/location-picker-screen.native.tsx')
           location_native_text = location_native.read_text(encoding='utf-8')
           if 'useCurrentLocation' not in location_native_text:
@@ -140,8 +128,6 @@ jobs:
               encoding='utf-8',
           )
 
-          # JSX text should not contain raw ASCII quote entities around the
-          # conflicting restaurant name.
           replace_exact(
               'src/app/store/[id].tsx',
               '              عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من "\n',
@@ -153,9 +139,6 @@ jobs:
               '              ”.\n',
           )
 
-          # The file was committed empty in the original service-booking feature.
-          # Keep the service cart route functional by forwarding the package into
-          # the canonical service checkout flow rather than crashing on import.
           Path('src/components/service/service-package-cart.tsx').write_text(
               "import ServicePackageCheckout from './service-package-checkout';\n\n"
               "type ServicePackageCartProps = {\n"
@@ -172,12 +155,6 @@ jobs:
               "}\n",
               encoding='utf-8',
           )
-
-          # Current Supabase JS packages in this lockfile require Node 22+.
-          ci_path = Path('.github/workflows/ci.yml')
-          ci_text = ci_path.read_text(encoding='utf-8')
-          ci_text = ci_text.replace('node-version: 20.19.4', 'node-version: 22', 1)
-          ci_path.write_text(ci_text, encoding='utf-8')
 
       - name: Install dependencies
         run: npm ci
@@ -197,6 +174,6 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tsconfig.json src .github/workflows/ci.yml package.json package-lock.json eslint.config.js
+          git add tsconfig.json src package.json package-lock.json eslint.config.js
           git commit -m "Repair mobile TypeScript and lint validation"
           git push origin HEAD:agent/p0-launch-hardening
