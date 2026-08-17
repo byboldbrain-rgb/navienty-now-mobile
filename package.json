@@ -54,7 +54,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --experimental-strip-types --test tests/app-version.test.ts"
+    "test": "node --experimental-strip-types --test tests/app-version.test.mjs"
   },
   "private": true
 }
