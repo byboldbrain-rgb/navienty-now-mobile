@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 import AppLaunchBlockScreen from '../components/app-launch-block-screen';
+import OrderRealtimeBridge from '../components/order-realtime-bridge';
 import {
   getAppLaunchGate,
   type AppLaunchGateResult,
@@ -431,34 +432,38 @@ export default function RootLayout() {
       />
 
       {startupHasResolved && appIsAllowed ? (
-        <Stack
-          screenOptions={{
-            animation: 'fade',
-            contentStyle: {
-              backgroundColor:
-                NAVIENTY_NOW_COLORS.page,
-            },
-            headerShown: false,
-          }}
-        >
-          <Stack.Screen
-            name="location-picker"
-            options={{
-              animation:
-                'slide_from_right',
-              headerShown: false,
-            }}
-          />
+        <>
+          <OrderRealtimeBridge />
 
-          <Stack.Screen
-            name="promo/[id]"
-            options={{
-              animation: 'slide_from_right',
-              gestureEnabled: true,
+          <Stack
+            screenOptions={{
+              animation: 'fade',
+              contentStyle: {
+                backgroundColor:
+                  NAVIENTY_NOW_COLORS.page,
+              },
               headerShown: false,
             }}
-          />
-        </Stack>
+          >
+            <Stack.Screen
+              name="location-picker"
+              options={{
+                animation:
+                  'slide_from_right',
+                headerShown: false,
+              }}
+            />
+
+            <Stack.Screen
+              name="promo/[id]"
+              options={{
+                animation: 'slide_from_right',
+                gestureEnabled: true,
+                headerShown: false,
+              }}
+            />
+          </Stack>
+        </>
       ) : null}
 
       {startupHasResolved &&
