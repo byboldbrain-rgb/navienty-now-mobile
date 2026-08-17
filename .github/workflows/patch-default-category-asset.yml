@@ -1,0 +1,72 @@
+name: Patch Default Category Asset
+
+on:
+  push:
+    branches:
+      - cto/launch-readiness-hardening
+    paths:
+      - .github/workflows/patch-default-category-asset.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout hardening branch
+        uses: actions/checkout@v5
+        with:
+          ref: cto/launch-readiness-hardening
+          fetch-depth: 0
+
+      - name: Rename mislabeled JPEG and update references
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+
+          old_asset = Path('src/assets/icons/categories/default.png')
+          new_asset = Path('src/assets/icons/categories/default.jpg')
+          data = old_asset.read_bytes()
+          if not data.startswith(b'\xff\xd8\xff'):
+              raise SystemExit('default.png is no longer JPEG bytes; refusing automatic patch')
+          if new_asset.exists():
+              raise SystemExit('default.jpg already exists; refusing ambiguous patch')
+
+          allowed = {'.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'}
+          old_ref = 'assets/icons/categories/default.png'
+          new_ref = 'assets/icons/categories/default.jpg'
+          changed = []
+          for file in Path('src').rglob('*'):
+              if not file.is_file() or file.suffix.lower() not in allowed:
+                  continue
+              text = file.read_text(encoding='utf-8')
+              if old_ref not in text:
+                  continue
+              file.write_text(text.replace(old_ref, new_ref), encoding='utf-8')
+              changed.append(str(file))
+
+          if not changed:
+              raise SystemExit('No source reference to default.png was found; refusing blind rename')
+
+          print('Updated references:')
+          for file in changed:
+              print(f'- {file}')
+          PY
+
+          git mv src/assets/icons/categories/default.png src/assets/icons/categories/default.jpg
+          node scripts/validate-image-assets.mjs
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src scripts/validate-image-assets.mjs
+          git diff --cached --check
+          git commit -m 'fix(android): use correctly typed default category JPEG'
+          git push origin HEAD:cto/launch-readiness-hardening
