@@ -49,6 +49,9 @@ jobs:
       - name: Validate image assets
         run: node scripts/validate-image-assets.mjs
 
+      - name: Validate release config
+        run: node scripts/validate-release-config.mjs
+
       - name: Verify Expo project health
         run: npx expo-doctor@latest
 
@@ -67,7 +70,7 @@ jobs:
       - name: Verify Expo authentication
         run: eas whoami
 
-      - name: Build validated Android preview RC
+      - name: Build Android preview RC after splash prebuild verification
         shell: bash
         run: |
           set -o pipefail
