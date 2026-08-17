@@ -47,7 +47,8 @@
         {
           "defaultChannel": "orders"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
