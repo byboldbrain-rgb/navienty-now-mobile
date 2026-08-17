@@ -1,0 +1,112 @@
+name: Apply account deletion UI
+
+on:
+  push:
+    branches:
+      - agent/p0-launch-hardening
+    paths:
+      - .github/workflows/apply-account-deletion-ui.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: agent/p0-launch-hardening
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Patch account screen
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/app/account.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new):
+              global text
+              if old not in text:
+                  raise RuntimeError(f'Expected snippet not found: {old[:120]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "import {\n  useState,\n} from 'react';",
+              "import {\n  useEffect,\n  useState,\n} from 'react';",
+          )
+
+          replace_once(
+              "import {\n  ActivityIndicator,",
+              "import {\n  ActivityIndicator,\n  Alert,",
+          )
+
+          replace_once(
+              "import {\n  ensureAppSession,\n} from '../services/anonymous-auth-service';\n",
+              "import {\n  ensureAppSession,\n} from '../services/anonymous-auth-service';\nimport {\n  cancelMyAccountDeletionRequest,\n  getMyAccountDeletionRequest,\n  requestAccountDeletion,\n  type AccountDeletionRequest,\n} from '../services/account-deletion-service';\n",
+          )
+
+          replace_once(
+              "function MenuRow({\n",
+              "function formatDeletionDate(\n  value: string,\n): string {\n  const date = new Date(value);\n\n  if (Number.isNaN(date.getTime())) {\n    return value;\n  }\n\n  return date.toLocaleDateString(\n    'ar-EG',\n    {\n      day: 'numeric',\n      month: 'long',\n      year: 'numeric',\n    },\n  );\n}\n\nfunction MenuRow({\n",
+          )
+
+          replace_once(
+              "  const [errorMessage, setErrorMessage] =\n    useState<string | null>(null);\n\n  const isPermanentAccount =",
+              "  const [errorMessage, setErrorMessage] =\n    useState<string | null>(null);\n\n  const [\n    deletionRequest,\n    setDeletionRequest,\n  ] = useState<AccountDeletionRequest | null>(\n    null,\n  );\n\n  const [\n    isLoadingDeletionRequest,\n    setIsLoadingDeletionRequest,\n  ] = useState(false);\n\n  const [\n    isSubmittingDeletionRequest,\n    setIsSubmittingDeletionRequest,\n  ] = useState(false);\n\n  const [\n    isCancellingDeletionRequest,\n    setIsCancellingDeletionRequest,\n  ] = useState(false);\n\n  const isPermanentAccount =",
+          )
+
+          replace_once(
+              "  const linkedDisplayName =\n    getAccountDisplayName(authState);",
+              "  const hasCustomerSession =\n    isPermanentAccount ||\n    isAnonymousAccount;\n\n  const hasActiveDeletionRequest =\n    deletionRequest?.status === 'pending' ||\n    deletionRequest?.status === 'processing';\n\n  const linkedDisplayName =\n    getAccountDisplayName(authState);",
+          )
+
+          replace_once(
+              "  async function signOutPermanentAccount() {",
+              "  useEffect(() => {\n    let cancelled = false;\n\n    if (!hasCustomerSession) {\n      setDeletionRequest(null);\n      setIsLoadingDeletionRequest(false);\n      return () => {\n        cancelled = true;\n      };\n    }\n\n    async function loadDeletionRequest() {\n      try {\n        setIsLoadingDeletionRequest(true);\n\n        const request =\n          await getMyAccountDeletionRequest();\n\n        if (!cancelled) {\n          setDeletionRequest(request);\n        }\n      } catch (error) {\n        if (!cancelled) {\n          setErrorMessage(\n            error instanceof Error\n              ? error.message\n              : 'تعذر تحميل حالة طلب حذف الحساب.',\n          );\n        }\n      } finally {\n        if (!cancelled) {\n          setIsLoadingDeletionRequest(false);\n        }\n      }\n    }\n\n    void loadDeletionRequest();\n\n    return () => {\n      cancelled = true;\n    };\n  }, [hasCustomerSession]);\n\n  async function submitAccountDeletionRequest() {\n    if (isSubmittingDeletionRequest) {\n      return;\n    }\n\n    try {\n      setIsSubmittingDeletionRequest(true);\n      setErrorMessage(null);\n\n      const request =\n        await requestAccountDeletion();\n\n      setDeletionRequest(request);\n    } catch (error) {\n      setErrorMessage(\n        error instanceof Error\n          ? error.message\n          : 'تعذر إرسال طلب حذف الحساب.',\n      );\n    } finally {\n      setIsSubmittingDeletionRequest(false);\n    }\n  }\n\n  function confirmAccountDeletionRequest() {\n    if (\n      !hasCustomerSession ||\n      isSubmittingDeletionRequest ||\n      hasActiveDeletionRequest\n    ) {\n      return;\n    }\n\n    Alert.alert(\n      'حذف الحساب والبيانات',\n      'سيتم تسجيل طلب لحذف الحساب والبيانات المرتبطة به. قد نحتفظ فقط بالسجلات التي يلزم الاحتفاظ بها قانونيًا أو محاسبيًا. يمكنك إلغاء الطلب قبل بدء المعالجة.',\n      [\n        {\n          text: 'رجوع',\n          style: 'cancel',\n        },\n        {\n          text: 'طلب حذف الحساب',\n          style: 'destructive',\n          onPress: () => {\n            void submitAccountDeletionRequest();\n          },\n        },\n      ],\n    );\n  }\n\n  async function cancelDeletionRequest() {\n    if (\n      deletionRequest?.status !== 'pending' ||\n      isCancellingDeletionRequest\n    ) {\n      return;\n    }\n\n    try {\n      setIsCancellingDeletionRequest(true);\n      setErrorMessage(null);\n\n      const cancelled =\n        await cancelMyAccountDeletionRequest();\n\n      if (!cancelled) {\n        throw new Error(\n          'تعذر إلغاء الطلب لأنه بدأ المعالجة بالفعل.',\n        );\n      }\n\n      setDeletionRequest({\n        ...deletionRequest,\n        status: 'cancelled',\n        cancelledAt:\n          new Date().toISOString(),\n      });\n    } catch (error) {\n      setErrorMessage(\n        error instanceof Error\n          ? error.message\n          : 'تعذر إلغاء طلب حذف الحساب.',\n      );\n    } finally {\n      setIsCancellingDeletionRequest(false);\n    }\n  }\n\n  function confirmCancelDeletionRequest() {\n    Alert.alert(\n      'إلغاء طلب الحذف',\n      'هل تريد الاحتفاظ بحسابك وإلغاء طلب الحذف؟',\n      [\n        {\n          text: 'رجوع',\n          style: 'cancel',\n        },\n        {\n          text: 'إلغاء طلب الحذف',\n          onPress: () => {\n            void cancelDeletionRequest();\n          },\n        },\n      ],\n    );\n  }\n\n  async function signOutPermanentAccount() {",
+          )
+
+          replace_once(
+              "          {errorMessage && (",
+              "          {hasCustomerSession && (\n            <View style={styles.deletionCard}>\n              <View\n                style={\n                  styles.deletionHeadingRow\n                }\n              >\n                <View\n                  style={\n                    styles.deletionIcon\n                  }\n                >\n                  <Text\n                    style={\n                      styles.deletionIconText\n                    }\n                  >\n                    ×\n                  </Text>\n                </View>\n\n                <View\n                  style={\n                    styles.deletionHeadingCopy\n                  }\n                >\n                  <Text\n                    style={\n                      styles.deletionTitle\n                    }\n                  >\n                    حذف الحساب والبيانات\n                  </Text>\n\n                  <Text\n                    style={\n                      styles.deletionDescription\n                    }\n                  >\n                    تقدر تبدأ طلب حذف حسابك\n                    من داخل التطبيق، بما في\n                    ذلك حساب الضيف. قد نحتفظ\n                    فقط بالسجلات المطلوبة\n                    قانونيًا أو محاسبيًا.\n                  </Text>\n                </View>\n              </View>\n\n              {isLoadingDeletionRequest ? (\n                <View\n                  style={\n                    styles.deletionLoadingRow\n                  }\n                >\n                  <ActivityIndicator\n                    color={\n                      NAVIENTY_NOW_COLORS.error\n                    }\n                    size=\"small\"\n                  />\n                  <Text\n                    style={\n                      styles.deletionLoadingText\n                    }\n                  >\n                    جاري تحميل حالة الطلب...\n                  </Text>\n                </View>\n              ) : hasActiveDeletionRequest &&\n                deletionRequest ? (\n                <View\n                  style={\n                    styles.deletionStatusBox\n                  }\n                >\n                  <Text\n                    style={\n                      styles.deletionStatusTitle\n                    }\n                  >\n                    {deletionRequest.status ===\n                    'processing'\n                      ? 'بدأت معالجة طلب الحذف'\n                      : 'طلب الحذف مسجّل'}\n                  </Text>\n\n                  <Text\n                    style={\n                      styles.deletionStatusText\n                    }\n                  >\n                    موعد الإكمال المستهدف:{' '}\n                    {formatDeletionDate(\n                      deletionRequest\n                        .targetCompletionAt,\n                    )}\n                  </Text>\n\n                  {deletionRequest.status ===\n                    'pending' && (\n                    <Pressable\n                      accessibilityRole=\"button\"\n                      disabled={\n                        isCancellingDeletionRequest\n                      }\n                      style={({\n                        pressed,\n                      }) => [\n                        styles.cancelDeletionButton,\n                        isCancellingDeletionRequest &&\n                          styles.deletionButtonDisabled,\n                        pressed &&\n                          !isCancellingDeletionRequest &&\n                          styles.rowPressed,\n                      ]}\n                      onPress={\n                        confirmCancelDeletionRequest\n                      }\n                    >\n                      {isCancellingDeletionRequest ? (\n                        <ActivityIndicator\n                          color={\n                            NAVIENTY_NOW_COLORS.textSecondary\n                          }\n                          size=\"small\"\n                        />\n                      ) : (\n                        <Text\n                          style={\n                            styles.cancelDeletionButtonText\n                          }\n                        >\n                          إلغاء طلب الحذف\n                        </Text>\n                      )}\n                    </Pressable>\n                  )}\n                </View>\n              ) : (\n                <Pressable\n                  accessibilityLabel=\"طلب حذف الحساب\"\n                  accessibilityRole=\"button\"\n                  disabled={\n                    isSubmittingDeletionRequest\n                  }\n                  style={({ pressed }) => [\n                    styles.deleteAccountButton,\n                    isSubmittingDeletionRequest &&\n                      styles.deletionButtonDisabled,\n                    pressed &&\n                      !isSubmittingDeletionRequest &&\n                      styles.deleteAccountButtonPressed,\n                  ]}\n                  onPress={\n                    confirmAccountDeletionRequest\n                  }\n                >\n                  {isSubmittingDeletionRequest ? (\n                    <ActivityIndicator\n                      color={\n                        NAVIENTY_NOW_COLORS.white\n                      }\n                      size=\"small\"\n                    />\n                  ) : (\n                    <Text\n                      style={\n                        styles.deleteAccountButtonText\n                      }\n                    >\n                      طلب حذف الحساب\n                    </Text>\n                  )}\n                </Pressable>\n              )}\n            </View>\n          )}\n\n          {errorMessage && (",
+          )
+
+          replace_once(
+              "  errorCard: {",
+              "  deletionCard: {\n    backgroundColor: '#FFF8F8',\n    borderColor: '#EBCACA',\n    borderRadius: 18,\n    borderWidth: 1,\n    marginTop: 16,\n    padding: 16,\n  },\n\n  deletionHeadingRow: {\n    alignItems: 'flex-start',\n    flexDirection: 'row',\n  },\n\n  deletionIcon: {\n    alignItems: 'center',\n    backgroundColor: '#FDE8E8',\n    borderRadius: 18,\n    height: 42,\n    justifyContent: 'center',\n    width: 42,\n  },\n\n  deletionIconText: {\n    color: NAVIENTY_NOW_COLORS.error,\n    fontSize: 24,\n    fontWeight: '700',\n    lineHeight: 26,\n  },\n\n  deletionHeadingCopy: {\n    alignItems: 'flex-end',\n    flex: 1,\n    marginLeft: 12,\n  },\n\n  deletionTitle: {\n    color: NAVIENTY_NOW_COLORS.text,\n    fontSize: 14,\n    fontWeight: '900',\n    textAlign: 'right',\n    writingDirection: 'rtl',\n  },\n\n  deletionDescription: {\n    color:\n      NAVIENTY_NOW_COLORS.textSecondary,\n    fontSize: 10,\n    lineHeight: 17,\n    marginTop: 5,\n    textAlign: 'right',\n    writingDirection: 'rtl',\n  },\n\n  deletionLoadingRow: {\n    alignItems: 'center',\n    flexDirection: 'row',\n    gap: 8,\n    justifyContent: 'center',\n    marginTop: 15,\n  },\n\n  deletionLoadingText: {\n    color:\n      NAVIENTY_NOW_COLORS.textSecondary,\n    fontSize: 10,\n  },\n\n  deletionStatusBox: {\n    backgroundColor:\n      NAVIENTY_NOW_COLORS.white,\n    borderColor: '#EEDDDD',\n    borderRadius: 14,\n    borderWidth: 1,\n    marginTop: 14,\n    padding: 13,\n  },\n\n  deletionStatusTitle: {\n    color: NAVIENTY_NOW_COLORS.text,\n    fontSize: 12,\n    fontWeight: '900',\n    textAlign: 'right',\n  },\n\n  deletionStatusText: {\n    color:\n      NAVIENTY_NOW_COLORS.textSecondary,\n    fontSize: 10,\n    lineHeight: 17,\n    marginTop: 5,\n    textAlign: 'right',\n    writingDirection: 'rtl',\n  },\n\n  deleteAccountButton: {\n    alignItems: 'center',\n    backgroundColor:\n      NAVIENTY_NOW_COLORS.error,\n    borderRadius: 14,\n    justifyContent: 'center',\n    marginTop: 15,\n    minHeight: 48,\n    paddingHorizontal: 16,\n  },\n\n  deleteAccountButtonPressed: {\n    opacity: 0.82,\n  },\n\n  deleteAccountButtonText: {\n    color: NAVIENTY_NOW_COLORS.white,\n    fontSize: 12,\n    fontWeight: '900',\n  },\n\n  cancelDeletionButton: {\n    alignItems: 'center',\n    borderColor: '#D8C7C7',\n    borderRadius: 12,\n    borderWidth: 1,\n    justifyContent: 'center',\n    marginTop: 11,\n    minHeight: 42,\n  },\n\n  cancelDeletionButtonText: {\n    color:\n      NAVIENTY_NOW_COLORS.textSecondary,\n    fontSize: 11,\n    fontWeight: '800',\n  },\n\n  deletionButtonDisabled: {\n    opacity: 0.55,\n  },\n\n  errorCard: {",
+          )
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Commit account deletion UI
+        run: |
+          if git diff --quiet -- src/app/account.tsx; then
+            echo "No account UI changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/account.tsx
+          git commit -m "Add in-app account deletion request flow"
+          git push origin HEAD:agent/p0-launch-hardening
