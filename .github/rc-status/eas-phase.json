@@ -1,1 +1,1 @@
-{"phase":"AUTH_OK"}
+{"phase": "QUERY_ERROR", "targetCommit": "be1fb4e6a02cefa1d24ae3694ceedaadac631ce8", "exitCode": 1, "error": "Error: build:list command failed."}
