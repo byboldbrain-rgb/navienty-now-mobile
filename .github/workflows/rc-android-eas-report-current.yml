@@ -38,6 +38,11 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Report tracker start
+        shell: bash
+        run: |
+          gh pr comment "$TARGET_PR" --body "Android RC tracker started for commit \`$TARGET_BUILD_COMMIT\`; waiting for the existing EAS build request. No additional build is being submitted."
+
       - name: Find Android RC
         shell: bash
         run: |
