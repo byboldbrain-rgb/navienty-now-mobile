@@ -16,7 +16,7 @@ jobs:
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      TARGET_BUILD_COMMIT: be1fb4e6a02cefa1d24ae3694ceedaadac631ce8
+      TARGET_BUILD_COMMIT: 37d383acffcbca9d6f25df571a454035ead72f8f
 
     steps:
       - name: Checkout hardening branch
@@ -29,6 +29,13 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Expo project config
+        run: npx expo config --json > /tmp/expo-config.json
 
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
@@ -36,31 +43,33 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Query existing Android RC once
+      - name: Query existing Android RC
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .github/rc-status
-          eas build:list \
-            --platform android \
-            --build-profile preview \
-            --git-commit-hash "$TARGET_BUILD_COMMIT" \
-            --limit 1 \
-            --json > build-list.json
 
-          build_id="$(jq -r 'if length > 0 then .[0].id else empty end' build-list.json)"
+          build_id=''
+          for attempt in $(seq 1 30); do
+            eas build:list \
+              --platform android \
+              --build-profile preview \
+              --git-commit-hash "$TARGET_BUILD_COMMIT" \
+              --limit 1 \
+              --json > build-list.json
+            build_id="$(jq -r 'if length > 0 then .[0].id else empty end' build-list.json)"
+            if [ -n "$build_id" ]; then
+              break
+            fi
+            sleep 5
+          done
+
           if [ -z "$build_id" ]; then
-            cat > .github/rc-status/android-current-once.json <<EOF
-          {
-            "targetCommit": "$TARGET_BUILD_COMMIT",
-            "found": false,
-            "status": "NOT_FOUND"
-          }
-          EOF
+            jq -n --arg target "$TARGET_BUILD_COMMIT" '{targetCommit:$target,found:false,status:"NOT_FOUND"}' > .github/rc-status/android-current-once.json
           else
             eas build:view "$build_id" --json > build.json
-            jq '{
-              targetCommit: "'"$TARGET_BUILD_COMMIT"'",
+            jq --arg target "$TARGET_BUILD_COMMIT" '{
+              targetCommit: $target,
               found: true,
               id: .id,
               status: .status,
@@ -78,7 +87,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git pull --rebase origin cto/launch-readiness-hardening
           git add .github/rc-status/android-current-once.json
-          git commit -m 'ci: record one-shot Android RC query' || exit 0
+          git commit -m 'ci: record Android RC #3 current status' || exit 0
+          git pull --rebase origin cto/launch-readiness-hardening
           git push origin HEAD:cto/launch-readiness-hardening
