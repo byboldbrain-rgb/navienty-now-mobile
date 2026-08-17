@@ -7,7 +7,9 @@ on:
     paths:
       - .github/workflows/sdk55-upgrade.yml
       - eslint.config.js
+      - package.json
       - scripts/apply-rn086-compat.mjs
+      - scripts/audit-production.mjs
       - src/types/expo-notifications-compat.d.ts
       - src/services/push-notifications-service.ts
 
@@ -66,8 +68,8 @@ jobs:
       - name: TypeScript on SDK 57
         run: npx tsc --noEmit
 
-      - name: Production dependency audit on SDK 57
-        run: npm audit --omit=dev --audit-level=high
+      - name: Production dependency audit policy on SDK 57
+        run: npm run audit:prod
 
       - name: Lint on SDK 57
         run: npm run lint
