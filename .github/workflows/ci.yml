@@ -37,6 +37,9 @@ jobs:
       - name: Validate checkout handoff
         run: node scripts/validate-checkout-handoff.mjs
 
+      - name: Validate native maps config
+        run: node scripts/validate-native-maps-config.mjs
+
       - name: Production dependency audit policy
         run: npm run audit:prod
 
