@@ -37,7 +37,6 @@ jobs:
 
           python - <<'PY'
           from pathlib import Path
-          import textwrap
 
           workflow = Path('.github/workflows/patch-checkout-handoff.yml').read_text()
           start_marker = "          python - <<'PY'\n"
@@ -48,8 +47,11 @@ jobs:
           if start < 0 or end < 0:
               raise SystemExit('Could not extract one-shot patch program')
 
-          program = workflow[start + len(start_marker):end]
-          program = textwrap.dedent(program)
+          raw_program = workflow[start + len(start_marker):end]
+          program = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in raw_program.splitlines()
+          ) + '\n'
           exec(compile(program, 'patch-checkout-handoff.py', 'exec'))
           PY
 
