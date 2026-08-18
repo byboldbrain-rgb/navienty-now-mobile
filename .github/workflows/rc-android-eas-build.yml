@@ -57,6 +57,14 @@ jobs:
       - name: Validate checkout handoff
         run: node scripts/validate-checkout-handoff.mjs
 
+      - name: Validate native maps config
+        run: node scripts/validate-native-maps-config.mjs
+
+      - name: Require Google Maps Android key in EAS preview
+        shell: bash
+        run: |
+          eas env:exec preview 'node -e "const key=(process.env.GOOGLE_MAPS_ANDROID_API_KEY||\"\").trim(); if(!key){console.error(\"GOOGLE_MAPS_ANDROID_API_KEY is missing from the EAS preview environment.\"); process.exit(1)} console.log(\"Google Maps Android build key is configured.\")"' --non-interactive
+
       - name: Verify Expo project health
         run: npx expo-doctor@latest
 
@@ -100,14 +108,14 @@ jobs:
           build_id="$(jq -r 'if type == "array" then .[0].id else .id end' eas-android-rc-build.json)"
           artifact_url="$(jq -r 'if type == "array" then (. [0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // "") else (.artifacts.buildUrl // .artifacts.applicationArchiveUrl // "") end' eas-android-rc-build.json)"
           dashboard_url="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/${build_id}"
-          gh pr comment 2 --body "### Android RC after Checkout handoff fix
+          gh pr comment 2 --body "### Android RC after native Maps fix
 - Source commit: \`${GITHUB_SHA}\`
 - EAS Build ID: \`${build_id}\`
 - Status: **FINISHED**
 - Install APK: ${artifact_url}
 - Dashboard: ${dashboard_url}
 
-This build includes the explicit in-app Checkout → confirmation flow. Physical Android smoke testing is still required."
+This build includes EAS-injected Google Maps native configuration and the in-app Checkout handoff fix. Physical Android smoke testing is still required."
 
       - name: Publish Android RC failure to PR
         if: failure()
@@ -115,8 +123,8 @@ This build includes the explicit in-app Checkout → confirmation flow. Physical
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh pr comment 2 --body "### Android RC after Checkout handoff fix — FAILED
+          gh pr comment 2 --body "### Android RC after native Maps fix — FAILED
 - Source commit: \`${GITHUB_SHA}\`
 - GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
-The new APK was not approved for physical testing. Inspect the failed RC gate before retrying."
+The new APK was not approved for physical testing. Check the Google Maps EAS environment gate and the failed RC step before retrying."
