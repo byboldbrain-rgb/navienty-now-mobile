@@ -2,12 +2,12 @@
   "targetCommit": "37d383acffcbca9d6f25df571a454035ead72f8f",
   "found": true,
   "id": "bbe28daf-c4eb-4b2a-a457-7b24ad88dc7e",
-  "status": "IN_PROGRESS",
+  "status": "FINISHED",
   "platform": "ANDROID",
   "buildProfile": "preview",
-  "artifactUrl": null,
+  "artifactUrl": "https://expo.dev/artifacts/eas/LpZFq2-aRSXH58HSSZD0LNoO7hvLrhVMEvVnHWuHwPA.apk",
   "errorCode": null,
   "errorMessage": null,
-  "completedAt": null,
-  "updatedAt": "2026-08-17T23:39:25.201Z"
+  "completedAt": "2026-08-18T00:01:39.319Z",
+  "updatedAt": "2026-08-18T00:01:39.486Z"
 }
