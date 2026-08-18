@@ -43,27 +43,20 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Refresh Android RC terminal status
+      - name: Final refresh of Android RC status
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .github/rc-status
 
-          build_id=''
-          for attempt in $(seq 1 30); do
-            eas build:list \
-              --platform android \
-              --build-profile preview \
-              --git-commit-hash "$TARGET_BUILD_COMMIT" \
-              --limit 1 \
-              --json > build-list.json
-            build_id="$(jq -r 'if length > 0 then .[0].id else empty end' build-list.json)"
-            if [ -n "$build_id" ]; then
-              break
-            fi
-            sleep 5
-          done
+          eas build:list \
+            --platform android \
+            --build-profile preview \
+            --git-commit-hash "$TARGET_BUILD_COMMIT" \
+            --limit 1 \
+            --json > build-list.json
 
+          build_id="$(jq -r 'if length > 0 then .[0].id else empty end' build-list.json)"
           if [ -z "$build_id" ]; then
             jq -n --arg target "$TARGET_BUILD_COMMIT" '{targetCommit:$target,found:false,status:"NOT_FOUND"}' > .github/rc-status/android-current-once.json
           else
@@ -90,6 +83,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/rc-status/android-current-once.json
-          git commit -m 'ci: refresh Android RC #3 terminal status' || exit 0
+          git commit -m 'ci: record Android RC #3 final refresh' || exit 0
           git pull --rebase origin cto/launch-readiness-hardening
           git push origin HEAD:cto/launch-readiness-hardening
