@@ -49,17 +49,19 @@ jobs:
       - name: Lint
         run: npm run lint
 
-  eas_android_status:
-    name: Android RC status probe
+  android_rc_after_checkout_fix:
+    name: Android RC after Checkout fix
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      TARGET_BUILD_COMMIT: 353f7393641b4e121fa63c2bdfbc43f0a8e8d607
 
     steps:
-      - name: Checkout
+      - name: Checkout hardening branch
         uses: actions/checkout@v5
+        with:
+          ref: cto/launch-readiness-hardening
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -67,8 +69,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Require Expo access token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo 'EXPO_TOKEN is not configured.'
+            exit 1
+          fi
 
       - name: Setup Expo and EAS
         uses: expo/expo-github-action@v8
@@ -76,35 +83,47 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Read Android RC status
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate image assets
+        run: node scripts/validate-image-assets.mjs
+
+      - name: Validate release config
+        run: node scripts/validate-release-config.mjs
+
+      - name: Validate checkout handoff
+        run: node scripts/validate-checkout-handoff.mjs
+
+      - name: Verify Expo project health
+        run: npx expo-doctor@latest
+
+      - name: Production dependency audit policy
+        run: npm run audit:prod
+
+      - name: Business and security tests
+        run: npm test
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Verify Expo authentication
+        run: eas whoami
+
+      - name: Build Android preview RC
         shell: bash
         run: |
-          set -euo pipefail
-          eas build:list \
+          set -o pipefail
+          eas build \
             --platform android \
-            --build-profile preview \
-            --git-commit-hash "$TARGET_BUILD_COMMIT" \
-            --limit 1 \
-            --json > /tmp/build-list.json
+            --profile preview \
+            --non-interactive \
+            --wait \
+            --json | tee eas-android-checkout-fix.json
 
-          build_id="$(jq -r 'if length > 0 then .[0].id else empty end' /tmp/build-list.json)"
-          if [ -z "$build_id" ]; then
-            echo 'ANDROID_RC_STATUS={"found":false,"status":"NOT_FOUND"}'
-            exit 0
-          fi
-
-          eas build:view "$build_id" --json > /tmp/build.json
-          echo 'ANDROID_RC_STATUS='
-          jq '{
-            found: true,
-            id: .id,
-            status: .status,
-            platform: .platform,
-            buildProfile: .buildProfile,
-            artifactUrl: (.artifacts.buildUrl // .artifacts.applicationArchiveUrl // null),
-            errorCode: (.error.errorCode // .error.code // .errorCode // null),
-            errorMessage: (.error.message // .error.errorMessage // .errorMessage // null),
-            createdAt: .createdAt,
-            updatedAt: .updatedAt,
-            completedAt: .completedAt
-          }' /tmp/build.json
+      - name: Print Android RC result
+        if: success()
+        run: cat eas-android-checkout-fix.json
