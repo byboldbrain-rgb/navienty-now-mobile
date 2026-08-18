@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   build:
@@ -52,6 +54,9 @@ jobs:
       - name: Validate release config
         run: node scripts/validate-release-config.mjs
 
+      - name: Validate checkout handoff
+        run: node scripts/validate-checkout-handoff.mjs
+
       - name: Verify Expo project health
         run: npx expo-doctor@latest
 
@@ -70,7 +75,7 @@ jobs:
       - name: Verify Expo authentication
         run: eas whoami
 
-      - name: Build Android preview RC after splash prebuild verification
+      - name: Build validated Android preview RC
         shell: bash
         run: |
           set -o pipefail
@@ -84,3 +89,34 @@ jobs:
       - name: Record Android build result
         if: success()
         run: cat eas-android-rc-build.json
+
+      - name: Publish successful Android RC to PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_id="$(jq -r 'if type == "array" then .[0].id else .id end' eas-android-rc-build.json)"
+          artifact_url="$(jq -r 'if type == "array" then (. [0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // "") else (.artifacts.buildUrl // .artifacts.applicationArchiveUrl // "") end' eas-android-rc-build.json)"
+          dashboard_url="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/${build_id}"
+          gh pr comment 2 --body "### Android RC after Checkout handoff fix
+- Source commit: \`${GITHUB_SHA}\`
+- EAS Build ID: \`${build_id}\`
+- Status: **FINISHED**
+- Install APK: ${artifact_url}
+- Dashboard: ${dashboard_url}
+
+This build includes the explicit in-app Checkout → confirmation flow. Physical Android smoke testing is still required."
+
+      - name: Publish Android RC failure to PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh pr comment 2 --body "### Android RC after Checkout handoff fix — FAILED
+- Source commit: \`${GITHUB_SHA}\`
+- GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+The new APK was not approved for physical testing. Inspect the failed RC gate before retrying."
