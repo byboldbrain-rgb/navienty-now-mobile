@@ -48,3 +48,63 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  eas_android_status:
+    name: Android RC status probe
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      TARGET_BUILD_COMMIT: 353f7393641b4e121fa63c2bdfbc43f0a8e8d607
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Read Android RC status
+        shell: bash
+        run: |
+          set -euo pipefail
+          eas build:list \
+            --platform android \
+            --build-profile preview \
+            --git-commit-hash "$TARGET_BUILD_COMMIT" \
+            --limit 1 \
+            --json > /tmp/build-list.json
+
+          build_id="$(jq -r 'if length > 0 then .[0].id else empty end' /tmp/build-list.json)"
+          if [ -z "$build_id" ]; then
+            echo 'ANDROID_RC_STATUS={"found":false,"status":"NOT_FOUND"}'
+            exit 0
+          fi
+
+          eas build:view "$build_id" --json > /tmp/build.json
+          echo 'ANDROID_RC_STATUS='
+          jq '{
+            found: true,
+            id: .id,
+            status: .status,
+            platform: .platform,
+            buildProfile: .buildProfile,
+            artifactUrl: (.artifacts.buildUrl // .artifacts.applicationArchiveUrl // null),
+            errorCode: (.error.errorCode // .error.code // .errorCode // null),
+            errorMessage: (.error.message // .error.errorMessage // .errorMessage // null),
+            createdAt: .createdAt,
+            updatedAt: .updatedAt,
+            completedAt: .completedAt
+          }' /tmp/build.json
