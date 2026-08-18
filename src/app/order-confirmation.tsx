@@ -17,6 +17,7 @@ import {
 } from '../services/order-service';
 import { useCartStore } from '../store/cart-store';
 import { useOrdersStore } from '../store/orders-store';
+import { openOrderInWhatsApp } from '../utils/order-whatsapp';
 
 export default function OrderConfirmationScreen() {
   const router = useRouter();
@@ -25,6 +26,9 @@ export default function OrderConfirmationScreen() {
     useState(false);
 
   const [isCancelling, setIsCancelling] =
+    useState(false);
+
+  const [isOpeningWhatsApp, setIsOpeningWhatsApp] =
     useState(false);
 
   const clearCart = useCartStore(
@@ -51,10 +55,42 @@ export default function OrderConfirmationScreen() {
         state.discardPendingOrder,
     );
 
+  async function openWhatsAppForPendingOrder() {
+    if (
+      isOpeningWhatsApp ||
+      isConfirming ||
+      isCancelling ||
+      !pendingOrder
+    ) {
+      return;
+    }
+
+    try {
+      setIsOpeningWhatsApp(true);
+
+      await openOrderInWhatsApp(
+        pendingOrder,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'تعذر فتح واتساب.';
+
+      Alert.alert(
+        'تعذر فتح واتساب',
+        message,
+      );
+    } finally {
+      setIsOpeningWhatsApp(false);
+    }
+  }
+
   async function confirmOrderWasSent() {
     if (
       isConfirming ||
       isCancelling ||
+      isOpeningWhatsApp ||
       !pendingOrder
     ) {
       return;
@@ -98,7 +134,8 @@ export default function OrderConfirmationScreen() {
   async function returnToCheckout() {
     if (
       isConfirming ||
-      isCancelling
+      isCancelling ||
+      isOpeningWhatsApp
     ) {
       return;
     }
@@ -229,14 +266,13 @@ export default function OrderConfirmationScreen() {
             style={styles.titleContainer}
           >
             <Text style={styles.pageTitle}>
-              تأكيد إرسال الطلب
+              تأكيد الطلب
             </Text>
 
             <Text
               style={styles.pageSubtitle}
             >
-              أخبرنا هل أرسلت الرسالة على
-              واتساب
+              أكمل خطوة واتساب عندما تكون جاهزًا
             </Text>
           </View>
 
@@ -261,16 +297,15 @@ export default function OrderConfirmationScreen() {
           </View>
 
           <Text style={styles.heroTitle}>
-            هل أرسلت رسالة الطلب؟
+            طلبك جاهز للتأكيد
           </Text>
 
           <Text
             style={styles.heroDescription}
           >
-            فتح واتساب لا يعني أن الرسالة
-            تم إرسالها. اضغط على الخيار
-            الصحيح حتى لا نفقد محتويات
-            السلة بالخطأ.
+            افتح الرسالة الجاهزة على واتساب،
+            وبعد إرسالها ارجع إلى Navienty Now
+            واضغط «تم إرسال الطلب».
           </Text>
         </View>
 
@@ -373,6 +408,73 @@ export default function OrderConfirmationScreen() {
           </View>
         </View>
 
+        <Pressable
+          style={({ pressed }) => [
+            styles.whatsAppButton,
+            (isOpeningWhatsApp ||
+              isConfirming ||
+              isCancelling) &&
+              styles.confirmButtonDisabled,
+            pressed &&
+              !isOpeningWhatsApp &&
+              !isConfirming &&
+              !isCancelling &&
+              !isOpeningWhatsApp &&
+              styles.confirmButtonPressed,
+          ]}
+          disabled={
+            isOpeningWhatsApp ||
+            isConfirming ||
+            isCancelling
+          }
+          onPress={() => {
+            void openWhatsAppForPendingOrder();
+          }}
+        >
+          <View
+            style={
+              styles.confirmButtonIconContainer
+            }
+          >
+            {isOpeningWhatsApp ? (
+              <ActivityIndicator
+                color="#25a952"
+                size="small"
+              />
+            ) : (
+              <Text
+                style={
+                  styles.whatsAppButtonIcon
+                }
+              >
+                💬
+              </Text>
+            )}
+          </View>
+
+          <View
+            style={
+              styles.confirmButtonContent
+            }
+          >
+            <Text
+              style={
+                styles.confirmButtonText
+              }
+            >
+              متابعة عبر واتساب
+            </Text>
+
+            <Text
+              style={
+                styles.confirmButtonDescription
+              }
+            >
+              فتح الرسالة الجاهزة في واتساب
+            </Text>
+          </View>
+        </Pressable>
+
         <View style={styles.warningCard}>
           <Text
             style={styles.warningContent}
@@ -392,16 +494,18 @@ export default function OrderConfirmationScreen() {
 
         <Pressable
           style={({ pressed }) => [
-            styles.confirmButton,
+            styles.sentButton,
             (isConfirming ||
-              isCancelling) &&
+              isCancelling ||
+              isOpeningWhatsApp) &&
               styles.confirmButtonDisabled,
             pressed &&
               !isConfirming &&
               !isCancelling &&
+              !isOpeningWhatsApp &&
               styles.confirmButtonPressed,
           ]}
-          disabled={isConfirming || isCancelling}
+          disabled={isConfirming || isCancelling || isOpeningWhatsApp}
           onPress={() => {
             void confirmOrderWasSent();
           }}
@@ -459,7 +563,7 @@ export default function OrderConfirmationScreen() {
               !isCancelling &&
               styles.buttonPressed,
           ]}
-          disabled={isConfirming || isCancelling}
+          disabled={isConfirming || isCancelling || isOpeningWhatsApp}
           onPress={() => {
             void returnToCheckout();
           }}
@@ -474,7 +578,7 @@ export default function OrderConfirmationScreen() {
                 styles.notSentButtonText
               }
             >
-              لم أرسل الطلب بعد
+              العودة لبيانات الطلب
             </Text>
 
             <Text
@@ -482,8 +586,8 @@ export default function OrderConfirmationScreen() {
                 styles.notSentButtonDescription
               }
             >
-              العودة لبيانات التوصيل مع
-              الاحتفاظ بالسلة
+              إلغاء الطلب المعلّق والرجوع
+              إلى Checkout مع الاحتفاظ بالسلة
             </Text>
           </View>
 
@@ -732,12 +836,36 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
 
-  confirmButton: {
+  whatsAppButton: {
     alignItems: 'center',
     backgroundColor: '#25d366',
     borderRadius: 20,
     flexDirection: 'row',
     marginTop: 24,
+    minHeight: 76,
+    padding: 14,
+  },
+
+  whatsAppButtonIcon: {
+    fontSize: 21,
+  },
+
+  sentButton: {
+    alignItems: 'center',
+    backgroundColor: '#6d56df',
+    borderRadius: 20,
+    flexDirection: 'row',
+    marginTop: 12,
+    minHeight: 76,
+    padding: 14,
+  },
+
+  confirmButton: {
+    alignItems: 'center',
+    backgroundColor: '#25d366',
+    borderRadius: 20,
+    flexDirection: 'row',
+    marginTop: 12,
     minHeight: 76,
     padding: 14,
   },

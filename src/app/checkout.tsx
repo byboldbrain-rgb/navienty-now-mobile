@@ -38,7 +38,6 @@ import {
 
 import {
   cancelPendingWhatsAppOrder,
-  confirmWhatsAppOrderSent,
   createWhatsAppOrder,
 } from '../services/order-service';
 
@@ -68,9 +67,6 @@ import {
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 
-import {
-  openOrderInWhatsApp,
-} from '../utils/order-whatsapp';
 
 /* ---------------------------------- */
 /* BRAND                              */
@@ -321,11 +317,6 @@ function StoreCheckoutScreen() {
         state.setActiveCart,
     );
 
-  const clearCart =
-    useCartStore(
-      (state) =>
-        state.clearCart,
-    );
 
   const checkoutStoreId =
     requestedStoreId ??
@@ -429,11 +420,6 @@ function StoreCheckoutScreen() {
         state.setPendingOrder,
     );
 
-  const confirmPendingOrder =
-    useOrdersStore(
-      (state) =>
-        state.confirmPendingOrder,
-    );
 
   const discardPendingOrder =
     useOrdersStore(
@@ -538,8 +524,8 @@ function StoreCheckoutScreen() {
   ] = useState(false);
 
   const [
-    isOpeningWhatsApp,
-    setIsOpeningWhatsApp,
+    isSubmittingOrder,
+    setIsSubmittingOrder,
   ] = useState(false);
 
   const [
@@ -1179,7 +1165,7 @@ function StoreCheckoutScreen() {
   /* SEND ORDER                       */
   /* -------------------------------- */
 
-  async function sendOrderToWhatsApp() {
+  async function submitOrder() {
     setSubmitted(true);
 
     if (
@@ -1291,7 +1277,7 @@ function StoreCheckoutScreen() {
       > | null = null;
 
     try {
-      setIsOpeningWhatsApp(
+      setIsSubmittingOrder(
         true,
       );
 
@@ -1397,83 +1383,21 @@ function StoreCheckoutScreen() {
       );
 
       /*
-       * We cannot read WhatsApp's internal "message sent" state.
-       * The best no-extra-screen flow is:
-       *
-       * 1) open WhatsApp with the prepared message;
-       * 2) once the deep link opens successfully, mark the order as
-       *    submitted on Supabase;
-       * 3) move it from pendingOrder to the normal orders history;
-       * 4) clear the cart;
-       * 5) prepare the live order-flow screen in the background.
-       *
-       * When the customer comes back from WhatsApp, /order-success is
-       * already the active route, so the old confirmation screen is
-       * completely skipped.
+       * Keep the checkout flow inside Navienty Now. The order now exists
+       * as a pending order, but opening WhatsApp is a separate, explicit
+       * customer action on /order-confirmation.
        */
-      await openOrderInWhatsApp(
-        orderForWhatsApp,
+      createdOrder = null;
+
+      router.replace(
+        '/order-confirmation',
       );
-
-      /*
-       * WhatsApp opened successfully. From this point on, never cancel
-       * the order automatically: the customer may already have pressed
-       * Send inside WhatsApp.
-       */
-      try {
-        const confirmedOrder =
-          await confirmWhatsAppOrderSent(
-            orderForWhatsApp.accessToken,
-          );
-
-        confirmPendingOrder(
-          confirmedOrder,
-        );
-
-        clearCart();
-
-        /*
-         * The order is no longer pending and must never be cancelled by
-         * the outer recovery block.
-         */
-        createdOrder = null;
-
-        router.replace({
-          pathname: '/order-success',
-          params: {
-            id: confirmedOrder.id,
-          },
-        });
-      } catch (confirmationError) {
-        /*
-         * This is only a technical fallback. The normal customer flow
-         * never sees /order-confirmation. If Supabase could not record
-         * the submission after WhatsApp opened, keep the pending order
-         * instead of risking cancellation of a message that may have
-         * actually been sent.
-         */
-        const confirmationMessage =
-          confirmationError instanceof Error
-            ? confirmationError.message
-            : 'تعذر تحديث حالة الطلب تلقائيًا.';
-
-        Alert.alert(
-          'تعذر تحديث حالة الطلب',
-          `${confirmationMessage}\n\nحاول مرة أخرى من شاشة تأكيد الإرسال.`,
-        );
-
-        router.replace(
-          '/order-confirmation',
-        );
-
-        return;
-      }
     } catch (error) {
       if (createdOrder) {
         try {
           await cancelPendingWhatsAppOrder(
             createdOrder.accessToken,
-            'whatsapp_open_failed',
+            'checkout_create_failed',
           );
         } catch {
           /*
@@ -1488,14 +1412,14 @@ function StoreCheckoutScreen() {
       const message =
         error instanceof Error
           ? error.message
-          : 'تعذر إنشاء الطلب أو فتح واتساب.';
+          : 'تعذر إنشاء الطلب.';
 
       Alert.alert(
         'تعذر إرسال الطلب',
         message,
       );
     } finally {
-      setIsOpeningWhatsApp(
+      setIsSubmittingOrder(
         false,
       );
     }
@@ -2646,13 +2570,11 @@ function StoreCheckoutScreen() {
                 styles.whatsAppNoticeDescription
               }
             >
-              بعد الضغط على إرسال
-              الطلب سيتم فتح واتساب
-              برسالة جاهزة لتأكيد الأوردر
-              وطريقة الدفع التي اخترتها.
-              اضغط إرسال داخل واتساب
-              وانتظر تأكيد فريق{' '}
-              {appName}.
+              بعد الضغط على متابعة سيتم
+              إنشاء الطلب داخل {appName}
+              أولًا. في الشاشة التالية
+              يمكنك فتح واتساب برسالة
+              جاهزة عندما تكون مستعدًا.
             </Text>
           </View>
         </View>
@@ -2698,28 +2620,28 @@ function StoreCheckoutScreen() {
             }) => [
               styles.submitButton,
 
-              isOpeningWhatsApp &&
+              isSubmittingOrder &&
                 styles.submitButtonDisabled,
 
               pressed &&
-                !isOpeningWhatsApp &&
+                !isSubmittingOrder &&
                 styles.submitButtonPressed,
             ]}
             disabled={
-              isOpeningWhatsApp
+              isSubmittingOrder
             }
             onPress={
-              sendOrderToWhatsApp
+              submitOrder
             }
           >
-            {isOpeningWhatsApp ? (
+            {isSubmittingOrder ? (
               <ActivityIndicator
                 size="small"
                 color="#ffffff"
               />
             ) : (
               <Ionicons
-                name="logo-whatsapp"
+                name="checkmark-circle-outline"
                 size={22}
                 color="#ffffff"
               />
@@ -2731,7 +2653,7 @@ function StoreCheckoutScreen() {
               }
               numberOfLines={1}
             >
-              إرسال الطلب
+              متابعة
             </Text>
           </Pressable>
         </View>
