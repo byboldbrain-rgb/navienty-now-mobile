@@ -15,6 +15,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   getOrderRating,
@@ -44,6 +45,9 @@ function normalizeOrderId(
 }
 
 export default function OrderLayout() {
+  const insets =
+    useSafeAreaInsets();
+
   const params =
     useLocalSearchParams<{
       id?: string | string[];
@@ -200,7 +204,18 @@ export default function OrderLayout() {
       </View>
 
       {shouldShowRating && (
-        <View style={styles.ratingShell}>
+        <View
+          style={[
+            styles.ratingShell,
+            {
+              paddingBottom:
+                Math.max(
+                  insets.bottom,
+                  10,
+                ) + 8,
+            },
+          ]}
+        >
           <View style={styles.ratingCard}>
             {isLoadingRating ? (
               <View
@@ -453,7 +468,6 @@ const styles =
       borderTopColor: '#ECECEF',
       borderTopWidth:
         StyleSheet.hairlineWidth,
-      paddingBottom: 10,
       paddingHorizontal:
         NAVIENTY_NOW_LAYOUT.pageGutter,
       paddingTop: 9,
