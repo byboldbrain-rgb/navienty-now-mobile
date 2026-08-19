@@ -74,7 +74,11 @@ type RawOrderDetails = {
 
   summary: {
     subtotal: NumericValue;
+    voucher_code?: string | null;
+    voucher_title_ar?: string | null;
+    voucher_discount_amount?: NumericValue;
     delivery_fee: NumericValue;
+    payment_processing_fee?: NumericValue;
     total_amount: NumericValue;
     currency_code: string;
     currency_symbol: string;
@@ -288,9 +292,29 @@ function mapOrder(
       rawOrder.summary.subtotal,
     ),
 
+    voucherCode:
+      rawOrder.summary.voucher_code ??
+      null,
+
+    voucherTitle:
+      rawOrder.summary.voucher_title_ar ??
+      null,
+
+    voucherDiscountAmount:
+      toNumber(
+        rawOrder.summary
+          .voucher_discount_amount,
+      ),
+
     deliveryFee: toNumber(
       rawOrder.summary.delivery_fee,
     ),
+
+    paymentProcessingFee:
+      toNumber(
+        rawOrder.summary
+          .payment_processing_fee,
+      ),
 
     total: toNumber(
       rawOrder.summary.total_amount,
@@ -609,6 +633,10 @@ function getErrorMessage(
       'المتجر مغلق أو غير متاح حاليًا.',
     ],
     [
+      'store_closed',
+      'المتجر مغلق حاليًا.',
+    ],
+    [
       'payment_method_not_available',
       'طريقة الدفع المختارة غير متاحة حاليًا.',
     ],
@@ -643,6 +671,58 @@ function getErrorMessage(
     [
       'invalid_delivery_address',
       'عنوان التوصيل غير مكتمل.',
+    ],
+    [
+      'voucher_invalid_code',
+      'اكتب كود كوبون صحيح.',
+    ],
+    [
+      'voucher_not_found',
+      'الكوبون غير موجود أو الكود غير صحيح.',
+    ],
+    [
+      'voucher_inactive',
+      'الكوبون غير متاح حاليًا.',
+    ],
+    [
+      'voucher_not_started',
+      'الكوبون لم يبدأ بعد.',
+    ],
+    [
+      'voucher_expired',
+      'انتهت صلاحية هذا الكوبون.',
+    ],
+    [
+      'voucher_store_not_eligible',
+      'الكوبون غير متاح لهذا المتجر.',
+    ],
+    [
+      'voucher_category_not_eligible',
+      'الكوبون غير متاح لهذا النوع من المتاجر.',
+    ],
+    [
+      'voucher_minimum_not_reached',
+      'قيمة المنتجات أقل من الحد الأدنى المطلوب لاستخدام الكوبون.',
+    ],
+    [
+      'voucher_usage_limit_reached',
+      'تم استخدام الكوبون بالكامل.',
+    ],
+    [
+      'voucher_user_limit_reached',
+      'استخدمت هذا الكوبون بالفعل بالحد المسموح.',
+    ],
+    [
+      'voucher_first_order_only',
+      'الكوبون متاح لأول طلب فقط.',
+    ],
+    [
+      'voucher_order_conflict',
+      'تعذر تغيير الكوبون لهذا الطلب. أعد المحاولة من صفحة إتمام الطلب.',
+    ],
+    [
+      'voucher_no_discount',
+      'لا يمكن تطبيق خصم على قيمة الطلب الحالية.',
     ],
     [
       'order_not_found',
@@ -770,6 +850,12 @@ export async function createWhatsAppOrder(
     notes:
       input.notes.trim(),
 
+    voucher_code:
+      input.voucherCode
+        ?.trim()
+        .toUpperCase() ||
+      null,
+
     items: input.items.map(
       (item) => ({
         product_id:
@@ -785,7 +871,7 @@ export async function createWhatsAppOrder(
 
   const { data, error } =
     await supabase.rpc(
-      'create_whatsapp_order',
+      'create_whatsapp_order_v2',
       {
         p_payload: payload,
       },
