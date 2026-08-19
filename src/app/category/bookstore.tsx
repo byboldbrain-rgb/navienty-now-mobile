@@ -21,9 +21,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
-  getBookstoreCategoryImage,
-} from '../../config/bookstore-category-images';
-import {
   type BookstorePromotionBanner,
   listBookstorePromotionBanners,
 } from '../../services/bookstore-banner-service';
@@ -38,10 +35,57 @@ import {
 } from '../../services/catalog-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
+import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
 const CATEGORY_ROWS = 3;
+const CATEGORY_COLUMNS_PER_VIEW = 3;
+const CATEGORY_HORIZONTAL_PADDING = 16;
+const CATEGORY_COLUMN_GAP = 7;
+const CATEGORY_MIN_COLUMN_WIDTH = 85;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
 const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
+
+/**
+ * Local bookstore category artwork.
+ *
+ * Put your PNG images inside:
+ * assets/images/bookstore-categories/
+ *
+ * Keep each filename exactly the same as its category slug below.
+ * Metro requires static require(...) paths, so do not convert these
+ * paths to a dynamic template string.
+ */
+const BOOKSTORE_CATEGORY_IMAGES: Partial<
+  Record<string, ImageSourcePropType>
+> = {
+  'writing-tools': require(
+    '../../../assets/images/bookstore-categories/writing-tools.png',
+  ),
+  notebooks: require(
+    '../../../assets/images/bookstore-categories/notebooks.png',
+  ),
+  'printing-paper': require(
+    '../../../assets/images/bookstore-categories/printing-paper.png',
+  ),
+  'files-organization': require(
+    '../../../assets/images/bookstore-categories/files-organization.png',
+  ),
+  'study-supplies': require(
+    '../../../assets/images/bookstore-categories/study-supplies.png',
+  ),
+  'geometry-tools': require(
+    '../../../assets/images/bookstore-categories/geometry-tools.png',
+  ),
+  'art-supplies': require(
+    '../../../assets/images/bookstore-categories/art-supplies.png',
+  ),
+  calculators: require(
+    '../../../assets/images/bookstore-categories/calculators.png',
+  ),
+  'pencil-cases-bags': require(
+    '../../../assets/images/bookstore-categories/pencil-cases-bags.png',
+  ),
+};
 
 type CategoryDisplayItem = {
   key: string;
@@ -108,7 +152,9 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${currencyCode} ${amount.toFixed(2)}`;
+  return `${getArabicCurrencyLabel(
+    currencyCode,
+  )} ${amount.toFixed(2)}`;
 }
 
 function getArabicCurrencyLabel(
@@ -315,37 +361,21 @@ function CategoryVisual({
 }: {
   item: CategoryDisplayItem;
 }) {
-  if (item.imageSource) {
-    return (
-      <View style={styles.categoryImageBox}>
+  return (
+    <View style={styles.categoryImageBox}>
+      {item.imageSource ? (
         <Image
           source={item.imageSource}
           style={styles.categoryImage}
-          resizeMode="contain"
+          resizeMode="cover"
         />
-      </View>
-    );
-  }
-
-  if (item.section.imageUrl) {
-    return (
-      <View style={styles.categoryImageBox}>
-        <Image
-          source={{ uri: item.section.imageUrl }}
-          style={styles.categoryImage}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.categoryImageBox}>
-      <Text style={styles.categoryFallbackIcon}>
-        {getBookstoreCategoryFallbackIcon(
-          item.section,
-        )}
-      </Text>
+      ) : (
+        <Text style={styles.categoryFallbackIcon}>
+          {getBookstoreCategoryFallbackIcon(
+            item.section,
+          )}
+        </Text>
+      )}
     </View>
   );
 }
@@ -383,7 +413,7 @@ function FeaturedProductCard({
           <Image
             source={{ uri: imageUrl }}
             style={styles.featuredProductImage}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         ) : (
           <Text style={styles.featuredProductFallback}>
@@ -397,7 +427,7 @@ function FeaturedProductCard({
               style={styles.featuredDiscountText}
               numberOfLines={1}
             >
-              Save {discount}%
+              وفر {discount}%
             </Text>
           </View>
         )}
@@ -648,6 +678,13 @@ export default function BookstoreScreen() {
           );
 
     return [...rootSections]
+      .filter((section) =>
+        Boolean(
+          BOOKSTORE_CATEGORY_IMAGES[
+            section.slug
+          ],
+        ),
+      )
       .sort((first, second) => {
         if (
           first.sortOrder !== second.sortOrder
@@ -664,9 +701,9 @@ export default function BookstoreScreen() {
         key: section.id,
         label: section.name,
         imageSource:
-          getBookstoreCategoryImage(
-            section.slug,
-          ),
+          BOOKSTORE_CATEGORY_IMAGES[
+            section.slug
+          ] ?? null,
         section,
       }));
   }, [catalog]);
@@ -749,13 +786,41 @@ export default function BookstoreScreen() {
     560,
   );
 
+  /*
+   * Spread the visible category columns across the full page width.
+   * With the current 9 categories we have 3 columns × 3 rows,
+   * so the three columns fill the viewport instead of collecting
+   * on one side and leaving a large empty area.
+   *
+   * If more categories are added later, every viewport still shows
+   * three evenly spaced columns and horizontal scrolling keeps working.
+   */
+  const categoryColumnsPerViewport = Math.min(
+    CATEGORY_COLUMNS_PER_VIEW,
+    Math.max(categoryColumns.length, 1),
+  );
+
+  const categoryColumnWidth = Math.max(
+    CATEGORY_MIN_COLUMN_WIDTH,
+    (
+      pageWidth -
+      CATEGORY_HORIZONTAL_PADDING * 2 -
+      CATEGORY_COLUMN_GAP *
+        (categoryColumnsPerViewport - 1)
+    ) / categoryColumnsPerViewport,
+  );
+
+  const hasCategoryHorizontalScroll =
+    categoryContentWidth >
+    categoryViewportWidth + 1;
+
   const featuredCardWidth = Math.min(
     116,
     Math.max(92, pageWidth * 0.3),
   );
 
   const promotionBannerWidth = Math.max(
-    pageWidth - 18,
+    pageWidth,
     1,
   );
 
@@ -1023,7 +1088,13 @@ export default function BookstoreScreen() {
                     (column, columnIndex) => (
                       <View
                         key={`bookstore-category-column-${columnIndex}`}
-                        style={styles.categoryColumn}
+                        style={[
+                          styles.categoryColumn,
+                          {
+                            width:
+                              categoryColumnWidth,
+                          },
+                        ]}
                       >
                         {column.map((item) => (
                           <Pressable
@@ -1055,21 +1126,29 @@ export default function BookstoreScreen() {
                   )}
                 </Animated.ScrollView>
 
-                <View style={styles.categoryPagination}>
-                  <Animated.View
-                    style={[
-                      styles.categoryPaginationActive,
-                      {
-                        transform: [
-                          {
-                            translateX:
-                              categoryIndicatorTranslateX,
-                          },
-                        ],
-                      },
-                    ]}
+                {hasCategoryHorizontalScroll ? (
+                  <View
+                    style={styles.categoryPagination}
+                  >
+                    <Animated.View
+                      style={[
+                        styles.categoryPaginationActive,
+                        {
+                          transform: [
+                            {
+                              translateX:
+                                categoryIndicatorTranslateX,
+                            },
+                          ],
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={styles.categoryPaginationSpacer}
                   />
-                </View>
+                )}
               </>
             ) : (
               <View style={styles.emptyCategories}>
@@ -1316,12 +1395,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   categoriesRail: {
-    gap: 7,
-    paddingHorizontal: 16,
+    gap: CATEGORY_COLUMN_GAP,
+    paddingHorizontal:
+      CATEGORY_HORIZONTAL_PADDING,
   },
   categoryColumn: {
+    alignItems: 'center',
     gap: 15,
-    width: 85,
   },
   categoryItem: {
     alignItems: 'center',
@@ -1341,8 +1421,8 @@ const styles = StyleSheet.create({
     width: 80,
   },
   categoryImage: {
-    height: '92%',
-    width: '92%',
+    height: '100%',
+    width: '100%',
   },
   categoryFallbackIcon: {
     fontSize: 39,
@@ -1379,6 +1459,11 @@ const styles = StyleSheet.create({
     top: 0,
     width: CATEGORY_INDICATOR_THUMB_WIDTH,
   },
+  categoryPaginationSpacer: {
+    height: 5,
+    marginBottom: 22,
+    marginTop: 18,
+  },
   emptyCategories: {
     alignItems: 'center',
     paddingHorizontal: 28,
@@ -1404,8 +1489,9 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   promotionBannerFrame: {
-    marginHorizontal: 9,
+    marginHorizontal: 0,
     overflow: 'hidden',
+    width: '100%',
   },
   promotionBanner: {
     backgroundColor: '#F4F4F4',
@@ -1427,17 +1513,17 @@ const styles = StyleSheet.create({
   },
   featuredProductImageBox: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F4F4F4',
     borderColor: '#E8E8E8',
     borderRadius: 12,
     borderWidth: 1,
     justifyContent: 'center',
-    overflow: 'visible',
+    overflow: 'hidden',
     position: 'relative',
   },
   featuredProductImage: {
-    height: '68%',
-    width: '68%',
+    height: '100%',
+    width: '100%',
   },
   featuredProductFallback: {
     fontSize: 34,
@@ -1488,7 +1574,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   featuredAddButtonText: {
-    color: '#F04A00',
+    color: NAVIENTY_NOW_COLORS.primary,
     fontSize: 25,
     fontWeight: '300',
     lineHeight: 27,
@@ -1519,7 +1605,7 @@ const styles = StyleSheet.create({
     width: 25,
   },
   featuredQuantityButtonText: {
-    color: '#F04A00',
+    color: NAVIENTY_NOW_COLORS.primary,
     fontSize: 18,
     fontWeight: '500',
     lineHeight: 20,

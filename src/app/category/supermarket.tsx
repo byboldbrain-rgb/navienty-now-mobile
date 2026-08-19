@@ -34,6 +34,7 @@ import {
 } from '../../services/supermarket-banner-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
+import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
 const CATEGORY_ROWS = 3;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
@@ -44,6 +45,7 @@ type SupermarketCategoryDefinition = {
   label: string;
   aliases: string[];
   imageSource: ImageSourcePropType;
+  isOffers?: boolean;
 };
 
 type CategoryDisplayItem = {
@@ -51,6 +53,7 @@ type CategoryDisplayItem = {
   label: string;
   imageSource: ImageSourcePropType;
   section: CatalogSection | null;
+  isOffers: boolean;
 };
 
 type ResolvedPromotionBanner =
@@ -70,6 +73,30 @@ type FeaturedProductCardProps = {
 };
 
 const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
+  {
+    key: 'offers',
+    label: 'عروض',
+    aliases: [
+      'offers',
+      'offer',
+      'deals',
+      'deal',
+      'discounts',
+      'discount',
+      'promotions',
+      'promotion',
+      'sale',
+      'sales',
+      'special-offers',
+      'special-offer',
+      'special-deals',
+      'special-deal',
+      'discounted-products',
+      'discounted',
+    ],
+    imageSource: require('../../../assets/images/supermarket-categories/offers.png'),
+    isOffers: true,
+  },
   {
     key: 'fruit-veg',
     label: 'الفواكه والخضروات',
@@ -307,7 +334,10 @@ function normalizeValue(
     .trim()
     .toLowerCase()
     .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')
+    .replace(
+      /[^a-z0-9\u0600-\u06ff]+/g,
+      '-',
+    )
     .replace(/^-+|-+$/g, '');
 }
 
@@ -332,7 +362,8 @@ function getProductImage(
 function getDiscountPercent(
   product: CatalogProduct,
 ): number | null {
-  const compareAtPrice = product.compareAtPrice;
+  const compareAtPrice =
+    product.compareAtPrice;
 
   if (
     compareAtPrice === null ||
@@ -353,14 +384,19 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${currencyCode} ${amount.toFixed(2)}`;
+  return `${getArabicCurrencyLabel(
+    currencyCode,
+  )} ${amount.toFixed(
+    2,
+  )}`;
 }
 
 function getArabicCurrencyLabel(
   currencyCode: string,
 ) {
   if (
-    currencyCode.trim().toUpperCase() === 'EGP'
+    currencyCode.trim().toUpperCase() ===
+    'EGP'
   ) {
     return 'ج.م';
   }
@@ -406,9 +442,8 @@ function findSectionForCategory(
     return exactEnglishNameMatch;
   }
 
-  const normalizedLabel = normalizeValue(
-    definition.label,
-  );
+  const normalizedLabel =
+    normalizeValue(definition.label);
 
   return (
     sections.find(
@@ -424,7 +459,8 @@ function findSectionForCategory(
 function makeCategoryColumns(
   categories: CategoryDisplayItem[],
 ) {
-  const columns: CategoryDisplayItem[][] = [];
+  const columns: CategoryDisplayItem[][] =
+    [];
 
   for (
     let index = 0;
@@ -446,12 +482,14 @@ function BackArrowIcon() {
   return (
     <View style={styles.backArrowCanvas}>
       <View style={styles.backArrowStem} />
+
       <View
         style={[
           styles.backArrowDiagonal,
           styles.backArrowTop,
         ]}
       />
+
       <View
         style={[
           styles.backArrowDiagonal,
@@ -472,7 +510,7 @@ function CategoryVisual({
       <Image
         source={item.imageSource}
         style={styles.categoryImage}
-        resizeMode="contain"
+        resizeMode="cover"
       />
     </View>
   );
@@ -488,14 +526,19 @@ function FeaturedProductCard({
   onIncrease,
   onDecrease,
 }: FeaturedProductCardProps) {
-  const imageUrl = getProductImage(product);
-  const discount = getDiscountPercent(product);
+  const imageUrl =
+    getProductImage(product);
+
+  const discount =
+    getDiscountPercent(product);
 
   return (
     <View
       style={[
         styles.featuredProductCard,
-        { width: cardWidth },
+        {
+          width: cardWidth,
+        },
       ]}
     >
       <View
@@ -509,39 +552,56 @@ function FeaturedProductCard({
       >
         {imageUrl ? (
           <Image
-            source={{ uri: imageUrl }}
-            style={styles.featuredProductImage}
-            resizeMode="contain"
+            source={{
+              uri: imageUrl,
+            }}
+            style={
+              styles.featuredProductImage
+            }
+            resizeMode="cover"
           />
         ) : (
           <Text
-            style={styles.featuredProductFallback}
+            style={
+              styles.featuredProductFallback
+            }
           >
-            {product.icon || '🛒'}
+            {product.icon ||
+              '🛒'}
           </Text>
         )}
 
         {discount !== null && (
           <View
-            style={styles.featuredDiscountBadge}
+            style={
+              styles.featuredDiscountBadge
+            }
           >
             <Text
-              style={styles.featuredDiscountText}
+              style={
+                styles.featuredDiscountText
+              }
               numberOfLines={1}
             >
-              Save {discount}%
+              وفر {discount}%
             </Text>
           </View>
         )}
 
         {quantity === 0 ? (
           <Pressable
-            disabled={isStoreClosed}
+            disabled={
+              isStoreClosed
+            }
             hitSlop={5}
-            style={({ pressed }) => [
+            style={({
+              pressed,
+            }) => [
               styles.featuredAddButton,
+
               isStoreClosed &&
                 styles.featuredAddButtonDisabled,
+
               pressed &&
                 !isStoreClosed &&
                 styles.featuredAddButtonPressed,
@@ -549,19 +609,27 @@ function FeaturedProductCard({
             onPress={onAdd}
           >
             <Text
-              style={styles.featuredAddButtonText}
+              style={
+                styles.featuredAddButtonText
+              }
             >
               +
             </Text>
           </Pressable>
         ) : (
           <View
-            style={styles.featuredQuantityPill}
+            style={
+              styles.featuredQuantityPill
+            }
           >
             <Pressable
               hitSlop={4}
-              style={styles.featuredQuantityButton}
-              onPress={onDecrease}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={
+                onDecrease
+              }
             >
               <Text
                 style={
@@ -573,16 +641,24 @@ function FeaturedProductCard({
             </Pressable>
 
             <Text
-              style={styles.featuredQuantityValue}
+              style={
+                styles.featuredQuantityValue
+              }
             >
               {quantity}
             </Text>
 
             <Pressable
-              disabled={isStoreClosed}
+              disabled={
+                isStoreClosed
+              }
               hitSlop={4}
-              style={styles.featuredQuantityButton}
-              onPress={onIncrease}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={
+                onIncrease
+              }
             >
               <Text
                 style={
@@ -597,17 +673,24 @@ function FeaturedProductCard({
       </View>
 
       <Text
-        style={styles.featuredProductName}
+        style={
+          styles.featuredProductName
+        }
         numberOfLines={2}
       >
-        {product.nameEn?.trim() || product.name}
+        {product.nameEn?.trim() ||
+          product.name}
       </Text>
 
       <View
-        style={styles.featuredCurrentPriceWrap}
+        style={
+          styles.featuredCurrentPriceWrap
+        }
       >
         <Text
-          style={styles.featuredCurrentPrice}
+          style={
+            styles.featuredCurrentPrice
+          }
           numberOfLines={1}
         >
           {formatMoney(
@@ -617,10 +700,14 @@ function FeaturedProductCard({
         </Text>
       </View>
 
-      {product.compareAtPrice !== null &&
-        product.compareAtPrice > product.price && (
+      {product.compareAtPrice !==
+        null &&
+        product.compareAtPrice >
+          product.price && (
           <Text
-            style={styles.featuredOldPrice}
+            style={
+              styles.featuredOldPrice
+            }
             numberOfLines={1}
           >
             {formatMoney(
@@ -635,6 +722,7 @@ function FeaturedProductCard({
 
 export default function SupermarketScreen() {
   const router = useRouter();
+
   const { width: windowWidth } =
     useWindowDimensions();
 
@@ -652,26 +740,40 @@ export default function SupermarketScreen() {
     setCategoryContentWidth,
   ] = useState(0);
 
-  const [catalog, setCatalog] =
-    useState<StoreCatalog | null>(null);
+  const [
+    catalog,
+    setCatalog,
+  ] =
+    useState<StoreCatalog | null>(
+      null,
+    );
 
   const [
     promotionBanners,
     setPromotionBanners,
-  ] = useState<SupermarketPromotionBanner[]>(
-    [],
-  );
+  ] = useState<
+    SupermarketPromotionBanner[]
+  >([]);
 
-  const [currencyCode, setCurrencyCode] =
+  const [
+    currencyCode,
+    setCurrencyCode,
+  ] =
     useState('EGP');
 
-  const [isLoading, setIsLoading] =
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
     useState(true);
 
   const [
     errorMessage,
     setErrorMessage,
-  ] = useState<string | null>(null);
+  ] =
+    useState<string | null>(
+      null,
+    );
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -679,11 +781,18 @@ export default function SupermarketScreen() {
         state.locationServiceAreaId,
     );
 
-  const cartStore = useCartStore();
-  const cartItems = cartStore.items;
-  const addItem = cartStore.addItem;
+  const cartStore =
+    useCartStore();
+
+  const cartItems =
+    cartStore.items;
+
+  const addItem =
+    cartStore.addItem;
+
   const increaseItem =
     cartStore.increaseItem;
+
   const decreaseItem =
     cartStore.decreaseItem;
 
@@ -703,12 +812,17 @@ export default function SupermarketScreen() {
 
       const supermarketStores =
         await listStores({
-          categorySlug: 'supermarket',
+          categorySlug:
+            'supermarket',
+
           serviceAreaId:
             defaultServiceAreaId,
         });
 
-      if (supermarketStores.length === 0) {
+      if (
+        supermarketStores.length ===
+        0
+      ) {
         throw new Error(
           'لا يوجد سوبر ماركت متاح حاليًا.',
         );
@@ -734,28 +848,40 @@ export default function SupermarketScreen() {
           supermarket.id,
           defaultServiceAreaId,
         ),
+
         listSupermarketPromotionBanners({
-          storeId: supermarket.id,
-        }).catch((bannerError) => {
-          console.warn(
-            'Unable to load supermarket banners:',
-            bannerError,
-          );
-          return [];
-        }),
+          storeId:
+            supermarket.id,
+        }).catch(
+          (bannerError) => {
+            console.warn(
+              'Unable to load supermarket banners:',
+              bannerError,
+            );
+
+            return [];
+          },
+        ),
       ]);
 
-      setCatalog(loadedCatalog);
+      setCatalog(
+        loadedCatalog,
+      );
+
       setPromotionBanners(
         loadedPromotionBanners,
       );
+
       setCurrencyCode(
-        bootstrap.settings.currency_code ||
+        bootstrap.settings
+          .currency_code ||
           'EGP',
       );
     } catch (error) {
       setCatalog(null);
+
       setPromotionBanners([]);
+
       setErrorMessage(
         error instanceof Error
           ? error.message
@@ -770,34 +896,53 @@ export default function SupermarketScreen() {
     void loadSupermarket();
   }, [savedServiceAreaId]);
 
-  const categories = useMemo<
-    CategoryDisplayItem[]
-  >(() => {
-    const sections = catalog?.sections ?? [];
+  const categories =
+    useMemo<
+      CategoryDisplayItem[]
+    >(() => {
+      const sections =
+        catalog?.sections ??
+        [];
 
-    return SUPERMARKET_CATEGORIES.map(
-      (definition) => ({
-        key: definition.key,
-        label: definition.label,
-        imageSource: definition.imageSource,
-        section: findSectionForCategory(
-          definition,
-          sections,
+      return SUPERMARKET_CATEGORIES.map(
+        (definition) => ({
+          key:
+            definition.key,
+
+          label:
+            definition.label,
+
+          imageSource:
+            definition.imageSource,
+
+          isOffers:
+            definition.isOffers ===
+            true,
+
+          section:
+            findSectionForCategory(
+              definition,
+              sections,
+            ),
+        }),
+      );
+    }, [catalog]);
+
+  const categoryColumns =
+    useMemo(
+      () =>
+        makeCategoryColumns(
+          categories,
         ),
-      }),
+      [categories],
     );
-  }, [catalog]);
 
-  const categoryColumns = useMemo(
-    () => makeCategoryColumns(categories),
-    [categories],
-  );
-
-  const categoryMaxScroll = Math.max(
-    categoryContentWidth -
-      categoryViewportWidth,
-    1,
-  );
+  const categoryMaxScroll =
+    Math.max(
+      categoryContentWidth -
+        categoryViewportWidth,
+      1,
+    );
 
   const categoryIndicatorTravel =
     CATEGORY_INDICATOR_TRACK_WIDTH -
@@ -805,123 +950,207 @@ export default function SupermarketScreen() {
 
   const categoryIndicatorTranslateX =
     categoryScrollX.interpolate({
-      inputRange: [0, categoryMaxScroll],
+      inputRange: [
+        0,
+        categoryMaxScroll,
+      ],
+
       outputRange: [
         0,
         categoryIndicatorTravel,
       ],
-      extrapolate: 'clamp',
+
+      extrapolate:
+        'clamp',
     });
 
-  const catalogProductsById = useMemo(() => {
-    const productsById =
-      new Map<string, CatalogProduct>();
+  const catalogProductsById =
+    useMemo(() => {
+      const productsById =
+        new Map<
+          string,
+          CatalogProduct
+        >();
 
-    for (const section of catalog?.sections ?? []) {
-      for (const product of section.products) {
-        productsById.set(product.id, product);
+      for (
+        const section of
+        catalog?.sections ?? []
+      ) {
+        for (
+          const product of
+          section.products
+        ) {
+          productsById.set(
+            product.id,
+            product,
+          );
+        }
       }
-    }
 
-    return productsById;
-  }, [catalog]);
+      return productsById;
+    }, [catalog]);
 
-  const resolvedPromotionBanners = useMemo<
-    ResolvedPromotionBanner[]
-  >(() => {
-    return promotionBanners
-      .map((banner) => ({
-        ...banner,
-        products: banner.productIds
-          .map((productId) =>
-            catalogProductsById.get(
-              productId,
+  const resolvedPromotionBanners =
+    useMemo<
+      ResolvedPromotionBanner[]
+    >(() => {
+      return promotionBanners
+        .map(
+          (banner) => ({
+            ...banner,
+
+            products:
+              banner.productIds
+                .map(
+                  (
+                    productId,
+                  ) =>
+                    catalogProductsById.get(
+                      productId,
+                    ),
+                )
+                .filter(
+                  (
+                    product,
+                  ): product is CatalogProduct =>
+                    Boolean(
+                      product,
+                    ),
+                ),
+          }),
+        )
+        .filter(
+          (banner) =>
+            Boolean(
+              banner.imageUrl.trim(),
             ),
-          )
-          .filter(
-            (
-              product,
-            ): product is CatalogProduct =>
-              Boolean(product),
-          ),
-      }))
-      .filter((banner) =>
-        Boolean(banner.imageUrl.trim()),
-      );
-  }, [
-    catalogProductsById,
-    promotionBanners,
-  ]);
+        );
+    }, [
+      catalogProductsById,
+      promotionBanners,
+    ]);
 
-  const pageWidth = Math.min(
-    windowWidth,
-    560,
-  );
+  const pageWidth =
+    Math.min(
+      windowWidth,
+      560,
+    );
 
-  const featuredCardWidth = Math.min(
-    116,
-    Math.max(92, pageWidth * 0.3),
-  );
+  const featuredCardWidth =
+    Math.min(
+      116,
+      Math.max(
+        92,
+        pageWidth * 0.3,
+      ),
+    );
 
-  const promotionBannerWidth = Math.max(
-    pageWidth - 18,
-    1,
-  );
+  /*
+   * Banner becomes edge-to-edge.
+   *
+   * Previously:
+   * pageWidth - 18
+   *
+   * That intentionally left 9px
+   * on the left and 9px on the right.
+   */
+  const promotionBannerWidth =
+    Math.max(
+      pageWidth,
+      1,
+    );
 
-  const promotionBannerHeight = Math.round(
-    promotionBannerWidth * 0.64,
-  );
+  const promotionBannerHeight =
+    Math.round(
+      promotionBannerWidth *
+        0.64,
+    );
 
-  const promotionProductsOverlap = Math.round(
-    promotionBannerHeight * 0.49,
-  );
+  const promotionProductsOverlap =
+    Math.round(
+      promotionBannerHeight *
+        0.49,
+    );
 
   if (isLoading) {
-    return <CatalogHomeScreenSkeleton />;
+    return (
+      <CatalogHomeScreenSkeleton />
+    );
   }
 
-  if (!catalog || errorMessage) {
+  if (
+    !catalog ||
+    errorMessage
+  ) {
     return (
-      <SafeAreaView style={styles.stateScreen}>
-        <StatusBar style="dark" />
+      <SafeAreaView
+        style={
+          styles.stateScreen
+        }
+      >
+        <StatusBar
+          style="dark"
+        />
 
-        <Text style={styles.stateEmoji}>
+        <Text
+          style={
+            styles.stateEmoji
+          }
+        >
           🛒
         </Text>
 
-        <Text style={styles.stateTitle}>
+        <Text
+          style={
+            styles.stateTitle
+          }
+        >
           السوبر ماركت غير متاح
         </Text>
 
         <Text
-          style={styles.stateDescription}
+          style={
+            styles.stateDescription
+          }
         >
           {errorMessage ??
             'تعذر تحميل السوبر ماركت.'}
         </Text>
 
         <Pressable
-          style={({ pressed }) => [
+          style={({
+            pressed,
+          }) => [
             styles.retryButton,
-            pressed && styles.generalPressed,
+
+            pressed &&
+              styles.generalPressed,
           ]}
           onPress={() => {
             void loadSupermarket();
           }}
         >
           <Text
-            style={styles.retryButtonText}
+            style={
+              styles.retryButtonText
+            }
           >
             إعادة المحاولة
           </Text>
         </Pressable>
 
         <Pressable
-          style={({ pressed }) => [
+          style={({
+            pressed,
+          }) => [
             styles.errorBackButton,
-            pressed && styles.generalPressed,
+
+            pressed &&
+              styles.generalPressed,
           ]}
-          onPress={() => router.back()}
+          onPress={() =>
+            router.back()
+          }
         >
           <Text
             style={
@@ -935,42 +1164,68 @@ export default function SupermarketScreen() {
     );
   }
 
-  const currentStore = catalog.store;
-  const delivery = catalog.delivery;
+  const currentStore =
+    catalog.store;
+
+  const delivery =
+    catalog.delivery;
+
   const isStoreClosed =
     currentStore.isManuallyClosed;
 
   const currentStoreItemCount =
     cartItems.reduce(
-      (total, item) =>
-        total + item.quantity,
+      (
+        total,
+        item,
+      ) =>
+        total +
+        item.quantity,
       0,
     );
 
   const currentStoreSubtotal =
     cartItems.reduce(
-      (total, item) =>
-        total + item.price * item.quantity,
+      (
+        total,
+        item,
+      ) =>
+        total +
+        item.price *
+          item.quantity,
       0,
     );
 
   const shouldShowCartBar =
-    currentStoreItemCount > 0;
+    currentStoreItemCount >
+    0;
 
   function openCategory(
     item: CategoryDisplayItem,
   ) {
     const categorySlug =
-      item.section?.slug ?? item.key;
+      item.isOffers
+        ? 'offers'
+        : item.section
+              ?.slug ??
+          item.key;
 
     router.push({
       pathname:
         '/supermarket-category/[slug]',
+
       params: {
-        slug: categorySlug,
-        storeId: currentStore.id,
-        categoryKey: item.key,
-        label: item.label,
+        slug:
+          categorySlug,
+
+        storeId:
+          currentStore.id,
+
+        categoryKey:
+          item.key,
+
+        label:
+          item.label,
       },
     });
   }
@@ -984,20 +1239,36 @@ export default function SupermarketScreen() {
 
     addItem(
       {
-        id: currentStore.id,
-        name: currentStore.name,
-        icon: currentStore.icon,
+        id:
+          currentStore.id,
+
+        name:
+          currentStore.name,
+
+        icon:
+          currentStore.icon,
+
         deliveryFee:
           delivery.deliveryFee,
+
         minimumOrder:
           delivery.minimumOrder,
       },
       {
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        icon: product.icon,
+        id:
+          product.id,
+
+        name:
+          product.name,
+
+        description:
+          product.description,
+
+        price:
+          product.price,
+
+        icon:
+          product.icon,
       },
     );
   }
@@ -1009,30 +1280,43 @@ export default function SupermarketScreen() {
       return;
     }
 
-    const existingItem = cartItems.find(
-      (item) => item.id === product.id,
-    );
+    const existingItem =
+      cartItems.find(
+        (item) =>
+          item.id ===
+          product.id,
+      );
 
     if (existingItem) {
-      increaseItem(product.id);
+      increaseItem(
+        product.id,
+      );
+
       return;
     }
 
-    addFeaturedProduct(product);
+    addFeaturedProduct(
+      product,
+    );
   }
 
   function decreaseFeaturedProduct(
     productId: string,
   ) {
-    const existingItem = cartItems.find(
-      (item) => item.id === productId,
-    );
+    const existingItem =
+      cartItems.find(
+        (item) =>
+          item.id ===
+          productId,
+      );
 
     if (!existingItem) {
       return;
     }
 
-    decreaseItem(productId);
+    decreaseItem(
+      productId,
+    );
   }
 
   function getProductQuantity(
@@ -1040,7 +1324,9 @@ export default function SupermarketScreen() {
   ) {
     return (
       cartItems.find(
-        (item) => item.id === productId,
+        (item) =>
+          item.id ===
+          productId,
       )?.quantity ?? 0
     );
   }
@@ -1050,50 +1336,87 @@ export default function SupermarketScreen() {
       style={styles.screen}
       edges={['top']}
     >
-      <StatusBar style="dark" />
+      <StatusBar
+        style="dark"
+      />
 
-      <View style={styles.pageShell}>
-        <View style={styles.header}>
+      <View
+        style={
+          styles.pageShell
+        }
+      >
+        <View
+          style={styles.header}
+        >
           <Pressable
-            style={({ pressed }) => [
+            style={({
+              pressed,
+            }) => [
               styles.backButton,
+
               pressed &&
                 styles.headerButtonPressed,
             ]}
-            onPress={() => router.back()}
+            onPress={() =>
+              router.back()
+            }
           >
             <BackArrowIcon />
           </Pressable>
         </View>
 
         <ScrollView
-          style={styles.mainScrollView}
+          style={
+            styles.mainScrollView
+          }
           contentContainerStyle={[
             styles.mainContent,
+
             shouldShowCartBar &&
               styles.mainContentWithCart,
           ]}
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={
+            false
+          }
         >
-          <View style={styles.categoriesSection}>
-            <Text style={styles.categoriesTitle}>
+          <View
+            style={
+              styles.categoriesSection
+            }
+          >
+            <Text
+              style={
+                styles.categoriesTitle
+              }
+            >
               تسوق حسب الفئة
             </Text>
 
             <Animated.ScrollView
               horizontal
-              showsHorizontalScrollIndicator={false}
-              scrollEventThrottle={16}
+              showsHorizontalScrollIndicator={
+                false
+              }
+              scrollEventThrottle={
+                16
+              }
               contentContainerStyle={
                 styles.categoriesRail
               }
-              onLayout={(event) => {
+              onLayout={(
+                event,
+              ) => {
                 setCategoryViewportWidth(
-                  event.nativeEvent.layout.width,
+                  event.nativeEvent
+                    .layout.width,
                 );
               }}
-              onContentSizeChange={(width) => {
-                setCategoryContentWidth(width);
+              onContentSizeChange={(
+                width,
+              ) => {
+                setCategoryContentWidth(
+                  width,
+                );
               }}
               onScroll={Animated.event(
                 [
@@ -1105,45 +1428,78 @@ export default function SupermarketScreen() {
                     },
                   },
                 ],
-                { useNativeDriver: true },
+                {
+                  useNativeDriver:
+                    true,
+                },
               )}
             >
               {categoryColumns.map(
-                (column, columnIndex) => (
+                (
+                  column,
+                  columnIndex,
+                ) => (
                   <View
                     key={`category-column-${columnIndex}`}
-                    style={styles.categoryColumn}
+                    style={
+                      styles.categoryColumn
+                    }
                   >
-                    {column.map((item) => (
-                      <Pressable
-                        key={item.key}
-                        style={({ pressed }) => [
-                          styles.categoryItem,
-                          pressed &&
-                            styles.categoryItemPressed,
-                        ]}
-                        onPress={() =>
-                          openCategory(item)
-                        }
-                      >
-                        <CategoryVisual item={item} />
-                        <Text
-                          style={styles.categoryLabel}
-                          numberOfLines={2}
+                    {column.map(
+                      (item) => (
+                        <Pressable
+                          key={
+                            item.key
+                          }
+                          style={({
+                            pressed,
+                          }) => [
+                            styles.categoryItem,
+
+                            pressed &&
+                              styles.categoryItemPressed,
+                          ]}
+                          onPress={() =>
+                            openCategory(
+                              item,
+                            )
+                          }
                         >
-                          {item.label}
-                        </Text>
-                      </Pressable>
-                    ))}
+                          <CategoryVisual
+                            item={
+                              item
+                            }
+                          />
+
+                          <Text
+                            style={
+                              styles.categoryLabel
+                            }
+                            numberOfLines={
+                              2
+                            }
+                          >
+                            {
+                              item.label
+                            }
+                          </Text>
+                        </Pressable>
+                      ),
+                    )}
                   </View>
                 ),
               )}
             </Animated.ScrollView>
 
-            <View style={styles.categoryPagination}>
+            <View
+              style={
+                styles.categoryPagination
+              }
+            >
               <Animated.View
                 style={[
                   styles.categoryPaginationActive,
+
                   {
                     transform: [
                       {
@@ -1158,11 +1514,17 @@ export default function SupermarketScreen() {
           </View>
 
           {resolvedPromotionBanners.map(
-            (banner, bannerIndex) => (
+            (
+              banner,
+              bannerIndex,
+            ) => (
               <View
-                key={banner.id}
+                key={
+                  banner.id
+                }
                 style={[
                   styles.promotionSection,
+
                   bannerIndex ===
                     resolvedPromotionBanners.length -
                       1 &&
@@ -1170,12 +1532,18 @@ export default function SupermarketScreen() {
                 ]}
               >
                 <View
-                  style={styles.promotionBannerFrame}
+                  style={
+                    styles.promotionBannerFrame
+                  }
                 >
                   <Image
-                    source={{ uri: banner.imageUrl }}
+                    source={{
+                      uri:
+                        banner.imageUrl,
+                    }}
                     style={[
                       styles.promotionBanner,
+
                       {
                         height:
                           promotionBannerHeight,
@@ -1189,16 +1557,21 @@ export default function SupermarketScreen() {
                   />
                 </View>
 
-                {banner.products.length > 0 && (
+                {banner.products
+                  .length >
+                  0 && (
                   <ScrollView
                     horizontal
-                    showsHorizontalScrollIndicator={false}
+                    showsHorizontalScrollIndicator={
+                      false
+                    }
                     directionalLockEnabled
                     contentContainerStyle={
                       styles.promotionProductsRail
                     }
                     style={[
                       styles.promotionProductsScroll,
+
                       {
                         marginTop:
                           -promotionProductsOverlap,
@@ -1206,12 +1579,20 @@ export default function SupermarketScreen() {
                     ]}
                   >
                     {banner.products.map(
-                      (product) => (
+                      (
+                        product,
+                      ) => (
                         <FeaturedProductCard
                           key={`${banner.id}-${product.id}`}
-                          product={product}
-                          currencyCode={currencyCode}
-                          cardWidth={featuredCardWidth}
+                          product={
+                            product
+                          }
+                          currencyCode={
+                            currencyCode
+                          }
+                          cardWidth={
+                            featuredCardWidth
+                          }
                           quantity={getProductQuantity(
                             product.id,
                           )}
@@ -1219,7 +1600,9 @@ export default function SupermarketScreen() {
                             isStoreClosed
                           }
                           onAdd={() =>
-                            addFeaturedProduct(product)
+                            addFeaturedProduct(
+                              product,
+                            )
                           }
                           onIncrease={() =>
                             increaseFeaturedProduct(
@@ -1242,9 +1625,15 @@ export default function SupermarketScreen() {
         </ScrollView>
 
         {isStoreClosed && (
-          <View style={styles.closedOverlay}>
+          <View
+            style={
+              styles.closedOverlay
+            }
+          >
             <Text
-              style={styles.closedOverlayText}
+              style={
+                styles.closedOverlayText
+              }
             >
               {currentStore.manualClosedNote ??
                 'السوبر ماركت مغلق حاليًا.'}
@@ -1265,28 +1654,48 @@ export default function SupermarketScreen() {
                 currentStoreSubtotal,
                 currencyCode,
               )}`}
-              style={({ pressed }) => [
+              style={({
+                pressed,
+              }) => [
                 styles.cartBar,
-                pressed && styles.cartBarPressed,
+
+                pressed &&
+                  styles.cartBarPressed,
               ]}
               onPress={() => {
-                router.push('/cart');
+                router.push(
+                  '/cart',
+                );
               }}
             >
               <View
-                style={styles.cartCountBadge}
+                style={
+                  styles.cartCountBadge
+                }
               >
                 <Text
-                  style={styles.cartCountText}
+                  style={
+                    styles.cartCountText
+                  }
                 >
-                  {currentStoreItemCount}
+                  {
+                    currentStoreItemCount
+                  }
                 </Text>
               </View>
 
-              <View style={styles.cartBarRight}>
+              <View
+                style={
+                  styles.cartBarRight
+                }
+              >
                 <Text
-                  style={styles.cartBarText}
-                  numberOfLines={1}
+                  style={
+                    styles.cartBarText
+                  }
+                  numberOfLines={
+                    1
+                  }
                 >
                   {formatCartMoney(
                     currentStoreSubtotal,
@@ -1303,453 +1712,1047 @@ export default function SupermarketScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-  },
-  pageShell: {
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    maxWidth: 560,
-    position: 'relative',
-    width: '100%',
-  },
-  header: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    zIndex: 10,
-  },
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: 'center',
-    width: 46,
-  },
-  headerButtonPressed: {
-    backgroundColor: '#F7F7F7',
-    transform: [{ scale: 0.97 }],
-  },
-  backArrowCanvas: {
-    height: 23,
-    position: 'relative',
-    width: 24,
-  },
-  backArrowStem: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 3,
-    position: 'absolute',
-    top: 10.3,
-    width: 19,
-  },
-  backArrowDiagonal: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 2,
-    position: 'absolute',
-    width: 10,
-  },
-  backArrowTop: {
-    top: 7,
-    transform: [{ rotate: '-42deg' }],
-  },
-  backArrowBottom: {
-    top: 14,
-    transform: [{ rotate: '42deg' }],
-  },
-  mainScrollView: {
-    flex: 1,
-  },
-  mainContent: {
-    backgroundColor: '#FFFFFF',
-    paddingBottom: 30,
-  },
-  mainContentWithCart: {
-    paddingBottom: 115,
-  },
-  categoriesSection: {
-    backgroundColor: '#FFFFFF',
-    paddingTop: 1,
-  },
-  categoriesTitle: {
-    color: '#202020',
-    fontSize: 21,
-    fontWeight: '800',
-    letterSpacing: -0.45,
-    marginBottom: 14,
-    paddingHorizontal: 16,
-  },
-  categoriesRail: {
-    gap: 7,
-    paddingHorizontal: 16,
-  },
-  categoryColumn: {
-    gap: 15,
-    width: 85,
-  },
-  categoryItem: {
-    alignItems: 'center',
-    width: 85,
-  },
-  categoryItemPressed: {
-    opacity: 0.68,
-    transform: [{ scale: 0.97 }],
-  },
-  categoryImageBox: {
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 13,
-    height: 80,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: 80,
-  },
-  categoryImage: {
-    height: '92%',
-    width: '92%',
-  },
-  categoryLabel: {
-    color: '#202020',
-    fontSize: 13.5,
-    fontWeight: '400',
-    letterSpacing: -0.2,
-    lineHeight: 18,
-    marginTop: 8,
-    minHeight: 36,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-    width: 85,
-  },
-  categoryPagination: {
-    alignSelf: 'center',
-    backgroundColor: '#E6E6E6',
-    borderRadius: 3,
-    height: 5,
-    marginBottom: 22,
-    marginTop: 18,
-    overflow: 'hidden',
-    position: 'relative',
-    width: CATEGORY_INDICATOR_TRACK_WIDTH,
-  },
-  categoryPaginationActive: {
-    backgroundColor: '#151515',
-    borderRadius: 3,
-    height: 5,
-    left: 0,
-    position: 'absolute',
-    top: 0,
-    width: CATEGORY_INDICATOR_THUMB_WIDTH,
-  },
-  promotionSection: {
-    backgroundColor: '#FFFFFF',
-    marginBottom: 22,
-    overflow: 'visible',
-    width: '100%',
-  },
-  promotionSectionLast: {
-    marginBottom: 0,
-  },
-  promotionBannerFrame: {
-    marginHorizontal: 9,
-    overflow: 'hidden',
-  },
-  promotionBanner: {
-    backgroundColor: '#F4F4F4',
-    width: '100%',
-  },
-  promotionProductsScroll: {
-    overflow: 'visible',
-  },
-  promotionProductsRail: {
-    alignItems: 'flex-start',
-    gap: 7,
-    paddingBottom: 7,
-    paddingHorizontal: 21,
-    paddingTop: 0,
-  },
-  featuredProductCard: {
-    backgroundColor: 'transparent',
-    overflow: 'visible',
-  },
-  featuredProductImageBox: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E8E8E8',
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: 'center',
-    overflow: 'visible',
-    position: 'relative',
-  },
-  featuredProductImage: {
-    height: '68%',
-    width: '68%',
-  },
-  featuredProductFallback: {
-    fontSize: 34,
-  },
-  featuredDiscountBadge: {
-    alignItems: 'center',
-    backgroundColor: '#BFFF00',
-    borderRadius: 3,
-    justifyContent: 'center',
-    left: 6,
-    minHeight: 17,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    position: 'absolute',
-    top: 6,
-    zIndex: 5,
-  },
-  featuredDiscountText: {
-    color: '#111111',
-    fontSize: 8.5,
-    fontWeight: '500',
-    lineHeight: 11,
-  },
-  featuredAddButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E7E7E7',
-    borderRadius: 18,
-    borderWidth: 1,
-    bottom: 6,
-    elevation: 2,
-    height: 34,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    width: 34,
-    zIndex: 8,
-  },
-  featuredAddButtonPressed: {
-    backgroundColor: '#F8F8F8',
-    transform: [{ scale: 0.94 }],
-  },
-  featuredAddButtonDisabled: {
-    opacity: 0.45,
-  },
-  featuredAddButtonText: {
-    color: '#F04A00',
-    fontSize: 25,
-    fontWeight: '300',
-    lineHeight: 27,
-    marginTop: -2,
-  },
-  featuredQuantityPill: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E7E7E7',
-    borderRadius: 18,
-    borderWidth: 1,
-    bottom: 6,
-    elevation: 2,
-    flexDirection: 'row',
-    height: 34,
-    position: 'absolute',
-    right: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    zIndex: 8,
-  },
-  featuredQuantityButton: {
-    alignItems: 'center',
-    height: 32,
-    justifyContent: 'center',
-    width: 25,
-  },
-  featuredQuantityButtonText: {
-    color: '#F04A00',
-    fontSize: 18,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  featuredQuantityValue: {
-    color: '#202020',
-    fontSize: 10,
-    fontWeight: '700',
-    minWidth: 14,
-    textAlign: 'center',
-  },
-  featuredProductName: {
-    color: '#202020',
-    fontSize: 10.5,
-    fontWeight: '400',
-    letterSpacing: -0.15,
-    lineHeight: 12.5,
-    marginTop: 7,
-    minHeight: 25,
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  featuredCurrentPriceWrap: {
-    alignSelf: 'flex-start',
-    borderBottomColor: '#BFFF00',
-    borderBottomWidth: 2,
-    marginTop: 3,
-  },
-  featuredCurrentPrice: {
-    color: '#202020',
-    fontSize: 10.5,
-    fontWeight: '500',
-    lineHeight: 13,
-    textAlign: 'left',
-    writingDirection: 'ltr',
-  },
-  featuredOldPrice: {
-    alignSelf: 'flex-start',
-    color: '#858585',
-    fontSize: 9,
-    lineHeight: 11,
-    marginTop: 1,
-    textAlign: 'left',
-    textDecorationLine: 'line-through',
-    writingDirection: 'ltr',
-  },
-  cartBarFloatingWrapper: {
-    bottom: 12,
-    left: 18,
-    position: 'absolute',
-    right: 18,
-    zIndex: 999,
-  },
-  cartBar: {
-    alignItems: 'center',
-    backgroundColor: '#00B956',
-    borderRadius: 34,
-    elevation: 20,
-    flexDirection: 'row',
-    height: 64,
-    justifyContent: 'space-between',
-    paddingHorizontal: 9,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.16,
-    shadowRadius: 8,
-    width: '100%',
-  },
-  cartBarPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.985 }],
-  },
-  cartCountBadge: {
-    alignItems: 'center',
-    backgroundColor: '#009D49',
-    borderRadius: 24,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  cartCountText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  cartBarRight: {
-    alignItems: 'flex-end',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  cartBarText: {
-    color: '#FFFFFF',
-    fontSize: 15.5,
-    fontWeight: '800',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  closedOverlay: {
-    backgroundColor: '#252525',
-    left: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    position: 'absolute',
-    right: 16,
-    top: 68,
-    zIndex: 50,
-  },
-  closedOverlayText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-  stateScreen: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
-  stateEmoji: {
-    fontSize: 50,
-  },
-  stateTitle: {
-    color: '#202020',
-    fontSize: 21,
-    fontWeight: '800',
-    marginTop: 15,
-    textAlign: 'center',
-  },
-  stateDescription: {
-    color: '#777777',
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 8,
-    maxWidth: 330,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#222222',
-    borderRadius: 14,
-    marginTop: 22,
-    minWidth: 150,
-    paddingHorizontal: 20,
-    paddingVertical: 13,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  errorBackButton: {
-    borderColor: '#E0E0E0',
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 10,
-    minWidth: 150,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  errorBackButtonText: {
-    color: '#222222',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  generalPressed: {
-    opacity: 0.72,
-    transform: [{ scale: 0.98 }],
-  },
-});
+const styles =
+  StyleSheet.create({
+    screen: {
+      backgroundColor:
+        '#FFFFFF',
+
+      flex: 1,
+    },
+
+    pageShell: {
+      alignSelf:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      flex: 1,
+
+      maxWidth: 560,
+
+      position:
+        'relative',
+
+      width: '100%',
+    },
+
+    header: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      flexDirection:
+        'row',
+
+      paddingBottom:
+        12,
+
+      paddingHorizontal:
+        16,
+
+      paddingTop: 10,
+
+      zIndex: 10,
+    },
+
+    backButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E1E1E1',
+
+      borderRadius: 24,
+
+      borderWidth: 1,
+
+      height: 46,
+
+      justifyContent:
+        'center',
+
+      width: 46,
+    },
+
+    headerButtonPressed: {
+      backgroundColor:
+        '#F7F7F7',
+
+      transform: [
+        {
+          scale: 0.97,
+        },
+      ],
+    },
+
+    backArrowCanvas: {
+      height: 23,
+
+      position:
+        'relative',
+
+      width: 24,
+    },
+
+    backArrowStem: {
+      backgroundColor:
+        '#242424',
+
+      borderRadius: 2,
+
+      height: 2.2,
+
+      left: 3,
+
+      position:
+        'absolute',
+
+      top: 10.3,
+
+      width: 19,
+    },
+
+    backArrowDiagonal: {
+      backgroundColor:
+        '#242424',
+
+      borderRadius: 2,
+
+      height: 2.2,
+
+      left: 2,
+
+      position:
+        'absolute',
+
+      width: 10,
+    },
+
+    backArrowTop: {
+      top: 7,
+
+      transform: [
+        {
+          rotate:
+            '-42deg',
+        },
+      ],
+    },
+
+    backArrowBottom: {
+      top: 14,
+
+      transform: [
+        {
+          rotate:
+            '42deg',
+        },
+      ],
+    },
+
+    mainScrollView: {
+      flex: 1,
+    },
+
+    mainContent: {
+      backgroundColor:
+        '#FFFFFF',
+
+      paddingBottom:
+        30,
+    },
+
+    mainContentWithCart: {
+      paddingBottom:
+        115,
+    },
+
+    categoriesSection: {
+      backgroundColor:
+        '#FFFFFF',
+
+      paddingTop: 1,
+    },
+
+    categoriesTitle: {
+      color:
+        '#202020',
+
+      fontSize: 21,
+
+      fontWeight:
+        '800',
+
+      letterSpacing:
+        -0.45,
+
+      marginBottom:
+        14,
+
+      paddingHorizontal:
+        16,
+    },
+
+    categoriesRail: {
+      gap: 7,
+
+      paddingHorizontal:
+        16,
+    },
+
+    categoryColumn: {
+      gap: 15,
+
+      width: 85,
+    },
+
+    categoryItem: {
+      alignItems:
+        'center',
+
+      width: 85,
+    },
+
+    categoryItemPressed: {
+      opacity: 0.68,
+
+      transform: [
+        {
+          scale: 0.97,
+        },
+      ],
+    },
+
+    categoryImageBox: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#F5F5F5',
+
+      borderRadius:
+        13,
+
+      height:
+        80,
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+
+      width:
+        80,
+    },
+
+    categoryImage: {
+      height: '100%',
+
+      width: '100%',
+    },
+
+    categoryLabel: {
+      color:
+        '#202020',
+
+      fontSize: 13.5,
+
+      fontWeight:
+        '400',
+
+      letterSpacing:
+        -0.2,
+
+      lineHeight: 18,
+
+      marginTop: 8,
+
+      minHeight: 36,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+
+      width: 85,
+    },
+
+    categoryPagination: {
+      alignSelf:
+        'center',
+
+      backgroundColor:
+        '#E6E6E6',
+
+      borderRadius: 3,
+
+      height: 5,
+
+      marginBottom:
+        22,
+
+      marginTop: 18,
+
+      overflow:
+        'hidden',
+
+      position:
+        'relative',
+
+      width:
+        CATEGORY_INDICATOR_TRACK_WIDTH,
+    },
+
+    categoryPaginationActive: {
+      backgroundColor:
+        '#151515',
+
+      borderRadius: 3,
+
+      height: 5,
+
+      left: 0,
+
+      position:
+        'absolute',
+
+      top: 0,
+
+      width:
+        CATEGORY_INDICATOR_THUMB_WIDTH,
+    },
+
+    /* ========================================================
+     * PROMOTION BANNER
+     * ========================================================
+     */
+
+    promotionSection: {
+      backgroundColor:
+        '#FFFFFF',
+
+      marginBottom:
+        22,
+
+      overflow:
+        'visible',
+
+      width: '100%',
+    },
+
+    promotionSectionLast: {
+      marginBottom: 0,
+    },
+
+    /*
+     * IMPORTANT:
+     *
+     * Removed marginHorizontal: 9.
+     *
+     * Banner now touches both
+     * sides of the page.
+     */
+    promotionBannerFrame: {
+      marginHorizontal:
+        0,
+
+      overflow:
+        'hidden',
+
+      width:
+        '100%',
+    },
+
+    promotionBanner: {
+      backgroundColor:
+        '#F4F4F4',
+
+      width: '100%',
+    },
+
+    promotionProductsScroll: {
+      overflow:
+        'visible',
+    },
+
+    promotionProductsRail: {
+      alignItems:
+        'flex-start',
+
+      gap: 7,
+
+      paddingBottom: 7,
+
+      paddingHorizontal:
+        21,
+
+      paddingTop: 0,
+    },
+
+    featuredProductCard: {
+      backgroundColor:
+        'transparent',
+
+      overflow:
+        'visible',
+    },
+
+    featuredProductImageBox: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#F4F4F4',
+
+      borderColor:
+        '#E8E8E8',
+
+      borderRadius:
+        12,
+
+      borderWidth:
+        1,
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+
+      position:
+        'relative',
+    },
+
+    featuredProductImage: {
+      height:
+        '100%',
+
+      width:
+        '100%',
+    },
+
+    featuredProductFallback: {
+      fontSize: 34,
+    },
+
+    featuredDiscountBadge: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#BFFF00',
+
+      borderRadius: 3,
+
+      justifyContent:
+        'center',
+
+      left: 6,
+
+      minHeight: 17,
+
+      paddingHorizontal:
+        4,
+
+      paddingVertical:
+        2,
+
+      position:
+        'absolute',
+
+      top: 6,
+
+      zIndex: 5,
+    },
+
+    featuredDiscountText: {
+      color:
+        '#111111',
+
+      fontSize: 8.5,
+
+      fontWeight:
+        '500',
+
+      lineHeight: 11,
+    },
+
+    featuredAddButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E7E7E7',
+
+      borderRadius:
+        18,
+
+      borderWidth:
+        1,
+
+      bottom:
+        6,
+
+      elevation:
+        2,
+
+      height:
+        34,
+
+      justifyContent:
+        'center',
+
+      position:
+        'absolute',
+
+      right:
+        6,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width:
+          0,
+
+        height:
+          1,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius:
+        2,
+
+      width:
+        34,
+
+      zIndex:
+        8,
+    },
+
+    featuredAddButtonPressed: {
+      backgroundColor:
+        '#F8F8F8',
+
+      transform: [
+        {
+          scale:
+            0.94,
+        },
+      ],
+    },
+
+    featuredAddButtonDisabled: {
+      opacity: 0.45,
+    },
+
+    featuredAddButtonText: {
+      color:
+        NAVIENTY_NOW_COLORS.primary,
+
+      fontSize:
+        25,
+
+      fontWeight:
+        '300',
+
+      lineHeight:
+        27,
+
+      marginTop:
+        -2,
+    },
+
+    featuredQuantityPill: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E7E7E7',
+
+      borderRadius:
+        18,
+
+      borderWidth:
+        1,
+
+      bottom:
+        6,
+
+      elevation:
+        2,
+
+      flexDirection:
+        'row',
+
+      height:
+        34,
+
+      position:
+        'absolute',
+
+      right:
+        6,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width:
+          0,
+
+        height:
+          1,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius:
+        2,
+
+      zIndex:
+        8,
+    },
+
+    featuredQuantityButton: {
+      alignItems:
+        'center',
+
+      height:
+        32,
+
+      justifyContent:
+        'center',
+
+      width:
+        25,
+    },
+
+    featuredQuantityButtonText: {
+      color:
+        NAVIENTY_NOW_COLORS.primary,
+
+      fontSize:
+        18,
+
+      fontWeight:
+        '500',
+
+      lineHeight:
+        20,
+    },
+
+    featuredQuantityValue: {
+      color:
+        '#202020',
+
+      fontSize:
+        10,
+
+      fontWeight:
+        '700',
+
+      minWidth:
+        14,
+
+      textAlign:
+        'center',
+    },
+
+    featuredProductName: {
+      color:
+        '#202020',
+
+      fontSize:
+        10.5,
+
+      fontWeight:
+        '400',
+
+      letterSpacing:
+        -0.15,
+
+      lineHeight:
+        12.5,
+
+      marginTop:
+        7,
+
+      minHeight:
+        25,
+
+      textAlign:
+        'left',
+
+      writingDirection:
+        'ltr',
+    },
+
+    featuredCurrentPriceWrap: {
+      alignSelf:
+        'flex-start',
+
+      borderBottomColor:
+        '#BFFF00',
+
+      borderBottomWidth:
+        2,
+
+      marginTop:
+        3,
+    },
+
+
+    featuredCurrentPrice: {
+      color:
+        '#202020',
+
+      fontSize:
+        10.5,
+
+      fontWeight:
+        '500',
+
+      lineHeight:
+        13,
+
+      textAlign:
+        'left',
+
+      writingDirection:
+        'ltr',
+    },
+
+
+    featuredOldPrice: {
+      alignSelf:
+        'flex-start',
+
+      color:
+        '#858585',
+
+      fontSize:
+        9,
+
+      lineHeight:
+        11,
+
+      marginTop:
+        1,
+
+      textAlign:
+        'left',
+
+      textDecorationLine:
+        'line-through',
+
+      writingDirection:
+        'ltr',
+    },
+
+
+
+
+
+
+
+    cartBarFloatingWrapper: {
+      bottom: 12,
+
+      left: 18,
+
+      position:
+        'absolute',
+
+      right: 18,
+
+      zIndex: 999,
+    },
+
+    cartBar: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#00B956',
+
+      borderRadius: 34,
+
+      elevation: 20,
+
+      flexDirection:
+        'row',
+
+      height: 64,
+
+      justifyContent:
+        'space-between',
+
+      paddingHorizontal:
+        9,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      shadowOpacity:
+        0.16,
+
+      shadowRadius: 8,
+
+      width: '100%',
+    },
+
+    cartBarPressed: {
+      opacity: 0.92,
+
+      transform: [
+        {
+          scale:
+            0.985,
+        },
+      ],
+    },
+
+    cartCountBadge: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#009D49',
+
+      borderRadius: 24,
+
+      height: 48,
+
+      justifyContent:
+        'center',
+
+      width: 48,
+    },
+
+    cartCountText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 17,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+    },
+
+    cartBarRight: {
+      alignItems:
+        'flex-end',
+
+      flex: 1,
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal:
+        16,
+    },
+
+    cartBarText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 15.5,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    closedOverlay: {
+      backgroundColor:
+        '#252525',
+
+      left: 16,
+
+      paddingHorizontal:
+        15,
+
+      paddingVertical:
+        10,
+
+      position:
+        'absolute',
+
+      right: 16,
+
+      top: 68,
+
+      zIndex: 50,
+    },
+
+    closedOverlayText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 12,
+
+      fontWeight:
+        '600',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    stateScreen: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      flex: 1,
+
+      justifyContent:
+        'center',
+
+      paddingHorizontal:
+        28,
+    },
+
+    stateEmoji: {
+      fontSize: 50,
+    },
+
+    stateTitle: {
+      color:
+        '#202020',
+
+      fontSize: 21,
+
+      fontWeight:
+        '800',
+
+      marginTop: 15,
+
+      textAlign:
+        'center',
+    },
+
+    stateDescription: {
+      color:
+        '#777777',
+
+      fontSize: 13,
+
+      lineHeight: 20,
+
+      marginTop: 8,
+
+      maxWidth: 330,
+
+      textAlign:
+        'center',
+    },
+
+    retryButton: {
+      backgroundColor:
+        '#222222',
+
+      borderRadius: 14,
+
+      marginTop: 22,
+
+      minWidth: 150,
+
+      paddingHorizontal:
+        20,
+
+      paddingVertical:
+        13,
+    },
+
+    retryButtonText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 14,
+
+      fontWeight:
+        '700',
+
+      textAlign:
+        'center',
+    },
+
+    errorBackButton: {
+      borderColor:
+        '#E0E0E0',
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      marginTop: 10,
+
+      minWidth: 150,
+
+      paddingHorizontal:
+        20,
+
+      paddingVertical:
+        12,
+    },
+
+    errorBackButtonText: {
+      color:
+        '#222222',
+
+      fontSize: 14,
+
+      fontWeight:
+        '600',
+
+      textAlign:
+        'center',
+    },
+
+    generalPressed: {
+      opacity: 0.72,
+
+      transform: [
+        {
+          scale: 0.98,
+        },
+      ],
+    },
+  });

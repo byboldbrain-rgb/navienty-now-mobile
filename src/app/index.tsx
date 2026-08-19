@@ -713,13 +713,25 @@ function HomeBannerCarousel({
 
   const carouselWidth = Math.max(1, width);
 
-  // Keep only a small visible slice of the NEXT banner inside the viewport.
-  // The carousel itself is forced to LTR below so an Arabic/RTL app does not
-  // mirror the rail and accidentally expose a large part of the previous card.
+  /*
+   * The main Home banner should use the complete available width.
+   *
+   * Other placements can still keep the small next-card preview, but the
+   * primary Home banner is intentionally full-width so it has the same
+   * strong visual size as the large exclusive-offers banner.
+   */
+  const isMainPlacement = placement === 'main';
+
   const bannerPeekWidth =
-    banners.length > 1 ? 28 : 0;
+    !isMainPlacement && banners.length > 1
+      ? 28
+      : 0;
+
   const bannerGap =
-    banners.length > 1 ? 10 : 0;
+    !isMainPlacement && banners.length > 1
+      ? 10
+      : 0;
+
   const bannerCardWidth = Math.max(
     1,
     carouselWidth -
@@ -2508,21 +2520,13 @@ const styles = StyleSheet.create({
   },
 
   headerTimeMoodLayer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 0,
+    ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
     zIndex: 1,
   },
 
   headerTimeMoodBackground: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 0,
+    ...StyleSheet.absoluteFillObject,
     height: '100%',
     width: '100%',
   },
@@ -3751,3 +3755,4 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 });
+

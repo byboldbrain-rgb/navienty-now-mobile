@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -24,7 +25,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap from '../../services/bootstrap-service';
-
 import {
   type CatalogProduct,
   type CatalogSection,
@@ -35,35 +35,38 @@ import {
   listStores,
   type StoreCatalog,
 } from '../../services/catalog-service';
-
-import {
-  useCartStore,
-} from '../../store/cart-store';
+import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 
 /* ============================================================
- * TYPES
+ * CONSTANTS
  * ============================================================
  */
+
+const PAGE_MAX_WIDTH = 560;
+const HORIZONTAL_PADDING = 16;
+const PRODUCT_GAP = 10;
 
 type ProductFilterKey =
   | 'all'
   | 'offers'
   | string;
 
+type ProductCardMode =
+  | 'category'
+  | 'offers';
+
 /* ============================================================
  * LOCAL CATEGORY IMAGES
- *
- * دي الصور الرئيسية الموجودة عندك بالفعل.
- * الـSubcategories تقدر تضيف لها image_url
- * من Database بعدين.
  * ============================================================
  */
 
-const CATEGORY_IMAGES: Record<
+const ROOT_CATEGORY_IMAGES: Record<
   string,
   ImageSourcePropType
 > = {
+  offers: require('../../../assets/images/supermarket-categories/offers.png'),
+
   'fruit-veg': require('../../../assets/images/supermarket-categories/fruit-veg.png'),
 
   bakery: require('../../../assets/images/supermarket-categories/bakery.png'),
@@ -95,6 +98,182 @@ const CATEGORY_IMAGES: Record<
   condiments: require('../../../assets/images/supermarket-categories/condiments.png'),
 };
 
+/*
+ * Every Subcategory image lives locally in:
+ *
+ * assets/images/supermarket-subcategories/
+ *
+ * The keys below are the real catalog category slugs from Supabase.
+ * The filenames are the asset names you should use exactly.
+ */
+const SUBCATEGORY_IMAGES: Record<
+  string,
+  ImageSourcePropType
+> = {
+  'fruit-veg-fresh-vegetables': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-vegetables.png'),
+
+  'fruit-veg-fresh-fruit': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-fruits.png'),
+
+  'fruit-veg-fresh-herbs': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-aromatic-herbs.png'),
+
+  'bakery-baked-goods': require('../../../assets/images/supermarket-subcategories/bakery-baked-goods.png'),
+
+  'bakery-baladi-tortilla': require('../../../assets/images/supermarket-subcategories/bakery-baladi-bread-tortilla.png'),
+
+  'bakery-kaiser-pate': require('../../../assets/images/supermarket-subcategories/bakery-kaiser-pate.png'),
+
+  'bakery-toast': require('../../../assets/images/supermarket-subcategories/bakery-toast.png'),
+
+  'bakery-rusks': require('../../../assets/images/supermarket-subcategories/bakery-rusk.png'),
+
+  'bakery-packaged-baked-goods': require('../../../assets/images/supermarket-subcategories/bakery-packaged-bakery.png'),
+
+  'poultry-meat-seafood-poultry': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-poultry.png'),
+
+  'poultry-meat-seafood-meat': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-meat.png'),
+
+  'poultry-meat-seafood-seafood-fish': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-seafood-fish.png'),
+
+  'coffee-tea-coffee': require('../../../assets/images/supermarket-subcategories/coffee-tea-coffee.png'),
+
+  'coffee-tea-tea': require('../../../assets/images/supermarket-subcategories/coffee-tea-tea.png'),
+
+  'coffee-tea-herbs': require('../../../assets/images/supermarket-subcategories/coffee-tea-herbs.png'),
+
+  'coffee-tea-hot-drinks': require('../../../assets/images/supermarket-subcategories/coffee-tea-hot-drinks.png'),
+
+  'cooking-baking-baking-ingredients': require('../../../assets/images/supermarket-subcategories/cooking-baking-baking-ingredients.png'),
+
+  'cooking-baking-frying-oil': require('../../../assets/images/supermarket-subcategories/cooking-baking-frying-oil.png'),
+
+  'cooking-baking-olive-oil': require('../../../assets/images/supermarket-subcategories/cooking-baking-olive-oil.png'),
+
+  'cooking-baking-ghee': require('../../../assets/images/supermarket-subcategories/cooking-baking-ghee.png'),
+
+  'cooking-baking-sugar-sweeteners': require('../../../assets/images/supermarket-subcategories/cooking-baking-sugar-sweeteners.png'),
+
+  'cooking-baking-pasta': require('../../../assets/images/supermarket-subcategories/cooking-baking-pasta.png'),
+
+  'cooking-baking-noodles-soup': require('../../../assets/images/supermarket-subcategories/cooking-baking-noodles-soup.png'),
+
+  'cooking-baking-asian-food': require('../../../assets/images/supermarket-subcategories/cooking-baking-asian-food.png'),
+
+  'cooking-baking-rice': require('../../../assets/images/supermarket-subcategories/cooking-baking-rice.png'),
+
+  'cooking-baking-legumes': require('../../../assets/images/supermarket-subcategories/cooking-baking-legumes.png'),
+
+  'cooking-baking-tomato-sauce': require('../../../assets/images/supermarket-subcategories/cooking-baking-tomato-sauce.png'),
+
+  'fresh-food-cheese': require('../../../assets/images/supermarket-subcategories/fresh-food-cheese.png'),
+
+  'fresh-food-meat': require('../../../assets/images/supermarket-subcategories/fresh-food-meat.png'),
+
+  'fresh-food-pickles': require('../../../assets/images/supermarket-subcategories/fresh-food-pickles.png'),
+
+  'ready-to-eat-stuffed-vegetables': require('../../../assets/images/supermarket-subcategories/ready-to-eat-mahashi.png'),
+
+  'ready-to-eat-stuffed-poultry': require('../../../assets/images/supermarket-subcategories/ready-to-eat-stuffed-birds-poultry.png'),
+
+  'ready-to-eat-seasoned-meat-mince': require('../../../assets/images/supermarket-subcategories/ready-to-eat-marinated-meat-minced-meat.png'),
+
+  'frozen-food-ready-meals': require('../../../assets/images/supermarket-subcategories/frozen-food-ready-meals.png'),
+
+  'frozen-food-fruit-veg': require('../../../assets/images/supermarket-subcategories/frozen-food-fruits-vegetables.png'),
+
+  'frozen-food-fries': require('../../../assets/images/supermarket-subcategories/frozen-food-french-fries.png'),
+
+  'frozen-food-poultry': require('../../../assets/images/supermarket-subcategories/frozen-food-poultry.png'),
+
+  'frozen-food-seafood': require('../../../assets/images/supermarket-subcategories/frozen-food-frozen-seafood.png'),
+
+  'frozen-food-meat': require('../../../assets/images/supermarket-subcategories/frozen-food-meat.png'),
+
+  'frozen-food-bakery-desserts': require('../../../assets/images/supermarket-subcategories/frozen-food-bakery-desserts.png'),
+
+  'dairy-eggs-milk-dairy': require('../../../assets/images/supermarket-subcategories/dairy-eggs-milk-dairy.png'),
+
+  'dairy-eggs-eggs': require('../../../assets/images/supermarket-subcategories/dairy-eggs-eggs.png'),
+
+  'dairy-eggs-yogurt-laban-rayeb': require('../../../assets/images/supermarket-subcategories/dairy-eggs-yogurt-laban-rayeb.png'),
+
+  'dairy-eggs-cream-butter-ghee': require('../../../assets/images/supermarket-subcategories/dairy-eggs-cream-butter-ghee.png'),
+
+  'dairy-eggs-cheese': require('../../../assets/images/supermarket-subcategories/dairy-eggs-cheese.png'),
+
+  'breakfast-food-cereals': require('../../../assets/images/supermarket-subcategories/breakfast-food-breakfast-cereals.png'),
+
+  'breakfast-food-spreads': require('../../../assets/images/supermarket-subcategories/breakfast-food-spreadables.png'),
+
+  'breakfast-food-halawa': require('../../../assets/images/supermarket-subcategories/breakfast-food-halawa.png'),
+
+  'breakfast-food-honey': require('../../../assets/images/supermarket-subcategories/breakfast-food-honey.png'),
+
+  'breakfast-food-jam': require('../../../assets/images/supermarket-subcategories/breakfast-food-jam.png'),
+
+  'canned-jarred-seafood': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-seafood.png'),
+
+  'canned-jarred-vegetables': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-vegetables.png'),
+
+  'canned-jarred-foul-medames': require('../../../assets/images/supermarket-subcategories/canned-jarred-fava-beans.png'),
+
+  'canned-jarred-fruit': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-fruits.png'),
+
+  'household-essentials-laundry-detergents': require('../../../assets/images/supermarket-subcategories/household-essentials-laundry-detergents.png'),
+
+  'household-essentials-dishwashing': require('../../../assets/images/supermarket-subcategories/household-essentials-dish-detergents.png'),
+
+  'household-essentials-surface-floor-cleaners': require('../../../assets/images/supermarket-subcategories/household-essentials-surface-floor-cleaners.png'),
+
+  'household-essentials-air-fresheners': require('../../../assets/images/supermarket-subcategories/household-essentials-air-fresheners.png'),
+
+  'household-essentials-paper-plastic': require('../../../assets/images/supermarket-subcategories/household-essentials-paper-plastic-products.png'),
+
+  'household-essentials-cleaning-tools': require('../../../assets/images/supermarket-subcategories/household-essentials-cleaning-tools-equipment.png'),
+
+  'beverages-water': require('../../../assets/images/supermarket-subcategories/beverages-water.png'),
+
+  'beverages-soft-drinks': require('../../../assets/images/supermarket-subcategories/beverages-soft-drinks.png'),
+
+  'beverages-malt': require('../../../assets/images/supermarket-subcategories/beverages-malt-drinks.png'),
+
+  'beverages-energy-drinks': require('../../../assets/images/supermarket-subcategories/beverages-energy-drinks.png'),
+
+  'beverages-juices': require('../../../assets/images/supermarket-subcategories/beverages-juices.png'),
+
+  'beverages-powder-drinks': require('../../../assets/images/supermarket-subcategories/beverages-powder-drinks.png'),
+
+  'snacks-chocolate-chocolate': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-chocolate.png'),
+
+  'snacks-chocolate-candy-gum': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-candy-gum.png'),
+
+  'snacks-chocolate-biscuits': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-biscuits.png'),
+
+  'snacks-chocolate-cake': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-cakes.png'),
+
+  'snacks-chocolate-chips': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-chips.png'),
+
+  'snacks-chocolate-nuts': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-nuts.png'),
+
+  'snacks-chocolate-popcorn': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-popcorn.png'),
+
+  'snacks-chocolate-crackers': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-crackers.png'),
+
+  'snacks-chocolate-dried-snacks': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-dried-snacks.png'),
+
+  'snacks-chocolate-ice-cream': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-ice-cream.png'),
+
+  'condiments-basic-spices': require('../../../assets/images/supermarket-subcategories/condiments-basic-spices-seasonings.png'),
+
+  'condiments-dried-herbs': require('../../../assets/images/supermarket-subcategories/condiments-dried-herbs.png'),
+
+  'condiments-mixed-spices': require('../../../assets/images/supermarket-subcategories/condiments-mixed-seasonings-blends.png'),
+
+  'condiments-specialty-salts': require('../../../assets/images/supermarket-subcategories/condiments-specialty-salts.png'),
+
+  'condiments-sesame-grains': require('../../../assets/images/supermarket-subcategories/condiments-sesame-grains.png'),
+
+};
+
 /* ============================================================
  * HELPERS
  * ============================================================
@@ -119,6 +298,17 @@ function normalizeSearchText(
   return (value ?? '')
     .trim()
     .toLowerCase();
+}
+
+function normalizeSlug(
+  value: string | null | undefined,
+) {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function getProductImage(
@@ -163,12 +353,25 @@ function getDiscountPercent(
   );
 }
 
+function isOfferProduct(
+  product: CatalogProduct,
+) {
+  return (
+    product.compareAtPrice !== null &&
+    product.compareAtPrice >
+      product.price &&
+    product.compareAtPrice > 0
+  );
+}
+
 function formatMoney(
   value: number,
   currencyCode: string,
 ) {
   const currencyLabel =
-    currencyCode === 'EGP'
+    currencyCode
+      .trim()
+      .toUpperCase() === 'EGP'
       ? 'ج.م'
       : currencyCode;
 
@@ -177,108 +380,149 @@ function formatMoney(
   )} ${currencyLabel}`;
 }
 
-/**
- * Temporary visual fallback
- * للـSubcategories اللي لسه معندهاش image_url.
- *
- * لما تضيف image_url في Supabase
- * الصورة الحقيقية هتظهر بدل Emoji تلقائيًا.
- */
-function getCategoryFallbackIcon(
-  slug: string,
+function deduplicateProducts(
+  products: CatalogProduct[],
 ) {
-  const icons: Record<
-    string,
-    string
-  > = {
-    milk: '🥛',
-    'fresh-milk': '🥛',
-    'long-life-milk': '🥛',
-    'powdered-milk': '🥛',
-    'flavored-milk': '🥛',
+  const productsMap =
+    new Map<
+      string,
+      CatalogProduct
+    >();
 
-    cheese: '🧀',
-    'white-cheese': '🧀',
-    'processed-cheese': '🧀',
-    'spreadable-cheese': '🧀',
-    'cheddar-cheese': '🧀',
+  for (const product of products) {
+    productsMap.set(
+      product.id,
+      product,
+    );
+  }
 
-    yogurt: '🥣',
-    'plain-yogurt': '🥣',
-    'flavored-yogurt': '🥣',
-    'greek-yogurt': '🥣',
+  return Array.from(
+    productsMap.values(),
+  );
+}
 
-    eggs: '🥚',
-    'butter-cream': '🧈',
+function getOfferPageRootCategories(
+  catalog: StoreCatalog,
+): CatalogSection[] {
+  /*
+   * Primary source:
+   * categoryTree contains the real root categories.
+   */
+  const treeRoots =
+    catalog.categoryTree.filter(
+      (section) =>
+        section.parentId === null ||
+        section.depth === 0,
+    );
 
-    'fresh-fruit': '🍎',
-    'fresh-vegetables': '🥬',
-    herbs: '🌿',
+  /*
+   * Defensive fallback:
+   * لو categoryTree رجعت فاضية لأي سبب،
+   * نستخدم الـFlat sections ونجيب الـRoot categories.
+   */
+  const fallbackRoots =
+    catalog.sections.filter(
+      (section) =>
+        section.parentId === null,
+    );
 
-    bread: '🍞',
-    pastries: '🥐',
-    cakes: '🍰',
-    'wraps-flatbread': '🫓',
+  const source =
+    treeRoots.length > 0
+      ? treeRoots
+      : fallbackRoots.length > 0
+        ? fallbackRoots
+        : catalog.sections.filter(
+            (section) =>
+              section.depth === 0,
+          );
 
-    poultry: '🍗',
-    beef: '🥩',
-    lamb: '🥩',
-    seafood: '🐟',
+  const uniqueRoots =
+    new Map<
+      string,
+      CatalogSection
+    >();
 
-    coffee: '☕',
-    tea: '🫖',
-    'hot-chocolate': '☕',
+  for (const section of source) {
+    uniqueRoots.set(
+      section.id,
+      section,
+    );
+  }
 
-    'rice-pasta': '🍚',
-    'flour-baking': '🌾',
-    'oil-ghee': '🫗',
-    'sugar-sweeteners': '🧂',
+  return Array.from(
+    uniqueRoots.values(),
+  ).sort(
+    (
+      first,
+      second,
+    ) => {
+      if (
+        first.sortOrder !==
+        second.sortOrder
+      ) {
+        return (
+          first.sortOrder -
+          second.sortOrder
+        );
+      }
 
-    'cold-cuts': '🥩',
-    'deli-cheese': '🧀',
-    'olives-pickles': '🫒',
+      return first.name.localeCompare(
+        second.name,
+        'ar',
+      );
+    },
+  );
+}
 
-    'ready-meals': '🍱',
-    sandwiches: '🥪',
-    salads: '🥗',
+function getAllCatalogOffers(
+  catalog: StoreCatalog,
+) {
+  const products: CatalogProduct[] =
+    [];
 
-    'frozen-vegetables': '🥦',
-    'frozen-meat-poultry': '🍗',
-    'frozen-seafood': '🐟',
-    'frozen-pastry': '🥐',
+  for (
+    const rootCategory of
+    getOfferPageRootCategories(
+      catalog,
+    )
+  ) {
+    products.push(
+      ...getCatalogSectionOffers(
+        rootCategory,
+      ),
+    );
+  }
 
-    cereals: '🥣',
-    'oats-granola': '🥣',
-    spreads: '🍫',
-    'honey-jam': '🍯',
+  /*
+   * Final defensive fallback:
+   * لو hierarchy مش مكتملة، نجمع أي منتج عليه خصم
+   * من كل sections بدل ما صفحة العروض تظهر فاضية.
+   */
+  if (products.length === 0) {
+    for (
+      const section of
+      catalog.sections
+    ) {
+      for (
+        const product of
+        section.products
+      ) {
+        if (
+          isOfferProduct(
+            product,
+          )
+        ) {
+          products.push(
+            product,
+          );
+        }
+      }
+    }
+  }
 
-    'canned-vegetables': '🥫',
-    'canned-beans': '🥫',
-    'canned-fish': '🥫',
-    'jarred-pickles': '🥒',
-
-    'cleaning-laundry': '🧴',
-    'paper-plastic': '🧻',
-    dishwashing: '🧽',
-    'home-care': '🧹',
-
-    water: '💧',
-    'soft-drinks': '🥤',
-    juices: '🧃',
-    'energy-drinks': '🥤',
-
-    chips: '🍟',
-    biscuits: '🍪',
-    chocolate: '🍫',
-    nuts: '🥜',
-
-    'spices-seasonings': '🌶️',
-    'table-sauces': '🥫',
-    'ketchup-mayo-mustard': '🥫',
-    'cooking-sauces': '🥫',
-  };
-
-  return icons[slug] ?? '🛒';
+  return deduplicateProducts(
+    products,
+  );
 }
 
 /* ============================================================
@@ -293,14 +537,61 @@ function CategoryFilterVisual({
   section: CatalogSection;
   fallbackKey?: string;
 }) {
-  const localImage =
-    CATEGORY_IMAGES[section.slug] ??
+  const normalizedSectionSlug =
+    normalizeSlug(section.slug);
+
+  const localSubcategoryImage =
+    SUBCATEGORY_IMAGES[
+      normalizedSectionSlug
+    ];
+
+  const localRootImage =
+    ROOT_CATEGORY_IMAGES[
+      normalizedSectionSlug
+    ] ??
     (fallbackKey
-      ? CATEGORY_IMAGES[
-          fallbackKey
+      ? ROOT_CATEGORY_IMAGES[
+          normalizeSlug(fallbackKey)
         ]
       : undefined);
 
+  /*
+   * Subcategories use the local assets first.
+   * This guarantees that the new supermarket subcategory artwork
+   * replaces the old emoji/icon presentation.
+   */
+  if (localSubcategoryImage) {
+    return (
+      <Image
+        source={localSubcategoryImage}
+        style={
+          styles.filterCategoryImage
+        }
+        resizeMode="cover"
+      />
+    );
+  }
+
+  /*
+   * "الكل" keeps the main-category artwork from
+   * assets/images/supermarket-categories/.
+   */
+  if (localRootImage) {
+    return (
+      <Image
+        source={localRootImage}
+        style={
+          styles.filterCategoryImage
+        }
+        resizeMode="cover"
+      />
+    );
+  }
+
+  /*
+   * Keep database image_url as a safe fallback for any future
+   * category that has not been added to the local asset map yet.
+   */
   if (section.imageUrl) {
     return (
       <Image
@@ -310,33 +601,17 @@ function CategoryFilterVisual({
         style={
           styles.filterCategoryImage
         }
-        resizeMode="contain"
-      />
-    );
-  }
-
-  if (localImage) {
-    return (
-      <Image
-        source={localImage}
-        style={
-          styles.filterCategoryImage
-        }
-        resizeMode="contain"
+        resizeMode="cover"
       />
     );
   }
 
   return (
-    <Text
+    <View
       style={
-        styles.filterFallbackEmoji
+        styles.filterImagePlaceholder
       }
-    >
-      {getCategoryFallbackIcon(
-        section.slug,
-      )}
-    </Text>
+    />
   );
 }
 
@@ -356,6 +631,8 @@ type ProductCardProps = {
 
   isStoreClosed: boolean;
 
+  mode: ProductCardMode;
+
   onAdd: () => void;
 
   onIncrease: () => void;
@@ -369,6 +646,7 @@ function ProductCard({
   currencyCode,
   quantity,
   isStoreClosed,
+  mode,
   onAdd,
   onIncrease,
   onDecrease,
@@ -379,10 +657,20 @@ function ProductCard({
   const discount =
     getDiscountPercent(product);
 
+  const isOffersMode =
+    mode === 'offers';
+
+  const hasOldPrice =
+    product.compareAtPrice !== null &&
+    product.compareAtPrice >
+      product.price;
+
   return (
     <View
       style={[
         styles.productCard,
+        isOffersMode &&
+          styles.offersProductCard,
         {
           width: cardWidth,
         },
@@ -391,6 +679,8 @@ function ProductCard({
       <View
         style={[
           styles.productImageBox,
+          isOffersMode &&
+            styles.offersProductImageBox,
           {
             height: cardWidth,
           },
@@ -418,16 +708,26 @@ function ProductCard({
 
         {discount !== null && (
           <View
-            style={
-              styles.discountBadge
-            }
+            style={[
+              styles.discountBadgeBase,
+
+              isOffersMode
+                ? styles.offersDiscountBadge
+                : styles.categoryDiscountBadge,
+            ]}
           >
             <Text
-              style={
-                styles.discountText
-              }
+              style={[
+                styles.discountText,
+
+                isOffersMode &&
+                  styles.offersDiscountText,
+              ]}
+              numberOfLines={1}
             >
-              خصم {discount}%
+              {isOffersMode
+                ? `وفر ${discount}%`
+                : `خصم ${discount}%`}
             </Text>
           </View>
         )}
@@ -435,9 +735,13 @@ function ProductCard({
         {quantity === 0 ? (
           <Pressable
             disabled={isStoreClosed}
+            hitSlop={4}
             onPress={onAdd}
             style={({ pressed }) => [
               styles.addButton,
+
+              isOffersMode &&
+                styles.offersAddButton,
 
               isStoreClosed &&
                 styles.disabledButton,
@@ -448,20 +752,27 @@ function ProductCard({
             ]}
           >
             <Text
-              style={
-                styles.addButtonText
-              }
+              style={[
+                styles.addButtonText,
+
+                isOffersMode &&
+                  styles.offersAddButtonText,
+              ]}
             >
               +
             </Text>
           </Pressable>
         ) : (
           <View
-            style={
-              styles.quantityPill
-            }
+            style={[
+              styles.quantityPill,
+
+              isOffersMode &&
+                styles.offersQuantityPill,
+            ]}
           >
             <Pressable
+              hitSlop={4}
               style={
                 styles.quantityAction
               }
@@ -485,9 +796,8 @@ function ProductCard({
             </Text>
 
             <Pressable
-              disabled={
-                isStoreClosed
-              }
+              disabled={isStoreClosed}
+              hitSlop={4}
               style={
                 styles.quantityAction
               }
@@ -506,53 +816,102 @@ function ProductCard({
       </View>
 
       <Text
-        style={styles.productName}
-        numberOfLines={3}
+        style={[
+          styles.productName,
+
+          isOffersMode &&
+            styles.offersProductName,
+        ]}
+        numberOfLines={
+          isOffersMode ? 2 : 3
+        }
       >
         {product.name}
       </Text>
 
       {product.unitLabelAr ? (
         <Text
-          style={
-            styles.productUnitLabel
-          }
+          style={[
+            styles.productUnitLabel,
+
+            isOffersMode &&
+              styles.offersProductUnitLabel,
+          ]}
           numberOfLines={1}
         >
           {product.unitLabelAr}
         </Text>
       ) : null}
 
-      <View
-        style={styles.priceRow}
-      >
-        <Text
+      {isOffersMode ? (
+        <View
           style={
-            styles.currentPrice
+            styles.offersPriceRow
           }
         >
-          {formatMoney(
-            product.price,
-            currencyCode,
-          )}
-        </Text>
+          <View
+            style={
+              styles.offersCurrentPriceUnderline
+            }
+          >
+            <Text
+              style={
+                styles.offersCurrentPrice
+              }
+              numberOfLines={1}
+            >
+              {formatMoney(
+                product.price,
+                currencyCode,
+              )}
+            </Text>
+          </View>
 
-        {product.compareAtPrice !==
-          null &&
-          product.compareAtPrice >
-            product.price && (
+          {hasOldPrice && (
+            <Text
+              style={
+                styles.offersOldPrice
+              }
+              numberOfLines={1}
+            >
+              {formatMoney(
+                product.compareAtPrice!,
+                currencyCode,
+              )}
+            </Text>
+          )}
+        </View>
+      ) : (
+        <View
+          style={
+            styles.priceColumn
+          }
+        >
+          <Text
+            style={
+              styles.currentPrice
+            }
+          >
+            {formatMoney(
+              product.price,
+              currencyCode,
+            )}
+          </Text>
+
+          {hasOldPrice && (
             <Text
               style={
                 styles.oldPrice
               }
             >
               {formatMoney(
-                product.compareAtPrice,
+                product.compareAtPrice!,
                 currencyCode,
               )}
             </Text>
           )}
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -565,15 +924,40 @@ function ProductCard({
 export default function SupermarketCategoryScreen() {
   const router = useRouter();
 
+  const offersTabsScrollRef =
+    useRef<ScrollView | null>(
+      null,
+    );
+
+  const hasPositionedOffersTabsRef =
+    useRef(false);
+
+  /*
+   * Normal category/subcategory rail.
+   *
+   * Expo Router may keep this screen mounted when navigating
+   * between nested categories. Without explicitly resetting the
+   * horizontal position, React Native can preserve the previous
+   * ScrollView offset and make the next category open in the middle
+   * of its subcategories.
+   */
+  const filtersScrollRef =
+    useRef<ScrollView | null>(
+      null,
+    );
+
+  const hasPositionedFiltersRef =
+    useRef(false);
+
+  const {
+    width: windowWidth,
+  } = useWindowDimensions();
+
   const savedServiceAreaId =
     useCustomerStore(
       (state) =>
         state.locationServiceAreaId,
     );
-
-  const {
-    width: windowWidth,
-  } = useWindowDimensions();
 
   const params =
     useLocalSearchParams<{
@@ -613,6 +997,10 @@ export default function SupermarketCategoryScreen() {
     getSingleParam(
       params.label,
     );
+
+  const isOffersPage =
+    normalizeSlug(sectionSlug) ===
+    'offers';
 
   /* ==========================================================
    * STATE
@@ -677,15 +1065,12 @@ export default function SupermarketCategoryScreen() {
 
   /* ==========================================================
    * CART
-   *
-   * كل متجر له Cart مستقلة داخل state.carts.
    * ==========================================================
    */
 
   const carts =
     useCartStore(
-      (state) =>
-        state.carts,
+      (state) => state.carts,
     );
 
   const addItem =
@@ -713,7 +1098,7 @@ export default function SupermarketCategoryScreen() {
     );
 
   /* ==========================================================
-   * LOAD CATEGORY
+   * LOAD
    * ==========================================================
    */
 
@@ -721,9 +1106,7 @@ export default function SupermarketCategoryScreen() {
     try {
       setIsLoading(true);
 
-      setErrorMessage(
-        null,
-      );
+      setErrorMessage(null);
 
       const bootstrap =
         await getAppBootstrap();
@@ -737,10 +1120,6 @@ export default function SupermarketCategoryScreen() {
       let storeId =
         requestedStoreId;
 
-      /*
-       * لو Store ID مش موجود في Route،
-       * نجيب السوبر ماركت تلقائيًا.
-       */
       if (!storeId) {
         const supermarkets =
           await listStores({
@@ -782,9 +1161,36 @@ export default function SupermarketCategoryScreen() {
         );
 
       /*
-       * البحث عن Category
-       * في الشجرة الجديدة بالـSlug.
+       * العروض ليست Category حقيقية.
+       *
+       * هي صفحة Virtual تجمع المنتجات
+       * التي عليها compareAtPrice > price
+       * من كل أقسام السوبرماركت.
        */
+      if (isOffersPage) {
+        setCatalog(
+          loadedCatalog,
+        );
+
+        setSelectedSection(
+          null,
+        );
+
+        setCurrencyCode(
+          bootstrap.settings
+            .currency_code ||
+            'EGP',
+        );
+
+        setSelectedFilterKey(
+          'all',
+        );
+
+        setSearchQuery('');
+
+        return;
+      }
+
       const section =
         findCatalogSectionBySlug(
           loadedCatalog,
@@ -811,11 +1217,6 @@ export default function SupermarketCategoryScreen() {
           'EGP',
       );
 
-      /*
-       * كل مرة نفتح Category جديدة:
-       *
-       * نبدأ من "الكل".
-       */
       setSelectedFilterKey(
         'all',
       );
@@ -839,22 +1240,27 @@ export default function SupermarketCategoryScreen() {
   }
 
   useEffect(() => {
+    hasPositionedOffersTabsRef.current =
+      false;
+
+    hasPositionedFiltersRef.current =
+      false;
+
     void loadCategory();
   }, [
     requestedStoreId,
     sectionSlug,
+    savedServiceAreaId,
   ]);
 
   /* ==========================================================
-   * CHILD CATEGORIES
+   * NORMAL CATEGORY CHILDREN
    * ==========================================================
    */
 
   const childCategories =
     useMemo(() => {
-      if (
-        !selectedSection
-      ) {
+      if (!selectedSection) {
         return [];
       }
 
@@ -883,78 +1289,199 @@ export default function SupermarketCategoryScreen() {
       );
     }, [selectedSection]);
 
+  /*
+   * We render the normal filter rail using a regular row instead of
+   * row-reverse. To keep the Arabic visual order:
+   *
+   * Right edge:
+   *   الكل → العروض → أول Subcategory → ...
+   *
+   * the child categories are reversed only for display.
+   */
+  const childCategoriesForDisplay =
+    useMemo(
+      () => [
+        ...childCategories,
+      ].reverse(),
+      [childCategories],
+    );
+
+  /*
+   * Reset the normal subcategory rail whenever the actual category
+   * changes. This is important because Expo Router can reuse the same
+   * screen instance and preserve the old horizontal ScrollView offset.
+   *
+   * Two animation frames give React Native enough time to lay out the
+   * new rail before we move it to its Arabic "start" (the right edge).
+   */
+  useEffect(() => {
+    if (
+      isOffersPage ||
+      !selectedSection
+    ) {
+      return;
+    }
+
+    hasPositionedFiltersRef.current =
+      false;
+
+    requestAnimationFrame(
+      () => {
+        requestAnimationFrame(
+          () => {
+            filtersScrollRef.current?.scrollToEnd(
+              {
+                animated:
+                  false,
+              },
+            );
+
+            hasPositionedFiltersRef.current =
+              true;
+          },
+        );
+      },
+    );
+  }, [
+    isOffersPage,
+    selectedSection?.id,
+  ]);
+
+  /* ==========================================================
+   * OFFER PAGE CATEGORY TABS
+   * ==========================================================
+   */
+
+  const offerCategoryTabs =
+    useMemo(() => {
+      if (!catalog) {
+        return [];
+      }
+
+      /*
+       * بنعرض كل Main Categories في صفحة العروض،
+       * حتى لو Category معينة مفيهاش عروض حالياً.
+       *
+       * قبل كده كان فيه filter بيخفي أي Category
+       * مفيهاش منتج compareAtPrice > price.
+       */
+      return getOfferPageRootCategories(
+        catalog,
+      );
+    }, [catalog]);
+
+  /*
+   * Horizontal ScrollView + row-reverse ممكن يخلي العناصر
+   * تبدأ خارج الـviewport على بعض الأجهزة.
+   *
+   * لذلك نعرض Row عادي، نعكس الـCategories بصرياً،
+   * ونضع "الكل" في أقصى اليمين.
+   */
+  const offerCategoryTabsForDisplay =
+    useMemo(
+      () => [
+        ...offerCategoryTabs,
+      ].reverse(),
+      [offerCategoryTabs],
+    );
+
   /* ==========================================================
    * PRODUCTS
-   *
-   * All:
-   * Category + all descendants
-   *
-   * Offers:
-   * Offers inside Category + descendants
-   *
-   * Child selected:
-   * Products in that child + descendants
    * ==========================================================
    */
 
   const filteredProducts =
     useMemo(() => {
-      if (
-        !selectedSection
-      ) {
+      if (!catalog) {
         return [];
       }
 
       let products:
         CatalogProduct[] = [];
 
-      if (
-        selectedFilterKey ===
-        'all'
-      ) {
-        products =
-          getCatalogSectionProducts(
-            selectedSection,
-            true,
-          );
-      } else if (
-        selectedFilterKey ===
-        'offers'
-      ) {
-        products =
-          getCatalogSectionOffers(
-            selectedSection,
-          );
-      } else {
-        const selectedChild =
-          childCategories.find(
-            (category) =>
-              category.id ===
-              selectedFilterKey,
-          );
-
+      /*
+       * =====================================
+       * OFFERS PAGE
+       * =====================================
+       */
+      if (isOffersPage) {
         if (
-          selectedChild
+          selectedFilterKey ===
+          'all'
         ) {
           products =
-            getCatalogSectionProducts(
-              selectedChild,
-              true,
+            getAllCatalogOffers(
+              catalog,
             );
+        } else {
+          const selectedOfferCategory =
+            offerCategoryTabs.find(
+              (category) =>
+                category.id ===
+                selectedFilterKey,
+            );
+
+          if (
+            selectedOfferCategory
+          ) {
+            products =
+              getCatalogSectionOffers(
+                selectedOfferCategory,
+              );
+          }
         }
       }
 
       /*
-       * Search داخل النتائج الحالية.
+       * =====================================
+       * NORMAL CATEGORY PAGE
+       * =====================================
+       */
+      else if (selectedSection) {
+        if (
+          selectedFilterKey ===
+          'all'
+        ) {
+          products =
+            getCatalogSectionProducts(
+              selectedSection,
+              true,
+            );
+        } else if (
+          selectedFilterKey ===
+          'offers'
+        ) {
+          products =
+            getCatalogSectionOffers(
+              selectedSection,
+            );
+        } else {
+          const selectedChild =
+            childCategories.find(
+              (category) =>
+                category.id ===
+                selectedFilterKey,
+            );
+
+          if (selectedChild) {
+            products =
+              getCatalogSectionProducts(
+                selectedChild,
+                true,
+              );
+          }
+        }
+      }
+
+      /*
+       * Search.
        */
       const normalizedQuery =
         normalizeSearchText(
           searchQuery,
         );
 
-      if (
-        normalizedQuery
-      ) {
+      if (normalizedQuery) {
         products =
           products.filter(
             (product) => {
@@ -966,6 +1493,8 @@ export default function SupermarketCategoryScreen() {
                   product.descriptionEn,
                   product.sku,
                   product.barcode,
+                  product.unitLabelAr,
+                  product.unitLabelEn,
                 ]
                   .filter(Boolean)
                   .join(' ')
@@ -979,31 +1508,29 @@ export default function SupermarketCategoryScreen() {
       }
 
       /*
-       * منع أي Duplicate.
+       * Safety:
+       *
+       * صفحة العروض مستحيل تعرض
+       * منتج بدون خصم.
        */
-      const uniqueProducts =
-        new Map<
-          string,
-          CatalogProduct
-        >();
-
-      for (
-        const product of products
-      ) {
-        uniqueProducts.set(
-          product.id,
-          product,
-        );
+      if (isOffersPage) {
+        products =
+          products.filter(
+            isOfferProduct,
+          );
       }
 
-      return Array.from(
-        uniqueProducts.values(),
+      return deduplicateProducts(
+        products,
       );
     }, [
+      catalog,
+      isOffersPage,
       selectedFilterKey,
       searchQuery,
       selectedSection,
       childCategories,
+      offerCategoryTabs,
     ]);
 
   /* ==========================================================
@@ -1012,7 +1539,9 @@ export default function SupermarketCategoryScreen() {
    */
 
   if (isLoading) {
-    return <ProductGridScreenSkeleton />;
+    return (
+      <ProductGridScreenSkeleton />
+    );
   }
 
   /* ==========================================================
@@ -1022,14 +1551,13 @@ export default function SupermarketCategoryScreen() {
 
   if (
     !catalog ||
-    !selectedSection ||
-    errorMessage
+    errorMessage ||
+    (!isOffersPage &&
+      !selectedSection)
   ) {
     return (
       <SafeAreaView
-        style={
-          styles.stateScreen
-        }
+        style={styles.stateScreen}
       >
         <StatusBar
           style="dark"
@@ -1166,60 +1694,41 @@ export default function SupermarketCategoryScreen() {
   const pageWidth =
     Math.min(
       windowWidth,
-      560,
+      PAGE_MAX_WIDTH,
     );
-
-  const horizontalPadding =
-    16;
-
-  const cardGap =
-    10;
 
   const productCardWidth =
     (pageWidth -
-      horizontalPadding *
-        2 -
-      cardGap) /
+      HORIZONTAL_PADDING * 2 -
+      PRODUCT_GAP) /
     2;
 
   const categoryKey =
     passedCategoryKey ??
-    selectedSection.slug;
-
-  /*
-   * دايمًا نستخدم اسم Category الحالية.
-   *
-   * passedLabel fallback فقط.
-   */
-  const pageTitle =
-    selectedSection.name ||
-    passedLabel ||
+    selectedSection?.slug ??
     '';
 
+  const pageTitle =
+    isOffersPage
+      ? 'العروض'
+      : selectedSection?.name ||
+        passedLabel ||
+        '';
+
+  const shouldShowNormalCartDock =
+    !isOffersPage &&
+    currentStoreItemCount > 0;
+
   /* ==========================================================
-   * NAVIGATION
+   * NORMAL CATEGORY NAVIGATION
    * ==========================================================
    */
 
   function openChildCategory(
     child: CatalogSection,
   ) {
-    /*
-     * لو الـChild عندها Children أخرى:
-     *
-     * مثال:
-     *
-     * Dairy & Eggs
-     *   ↓
-     * Milk
-     *   ↓
-     * Fresh Milk
-     *
-     * نفتح Milk كصفحة جديدة.
-     */
     if (
-      child.children.length >
-      0
+      child.children.length > 0
     ) {
       router.push({
         pathname:
@@ -1243,10 +1752,6 @@ export default function SupermarketCategoryScreen() {
       return;
     }
 
-    /*
-     * لو Child آخر مستوى:
-     * نستخدمها Filter.
-     */
     setSelectedFilterKey(
       child.id,
     );
@@ -1255,16 +1760,14 @@ export default function SupermarketCategoryScreen() {
   }
 
   /* ==========================================================
-   * CART FUNCTIONS
+   * CART
    * ==========================================================
    */
 
   function addProduct(
     product: CatalogProduct,
   ) {
-    if (
-      isStoreClosed
-    ) {
+    if (isStoreClosed) {
       return;
     }
 
@@ -1309,6 +1812,12 @@ export default function SupermarketCategoryScreen() {
 
         variantName:
           null,
+
+        requiresPrescription:
+          product.requiresPrescription,
+
+        isAgeRestricted:
+          product.isAgeRestricted,
       },
     );
   }
@@ -1316,9 +1825,7 @@ export default function SupermarketCategoryScreen() {
   function increaseProduct(
     product: CatalogProduct,
   ) {
-    if (
-      isStoreClosed
-    ) {
+    if (isStoreClosed) {
       return;
     }
 
@@ -1331,9 +1838,7 @@ export default function SupermarketCategoryScreen() {
             null,
       );
 
-    if (
-      itemExists
-    ) {
+    if (itemExists) {
       increaseStoreItem(
         currentStore.id,
         product.id,
@@ -1373,6 +1878,12 @@ export default function SupermarketCategoryScreen() {
   }
 
   function openCart() {
+    if (
+      currentStoreItemCount <= 0
+    ) {
+      return;
+    }
+
     setActiveCart(
       currentStore.id,
     );
@@ -1402,16 +1913,22 @@ export default function SupermarketCategoryScreen() {
     )} لإتمام الحد الأدنى للطلب`;
   }
 
-  /* ==========================================================
-   * EMPTY MESSAGE
-   * ==========================================================
-   */
-
   function getEmptyMessage() {
     if (
       searchQuery.trim()
     ) {
       return 'لم نجد منتجاً مطابقاً لبحثك.';
+    }
+
+    if (isOffersPage) {
+      if (
+        selectedFilterKey !==
+        'all'
+      ) {
+        return 'لا توجد عروض متاحة حالياً داخل هذه الفئة.';
+      }
+
+      return 'لا توجد عروض متاحة حالياً.';
     }
 
     if (
@@ -1453,9 +1970,9 @@ export default function SupermarketCategoryScreen() {
           styles.pageShell
         }
       >
-        {/* ===================================================
+        {/* =====================================================
          * HEADER
-         * ===================================================
+         * =====================================================
          */}
 
         <View
@@ -1471,38 +1988,32 @@ export default function SupermarketCategoryScreen() {
             >
               <Ionicons
                 name="search-outline"
-                size={22}
+                size={18}
                 color="#222222"
               />
 
               <TextInput
                 autoFocus
-
-                value={
-                  searchQuery
-                }
-
+                value={searchQuery}
                 onChangeText={
                   setSearchQuery
                 }
-
-                placeholder="ابحث في الفئة"
-
+                placeholder={
+                  isOffersPage
+                    ? 'ابحث في العروض'
+                    : 'ابحث في الفئة'
+                }
                 placeholderTextColor="#999999"
-
                 style={
                   styles.searchInput
                 }
-
                 textAlign="right"
               />
 
               <Pressable
                 hitSlop={12}
                 onPress={() => {
-                  setSearchQuery(
-                    '',
-                  );
+                  setSearchQuery('');
 
                   setIsSearchVisible(
                     false,
@@ -1511,15 +2022,50 @@ export default function SupermarketCategoryScreen() {
               >
                 <Ionicons
                   name="close"
-                  size={24}
+                  size={20}
                   color="#222222"
                 />
               </Pressable>
             </View>
           ) : (
             <>
-              {/* SEARCH */}
+              {/* Back button stays on the LEFT side. */}
+              <Pressable
+                style={({
+                  pressed,
+                }) => [
+                  styles.headerCircleButton,
 
+                  pressed &&
+                    styles.pressed,
+                ]}
+                onPress={() =>
+                  router.back()
+                }
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={22}
+                  color="#202020"
+                />
+              </Pressable>
+
+              <View
+                style={
+                  styles.headerTitleGroup
+                }
+              >
+                <Text
+                  style={
+                    styles.headerTitle
+                  }
+                  numberOfLines={1}
+                >
+                  {pageTitle}
+                </Text>
+              </View>
+
+              {/* Search button stays on the RIGHT side. */}
               <Pressable
                 style={({
                   pressed,
@@ -1537,54 +2083,155 @@ export default function SupermarketCategoryScreen() {
               >
                 <Ionicons
                   name="search-outline"
-                  size={27}
+                  size={21}
                   color="#202020"
                 />
               </Pressable>
-
-              {/* TITLE + BACK */}
-
-              <View
-                style={
-                  styles.headerTitleGroup
-                }
-              >
-                <Text
-                  style={
-                    styles.headerTitle
-                  }
-                  numberOfLines={1}
-                >
-                  {pageTitle}
-                </Text>
-
-                <Pressable
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.headerCircleButton,
-
-                    pressed &&
-                      styles.pressed,
-                  ]}
-                  onPress={() =>
-                    router.back()
-                  }
-                >
-                  <Ionicons
-                    name="arrow-forward"
-                    size={29}
-                    color="#202020"
-                  />
-                </Pressable>
-              </View>
             </>
           )}
         </View>
 
-        {/* ===================================================
+        {/* =====================================================
+         * OFFERS CATEGORY TABS
+         * =====================================================
+         */}
+
+        {isOffersPage && (
+          <View
+            style={
+              styles.offersTabsContainer
+            }
+          >
+            <ScrollView
+              ref={
+                offersTabsScrollRef
+              }
+              horizontal
+              showsHorizontalScrollIndicator={
+                false
+              }
+              directionalLockEnabled
+              contentContainerStyle={
+                styles.offersTabsRail
+              }
+              style={
+                styles.offersTabsScroll
+              }
+              onContentSizeChange={() => {
+                if (
+                  hasPositionedOffersTabsRef.current
+                ) {
+                  return;
+                }
+
+                hasPositionedOffersTabsRef.current =
+                  true;
+
+                requestAnimationFrame(
+                  () => {
+                    offersTabsScrollRef.current?.scrollToEnd(
+                      {
+                        animated:
+                          false,
+                      },
+                    );
+                  },
+                );
+              }}
+            >
+              {offerCategoryTabsForDisplay.map(
+                (category) => {
+                  const isSelected =
+                    selectedFilterKey ===
+                    category.id;
+
+                  return (
+                    <Pressable
+                      key={
+                        category.id
+                      }
+                      style={
+                        styles.offersTab
+                      }
+                      onPress={() => {
+                        setSelectedFilterKey(
+                          category.id,
+                        );
+
+                        setSearchQuery(
+                          '',
+                        );
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.offersTabText,
+
+                          isSelected &&
+                            styles.offersTabTextSelected,
+                        ]}
+                        numberOfLines={
+                          1
+                        }
+                      >
+                        {
+                          category.name
+                        }
+                      </Text>
+
+                      {isSelected && (
+                        <View
+                          style={
+                            styles.offersTabUnderline
+                          }
+                        />
+                      )}
+                    </Pressable>
+                  );
+                },
+              )}
+
+              <Pressable
+                style={
+                  styles.offersTab
+                }
+                onPress={() => {
+                  setSelectedFilterKey(
+                    'all',
+                  );
+
+                  setSearchQuery('');
+                }}
+              >
+                <Text
+                  style={[
+                    styles.offersTabText,
+
+                    selectedFilterKey ===
+                      'all' &&
+                      styles.offersTabTextSelected,
+                  ]}
+                  numberOfLines={1}
+                >
+                  الكل
+                </Text>
+
+                {selectedFilterKey ===
+                  'all' && (
+                  <View
+                    style={
+                      styles.offersTabUnderline
+                    }
+                  />
+                )}
+              </Pressable>
+            </ScrollView>
+          </View>
+        )}
+
+        {/* =====================================================
          * CONTENT
-         * ===================================================
+         * =====================================================
          */}
 
         <ScrollView
@@ -1596,10 +2243,9 @@ export default function SupermarketCategoryScreen() {
 
             {
               paddingBottom:
-                currentStoreItemCount >
-                0
-                  ? 165
-                  : 35,
+                shouldShowNormalCartDock
+                  ? 145
+                  : 30,
             },
           ]}
           showsVerticalScrollIndicator={
@@ -1607,216 +2253,255 @@ export default function SupermarketCategoryScreen() {
           }
           keyboardShouldPersistTaps="handled"
         >
-          {/* =================================================
-           * CATEGORY FILTERS
-           * =================================================
+          {/* ===================================================
+           * NORMAL CATEGORY FILTERS
+           * ===================================================
            */}
 
-          <ScrollView
-            horizontal
-
-            showsHorizontalScrollIndicator={
-              false
-            }
-
-            contentContainerStyle={
-              styles.filtersRail
-            }
-
-            style={
-              styles.filtersScroll
-            }
-          >
-            {/* ===============================================
-             * ALL
-             * ===============================================
-             */}
-
-            <Pressable
-              style={
-                styles.filterItem
-              }
-              onPress={() => {
-                setSelectedFilterKey(
-                  'all',
-                );
-
-                setSearchQuery(
-                  '',
-                );
-              }}
-            >
-              <View
-                style={[
-                  styles.filterImageCircle,
-
-                  selectedFilterKey ===
-                    'all' &&
-                    styles.filterImageCircleSelected,
-                ]}
-              >
-                <CategoryFilterVisual
-                  section={
-                    selectedSection
+          {!isOffersPage &&
+            selectedSection && (
+            <>
+              <ScrollView
+                ref={
+                  filtersScrollRef
+                }
+                horizontal
+                showsHorizontalScrollIndicator={
+                  false
+                }
+                directionalLockEnabled
+                contentContainerStyle={
+                  styles.filtersRail
+                }
+                style={
+                  styles.filtersScroll
+                }
+                onContentSizeChange={() => {
+                  /*
+                   * When the route changes to another category,
+                   * React Native can retain the old x offset.
+                   * Position once after the new content is measured.
+                   */
+                  if (
+                    hasPositionedFiltersRef.current
+                  ) {
+                    return;
                   }
-                  fallbackKey={
-                    categoryKey
-                  }
-                />
-              </View>
 
-              <Text
-                style={[
-                  styles.filterLabel,
+                  requestAnimationFrame(
+                    () => {
+                      filtersScrollRef.current?.scrollToEnd(
+                        {
+                          animated:
+                            false,
+                        },
+                      );
 
-                  selectedFilterKey ===
-                    'all' &&
-                    styles.filterLabelSelected,
-                ]}
-                numberOfLines={2}
+                      hasPositionedFiltersRef.current =
+                        true;
+                    },
+                  );
+                }}
               >
-                الكل
-              </Text>
-            </Pressable>
+                {/* CHILD CATEGORIES
+                 *
+                 * Reversed only for display because this ScrollView
+                 * uses a normal row. They come before OFFERS in the
+                 * underlying LTR row so the visible Arabic order starts:
+                 * الكل → العروض → أول Subcategory → ثاني Subcategory → ...
+                 */}
 
-            {/* ===============================================
-             * OFFERS
-             * ===============================================
-             */}
+                {childCategoriesForDisplay.map(
+                  (child) => {
+                    const isSelected =
+                      selectedFilterKey ===
+                      child.id;
 
-            <Pressable
-              style={
-                styles.filterItem
-              }
-              onPress={() => {
-                setSelectedFilterKey(
-                  'offers',
-                );
-
-                setSearchQuery(
-                  '',
-                );
-              }}
-            >
-              <View
-                style={[
-                  styles.filterImageCircle,
-
-                  styles.offerCircle,
-
-                  selectedFilterKey ===
-                    'offers' &&
-                    styles.filterImageCircleSelected,
-                ]}
-              >
-                <Text
-                  style={
-                    styles.offerPercent
-                  }
-                >
-                  %
-                </Text>
-              </View>
-
-              <Text
-                style={[
-                  styles.filterLabel,
-
-                  selectedFilterKey ===
-                    'offers' &&
-                    styles.filterLabelSelected,
-                ]}
-              >
-                العروض
-              </Text>
-            </Pressable>
-
-            {/* ===============================================
-             * CHILD CATEGORIES
-             * ===============================================
-             */}
-
-            {childCategories.map(
-              (child) => {
-                const isSelected =
-                  selectedFilterKey ===
-                  child.id;
-
-                return (
-                  <Pressable
-                    key={
-                      child.id
-                    }
-                    style={
-                      styles.filterItem
-                    }
-                    onPress={() =>
-                      openChildCategory(
-                        child,
-                      )
-                    }
-                  >
-                    <View
-                      style={[
-                        styles.filterImageCircle,
-
-                        isSelected &&
-                          styles.filterImageCircleSelected,
-                      ]}
-                    >
-                      <CategoryFilterVisual
-                        section={
-                          child
+                    return (
+                      <Pressable
+                        key={
+                          child.id
                         }
-                      />
-
-                      {child.children
-                        .length >
-                        0 && (
+                        style={
+                          styles.filterItem
+                        }
+                        onPress={() =>
+                          openChildCategory(
+                            child,
+                          )
+                        }
+                      >
                         <View
-                          style={
-                            styles.hasChildrenBadge
+                          style={[
+                            styles.filterImageCircle,
+
+                            isSelected &&
+                              styles.filterImageCircleSelected,
+                          ]}
+                        >
+                          <CategoryFilterVisual
+                            section={
+                              child
+                            }
+                          />
+
+                          {child
+                            .children
+                            .length >
+                            0 && (
+                            <View
+                              style={
+                                styles.hasChildrenBadge
+                              }
+                            >
+                              <Ionicons
+                                name="chevron-forward"
+                                size={
+                                  10
+                                }
+                                color="#FFFFFF"
+                              />
+                            </View>
+                          )}
+                        </View>
+
+                        <Text
+                          style={[
+                            styles.filterLabel,
+
+                            isSelected &&
+                              styles.filterLabelSelected,
+                          ]}
+                          numberOfLines={
+                            2
                           }
                         >
-                          <Ionicons
-                            name="chevron-forward"
-                            size={
-                              13
-                            }
-                            color="#FFFFFF"
-                          />
-                        </View>
-                      )}
-                    </View>
+                          {
+                            child.name
+                          }
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
 
-                    <Text
-                      style={[
-                        styles.filterLabel,
 
-                        isSelected &&
-                          styles.filterLabelSelected,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {
-                        child.name
+                {/* OFFERS
+                 *
+                 * In the underlying LTR row, OFFERS is placed immediately
+                 * before ALL. Since the rail opens at the right edge, the
+                 * visible Arabic order becomes: الكل → العروض → Subcategories.
+                 */}
+
+                <Pressable
+                  style={
+                    styles.filterItem
+                  }
+                  onPress={() => {
+                    setSelectedFilterKey(
+                      'offers',
+                    );
+
+                    setSearchQuery(
+                      '',
+                    );
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.filterImageCircle,
+
+                      selectedFilterKey ===
+                        'offers' &&
+                        styles.filterImageCircleSelected,
+                    ]}
+                  >
+                    <Image
+                      source={
+                        ROOT_CATEGORY_IMAGES.offers
                       }
-                    </Text>
-                  </Pressable>
-                );
-              },
-            )}
-          </ScrollView>
+                      style={
+                        styles.filterCategoryImage
+                      }
+                      resizeMode="cover"
+                    />
+                  </View>
 
-          <View
-            style={
-              styles.sectionDivider
-            }
-          />
+                  <Text
+                    style={[
+                      styles.filterLabel,
 
-          {/* =================================================
+                      selectedFilterKey ===
+                        'offers' &&
+                        styles.filterLabelSelected,
+                    ]}
+                  >
+                    العروض
+                  </Text>
+                </Pressable>
+
+
+                {/* ALL — rightmost / selected by default */}
+
+                <Pressable
+                  style={
+                    styles.filterItem
+                  }
+                  onPress={() => {
+                    setSelectedFilterKey(
+                      'all',
+                    );
+
+                    setSearchQuery(
+                      '',
+                    );
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.filterImageCircle,
+
+                      selectedFilterKey ===
+                        'all' &&
+                        styles.filterImageCircleSelected,
+                    ]}
+                  >
+                    <CategoryFilterVisual
+                      section={
+                        selectedSection
+                      }
+                      fallbackKey={
+                        categoryKey
+                      }
+                    />
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.filterLabel,
+
+                      selectedFilterKey ===
+                        'all' &&
+                        styles.filterLabelSelected,
+                    ]}
+                    numberOfLines={2}
+                  >
+                    الكل
+                  </Text>
+                </Pressable>
+              </ScrollView>
+
+              <View
+                style={
+                  styles.sectionDivider
+                }
+              />
+            </>
+          )}
+
+          {/* ===================================================
            * CLOSED
-           * =================================================
+           * ===================================================
            */}
 
           {isStoreClosed && (
@@ -1836,42 +2521,46 @@ export default function SupermarketCategoryScreen() {
             </View>
           )}
 
-          {/* =================================================
-           * RESULTS COUNT
-           * =================================================
+          {/* ===================================================
+           * NORMAL PAGE RESULTS COUNT
+           * ===================================================
            */}
 
-          {filteredProducts.length >
-            0 && (
-            <View
-              style={
-                styles.productsHeader
-              }
-            >
-              <Text
+          {!isOffersPage &&
+            filteredProducts.length >
+              0 && (
+              <View
                 style={
-                  styles.productsCount
+                  styles.productsHeader
                 }
               >
-                {
-                  filteredProducts.length
-                }{' '}
-                منتج
-              </Text>
-            </View>
-          )}
+                <Text
+                  style={
+                    styles.productsCount
+                  }
+                >
+                  {
+                    filteredProducts.length
+                  }{' '}
+                  منتج
+                </Text>
+              </View>
+            )}
 
-          {/* =================================================
+          {/* ===================================================
            * PRODUCTS
-           * =================================================
+           * ===================================================
            */}
 
           {filteredProducts.length >
           0 ? (
             <View
-              style={
-                styles.productsGrid
-              }
+              style={[
+                styles.productsGrid,
+
+                isOffersPage &&
+                  styles.offersProductsGrid,
+              ]}
             >
               {filteredProducts.map(
                 (product) => (
@@ -1879,39 +2568,36 @@ export default function SupermarketCategoryScreen() {
                     key={
                       product.id
                     }
-
                     product={
                       product
                     }
-
                     cardWidth={
                       productCardWidth
                     }
-
                     currencyCode={
                       currencyCode
                     }
-
                     quantity={getProductQuantity(
                       product.id,
                     )}
-
                     isStoreClosed={
                       isStoreClosed
                     }
-
+                    mode={
+                      isOffersPage
+                        ? 'offers'
+                        : 'category'
+                    }
                     onAdd={() =>
                       addProduct(
                         product,
                       )
                     }
-
                     onIncrease={() =>
                       increaseProduct(
                         product,
                       )
                     }
-
                     onDecrease={() =>
                       decreaseProduct(
                         product.id,
@@ -1954,13 +2640,12 @@ export default function SupermarketCategoryScreen() {
           )}
         </ScrollView>
 
-        {/* ===================================================
-         * CART
-         * ===================================================
+        {/* =====================================================
+         * NORMAL CATEGORY CART
+         * =====================================================
          */}
 
-        {currentStoreItemCount >
-          0 && (
+        {shouldShowNormalCartDock && (
           <View
             style={
               styles.cartDock
@@ -2072,7 +2757,8 @@ const styles =
 
       flex: 1,
 
-      maxWidth: 560,
+      maxWidth:
+        PAGE_MAX_WIDTH,
 
       position:
         'relative',
@@ -2098,7 +2784,7 @@ const styles =
       justifyContent:
         'space-between',
 
-      minHeight: 82,
+      minHeight: 68,
 
       paddingHorizontal:
         18,
@@ -2117,28 +2803,29 @@ const styles =
       borderColor:
         '#E1E1E1',
 
-      borderRadius: 30,
+      borderRadius: 24,
 
       borderWidth: 1,
 
-      height: 60,
+      height: 48,
 
       justifyContent:
         'center',
 
-      width: 60,
+      width: 48,
     },
 
     headerTitleGroup: {
       alignItems:
         'center',
 
-      flexDirection:
-        'row',
+      flex: 1,
 
-      gap: 13,
+      justifyContent:
+        'center',
 
-      maxWidth: '74%',
+      paddingHorizontal:
+        12,
     },
 
     headerTitle: {
@@ -2147,13 +2834,13 @@ const styles =
 
       flexShrink: 1,
 
-      fontSize: 24,
+      fontSize: 20,
 
       fontWeight:
         '700',
 
       textAlign:
-        'right',
+        'center',
 
       writingDirection:
         'rtl',
@@ -2186,7 +2873,7 @@ const styles =
       borderColor:
         '#EAEAEA',
 
-      borderRadius: 27,
+      borderRadius: 23,
 
       borderWidth: 1,
 
@@ -2195,9 +2882,9 @@ const styles =
       flexDirection:
         'row',
 
-      gap: 8,
+      gap: 7,
 
-      minHeight: 54,
+      minHeight: 46,
 
       paddingHorizontal:
         16,
@@ -2209,12 +2896,108 @@ const styles =
 
       flex: 1,
 
-      fontSize: 16,
+      fontSize: 14,
 
-      minHeight: 50,
+      minHeight: 44,
 
       writingDirection:
         'rtl',
+    },
+
+    /* ========================================================
+     * OFFERS TEXT TABS
+     * ========================================================
+     */
+
+    offersTabsContainer: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderBottomColor:
+        '#E8E8E8',
+
+      borderBottomWidth:
+        StyleSheet.hairlineWidth,
+    },
+
+    offersTabsScroll: {
+      flexGrow: 0,
+    },
+
+    offersTabsRail: {
+      alignItems:
+        'stretch',
+
+      flexDirection:
+        'row',
+
+      flexGrow: 1,
+
+      gap: 22,
+
+      justifyContent:
+        'flex-end',
+
+      paddingHorizontal:
+        18,
+    },
+
+    offersTab: {
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      minHeight: 50,
+
+      paddingHorizontal:
+        1,
+
+      position:
+        'relative',
+    },
+
+    offersTabText: {
+      color:
+        '#777777',
+
+      fontSize: 14,
+
+      fontWeight:
+        '400',
+
+      lineHeight: 19,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    offersTabTextSelected: {
+      color:
+        '#171717',
+
+      fontWeight:
+        '700',
+    },
+
+    offersTabUnderline: {
+      backgroundColor:
+        '#202020',
+
+      bottom: 0,
+
+      height: 2,
+
+      left: 0,
+
+      position:
+        'absolute',
+
+      right: 0,
     },
 
     /* ========================================================
@@ -2232,7 +3015,7 @@ const styles =
     },
 
     /* ========================================================
-     * FILTERS
+     * NORMAL CATEGORY FILTERS
      * ========================================================
      */
 
@@ -2241,10 +3024,23 @@ const styles =
     },
 
     filtersRail: {
+      /*
+       * Avoid row-reverse here. On horizontal ScrollViews it can
+       * produce inconsistent initial offsets between iOS/Android and
+       * when Expo Router reuses the screen.
+       *
+       * Items are explicitly arranged in the JSX and we scroll to the
+       * right edge when a category opens.
+       */
       flexDirection:
-        'row-reverse',
+        'row',
+
+      flexGrow: 1,
 
       gap: 17,
+
+      justifyContent:
+        'flex-end',
 
       paddingBottom:
         17,
@@ -2296,26 +3092,31 @@ const styles =
     },
 
     filterCategoryImage: {
-      height: '86%',
+      height: '100%',
 
-      width: '86%',
+      width: '100%',
     },
 
-    filterFallbackEmoji: {
-      fontSize: 37,
+    filterImagePlaceholder: {
+      backgroundColor:
+        '#F3F3F3',
+
+      height: '100%',
+
+      width: '100%',
     },
 
     filterLabel: {
       color:
         '#666666',
 
-      fontSize: 14.5,
+      fontSize: 12.5,
 
-      lineHeight: 19,
+      lineHeight: 17,
 
-      marginTop: 7,
+      marginTop: 6,
 
-      minHeight: 38,
+      minHeight: 34,
 
       textAlign:
         'center',
@@ -2332,26 +3133,6 @@ const styles =
         '700',
     },
 
-    /* ========================================================
-     * OFFERS
-     * ========================================================
-     */
-
-    offerCircle: {
-      backgroundColor:
-        '#FFF8EF',
-    },
-
-    offerPercent: {
-      color:
-        '#E96A16',
-
-      fontSize: 46,
-
-      fontWeight:
-        '800',
-    },
-
     hasChildrenBadge: {
       alignItems:
         'center',
@@ -2362,13 +3143,13 @@ const styles =
       borderColor:
         '#FFFFFF',
 
-      borderRadius: 11,
+      borderRadius: 9,
 
       borderWidth: 2,
 
       bottom: 1,
 
-      height: 22,
+      height: 18,
 
       justifyContent:
         'center',
@@ -2378,13 +3159,8 @@ const styles =
 
       right: 0,
 
-      width: 22,
+      width: 18,
     },
-
-    /* ========================================================
-     * DIVIDER
-     * ========================================================
-     */
 
     sectionDivider: {
       backgroundColor:
@@ -2409,7 +3185,7 @@ const styles =
     },
 
     /* ========================================================
-     * CLOSED STORE
+     * CLOSED
      * ========================================================
      */
 
@@ -2435,7 +3211,7 @@ const styles =
       color:
         '#FFFFFF',
 
-      fontSize: 13,
+      fontSize: 12,
 
       fontWeight:
         '600',
@@ -2466,7 +3242,7 @@ const styles =
       color:
         '#8A8A8A',
 
-      fontSize: 13,
+      fontSize: 12,
 
       textAlign:
         'right',
@@ -2476,7 +3252,7 @@ const styles =
     },
 
     /* ========================================================
-     * PRODUCTS GRID
+     * PRODUCT GRID
      * ========================================================
      */
 
@@ -2487,12 +3263,24 @@ const styles =
       flexWrap:
         'wrap',
 
-      gap: 10,
+      gap:
+        PRODUCT_GAP,
 
       paddingHorizontal:
-        16,
+        HORIZONTAL_PADDING,
 
       paddingTop: 11,
+    },
+
+    /*
+     * أول Product في صفحة العروض
+     * يظهر يمين الشاشة مثل الصورة.
+     */
+    offersProductsGrid: {
+      flexDirection:
+        'row-reverse',
+
+      paddingTop: 12,
     },
 
     productCard: {
@@ -2500,6 +3288,10 @@ const styles =
         '#FFFFFF',
 
       marginBottom: 16,
+    },
+
+    offersProductCard: {
+      marginBottom: 13,
     },
 
     productImageBox: {
@@ -2528,6 +3320,16 @@ const styles =
       width: '100%',
     },
 
+    offersProductImageBox: {
+      backgroundColor:
+        '#F8F8F8',
+
+      borderColor:
+        '#DEDEDE',
+
+      borderRadius: 20,
+    },
+
     productImage: {
       height: '82%',
 
@@ -2535,39 +3337,68 @@ const styles =
     },
 
     productFallback: {
-      fontSize: 54,
+      fontSize: 44,
     },
 
     /* ========================================================
-     * DISCOUNT
+     * DISCOUNT BADGES
      * ========================================================
      */
 
-    discountBadge: {
-      backgroundColor:
-        '#FFF1B7',
+    discountBadgeBase: {
+      alignItems:
+        'center',
 
-      borderRadius: 5,
+      borderRadius: 4,
 
-      left: 8,
+      justifyContent:
+        'center',
+
+      minHeight: 22,
 
       paddingHorizontal:
         7,
 
       paddingVertical:
-        4,
+        3,
 
       position:
         'absolute',
 
-      top: 8,
+      top: 7,
 
-      zIndex: 3,
+      zIndex: 5,
+    },
+
+    categoryDiscountBadge: {
+      backgroundColor:
+        '#FFF1B7',
+
+      left: 8,
+    },
+
+    offersDiscountBadge: {
+      backgroundColor:
+        '#C7FF00',
+
+      right: 8,
     },
 
     discountText: {
       color:
         '#8B6813',
+
+      fontSize: 10,
+
+      fontWeight:
+        '700',
+
+      lineHeight: 13,
+    },
+
+    offersDiscountText: {
+      color:
+        '#181818',
 
       fontSize: 11,
 
@@ -2590,15 +3421,15 @@ const styles =
       borderColor:
         '#E1E1E1',
 
-      borderRadius: 25,
+      borderRadius: 21,
 
       borderWidth: 1,
 
-      bottom: 10,
+      bottom: 8,
 
       elevation: 3,
 
-      height: 50,
+      height: 42,
 
       justifyContent:
         'center',
@@ -2606,13 +3437,13 @@ const styles =
       position:
         'absolute',
 
-      right: 10,
+      right: 8,
 
       shadowColor:
         '#000000',
 
       shadowOffset: {
-        width: 0,
+        width: 42,
         height: 2,
       },
 
@@ -2622,6 +3453,20 @@ const styles =
       shadowRadius: 5,
 
       width: 50,
+
+      zIndex: 7,
+    },
+
+    offersAddButton: {
+      borderRadius: 20,
+
+      bottom: 8,
+
+      height: 40,
+
+      right: 8,
+
+      width: 40,
     },
 
     addButtonPressed: {
@@ -2643,14 +3488,20 @@ const styles =
       color:
         '#F05A00',
 
-      fontSize: 40,
+      fontSize: 31,
 
       fontWeight:
         '300',
 
-      lineHeight: 42,
+      lineHeight: 33,
 
-      marginTop: -4,
+      marginTop: -3,
+    },
+
+    offersAddButtonText: {
+      fontSize: 29,
+
+      lineHeight: 31,
     },
 
     /* ========================================================
@@ -2668,23 +3519,23 @@ const styles =
       borderColor:
         '#E1E1E1',
 
-      borderRadius: 25,
+      borderRadius: 21,
 
       borderWidth: 1,
 
-      bottom: 10,
+      bottom: 8,
 
       elevation: 3,
 
       flexDirection:
         'row',
 
-      height: 50,
+      height: 42,
 
       position:
         'absolute',
 
-      right: 10,
+      right: 8,
 
       shadowColor:
         '#000000',
@@ -2698,25 +3549,33 @@ const styles =
         0.08,
 
       shadowRadius: 5,
+
+      zIndex: 7,
+    },
+
+    offersQuantityPill: {
+      borderRadius: 20,
+
+      height: 40,
     },
 
     quantityAction: {
       alignItems:
         'center',
 
-      height: 48,
+      height: 40,
 
       justifyContent:
         'center',
 
-      width: 35,
+      width: 28,
     },
 
     quantityActionText: {
       color:
         '#F05A00',
 
-      fontSize: 24,
+      fontSize: 19,
 
       fontWeight:
         '500',
@@ -2726,12 +3585,12 @@ const styles =
       color:
         '#202020',
 
-      fontSize: 14,
+      fontSize: 12,
 
       fontWeight:
         '700',
 
-      minWidth: 18,
+      minWidth: 16,
 
       textAlign:
         'center',
@@ -2746,16 +3605,16 @@ const styles =
       color:
         '#202020',
 
-      fontSize: 16,
+      fontSize: 14,
 
       fontWeight:
         '500',
 
-      lineHeight: 22,
+      lineHeight: 19,
 
-      marginTop: 9,
+      marginTop: 8,
 
-      minHeight: 44,
+      minHeight: 38,
 
       textAlign:
         'right',
@@ -2764,11 +3623,24 @@ const styles =
         'rtl',
     },
 
+    offersProductName: {
+      fontSize: 13.5,
+
+      fontWeight:
+        '500',
+
+      lineHeight: 18,
+
+      marginTop: 8,
+
+      minHeight: 36,
+    },
+
     productUnitLabel: {
       color:
         '#999999',
 
-      fontSize: 13,
+      fontSize: 11.5,
 
       marginTop: 2,
 
@@ -2779,7 +3651,21 @@ const styles =
         'rtl',
     },
 
-    priceRow: {
+    offersProductUnitLabel: {
+      color:
+        '#969696',
+
+      fontSize: 11.5,
+
+      minHeight: 15,
+    },
+
+    /* ========================================================
+     * NORMAL PRICE
+     * ========================================================
+     */
+
+    priceColumn: {
       alignItems:
         'flex-end',
 
@@ -2790,7 +3676,7 @@ const styles =
       color:
         '#202020',
 
-      fontSize: 16,
+      fontSize: 14,
 
       fontWeight:
         '600',
@@ -2803,12 +3689,79 @@ const styles =
       color:
         '#969696',
 
-      fontSize: 13,
+      fontSize: 11.5,
 
       marginTop: 3,
 
       textDecorationLine:
         'line-through',
+    },
+
+    /* ========================================================
+     * OFFERS PRICE — SAME LOOK AS SCREENSHOT
+     * ========================================================
+     */
+
+    offersPriceRow: {
+      alignItems:
+        'center',
+
+      flexDirection:
+        'row-reverse',
+
+      flexWrap:
+        'wrap',
+
+      gap: 5,
+
+      justifyContent:
+        'flex-start',
+
+      marginTop: 6,
+
+      minHeight: 20,
+    },
+
+    offersCurrentPriceUnderline: {
+      borderBottomColor:
+        '#C7FF00',
+
+      borderBottomWidth: 2,
+
+      paddingBottom: 0,
+    },
+
+    offersCurrentPrice: {
+      color:
+        '#181818',
+
+      fontSize: 14,
+
+      fontWeight:
+        '700',
+
+      lineHeight: 18,
+
+      writingDirection:
+        'rtl',
+    },
+
+    offersOldPrice: {
+      color:
+        '#8D8D8D',
+
+      fontSize: 11.5,
+
+      fontWeight:
+        '400',
+
+      lineHeight: 18,
+
+      textDecorationLine:
+        'line-through',
+
+      writingDirection:
+        'rtl',
     },
 
     /* ========================================================
@@ -2827,14 +3780,14 @@ const styles =
     },
 
     emptyStateEmoji: {
-      fontSize: 48,
+      fontSize: 40,
     },
 
     emptyStateTitle: {
       color:
         '#202020',
 
-      fontSize: 19,
+      fontSize: 17,
 
       fontWeight:
         '700',
@@ -2846,9 +3799,9 @@ const styles =
       color:
         '#777777',
 
-      fontSize: 14,
+      fontSize: 13,
 
-      lineHeight: 22,
+      lineHeight: 20,
 
       marginTop: 7,
 
@@ -2856,13 +3809,10 @@ const styles =
 
       textAlign:
         'center',
-
-      writingDirection:
-        'rtl',
     },
 
     /* ========================================================
-     * CART DOCK
+     * NORMAL CART DOCK
      * ========================================================
      */
 
@@ -2912,7 +3862,7 @@ const styles =
       color:
         '#242424',
 
-      fontSize: 14,
+      fontSize: 12.5,
 
       fontWeight:
         '500',
@@ -2954,17 +3904,17 @@ const styles =
       backgroundColor:
         '#F45A00',
 
-      borderRadius: 32,
+      borderRadius: 28,
 
       flexDirection:
         'row',
 
-      height: 64,
+      height: 56,
 
       justifyContent:
         'space-between',
 
-      marginTop: 13,
+      marginTop: 11,
 
       paddingHorizontal:
         18,
@@ -2985,19 +3935,19 @@ const styles =
       color:
         '#FFFFFF',
 
-      fontSize: 17,
+      fontSize: 14,
 
       fontWeight:
         '700',
 
-      minWidth: 90,
+      minWidth: 78,
     },
 
     basketButtonTitle: {
       color:
         '#FFFFFF',
 
-      fontSize: 21,
+      fontSize: 17,
 
       fontWeight:
         '700',
@@ -3010,21 +3960,21 @@ const styles =
       backgroundColor:
         'rgba(0,0,0,0.12)',
 
-      borderRadius: 25,
+      borderRadius: 21,
 
-      height: 50,
+      height: 42,
 
       justifyContent:
         'center',
 
-      width: 50,
+      width: 42,
     },
 
     basketCountText: {
       color:
         '#FFFFFF',
 
-      fontSize: 18,
+      fontSize: 15,
 
       fontWeight:
         '700',
@@ -3052,14 +4002,14 @@ const styles =
     },
 
     stateEmoji: {
-      fontSize: 48,
+      fontSize: 40,
     },
 
     stateTitle: {
       color:
         '#202020',
 
-      fontSize: 21,
+      fontSize: 18,
 
       fontWeight:
         '800',
@@ -3074,9 +4024,9 @@ const styles =
       color:
         '#777777',
 
-      fontSize: 14,
+      fontSize: 13,
 
-      lineHeight: 21,
+      lineHeight: 20,
 
       marginTop: 8,
 
@@ -3107,7 +4057,7 @@ const styles =
       color:
         '#FFFFFF',
 
-      fontSize: 14,
+      fontSize: 13,
 
       fontWeight:
         '700',
@@ -3139,7 +4089,7 @@ const styles =
       color:
         '#222222',
 
-      fontSize: 14,
+      fontSize: 13,
 
       fontWeight:
         '600',
