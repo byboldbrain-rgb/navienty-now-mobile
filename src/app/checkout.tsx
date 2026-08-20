@@ -22,51 +22,45 @@ import {
   type ImageSourcePropType,
 } from 'react-native';
 
+import VoucherCheckoutCard from '../components/checkout/voucher-checkout-card';
+import ServicePackageCheckout from '../components/service/service-package-checkout';
+import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
+import {
+  ensureAppSession,
+} from '../services/anonymous-auth-service';
 import getAppBootstrap, {
   type AppBootstrap,
 } from '../services/bootstrap-service';
-
 import {
   getStoreCatalog,
 } from '../services/catalog-service';
-
 import {
   getDeliveryLocationErrorMessage,
   resolveDeliveryLocation,
   type DeliveryLocationResolution,
 } from '../services/delivery-location-service';
-
 import {
   cancelPendingWhatsAppOrder,
   createWhatsAppOrder,
 } from '../services/order-service';
-
 import {
   attachPrescriptionToOrder,
   getMyOpenPrescriptionSubmission,
   pickAndUploadPrescription,
   type PrescriptionSubmission,
 } from '../services/prescription-service';
-
-import {
-  ensureAppSession,
-} from '../services/anonymous-auth-service';
-
+import type {
+  VoucherQuote,
+} from '../services/voucher-service';
 import {
   useCartStore,
 } from '../store/cart-store';
-
 import {
   useCustomerStore,
 } from '../store/customer-store';
-
 import {
   useOrdersStore,
 } from '../store/orders-store';
-
-import ServicePackageCheckout from '../components/service/service-package-checkout';
-import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
-
 
 /* ---------------------------------- */
 /* BRAND                              */
@@ -80,21 +74,6 @@ const BRAND_GREEN_SOFT = '#EAF8F0';
 /* LOCAL PAYMENT METHOD IMAGES        */
 /* ---------------------------------- */
 
-/**
- * These images are bundled with the app.
- *
- * Expected project structure:
- *
- * assets/
- *   payment-methods/
- *     vodafone-cash.png
- *     orange-cash.png
- *     etisalat-cash.png
- *     instapay.png
- *
- * checkout.tsx is expected to live in:
- * src/app/checkout.tsx
- */
 const PAYMENT_METHOD_IMAGES:
   Record<string, ImageSourcePropType> = {
     'vodafone-cash': require(
@@ -292,13 +271,15 @@ function StoreCheckoutScreen() {
     null,
   );
 
+  const [
+    appliedVoucher,
+    setAppliedVoucher,
+  ] = useState<VoucherQuote | null>(
+    null,
+  );
+
   /* -------------------------------- */
   /* CART                             */
-  /*
-   * الـCheckout يعمل على Cart واحدة فقط.
-   * storeId القادم من Route هو المصدر الأساسي،
-   * مع fallback للسلة النشطة للتوافق مع الشاشات القديمة.
-   */
   /* -------------------------------- */
 
   const carts = useCartStore(
@@ -317,18 +298,9 @@ function StoreCheckoutScreen() {
         state.setActiveCart,
     );
 
-
   const checkoutStoreId =
     requestedStoreId ??
     activeStoreId;
-
-  /**
-   * Guest checkout is intentionally allowed.
-   *
-   * A persistent anonymous Supabase session is created
-   * when the app starts, so the user can continue without
-   * seeing a Login screen.
-   */
 
   const checkoutCart =
     checkoutStoreId
@@ -388,10 +360,6 @@ function StoreCheckoutScreen() {
       0,
     );
 
-  /*
-   * Delivery fee is resolved from the selected delivery pin + store.
-   * Until that RPC finishes, fall back to the cart snapshot.
-   */
   const deliveryFee =
     deliveryResolution?.deliveryFee ??
     Number(checkoutCart?.deliveryFee ?? 0);
@@ -399,8 +367,25 @@ function StoreCheckoutScreen() {
   const paymentProcessingFee =
     PAYMENT_PROCESSING_FEE;
 
+  const voucherDiscount =
+    Math.min(
+      Math.max(
+        appliedVoucher
+          ?.discountAmount ?? 0,
+        0,
+      ),
+      Math.max(
+        Number(subtotal ?? 0),
+        0,
+      ),
+    );
+
   const total =
-    Number(subtotal ?? 0) +
+    Math.max(
+      Number(subtotal ?? 0) -
+        voucherDiscount,
+      0,
+    ) +
     deliveryFee +
     paymentProcessingFee;
 
@@ -419,7 +404,6 @@ function StoreCheckoutScreen() {
       (state) =>
         state.setPendingOrder,
     );
-
 
   const discardPendingOrder =
     useOrdersStore(
@@ -572,7 +556,6 @@ function StoreCheckoutScreen() {
   async function loadCheckoutData() {
     try {
       setIsLoadingBootstrap(true);
-
       setBootstrapError(null);
 
       const loadedBootstrap =
@@ -604,7 +587,6 @@ function StoreCheckoutScreen() {
           : 'تعذر تحميل إعدادات الطلب من Supabase.';
 
       setBootstrap(null);
-
       setBootstrapError(
         message,
       );
@@ -635,6 +617,27 @@ function StoreCheckoutScreen() {
   ]);
 
   useEffect(() => {
+    if (!appliedVoucher) {
+      return;
+    }
+
+    if (
+      !storeId ||
+      Math.abs(
+        appliedVoucher
+          .subtotalBeforeDiscount -
+          subtotal,
+      ) > 0.009
+    ) {
+      setAppliedVoucher(null);
+    }
+  }, [
+    appliedVoucher,
+    storeId,
+    subtotal,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadStoreImage() {
@@ -642,7 +645,6 @@ function StoreCheckoutScreen() {
 
       if (!storeId) {
         setStoreImageUrl(null);
-
         return;
       }
 
@@ -793,17 +795,24 @@ function StoreCheckoutScreen() {
     const numericValue =
       Number(value ?? 0);
 
+    const currencyLabel =
+      currencyCode
+        .trim()
+        .toUpperCase() === 'EGP'
+        ? 'ج.م'
+        : currencyCode;
+
     if (
       Number.isInteger(
         numericValue,
       )
     ) {
-      return `${currencyCode} ${numericValue}`;
+      return `${numericValue} ${currencyLabel}`;
     }
 
-    return `${currencyCode} ${numericValue.toFixed(
+    return `${numericValue.toFixed(
       2,
-    )}`;
+    )} ${currencyLabel}`;
   }
 
   const hasDeliveryLocation =
@@ -1007,7 +1016,6 @@ function StoreCheckoutScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.emptyBackButton,
-
             pressed &&
               styles.buttonPressed,
           ]}
@@ -1064,7 +1072,6 @@ function StoreCheckoutScreen() {
               pressed,
             }) => [
               styles.primaryButton,
-
               pressed &&
                 styles.buttonPressed,
             ]}
@@ -1085,17 +1092,9 @@ function StoreCheckoutScreen() {
     );
   }
 
-  /* -------------------------------- */
-  /* LOADING                          */
-  /* -------------------------------- */
-
   if (isLoadingBootstrap) {
     return <CheckoutScreenSkeleton />;
   }
-
-  /* -------------------------------- */
-  /* ERROR                            */
-  /* -------------------------------- */
 
   if (
     !bootstrap ||
@@ -1141,7 +1140,6 @@ function StoreCheckoutScreen() {
             pressed,
           }) => [
             styles.primaryButton,
-
             pressed &&
               styles.buttonPressed,
           ]}
@@ -1183,7 +1181,6 @@ function StoreCheckoutScreen() {
         'بيانات المتجر غير مكتملة',
         'ارجع إلى المتجر وأعد إضافة المنتجات إلى السلة.',
       );
-
       return;
     }
 
@@ -1192,7 +1189,6 @@ function StoreCheckoutScreen() {
         'بيانات الطلب غير مكتملة',
         'تعذر تحميل إعدادات التطبيق من Supabase.',
       );
-
       return;
     }
 
@@ -1205,7 +1201,6 @@ function StoreCheckoutScreen() {
         'حدد موقع التوصيل',
         'اختر موقع التوصيل من الخريطة قبل إرسال الطلب.',
       );
-
       return;
     }
 
@@ -1221,7 +1216,6 @@ function StoreCheckoutScreen() {
             deliveryResolution?.reason,
           ),
       );
-
       return;
     }
 
@@ -1252,7 +1246,6 @@ function StoreCheckoutScreen() {
         'السلة تحتاج إلى تحديث',
         'هذه السلة أُنشئت قبل ربط الكتالوج بـSupabase. أفرغ السلة وأضف المنتجات من المتجر مرة أخرى.',
       );
-
       return;
     }
 
@@ -1265,7 +1258,6 @@ function StoreCheckoutScreen() {
         'استقبال الطلبات متوقف',
         'الطلبات ما زالت غير مفعّلة في إعدادات Supabase.',
       );
-
       return;
     }
 
@@ -1281,11 +1273,6 @@ function StoreCheckoutScreen() {
         true,
       );
 
-      /**
-       * Normally the root layout has already created this session.
-       * Calling this again is safe and makes direct/deep-link
-       * checkout resilient if the stored session was lost.
-       */
       await ensureAppSession();
 
       if (pendingOrder) {
@@ -1295,11 +1282,7 @@ function StoreCheckoutScreen() {
             'checkout_recreated',
           );
         } catch {
-          /*
-           * Previous pending
-           * order may already
-           * be cancelled.
-           */
+          // Previous pending order may already be cancelled.
         }
 
         discardPendingOrder();
@@ -1333,6 +1316,10 @@ function StoreCheckoutScreen() {
 
           notes,
 
+          voucherCode:
+            appliedVoucher?.code ??
+            null,
+
           items: items.map(
             (item) => ({
               productId:
@@ -1358,14 +1345,6 @@ function StoreCheckoutScreen() {
         );
       }
 
-      /**
-       * Open WhatsApp with a very short, ready-to-send confirmation
-       * message that includes the payment method selected by the
-       * customer.
-       *
-       * Example:
-       * اكد الاوردر وهدفع عن طريق انستا باي
-       */
       const whatsappPaymentMessage =
         `اكد الاوردر وهدفع عن طريق ${
           createdOrder.paymentMethodTitle ||
@@ -1382,11 +1361,6 @@ function StoreCheckoutScreen() {
         orderForWhatsApp,
       );
 
-      /*
-       * Keep the checkout flow inside Navienty Now. The order now exists
-       * as a pending order, but opening WhatsApp is a separate, explicit
-       * customer action on /order-confirmation.
-       */
       createdOrder = null;
 
       router.replace(
@@ -1400,10 +1374,7 @@ function StoreCheckoutScreen() {
             'checkout_create_failed',
           );
         } catch {
-          /*
-           * Keep original
-           * error visible.
-           */
+          // Keep original error visible.
         }
 
         discardPendingOrder();
@@ -1447,8 +1418,6 @@ function StoreCheckoutScreen() {
           false
         }
       >
-        {/* HEADER */}
-
         <View
           style={styles.header}
         >
@@ -1457,7 +1426,6 @@ function StoreCheckoutScreen() {
               pressed,
             }) => [
               styles.backButton,
-
               pressed &&
                 styles.buttonPressed,
             ]}
@@ -1496,8 +1464,6 @@ function StoreCheckoutScreen() {
             </Text>
           </View>
         </View>
-
-        {/* ORDER STORE */}
 
         <View
           style={
@@ -1572,8 +1538,6 @@ function StoreCheckoutScreen() {
           </View>
         </View>
 
-        {/* CUSTOMER DETAILS */}
-
         <View
           style={styles.section}
         >
@@ -1584,8 +1548,6 @@ function StoreCheckoutScreen() {
           >
             بيانات العميل
           </Text>
-
-          {/* NAME */}
 
           <View
             style={styles.field}
@@ -1601,7 +1563,6 @@ function StoreCheckoutScreen() {
             <View
               style={[
                 styles.inputContainer,
-
                 submitted &&
                   !validation.customerName &&
                   styles.inputContainerError,
@@ -1635,14 +1596,10 @@ function StoreCheckoutScreen() {
                     styles.errorText
                   }
                 >
-                  اكتب اسمًا صحيحًا
-                  مكوّنًا من حرفين على
-                  الأقل.
+                  اكتب اسمًا صحيحًا مكوّنًا من حرفين على الأقل.
                 </Text>
               )}
           </View>
-
-          {/* PHONE */}
 
           <View
             style={styles.field}
@@ -1658,7 +1615,6 @@ function StoreCheckoutScreen() {
             <View
               style={[
                 styles.inputContainer,
-
                 submitted &&
                   !validation.phoneNumber &&
                   styles.inputContainerError,
@@ -1693,15 +1649,11 @@ function StoreCheckoutScreen() {
                     styles.errorText
                   }
                 >
-                  اكتب رقم موبايل
-                  مصريًا صحيحًا من 11
-                  رقمًا.
+                  اكتب رقم موبايل مصريًا صحيحًا من 11 رقمًا.
                 </Text>
               )}
           </View>
         </View>
-
-        {/* DELIVERY ADDRESS */}
 
         <View
           style={styles.section}
@@ -1714,12 +1666,9 @@ function StoreCheckoutScreen() {
             عنوان التوصيل
           </Text>
 
-          {/* MAP LOCATION */}
-
           <View
             style={[
               styles.mapLocationCard,
-
               !hasDeliveryLocation &&
                 styles.mapLocationCardMissing,
             ]}
@@ -1775,7 +1724,6 @@ function StoreCheckoutScreen() {
                 pressed,
               }) => [
                 styles.changeLocationButton,
-
                 pressed &&
                   styles.buttonPressed,
               ]}
@@ -1802,12 +1750,9 @@ function StoreCheckoutScreen() {
                   styles.locationErrorText
                 }
               >
-                حدد موقع التوصيل على الخريطة
-                قبل إرسال الطلب.
+                حدد موقع التوصيل على الخريطة قبل إرسال الطلب.
               </Text>
             )}
-
-          {/* AREA */}
 
           <View
             style={
@@ -1867,8 +1812,6 @@ function StoreCheckoutScreen() {
             />
           </View>
 
-          {/* ADDRESS */}
-
           <View
             style={styles.field}
           >
@@ -1885,18 +1828,13 @@ function StoreCheckoutScreen() {
                 styles.addressHelperText
               }
             >
-              تم تعبئة العنوان تلقائيًا
-              من موقعك على الخريطة.
-              يمكنك إضافة رقم العمارة
-              والدور والشقة إذا لزم.
+              تم تعبئة العنوان تلقائيًا من موقعك على الخريطة. يمكنك إضافة رقم العمارة والدور والشقة إذا لزم.
             </Text>
 
             <View
               style={[
                 styles.inputContainer,
-
                 styles.multilineContainer,
-
                 submitted &&
                   !validation.address &&
                   styles.inputContainerError,
@@ -1936,17 +1874,10 @@ function StoreCheckoutScreen() {
                     styles.errorText
                   }
                 >
-                  اكتب عنوانًا واضحًا
-                  ومفصلًا للتوصيل.
+                  اكتب عنوانًا واضحًا ومفصلًا للتوصيل.
                 </Text>
               )}
           </View>
-
-          {/* LANDMARK */}
-
-          
-
-          {/* NOTES */}
 
           <View
             style={styles.field}
@@ -2046,10 +1977,7 @@ function StoreCheckoutScreen() {
                         styles.prescriptionDescription
                       }
                     >
-                      ارفع صورة واضحة أو PDF
-                      للروشتة قبل إرسال الطلب.
-                      الملف خاص ولا يظهر في
-                      الكتالوج أو لأي مستخدم آخر.
+                      ارفع صورة واضحة أو PDF للروشتة قبل إرسال الطلب. الملف خاص ولا يظهر في الكتالوج أو لأي مستخدم آخر.
                     </Text>
                   </View>
                 </View>
@@ -2153,8 +2081,7 @@ function StoreCheckoutScreen() {
                         styles.prescriptionError
                       }
                     >
-                      ارفع الروشتة قبل إرسال
-                      الطلب.
+                      ارفع الروشتة قبل إرسال الطلب.
                     </Text>
                   )}
               </View>
@@ -2190,18 +2117,13 @@ function StoreCheckoutScreen() {
                       styles.ageVerificationText
                     }
                   >
-                    قد يطلب المندوب أو فريق
-                    الصيدلية بطاقة هوية قبل
-                    تسليم المنتجات المقيدة
-                    بالعمر.
+                    قد يطلب المندوب أو فريق الصيدلية بطاقة هوية قبل تسليم المنتجات المقيدة بالعمر.
                   </Text>
                 </View>
               </View>
             )}
           </View>
         )}
-
-        {/* PAYMENT */}
 
         <View
           style={styles.section}
@@ -2219,8 +2141,7 @@ function StoreCheckoutScreen() {
               styles.sectionDescription
             }
           >
-            اختر طريقة الدفع
-            المناسبة لإتمام الطلب.
+            اختر طريقة الدفع المناسبة لإتمام الطلب.
           </Text>
 
           <View
@@ -2248,10 +2169,8 @@ function StoreCheckoutScreen() {
                       pressed,
                     }) => [
                       styles.paymentMethod,
-
                       selected &&
                         styles.paymentMethodSelected,
-
                       pressed &&
                         styles.paymentMethodPressed,
                     ]}
@@ -2302,13 +2221,11 @@ function StoreCheckoutScreen() {
                           method.name_ar
                         }
                       </Text>
-
                     </View>
 
                     <View
                       style={[
                         styles.radioOuter,
-
                         selected &&
                           styles.radioOuterSelected,
                       ]}
@@ -2334,15 +2251,27 @@ function StoreCheckoutScreen() {
                   styles.paymentError
                 }
               >
-                اختر طريقة الدفع
-                المناسبة.
+                اختر طريقة الدفع المناسبة.
               </Text>
             )}
-
-          
         </View>
 
-        {/* ORDER DETAILS */}
+        <VoucherCheckoutCard
+          storeId={storeId}
+          subtotal={subtotal}
+          customerPhone={
+            normalizedPhone
+          }
+          currencyCode={
+            currencyCode
+          }
+          value={
+            appliedVoucher
+          }
+          onChange={
+            setAppliedVoucher
+          }
+        />
 
         <View
           style={
@@ -2356,8 +2285,6 @@ function StoreCheckoutScreen() {
           >
             تفاصيل الطلب
           </Text>
-
-          {/* ITEMS */}
 
           <View
             style={
@@ -2422,8 +2349,6 @@ function StoreCheckoutScreen() {
             }
           />
 
-          {/* SUBTOTAL */}
-
           <View
             style={
               styles.summaryRow
@@ -2448,7 +2373,31 @@ function StoreCheckoutScreen() {
             </Text>
           </View>
 
-          {/* DELIVERY */}
+          {voucherDiscount > 0 && (
+            <View
+              style={
+                styles.summaryRow
+              }
+            >
+              <Text
+                style={
+                  styles.discountLabel
+                }
+              >
+                خصم الكوبون
+              </Text>
+
+              <Text
+                style={
+                  styles.discountValue
+                }
+              >
+                -{formatPrice(
+                  voucherDiscount,
+                )}
+              </Text>
+            </View>
+          )}
 
           <View
             style={
@@ -2474,8 +2423,6 @@ function StoreCheckoutScreen() {
             </Text>
           </View>
 
-          {/* PAYMENT FEE */}
-
           <View
             style={
               styles.summaryRow
@@ -2499,8 +2446,6 @@ function StoreCheckoutScreen() {
               )}
             </Text>
           </View>
-
-          {/* TOTAL */}
 
           <View
             style={
@@ -2530,8 +2475,6 @@ function StoreCheckoutScreen() {
             </Text>
           </View>
         </View>
-
-        {/* WHATSAPP */}
 
         <View
           style={
@@ -2570,17 +2513,11 @@ function StoreCheckoutScreen() {
                 styles.whatsAppNoticeDescription
               }
             >
-              بعد الضغط على متابعة سيتم
-              إنشاء الطلب داخل {appName}
-              أولًا. في الشاشة التالية
-              يمكنك فتح واتساب برسالة
-              جاهزة عندما تكون مستعدًا.
+              بعد الضغط على متابعة سيتم إنشاء الطلب داخل {appName} أولًا. في الشاشة التالية يمكنك فتح واتساب برسالة جاهزة عندما تكون مستعدًا.
             </Text>
           </View>
         </View>
       </ScrollView>
-
-      {/* BOTTOM BAR */}
 
       <View
         style={
@@ -2597,7 +2534,6 @@ function StoreCheckoutScreen() {
               pressed,
             }) => [
               styles.backToCartButton,
-
               pressed &&
                 styles.bottomButtonPressed,
             ]}
@@ -2619,10 +2555,8 @@ function StoreCheckoutScreen() {
               pressed,
             }) => [
               styles.submitButton,
-
               isSubmittingOrder &&
                 styles.submitButtonDisabled,
-
               pressed &&
                 !isSubmittingOrder &&
                 styles.submitButtonPressed,
@@ -2662,16 +2596,11 @@ function StoreCheckoutScreen() {
   );
 }
 
-/* ---------------------------------- */
-/* STYLES                             */
-/* ---------------------------------- */
-
 const styles =
   StyleSheet.create({
     screen: {
       backgroundColor:
         '#ffffff',
-
       flex: 1,
     },
 
@@ -2679,115 +2608,74 @@ const styles =
       paddingBottom: 145,
     },
 
-    /* -------------------------------- */
-    /* HEADER                           */
-    /* -------------------------------- */
-
     header: {
       alignItems: 'center',
-
       flexDirection: 'row',
-
       paddingBottom: 28,
-
       paddingHorizontal: 24,
-
       paddingTop: 54,
     },
 
     backButton: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderColor: '#e5e5e5',
-
       borderRadius: 31,
-
       borderWidth: 1,
-
       height: 62,
-
       justifyContent:
         'center',
-
       width: 62,
     },
 
     headerContent: {
       flex: 1,
-
       marginLeft: 18,
     },
 
     pageTitle: {
       color: '#202020',
-
       fontSize: 25,
-
       fontWeight: '800',
     },
 
     pageSubtitle: {
       color: '#8a8a8a',
-
       fontSize: 15,
-
       marginTop: 3,
     },
 
-    /* -------------------------------- */
-    /* STORE                            */
-    /* -------------------------------- */
-
     orderStoreSection: {
       alignItems: 'center',
-
       borderBottomColor:
         '#eeeeee',
-
       borderBottomWidth: 1,
-
       borderTopColor:
         '#eeeeee',
-
       borderTopWidth: 1,
-
       flexDirection: 'row',
-
       marginBottom: 5,
-
       paddingHorizontal: 24,
-
       paddingVertical: 19,
     },
 
     storeIconContainer: {
       alignItems: 'center',
-
       backgroundColor:
         '#f5f5f5',
-
       borderColor: '#ededed',
-
       borderRadius: 17,
-
       borderWidth: 1,
-
       height: 62,
-
       justifyContent:
         'center',
-
       overflow: 'hidden',
-
       width: 62,
     },
 
     storeImage: {
       height: '100%',
-
       width: '100%',
     },
 
@@ -2797,78 +2685,51 @@ const styles =
 
     storeContent: {
       flex: 1,
-
       marginLeft: 15,
     },
 
     storeLabel: {
       color: '#929292',
-
       fontSize: 11,
     },
 
     storeName: {
       color: '#242424',
-
       fontSize: 18,
-
       fontWeight: '800',
-
       marginTop: 3,
     },
 
     storeMeta: {
       color: '#818181',
-
       fontSize: 12,
-
       marginTop: 5,
     },
-
-    /* -------------------------------- */
-    /* SECTIONS                         */
-    /* -------------------------------- */
 
     section: {
       borderBottomColor:
         '#f0f0f0',
-
       borderBottomWidth: 1,
-
       paddingBottom: 7,
-
       paddingHorizontal: 24,
-
       paddingTop: 29,
     },
 
     sectionTitle: {
       color: '#242424',
-
       fontSize: 23,
-
       fontWeight: '800',
-
       marginBottom: 20,
-
       textAlign: 'right',
     },
 
     sectionDescription: {
       color: '#858585',
-
       fontSize: 13,
-
       lineHeight: 20,
-
       marginBottom: 17,
-
       textAlign: 'right',
     },
-
-    /* -------------------------------- */
-    /* FIELDS                           */
-    /* -------------------------------- */
 
     field: {
       marginBottom: 20,
@@ -2876,32 +2737,21 @@ const styles =
 
     fieldLabel: {
       color: '#373737',
-
       fontSize: 14,
-
       fontWeight: '700',
-
       marginBottom: 9,
-
       textAlign: 'right',
     },
 
     inputContainer: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderColor: '#dfdfdf',
-
       borderRadius: 17,
-
       borderWidth: 1,
-
       flexDirection: 'row',
-
       minHeight: 58,
-
       paddingHorizontal: 15,
     },
 
@@ -2911,42 +2761,32 @@ const styles =
 
     input: {
       color: '#242424',
-
       flex: 1,
-
       fontSize: 15,
-
       minHeight: 56,
-
       paddingHorizontal: 13,
-
       paddingVertical: 12,
-
       writingDirection:
         'rtl',
     },
 
     multilineContainer: {
       alignItems: 'flex-start',
-
       minHeight: 125,
     },
 
     multilineInput: {
       minHeight: 120,
-
       paddingTop: 16,
     },
 
     notesContainer: {
       alignItems: 'flex-start',
-
       minHeight: 105,
     },
 
     notesInput: {
       minHeight: 100,
-
       paddingTop: 16,
     },
 
@@ -2956,209 +2796,138 @@ const styles =
 
     errorText: {
       color: '#d64b4b',
-
       fontSize: 11,
-
       lineHeight: 17,
-
       marginTop: 7,
-
       textAlign: 'right',
     },
 
-    /* -------------------------------- */
-    /* MAP LOCATION                     */
-    /* -------------------------------- */
-
     mapLocationCard: {
       alignItems: 'center',
-
       backgroundColor:
         BRAND_GREEN_SOFT,
-
       borderColor: '#d6f0e1',
-
       borderRadius: 18,
-
       borderWidth: 1,
-
       flexDirection: 'row',
-
       marginBottom: 12,
-
       padding: 15,
     },
 
     mapLocationCardMissing: {
       backgroundColor: '#f7f7f7',
-
       borderColor: '#e0e0e0',
     },
 
     mapLocationIconContainer: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderRadius: 21,
-
       height: 42,
-
       justifyContent:
         'center',
-
       width: 42,
     },
 
     mapLocationContent: {
       flex: 1,
-
       marginHorizontal: 13,
     },
 
     mapLocationLabel: {
       color: '#638370',
-
       fontSize: 11,
-
       textAlign: 'right',
     },
 
     mapLocationValue: {
       color: '#1c5334',
-
       fontSize: 13,
-
       fontWeight: '700',
-
       lineHeight: 19,
-
       marginTop: 4,
-
       textAlign: 'right',
     },
 
     changeLocationButton: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderColor:
         BRAND_GREEN,
-
       borderRadius: 15,
-
       borderWidth: 1,
-
       justifyContent:
         'center',
-
       minHeight: 38,
-
       minWidth: 62,
-
       paddingHorizontal: 12,
     },
 
     changeLocationButtonText: {
       color:
         BRAND_GREEN_DARK,
-
       fontSize: 12,
-
       fontWeight: '800',
     },
 
     locationErrorText: {
       color: '#d64b4b',
-
       fontSize: 11,
-
       lineHeight: 17,
-
       marginBottom: 12,
-
       textAlign: 'right',
     },
 
     addressHelperText: {
       color: '#8a8a8a',
-
       fontSize: 11,
-
       lineHeight: 18,
-
       marginBottom: 9,
-
       marginTop: -3,
-
       textAlign: 'right',
     },
 
-    /* -------------------------------- */
-    /* AREA                             */
-    /* -------------------------------- */
-
     areaCard: {
       alignItems: 'center',
-
       backgroundColor:
         BRAND_GREEN_SOFT,
-
       borderColor: '#d6f0e1',
-
       borderRadius: 18,
-
       borderWidth: 1,
-
       flexDirection: 'row',
-
       marginBottom: 21,
-
       padding: 15,
     },
 
     areaIconContainer: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderRadius: 21,
-
       height: 42,
-
       justifyContent:
         'center',
-
       width: 42,
     },
 
     areaContent: {
       flex: 1,
-
       marginHorizontal: 13,
     },
 
     areaLabel: {
       color: '#638370',
-
       fontSize: 11,
-
       textAlign: 'right',
     },
 
     areaValue: {
       color: '#1c5334',
-
       fontSize: 14,
-
       fontWeight: '800',
-
       marginTop: 4,
-
       textAlign: 'right',
     },
 
@@ -3289,42 +3058,28 @@ const styles =
       textAlign: 'right',
     },
 
-    /* -------------------------------- */
-    /* PAYMENT                          */
-    /* -------------------------------- */
-
     paymentMethods: {
       gap: 11,
     },
 
     paymentMethod: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderColor: '#dedede',
-
       borderRadius: 19,
-
       borderWidth: 1,
-
       flexDirection: 'row',
-
       minHeight: 78,
-
       paddingHorizontal: 15,
-
       paddingVertical: 12,
     },
 
     paymentMethodSelected: {
       backgroundColor:
         BRAND_GREEN_SOFT,
-
       borderColor:
         BRAND_GREEN,
-
       borderWidth: 1.5,
     },
 
@@ -3334,25 +3089,18 @@ const styles =
 
     paymentIconContainer: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderRadius: 14,
-
       height: 49,
-
       justifyContent:
         'center',
-
       overflow: 'hidden',
-
       width: 49,
     },
 
     paymentMethodImage: {
       height: '100%',
-
       width: '100%',
     },
 
@@ -3362,35 +3110,24 @@ const styles =
 
     paymentContent: {
       flex: 1,
-
       marginHorizontal: 13,
     },
 
     paymentTitle: {
       color: '#262626',
-
       fontSize: 15,
-
       fontWeight: '700',
-
       textAlign: 'right',
     },
 
-
     radioOuter: {
       alignItems: 'center',
-
       borderColor: '#b7b7b7',
-
       borderRadius: 11,
-
       borderWidth: 2,
-
       height: 22,
-
       justifyContent:
         'center',
-
       width: 22,
     },
 
@@ -3402,79 +3139,31 @@ const styles =
     radioInner: {
       backgroundColor:
         BRAND_GREEN,
-
       borderRadius: 6,
-
       height: 12,
-
       width: 12,
     },
 
     paymentError: {
       color: '#d64b4b',
-
       fontSize: 11,
-
       marginTop: 9,
-
       textAlign: 'right',
     },
-
-    paymentFeeNotice: {
-      alignItems: 'center',
-
-      backgroundColor:
-        '#f7f7f7',
-
-      borderRadius: 14,
-
-      flexDirection: 'row',
-
-      marginBottom: 17,
-
-      marginTop: 14,
-
-      padding: 13,
-    },
-
-    paymentFeeNoticeText: {
-      color: '#686868',
-
-      flex: 1,
-
-      fontSize: 12,
-
-      lineHeight: 19,
-
-      marginLeft: 9,
-
-      textAlign: 'right',
-    },
-
-    /* -------------------------------- */
-    /* SUMMARY                          */
-    /* -------------------------------- */
 
     orderSummarySection: {
       borderBottomColor:
         '#f0f0f0',
-
       borderBottomWidth: 1,
-
       paddingHorizontal: 24,
-
       paddingVertical: 29,
     },
 
     orderSummaryTitle: {
       color: '#242424',
-
       fontSize: 23,
-
       fontWeight: '800',
-
       marginBottom: 22,
-
       textAlign: 'right',
     },
 
@@ -3484,281 +3173,203 @@ const styles =
 
     summaryItem: {
       alignItems: 'center',
-
       flexDirection: 'row',
-
       justifyContent:
         'space-between',
     },
 
     summaryItemContent: {
       flex: 1,
-
       marginRight: 16,
     },
 
     summaryItemName: {
       color: '#343434',
-
       fontSize: 14,
-
       fontWeight: '600',
-
       textAlign: 'right',
     },
 
     summaryItemQuantity: {
       color: '#939393',
-
       fontSize: 11,
-
       marginTop: 4,
-
       textAlign: 'right',
     },
 
     summaryItemPrice: {
       color: '#343434',
-
       fontSize: 13,
-
       fontWeight: '600',
     },
 
     itemsDivider: {
       backgroundColor:
         '#eeeeee',
-
       height: 1,
-
       marginVertical: 21,
     },
 
     summaryRow: {
       alignItems: 'center',
-
       flexDirection: 'row',
-
       justifyContent:
         'space-between',
-
       marginBottom: 16,
     },
 
     summaryLabel: {
       color: '#696969',
-
       fontSize: 14,
     },
 
     summaryValue: {
       color: '#303030',
-
       fontSize: 14,
-
       fontWeight: '600',
+    },
+
+    discountLabel: {
+      color: '#1F7A43',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    discountValue: {
+      color: '#1F7A43',
+      fontSize: 14,
+      fontWeight: '800',
     },
 
     summaryDivider: {
       backgroundColor:
         '#eeeeee',
-
       height: 1,
-
       marginBottom: 19,
-
       marginTop: 3,
     },
 
     totalRow: {
       alignItems: 'center',
-
       flexDirection: 'row',
-
       justifyContent:
         'space-between',
     },
 
     totalLabel: {
       color: '#202020',
-
       fontSize: 18,
-
       fontWeight: '800',
     },
 
     totalValue: {
       color: '#202020',
-
       fontSize: 20,
-
       fontWeight: '900',
     },
 
-    /* -------------------------------- */
-    /* WHATSAPP                         */
-    /* -------------------------------- */
-
     whatsAppNotice: {
       alignItems: 'center',
-
       backgroundColor:
         BRAND_GREEN_SOFT,
-
       borderColor: '#d5f0e0',
-
       borderRadius: 18,
-
       borderWidth: 1,
-
       flexDirection: 'row',
-
       marginHorizontal: 24,
-
       marginTop: 21,
-
       padding: 16,
     },
 
     whatsAppIconContainer: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderRadius: 23,
-
       height: 46,
-
       justifyContent:
         'center',
-
       width: 46,
     },
 
     whatsAppNoticeContent: {
       flex: 1,
-
       marginLeft: 13,
     },
 
     whatsAppNoticeTitle: {
       color: '#23553a',
-
       fontSize: 14,
-
       fontWeight: '800',
-
       textAlign: 'right',
     },
 
     whatsAppNoticeDescription: {
       color: '#557362',
-
       fontSize: 11,
-
       lineHeight: 18,
-
       marginTop: 5,
-
       textAlign: 'right',
     },
-
-    /* -------------------------------- */
-    /* BOTTOM BAR                       */
-    /* -------------------------------- */
 
     submitBarWrapper: {
       backgroundColor:
         '#ffffff',
-
       borderTopColor:
         '#e8e8e8',
-
       borderTopWidth: 1,
-
       bottom: 0,
-
       left: 0,
-
       paddingBottom: 20,
-
       paddingHorizontal: 24,
-
       paddingTop: 18,
-
       position: 'absolute',
-
       right: 0,
-
       shadowColor: '#000000',
-
       shadowOffset: {
         width: 0,
-
         height: -3,
       },
-
       shadowOpacity: 0.06,
-
       shadowRadius: 8,
-
       elevation: 12,
     },
 
     submitBar: {
       flexDirection: 'row',
-
       gap: 15,
     },
 
     backToCartButton: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderColor: '#252525',
-
       borderRadius: 31,
-
       borderWidth: 1.5,
-
       flex: 0.7,
-
       height: 64,
-
       justifyContent:
         'center',
     },
 
     backToCartButtonText: {
       color: '#242424',
-
       fontSize: 17,
-
       fontWeight: '800',
     },
 
     submitButton: {
       alignItems: 'center',
-
       backgroundColor:
         BRAND_GREEN,
-
       borderRadius: 31,
-
       flex: 1.3,
-
       flexDirection: 'row',
-
       gap: 9,
-
       height: 64,
-
       justifyContent:
         'center',
-
       paddingHorizontal: 15,
     },
 
@@ -3769,7 +3380,6 @@ const styles =
     submitButtonPressed: {
       backgroundColor:
         BRAND_GREEN_DARK,
-
       transform: [
         {
           scale: 0.98,
@@ -3779,15 +3389,12 @@ const styles =
 
     submitButtonText: {
       color: '#ffffff',
-
       fontSize: 16,
-
       fontWeight: '800',
     },
 
     bottomButtonPressed: {
       opacity: 0.75,
-
       transform: [
         {
           scale: 0.98,
@@ -3795,146 +3402,95 @@ const styles =
       ],
     },
 
-    /* -------------------------------- */
-    /* EMPTY / ERROR                    */
-    /* -------------------------------- */
-
     emptyScreen: {
       backgroundColor:
         '#ffffff',
-
       flex: 1,
     },
 
     emptyContainer: {
       alignItems: 'center',
-
       flex: 1,
-
       justifyContent:
         'center',
-
       paddingHorizontal: 30,
     },
 
     emptyBackButton: {
       alignItems: 'center',
-
       backgroundColor:
         '#ffffff',
-
       borderColor: '#e4e4e4',
-
       borderRadius: 30,
-
       borderWidth: 1,
-
       height: 60,
-
       justifyContent:
         'center',
-
       left: 24,
-
       position: 'absolute',
-
       top: 54,
-
       width: 60,
-
       zIndex: 5,
     },
 
     emptyIconContainer: {
       alignItems: 'center',
-
       backgroundColor:
         BRAND_GREEN_SOFT,
-
       borderRadius: 48,
-
       height: 96,
-
       justifyContent:
         'center',
-
       width: 96,
     },
 
     errorIconContainer: {
       alignItems: 'center',
-
       alignSelf: 'center',
-
       backgroundColor:
         '#fff1f1',
-
       borderRadius: 48,
-
       height: 96,
-
       justifyContent:
         'center',
-
       marginTop: 'auto',
-
       width: 96,
     },
 
     emptyTitle: {
       color: '#242424',
-
       fontSize: 24,
-
       fontWeight: '800',
-
       marginTop: 22,
-
       textAlign: 'center',
     },
 
     emptyDescription: {
       alignSelf: 'center',
-
       color: '#7c7c7c',
-
       fontSize: 14,
-
       lineHeight: 22,
-
       marginTop: 8,
-
       maxWidth: 330,
-
       textAlign: 'center',
     },
 
     primaryButton: {
       alignItems: 'center',
-
       alignSelf: 'center',
-
       backgroundColor:
         BRAND_GREEN,
-
       borderRadius: 29,
-
       marginBottom: 'auto',
-
       marginTop: 24,
-
       minWidth: 220,
-
       paddingHorizontal: 30,
-
       paddingVertical: 16,
     },
 
     primaryButtonText: {
       color: '#ffffff',
-
       fontSize: 16,
-
       fontWeight: '800',
     },
 
