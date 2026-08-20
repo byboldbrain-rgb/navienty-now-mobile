@@ -1,11 +1,7 @@
-name: Optimize bundled images once
+name: Optimize bundled images
 
 on:
-  push:
-    branches:
-      - cto/launch-readiness-hardening
-    paths:
-      - .github/workflows/optimize-images-once.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -30,7 +26,7 @@ jobs:
       - name: Install project dependencies
         run: npm ci
 
-      - name: Install Sharp for one-time optimization
+      - name: Install Sharp for optimization
         run: npm install --no-save --package-lock=false sharp
 
       - name: Audit images before optimization
