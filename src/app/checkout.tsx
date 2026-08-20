@@ -367,6 +367,16 @@ function StoreCheckoutScreen() {
   const paymentProcessingFee =
     PAYMENT_PROCESSING_FEE;
 
+  const voucherDiscountTarget =
+    appliedVoucher?.discountTarget ??
+    'order_subtotal';
+
+  const voucherDiscountBase =
+    voucherDiscountTarget ===
+      'delivery_fee'
+      ? deliveryFee
+      : Number(subtotal ?? 0);
+
   const voucherDiscount =
     Math.min(
       Math.max(
@@ -375,18 +385,40 @@ function StoreCheckoutScreen() {
         0,
       ),
       Math.max(
-        Number(subtotal ?? 0),
+        Number(
+          voucherDiscountBase ?? 0,
+        ),
         0,
       ),
     );
 
-  const total =
+  const discountedSubtotal =
     Math.max(
       Number(subtotal ?? 0) -
-        voucherDiscount,
+        (
+          voucherDiscountTarget ===
+            'order_subtotal'
+            ? voucherDiscount
+            : 0
+        ),
       0,
-    ) +
-    deliveryFee +
+    );
+
+  const discountedDeliveryFee =
+    Math.max(
+      deliveryFee -
+        (
+          voucherDiscountTarget ===
+            'delivery_fee'
+            ? voucherDiscount
+            : 0
+        ),
+      0,
+    );
+
+  const total =
+    discountedSubtotal +
+    discountedDeliveryFee +
     paymentProcessingFee;
 
   /* -------------------------------- */
@@ -621,18 +653,30 @@ function StoreCheckoutScreen() {
       return;
     }
 
-    if (
-      !storeId ||
+    const subtotalChanged =
       Math.abs(
         appliedVoucher
           .subtotalBeforeDiscount -
           subtotal,
-      ) > 0.009
+      ) > 0.009;
+
+    const deliveryChanged =
+      Math.abs(
+        appliedVoucher
+          .deliveryFeeBeforeDiscount -
+          deliveryFee,
+      ) > 0.009;
+
+    if (
+      !storeId ||
+      subtotalChanged ||
+      deliveryChanged
     ) {
       setAppliedVoucher(null);
     }
   }, [
     appliedVoucher,
+    deliveryFee,
     storeId,
     subtotal,
   ]);
@@ -2259,6 +2303,7 @@ function StoreCheckoutScreen() {
         <VoucherCheckoutCard
           storeId={storeId}
           subtotal={subtotal}
+          deliveryFee={deliveryFee}
           customerPhone={
             normalizedPhone
           }
@@ -2373,31 +2418,33 @@ function StoreCheckoutScreen() {
             </Text>
           </View>
 
-          {voucherDiscount > 0 && (
-            <View
-              style={
-                styles.summaryRow
-              }
-            >
-              <Text
+          {voucherDiscount > 0 &&
+            voucherDiscountTarget ===
+              'order_subtotal' && (
+              <View
                 style={
-                  styles.discountLabel
+                  styles.summaryRow
                 }
               >
-                خصم الكوبون
-              </Text>
+                <Text
+                  style={
+                    styles.discountLabel
+                  }
+                >
+                  خصم على الطلب
+                </Text>
 
-              <Text
-                style={
-                  styles.discountValue
-                }
-              >
-                -{formatPrice(
-                  voucherDiscount,
-                )}
-              </Text>
-            </View>
-          )}
+                <Text
+                  style={
+                    styles.discountValue
+                  }
+                >
+                  -{formatPrice(
+                    voucherDiscount,
+                  )}
+                </Text>
+              </View>
+            )}
 
           <View
             style={
@@ -2422,6 +2469,34 @@ function StoreCheckoutScreen() {
               )}
             </Text>
           </View>
+
+          {voucherDiscount > 0 &&
+            voucherDiscountTarget ===
+              'delivery_fee' && (
+              <View
+                style={
+                  styles.summaryRow
+                }
+              >
+                <Text
+                  style={
+                    styles.discountLabel
+                  }
+                >
+                  خصم على التوصيل
+                </Text>
+
+                <Text
+                  style={
+                    styles.discountValue
+                  }
+                >
+                  -{formatPrice(
+                    voucherDiscount,
+                  )}
+                </Text>
+              </View>
+            )}
 
           <View
             style={
