@@ -28,11 +28,17 @@ import {
   getStoreCatalog,
 } from '../services/catalog-service';
 
+import VoucherCheckoutCard from '../components/checkout/voucher-checkout-card';
+import ServicePackageCart from '../components/service/service-package-cart';
 import {
   useCartStore,
 } from '../store/cart-store';
-
-import ServicePackageCart from '../components/service/service-package-cart';
+import {
+  useCustomerStore,
+} from '../store/customer-store';
+import {
+  useVoucherStore,
+} from '../store/voucher-store';
 
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_SOFT = '#EAF8F0';
@@ -489,6 +495,36 @@ function StoreCartScreen() {
   const storeId =
     currentCart?.storeId ?? null;
 
+  const phoneNumber =
+    useCustomerStore(
+      (state) => state.phoneNumber,
+    );
+
+  const normalizedPhone =
+    phoneNumber.replace(
+      /\D/g,
+      '',
+    );
+
+  const appliedVoucher =
+    useVoucherStore(
+      (state) =>
+        storeId
+          ? state.vouchers[storeId] ??
+            null
+          : null,
+    );
+
+  const setStoreVoucher =
+    useVoucherStore(
+      (state) => state.setVoucher,
+    );
+
+  const clearVoucher =
+    useVoucherStore(
+      (state) => state.clearVoucher,
+    );
+
   const storeName =
     currentCart?.storeName ?? null;
 
@@ -509,9 +545,58 @@ function StoreCartScreen() {
   const deliveryFee =
     Number(currentCart?.deliveryFee ?? 0);
 
+  const voucherDiscountTarget =
+    appliedVoucher?.discountTarget ??
+    'order_subtotal';
+
+  const voucherDiscountBase =
+    voucherDiscountTarget ===
+      'delivery_fee'
+      ? deliveryFee
+      : Number(subtotal ?? 0);
+
+  const voucherDiscount =
+    Math.min(
+      Math.max(
+        appliedVoucher
+          ?.discountAmount ?? 0,
+        0,
+      ),
+      Math.max(
+        Number(
+          voucherDiscountBase ?? 0,
+        ),
+        0,
+      ),
+    );
+
+  const discountedSubtotal =
+    Math.max(
+      Number(subtotal ?? 0) -
+        (
+          voucherDiscountTarget ===
+            'order_subtotal'
+            ? voucherDiscount
+            : 0
+        ),
+      0,
+    );
+
+  const discountedDeliveryFee =
+    Math.max(
+      deliveryFee -
+        (
+          voucherDiscountTarget ===
+            'delivery_fee'
+            ? voucherDiscount
+            : 0
+        ),
+      0,
+    );
+
   const grandTotal =
-    Number(subtotal ?? 0) +
-    deliveryFee +
+    discountedSubtotal +
+    discountedDeliveryFee +
     paymentProcessingFee;
 
   /* ============================================================
@@ -777,6 +862,7 @@ function StoreCartScreen() {
       return;
     }
 
+    clearVoucher(storeId);
     clearStoreCart(storeId);
 
     setClearModalVisible(false);
@@ -1681,6 +1767,31 @@ function StoreCartScreen() {
           </View>
         )}
 
+        {/* VOUCHER */}
+
+        <VoucherCheckoutCard
+          storeId={storeId}
+          subtotal={subtotal}
+          deliveryFee={deliveryFee}
+          customerPhone={
+            normalizedPhone
+          }
+          currencyCode="EGP"
+          value={
+            appliedVoucher
+          }
+          onChange={(voucher) => {
+            if (!storeId) {
+              return;
+            }
+
+            setStoreVoucher(
+              storeId,
+              voucher,
+            );
+          }}
+        />
+
         {/* ORDER DETAILS */}
 
         <View
@@ -1712,6 +1823,34 @@ function StoreCartScreen() {
             </Text>
           </View>
 
+          {voucherDiscount > 0 &&
+            voucherDiscountTarget ===
+              'order_subtotal' && (
+              <View
+                style={
+                  styles.summaryRow
+                }
+              >
+                <Text
+                  style={
+                    styles.discountLabel
+                  }
+                >
+                  خصم على الطلب
+                </Text>
+
+                <Text
+                  style={
+                    styles.discountValue
+                  }
+                >
+                  -{formatPrice(
+                    voucherDiscount,
+                  )}
+                </Text>
+              </View>
+            )}
+
           <View
             style={styles.summaryRow}
           >
@@ -1727,6 +1866,34 @@ function StoreCartScreen() {
               {formatPrice(deliveryFee)}
             </Text>
           </View>
+
+          {voucherDiscount > 0 &&
+            voucherDiscountTarget ===
+              'delivery_fee' && (
+              <View
+                style={
+                  styles.summaryRow
+                }
+              >
+                <Text
+                  style={
+                    styles.discountLabel
+                  }
+                >
+                  خصم على التوصيل
+                </Text>
+
+                <Text
+                  style={
+                    styles.discountValue
+                  }
+                >
+                  -{formatPrice(
+                    voucherDiscount,
+                  )}
+                </Text>
+              </View>
+            )}
 
           <View
             style={styles.summaryRow}
@@ -2495,6 +2662,18 @@ const styles = StyleSheet.create({
     color: '#303030',
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  discountLabel: {
+    color: BRAND_GREEN,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  discountValue: {
+    color: BRAND_GREEN,
+    fontSize: 13,
+    fontWeight: '800',
   },
 
   paymentFeeLabelContainer: {

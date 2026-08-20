@@ -22,7 +22,6 @@ import {
   type ImageSourcePropType,
 } from 'react-native';
 
-import VoucherCheckoutCard from '../components/checkout/voucher-checkout-card';
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
@@ -49,8 +48,8 @@ import {
   pickAndUploadPrescription,
   type PrescriptionSubmission,
 } from '../services/prescription-service';
-import type {
-  VoucherQuote,
+import {
+  validateVoucher,
 } from '../services/voucher-service';
 import {
   useCartStore,
@@ -61,6 +60,9 @@ import {
 import {
   useOrdersStore,
 } from '../store/orders-store';
+import {
+  useVoucherStore,
+} from '../store/voucher-store';
 
 /* ---------------------------------- */
 /* BRAND                              */
@@ -271,13 +273,6 @@ function StoreCheckoutScreen() {
     null,
   );
 
-  const [
-    appliedVoucher,
-    setAppliedVoucher,
-  ] = useState<VoucherQuote | null>(
-    null,
-  );
-
   /* -------------------------------- */
   /* CART                             */
   /* -------------------------------- */
@@ -316,6 +311,20 @@ function StoreCheckoutScreen() {
   const storeId =
     checkoutCart?.storeId ??
     null;
+
+  const appliedVoucher =
+    useVoucherStore(
+      (state) =>
+        storeId
+          ? state.vouchers[storeId] ??
+            null
+          : null,
+    );
+
+  const setStoreVoucher =
+    useVoucherStore(
+      (state) => state.setVoucher,
+    );
 
   const storeName =
     checkoutCart?.storeName ??
@@ -649,7 +658,10 @@ function StoreCheckoutScreen() {
   ]);
 
   useEffect(() => {
-    if (!appliedVoucher) {
+    if (
+      !appliedVoucher ||
+      !storeId
+    ) {
       return;
     }
 
@@ -668,15 +680,62 @@ function StoreCheckoutScreen() {
       ) > 0.009;
 
     if (
-      !storeId ||
-      subtotalChanged ||
-      deliveryChanged
+      !subtotalChanged &&
+      !deliveryChanged
     ) {
-      setAppliedVoucher(null);
+      return;
     }
+
+    let cancelled = false;
+
+    async function refreshVoucher() {
+      try {
+        await ensureAppSession();
+
+        const voucherPhone =
+          phoneNumber.replace(
+            /\D/g,
+            '',
+          );
+
+        const refreshedVoucher =
+          await validateVoucher({
+            code:
+              appliedVoucher.code,
+            storeId,
+            subtotal,
+            deliveryFee,
+            customerPhone:
+              voucherPhone ||
+              null,
+          });
+
+        if (!cancelled) {
+          setStoreVoucher(
+            storeId,
+            refreshedVoucher,
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setStoreVoucher(
+            storeId,
+            null,
+          );
+        }
+      }
+    }
+
+    void refreshVoucher();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     appliedVoucher,
     deliveryFee,
+    phoneNumber,
+    setStoreVoucher,
     storeId,
     subtotal,
   ]);
@@ -1403,6 +1462,11 @@ function StoreCheckoutScreen() {
 
       setPendingOrder(
         orderForWhatsApp,
+      );
+
+      setStoreVoucher(
+        activeStoreId,
+        null,
       );
 
       createdOrder = null;
@@ -2299,24 +2363,6 @@ function StoreCheckoutScreen() {
               </Text>
             )}
         </View>
-
-        <VoucherCheckoutCard
-          storeId={storeId}
-          subtotal={subtotal}
-          deliveryFee={deliveryFee}
-          customerPhone={
-            normalizedPhone
-          }
-          currencyCode={
-            currencyCode
-          }
-          value={
-            appliedVoucher
-          }
-          onChange={
-            setAppliedVoucher
-          }
-        />
 
         <View
           style={
