@@ -16,7 +16,8 @@
       "distribution": "internal",
       "environment": "development",
       "env": {
-        "APP_VARIANT": "development"
+        "APP_VARIANT": "development",
+        "PUSH_AUTO_REGISTER": "false"
       },
       "android": {
         "buildType": "apk"
