@@ -1,8 +1,18 @@
 import { supabase } from '../lib/supabase';
 
+export type VoucherDiscountTarget =
+  | 'order_subtotal'
+  | 'delivery_fee';
+
 export type VoucherDiscountType =
   | 'fixed'
   | 'percentage';
+
+export type VoucherCategorySlug =
+  | 'restaurants'
+  | 'supermarket'
+  | 'pharmacy'
+  | 'bookstores';
 
 export type VoucherQuote = {
   valid: true;
@@ -10,13 +20,18 @@ export type VoucherQuote = {
   code: string;
   titleAr: string;
   descriptionAr: string | null;
+  discountTarget: VoucherDiscountTarget;
   discountType: VoucherDiscountType;
   discountValue: number;
   discountAmount: number;
+  discountBaseAmount: number;
   minimumSubtotal: number;
   maxDiscountAmount: number | null;
   subtotalBeforeDiscount: number;
   subtotalAfterDiscount: number;
+  deliveryFeeBeforeDiscount: number;
+  deliveryFeeAfterDiscount: number;
+  eligibleCategorySlugs: VoucherCategorySlug[];
   startsAt: string | null;
   endsAt: string | null;
 };
@@ -27,9 +42,13 @@ type RawVoucherQuote = {
   code: string;
   title_ar?: string | null;
   description_ar?: string | null;
+  discount_target: VoucherDiscountTarget;
   discount_type: VoucherDiscountType;
   discount_value: number | string;
   discount_amount: number | string;
+  discount_base_amount?:
+    | number
+    | string;
   minimum_subtotal: number | string;
   max_discount_amount?:
     | number
@@ -41,6 +60,13 @@ type RawVoucherQuote = {
   subtotal_after_discount:
     | number
     | string;
+  delivery_fee_before_discount?:
+    | number
+    | string;
+  delivery_fee_after_discount?:
+    | number
+    | string;
+  eligible_category_slugs?: unknown;
   starts_at?: string | null;
   ends_at?: string | null;
 };
@@ -68,6 +94,33 @@ function normalizeVoucherCode(
   return value
     .trim()
     .toUpperCase();
+}
+
+function mapCategorySlugs(
+  value: unknown,
+): VoucherCategorySlug[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const supported = new Set<
+    VoucherCategorySlug
+  >([
+    'restaurants',
+    'supermarket',
+    'pharmacy',
+    'bookstores',
+  ]);
+
+  return value.filter(
+    (
+      item,
+    ): item is VoucherCategorySlug =>
+      typeof item === 'string' &&
+      supported.has(
+        item as VoucherCategorySlug,
+      ),
+  );
 }
 
 function getVoucherErrorMessage(
@@ -131,7 +184,7 @@ function getVoucherErrorMessage(
     ],
     [
       'voucher_category_not_eligible',
-      'الكوبون غير متاح لهذا النوع من المتاجر.',
+      'الكوبون غير متاح لهذا القسم.',
     ],
     [
       'voucher_minimum_not_reached',
@@ -154,8 +207,12 @@ function getVoucherErrorMessage(
       'تعذر تغيير الكوبون لهذا الطلب. أعد المحاولة من صفحة إتمام الطلب.',
     ],
     [
+      'voucher_invalid_delivery_fee',
+      'تعذر تحديد رسوم التوصيل لتطبيق هذا الكوبون.',
+    ],
+    [
       'voucher_no_discount',
-      'لا يمكن تطبيق خصم على قيمة الطلب الحالية.',
+      'لا يمكن تطبيق خصم على القيمة الحالية.',
     ],
   ];
 
@@ -178,6 +235,7 @@ export async function validateVoucher(
     code: string;
     storeId: string;
     subtotal: number;
+    deliveryFee: number;
     customerPhone?: string | null;
   },
 ): Promise<VoucherQuote> {
@@ -200,7 +258,11 @@ export async function validateVoucher(
     !Number.isFinite(
       input.subtotal,
     ) ||
-    input.subtotal < 0
+    input.subtotal < 0 ||
+    !Number.isFinite(
+      input.deliveryFee,
+    ) ||
+    input.deliveryFee < 0
   ) {
     throw new Error(
       'تعذر التحقق من الكوبون للطلب الحالي.',
@@ -218,6 +280,8 @@ export async function validateVoucher(
         input.storeId,
       p_subtotal:
         input.subtotal,
+      p_delivery_fee:
+        input.deliveryFee,
       p_customer_phone:
         input.customerPhone ??
         null,
@@ -242,12 +306,34 @@ export async function validateVoucher(
   if (
     raw.valid !== true ||
     !raw.voucher_id ||
-    !raw.code
+    !raw.code ||
+    (
+      raw.discount_target !==
+        'order_subtotal' &&
+      raw.discount_target !==
+        'delivery_fee'
+    )
   ) {
     throw new Error(
       'تعذر التحقق من الكوبون.',
     );
   }
+
+  const subtotalBeforeDiscount =
+    toNumber(
+      raw.subtotal_before_discount,
+    );
+
+  const deliveryFeeBeforeDiscount =
+    toNumber(
+      raw.delivery_fee_before_discount ??
+        input.deliveryFee,
+    );
+
+  const discountAmount =
+    toNumber(
+      raw.discount_amount,
+    );
 
   return {
     valid: true,
@@ -260,15 +346,24 @@ export async function validateVoucher(
       'تم تطبيق الكوبون',
     descriptionAr:
       raw.description_ar ?? null,
+    discountTarget:
+      raw.discount_target,
     discountType:
       raw.discount_type,
     discountValue:
       toNumber(
         raw.discount_value,
       ),
-    discountAmount:
+    discountAmount,
+    discountBaseAmount:
       toNumber(
-        raw.discount_amount,
+        raw.discount_base_amount ??
+          (
+            raw.discount_target ===
+              'delivery_fee'
+              ? deliveryFeeBeforeDiscount
+              : subtotalBeforeDiscount
+          ),
       ),
     minimumSubtotal:
       toNumber(
@@ -283,13 +378,20 @@ export async function validateVoucher(
         : toNumber(
             raw.max_discount_amount,
           ),
-    subtotalBeforeDiscount:
-      toNumber(
-        raw.subtotal_before_discount,
-      ),
+    subtotalBeforeDiscount,
     subtotalAfterDiscount:
       toNumber(
         raw.subtotal_after_discount,
+      ),
+    deliveryFeeBeforeDiscount,
+    deliveryFeeAfterDiscount:
+      toNumber(
+        raw.delivery_fee_after_discount ??
+          deliveryFeeBeforeDiscount,
+      ),
+    eligibleCategorySlugs:
+      mapCategorySlugs(
+        raw.eligible_category_slugs,
       ),
     startsAt:
       raw.starts_at ?? null,
