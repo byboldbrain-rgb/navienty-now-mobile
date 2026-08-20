@@ -11,6 +11,10 @@ const appVariant =
 const isDevelopment =
   appVariant === 'development';
 
+const pushAutoRegister =
+  process.env.PUSH_AUTO_REGISTER?.trim().toLowerCase() !==
+  'false';
+
 module.exports = ({ config }) => {
   const productionAndroidPackage =
     config.android?.package ?? 'com.navienty.now';
@@ -71,6 +75,7 @@ module.exports = ({ config }) => {
     extra: {
       ...(config.extra ?? {}),
       appVariant,
+      pushAutoRegister,
     },
   };
 };
