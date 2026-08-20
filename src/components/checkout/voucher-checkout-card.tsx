@@ -24,7 +24,7 @@ import {
 type VoucherCheckoutCardProps = {
   storeId: string | null;
   subtotal: number;
-  deliveryFee: number;
+  deliveryFee?: number | null;
   customerPhone: string;
   currencyCode: string;
   value: VoucherQuote | null;
@@ -84,7 +84,7 @@ export default function VoucherCheckoutCard({
     useRef<{
       storeId: string;
       subtotal: number;
-      deliveryFee: number;
+      deliveryFee: number | null;
     } | null>(
       value && storeId
         ? {
@@ -107,6 +107,16 @@ export default function VoucherCheckoutCard({
     const snapshot =
       appliedSnapshotRef.current;
 
+    const deliveryChanged =
+      deliveryFee !== null &&
+      deliveryFee !== undefined &&
+      snapshot?.deliveryFee !== null &&
+      snapshot?.deliveryFee !== undefined &&
+      Math.abs(
+        snapshot.deliveryFee -
+          deliveryFee,
+      ) > 0.009;
+
     if (
       !storeId ||
       !snapshot ||
@@ -115,10 +125,7 @@ export default function VoucherCheckoutCard({
         snapshot.subtotal -
           subtotal,
       ) > 0.009 ||
-      Math.abs(
-        snapshot.deliveryFee -
-          deliveryFee,
-      ) > 0.009
+      deliveryChanged
     ) {
       onChange(null);
       setErrorMessage(
@@ -206,7 +213,9 @@ export default function VoucherCheckoutCard({
       appliedSnapshotRef.current = {
         storeId,
         subtotal,
-        deliveryFee,
+        deliveryFee:
+          deliveryFee ??
+          quote.deliveryFeeBeforeDiscount,
       };
       onChange(quote);
     } catch (error) {
