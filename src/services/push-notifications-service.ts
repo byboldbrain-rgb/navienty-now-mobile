@@ -45,6 +45,18 @@ export function isRunningInExpoGo() {
   return Constants.expoGoConfig !== null;
 }
 
+export function isNotificationTestBuild() {
+  const appVariant =
+    Constants.expoConfig?.extra?.appVariant;
+
+  return (
+    __DEV__ ||
+    (typeof appVariant === 'string' &&
+      appVariant.trim().toLowerCase() ===
+        'development')
+  );
+}
+
 function getProjectId(): string | null {
   const configuredProjectId =
     Constants.expoConfig?.extra?.eas
