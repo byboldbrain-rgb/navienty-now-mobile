@@ -27,6 +27,7 @@ import {
   getCatalogSectionProducts,
   getStoreCatalog,
   listStores,
+  type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
 import {
@@ -587,6 +588,834 @@ function BackArrowIcon() {
           styles.backArrowBottom,
         ]}
       />
+    </View>
+  );
+}
+
+
+const ARABIC_WEEK_DAYS = [
+  'الأحد',
+  'الاثنين',
+  'الثلاثاء',
+  'الأربعاء',
+  'الخميس',
+  'الجمعة',
+  'السبت',
+];
+
+function parseBusinessTime(
+  value: string | null,
+): {
+  hours: number;
+  minutes: number;
+} | null {
+  if (!value) {
+    return null;
+  }
+
+  const parts =
+    value.split(':');
+
+  const hours =
+    Number(parts[0]);
+
+  const minutes =
+    Number(parts[1] ?? 0);
+
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return {
+    hours,
+    minutes,
+  };
+}
+
+function getBusinessMinutes(
+  value: string | null,
+): number | null {
+  const parsed =
+    parseBusinessTime(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  return (
+    parsed.hours * 60 +
+    parsed.minutes
+  );
+}
+
+function formatBusinessTime(
+  value: string | null,
+): string | null {
+  const parsed =
+    parseBusinessTime(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const period =
+    parsed.hours >= 12
+      ? 'م'
+      : 'ص';
+
+  let displayHours =
+    parsed.hours % 12;
+
+  if (
+    displayHours === 0
+  ) {
+    displayHours = 12;
+  }
+
+  return `${displayHours}:${String(
+    parsed.minutes,
+  ).padStart(2, '0')} ${period}`;
+}
+
+function isStoreOpenByBusinessHours(
+  businessHours:
+    StoreBusinessHour[],
+  now = new Date(),
+): boolean {
+  /*
+   * لو مفيش مواعيد مسجلة نحافظ
+   * على السلوك الحالي ولا نقفل
+   * الصيدلية تلقائيًا.
+   */
+  if (
+    businessHours.length === 0
+  ) {
+    return true;
+  }
+
+  const currentDay =
+    now.getDay();
+
+  const previousDay =
+    (currentDay + 6) % 7;
+
+  const currentMinutes =
+    now.getHours() * 60 +
+    now.getMinutes();
+
+  const todayHours =
+    businessHours.find(
+      (item) =>
+        item.dayOfWeek ===
+        currentDay,
+    );
+
+  if (
+    todayHours?.isOpen
+  ) {
+    const openMinutes =
+      getBusinessMinutes(
+        todayHours.openTime,
+      );
+
+    const closeMinutes =
+      getBusinessMinutes(
+        todayHours.closeTime,
+      );
+
+    if (
+      openMinutes !== null &&
+      closeMinutes !== null
+    ) {
+      if (
+        closeMinutes >
+        openMinutes
+      ) {
+        if (
+          currentMinutes >=
+            openMinutes &&
+          currentMinutes <
+            closeMinutes
+        ) {
+          return true;
+        }
+      } else if (
+        closeMinutes <
+        openMinutes
+      ) {
+        /*
+         * مثال:
+         * 20:00 → 02:00
+         */
+        if (
+          currentMinutes >=
+          openMinutes
+        ) {
+          return true;
+        }
+      } else {
+        /*
+         * نفس وقت الفتح والإغلاق
+         * نعتبره 24 ساعة.
+         */
+        return true;
+      }
+    }
+  }
+
+  /*
+   * دعم المواعيد الممتدة
+   * بعد منتصف الليل.
+   */
+  const previousHours =
+    businessHours.find(
+      (item) =>
+        item.dayOfWeek ===
+        previousDay,
+    );
+
+  if (
+    previousHours?.isOpen
+  ) {
+    const previousOpenMinutes =
+      getBusinessMinutes(
+        previousHours.openTime,
+      );
+
+    const previousCloseMinutes =
+      getBusinessMinutes(
+        previousHours.closeTime,
+      );
+
+    if (
+      previousOpenMinutes !== null &&
+      previousCloseMinutes !== null &&
+      previousCloseMinutes <
+        previousOpenMinutes &&
+      currentMinutes <
+        previousCloseMinutes
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getNextOpeningLabel(
+  businessHours:
+    StoreBusinessHour[],
+  now = new Date(),
+): string | null {
+  if (
+    businessHours.length === 0
+  ) {
+    return null;
+  }
+
+  const currentDay =
+    now.getDay();
+
+  for (
+    let dayOffset = 0;
+    dayOffset <= 7;
+    dayOffset += 1
+  ) {
+    const targetDay =
+      (currentDay +
+        dayOffset) %
+      7;
+
+    const schedule =
+      businessHours.find(
+        (item) =>
+          item.dayOfWeek ===
+            targetDay &&
+          item.isOpen,
+      );
+
+    if (
+      !schedule ||
+      !schedule.openTime
+    ) {
+      continue;
+    }
+
+    const parsedOpenTime =
+      parseBusinessTime(
+        schedule.openTime,
+      );
+
+    const displayTime =
+      formatBusinessTime(
+        schedule.openTime,
+      );
+
+    if (
+      !parsedOpenTime ||
+      !displayTime
+    ) {
+      continue;
+    }
+
+    const openingDate =
+      new Date(now);
+
+    openingDate.setDate(
+      now.getDate() +
+        dayOffset,
+    );
+
+    openingDate.setHours(
+      parsedOpenTime.hours,
+      parsedOpenTime.minutes,
+      0,
+      0,
+    );
+
+    if (
+      openingDate.getTime() <=
+      now.getTime()
+    ) {
+      continue;
+    }
+
+    if (
+      dayOffset === 0
+    ) {
+      return `تفتح اليوم الساعة ${displayTime}`;
+    }
+
+    if (
+      dayOffset === 1
+    ) {
+      return `تفتح بكرة الساعة ${displayTime}`;
+    }
+
+    return `تفتح يوم ${ARABIC_WEEK_DAYS[targetDay]} الساعة ${displayTime}`;
+  }
+
+  return null;
+}
+
+function ClosedPharmacyBackArrowIcon() {
+  return (
+    <View
+      style={
+        styles.closedPharmacyBackArrowCanvas
+      }
+    >
+      <View
+        style={
+          styles.closedPharmacyBackArrowStem
+        }
+      />
+
+      <View
+        style={[
+          styles.closedPharmacyBackArrowDiagonal,
+          styles.closedPharmacyBackArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.closedPharmacyBackArrowDiagonal,
+          styles.closedPharmacyBackArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
+function ClosedPharmacyExperience({
+  nextOpeningLabel,
+}: {
+  nextOpeningLabel: string | null;
+}) {
+  const floatY =
+    useRef(
+      new Animated.Value(0),
+    ).current;
+
+  const pulse =
+    useRef(
+      new Animated.Value(0),
+    ).current;
+
+  const capsuleX =
+    useRef(
+      new Animated.Value(0),
+    ).current;
+
+  useEffect(() => {
+    const floatAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            floatY,
+            {
+              toValue: -5,
+              duration: 1550,
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            floatY,
+            {
+              toValue: 0,
+              duration: 1550,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    const pulseAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            pulse,
+            {
+              toValue: 1,
+              duration: 1700,
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            pulse,
+            {
+              toValue: 0,
+              duration: 1700,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    const capsuleAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            capsuleX,
+            {
+              toValue: 8,
+              duration: 1800,
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            capsuleX,
+            {
+              toValue: 0,
+              duration: 1800,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    floatAnimation.start();
+    pulseAnimation.start();
+    capsuleAnimation.start();
+
+    return () => {
+      floatAnimation.stop();
+      pulseAnimation.stop();
+      capsuleAnimation.stop();
+    };
+  }, [
+    capsuleX,
+    floatY,
+    pulse,
+  ]);
+
+  const glowOpacity =
+    pulse.interpolate({
+      inputRange: [
+        0,
+        1,
+      ],
+
+      outputRange: [
+        0.12,
+        0.27,
+      ],
+    });
+
+  const crossOpacity =
+    pulse.interpolate({
+      inputRange: [
+        0,
+        1,
+      ],
+
+      outputRange: [
+        0.58,
+        1,
+      ],
+    });
+
+  return (
+    <View
+      style={
+        styles.closedPharmacyExperience
+      }
+    >
+      <Animated.View
+        style={[
+          styles.closedPharmacyGlow,
+
+          {
+            opacity:
+              glowOpacity,
+          },
+        ]}
+      />
+
+      <View
+        style={
+          styles.closedPharmacyMoon
+        }
+      >
+        <View
+          style={
+            styles.closedPharmacyMoonCutout
+          }
+        />
+      </View>
+
+      <View
+        style={[
+          styles.closedPharmacyStar,
+          styles.closedPharmacyStarOne,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.closedPharmacyStar,
+          styles.closedPharmacyStarTwo,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.closedPharmacyStar,
+          styles.closedPharmacyStarThree,
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedPharmacyCrossSign,
+
+          {
+            opacity:
+              crossOpacity,
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.closedPharmacyCrossVertical
+          }
+        />
+
+        <View
+          style={
+            styles.closedPharmacyCrossHorizontal
+          }
+        />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.closedPharmacyStore,
+
+          {
+            transform: [
+              {
+                translateY:
+                  floatY,
+              },
+            ],
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.closedPharmacyRoof
+          }
+        />
+
+        <View
+          style={
+            styles.closedPharmacyAwning
+          }
+        >
+          {[
+            '#FFFFFF',
+            '#BFECD0',
+            '#FFFFFF',
+            '#BFECD0',
+            '#FFFFFF',
+          ].map(
+            (
+              color,
+              index,
+            ) => (
+              <View
+                key={`closed-pharmacy-awning-${index}`}
+                style={[
+                  styles.closedPharmacyAwningStripe,
+
+                  {
+                    backgroundColor:
+                      color,
+                  },
+                ]}
+              />
+            ),
+          )}
+        </View>
+
+        <View
+          style={
+            styles.closedPharmacyBuilding
+          }
+        >
+          <View
+            style={
+              styles.closedPharmacyWindow
+            }
+          >
+            <View
+              style={
+                styles.closedPharmacyShelfTop
+              }
+            >
+              <View
+                style={[
+                  styles.closedPharmacyMedicineBox,
+                  styles.closedPharmacyMedicineGreen,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedPharmacyMedicineBox,
+                  styles.closedPharmacyMedicineWhite,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedPharmacyBottle,
+                  styles.closedPharmacyMedicineMint,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedPharmacyMedicineBoxSmall,
+                  styles.closedPharmacyMedicineWarm,
+                ]}
+              />
+            </View>
+
+            <View
+              style={
+                styles.closedPharmacyShelfBottom
+              }
+            >
+              <View
+                style={[
+                  styles.closedPharmacyMedicineBoxSmall,
+                  styles.closedPharmacyMedicineWhite,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedPharmacyBottleSmall,
+                  styles.closedPharmacyMedicineGreen,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedPharmacyMedicineBoxSmall,
+                  styles.closedPharmacyMedicineMint,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedPharmacyBottleSmall,
+                  styles.closedPharmacyMedicineWhite,
+                ]}
+              />
+            </View>
+
+            <View
+              style={
+                styles.closedPharmacyShutter
+              }
+            >
+              {Array.from({
+                length: 8,
+              }).map(
+                (
+                  _,
+                  index,
+                ) => (
+                  <View
+                    key={`closed-pharmacy-shutter-${index}`}
+                    style={
+                      styles.closedPharmacyShutterLine
+                    }
+                  />
+                ),
+              )}
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.closedPharmacyDoorBase
+            }
+          >
+            <View
+              style={
+                styles.closedPharmacyLock
+              }
+            >
+              <View
+                style={
+                  styles.closedPharmacyLockDot
+                }
+              />
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={
+            styles.closedPharmacyGroundShadow
+          }
+        />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.closedPharmacyCapsule,
+
+          {
+            transform: [
+              {
+                translateX:
+                  capsuleX,
+              },
+
+              {
+                rotate:
+                  '-24deg',
+              },
+            ],
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.closedPharmacyCapsuleHalfGreen
+          }
+        />
+
+        <View
+          style={
+            styles.closedPharmacyCapsuleHalfWhite
+          }
+        />
+      </Animated.View>
+
+      <View
+        style={
+          styles.closedPharmacyBottleHero
+        }
+      >
+        <View
+          style={
+            styles.closedPharmacyBottleCap
+          }
+        />
+
+        <View
+          style={
+            styles.closedPharmacyBottleLabel
+          }
+        >
+          <View
+            style={
+              styles.closedPharmacyBottleLabelCrossVertical
+            }
+          />
+
+          <View
+            style={
+              styles.closedPharmacyBottleLabelCrossHorizontal
+            }
+          />
+        </View>
+      </View>
+
+      <View
+        style={
+          styles.closedPharmacyCopy
+        }
+      >
+        <Text
+          style={
+            styles.closedPharmacyTitle
+          }
+        >
+          الصيدلية مغلقة
+        </Text>
+
+        {nextOpeningLabel ? (
+          <View
+            style={
+              styles.closedPharmacyOpeningPill
+            }
+          >
+            <Text
+              style={
+                styles.closedPharmacyOpeningText
+              }
+            >
+              {nextOpeningLabel}
+            </Text>
+          </View>
+        ) : (
+          <Text
+            style={
+              styles.closedPharmacyOpeningFallback
+            }
+          >
+            هنرجع نستقبل طلباتك قريب
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -1353,8 +2182,15 @@ export default function PharmacyScreen() {
     [];
 
   const isStoreClosed =
-    currentStore
-      .isManuallyClosed;
+    currentStore.isManuallyClosed ||
+    !isStoreOpenByBusinessHours(
+      catalog.businessHours,
+    );
+
+  const nextOpeningLabel =
+    getNextOpeningLabel(
+      catalog.businessHours,
+    );
 
   const currentStoreItemCount =
     cartItems.reduce(
@@ -1553,6 +2389,54 @@ export default function PharmacyScreen() {
           currentStore.id,
       },
     });
+  }
+
+  if (isStoreClosed) {
+    return (
+      <SafeAreaView
+        style={
+          styles.closedPharmacyStateScreen
+        }
+        edges={[
+          'top',
+          'bottom',
+        ]}
+      >
+        <StatusBar
+          style="light"
+        />
+
+        <View
+          style={
+            styles.closedPharmacyStateHeader
+          }
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="رجوع"
+            style={({
+              pressed,
+            }) => [
+              styles.closedPharmacyBackButton,
+
+              pressed &&
+                styles.closedPharmacyBackButtonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <ClosedPharmacyBackArrowIcon />
+          </Pressable>
+        </View>
+
+        <ClosedPharmacyExperience
+          nextOpeningLabel={
+            nextOpeningLabel
+          }
+        />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -1890,23 +2774,6 @@ export default function PharmacyScreen() {
             ),
           )}
         </ScrollView>
-
-        {isStoreClosed && (
-          <View
-            style={
-              styles.closedOverlay
-            }
-          >
-            <Text
-              style={
-                styles.closedOverlayText
-              }
-            >
-              {currentStore.manualClosedNote ??
-                'الصيدلية مغلقة حاليًا.'}
-            </Text>
-          </View>
-        )}
 
         {shouldShowCartBar && (
           <View
@@ -2956,41 +3823,986 @@ const styles =
         'rtl',
     },
 
-    closedOverlay: {
-      backgroundColor:
-        '#252525',
+    /* ========================================================
+     * CLOSED PHARMACY — FULL SCREEN EXPERIENCE
+     * ========================================================
+     */
 
-      left:
-        16,
+    closedPharmacyStateScreen: {
+      backgroundColor:
+        '#0D211A',
+
+      flex:
+        1,
+    },
+
+    closedPharmacyStateHeader: {
+      alignItems:
+        'flex-start',
+
+      height:
+        62,
+
+      justifyContent:
+        'center',
 
       paddingHorizontal:
-        15,
+        16,
 
-      paddingVertical:
+      zIndex:
+        20,
+    },
+
+    closedPharmacyBackButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(255, 255, 255, 0.09)',
+
+      borderColor:
+        'rgba(255, 255, 255, 0.16)',
+
+      borderRadius:
+        24,
+
+      borderWidth:
+        1,
+
+      height:
+        46,
+
+      justifyContent:
+        'center',
+
+      width:
+        46,
+    },
+
+    closedPharmacyBackButtonPressed: {
+      backgroundColor:
+        'rgba(255, 255, 255, 0.15)',
+
+      transform: [
+        {
+          scale:
+            0.97,
+        },
+      ],
+    },
+
+    closedPharmacyBackArrowCanvas: {
+      height:
+        23,
+
+      position:
+        'relative',
+
+      width:
+        24,
+    },
+
+    closedPharmacyBackArrowStem: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius:
+        2,
+
+      height:
+        2.2,
+
+      left:
+        3,
+
+      position:
+        'absolute',
+
+      top:
+        10.3,
+
+      width:
+        19,
+    },
+
+    closedPharmacyBackArrowDiagonal: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius:
+        2,
+
+      height:
+        2.2,
+
+      left:
+        2,
+
+      position:
+        'absolute',
+
+      width:
+        10,
+    },
+
+    closedPharmacyBackArrowTop: {
+      top:
+        7,
+
+      transform: [
+        {
+          rotate:
+            '-42deg',
+        },
+      ],
+    },
+
+    closedPharmacyBackArrowBottom: {
+      top:
+        14,
+
+      transform: [
+        {
+          rotate:
+            '42deg',
+        },
+      ],
+    },
+
+    closedPharmacyExperience: {
+      alignItems:
+        'center',
+
+      flex:
+        1,
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+
+      paddingBottom:
+        44,
+
+      position:
+        'relative',
+
+      width:
+        '100%',
+    },
+
+    closedPharmacyGlow: {
+      backgroundColor:
+        '#35D57A',
+
+      borderRadius:
+        999,
+
+      height:
+        430,
+
+      position:
+        'absolute',
+
+      top:
+        28,
+
+      width:
+        430,
+    },
+
+    closedPharmacyMoon: {
+      backgroundColor:
+        '#DFF9E8',
+
+      borderRadius:
+        999,
+
+      height:
+        50,
+
+      position:
+        'absolute',
+
+      right:
+        34,
+
+      top:
+        36,
+
+      width:
+        50,
+    },
+
+    closedPharmacyMoonCutout: {
+      backgroundColor:
+        '#0D211A',
+
+      borderRadius:
+        999,
+
+      height:
+        46,
+
+      left:
+        17,
+
+      position:
+        'absolute',
+
+      top:
+        -3,
+
+      width:
+        46,
+    },
+
+    closedPharmacyStar: {
+      backgroundColor:
+        '#DFF9E8',
+
+      borderRadius:
+        999,
+
+      height:
+        4,
+
+      position:
+        'absolute',
+
+      width:
+        4,
+    },
+
+    closedPharmacyStarOne: {
+      right:
+        102,
+
+      top:
+        66,
+    },
+
+    closedPharmacyStarTwo: {
+      height:
+        3,
+
+      right:
+        77,
+
+      top:
+        112,
+
+      width:
+        3,
+    },
+
+    closedPharmacyStarThree: {
+      height:
+        3,
+
+      left:
+        46,
+
+      top:
+        118,
+
+      width:
+        3,
+    },
+
+    closedPharmacyCrossSign: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(53, 213, 122, 0.10)',
+
+      borderColor:
+        'rgba(135, 255, 184, 0.38)',
+
+      borderRadius:
+        24,
+
+      borderWidth:
+        1,
+
+      height:
+        72,
+
+      justifyContent:
+        'center',
+
+      position:
+        'absolute',
+
+      right:
+        23,
+
+      top:
+        145,
+
+      transform: [
+        {
+          rotate:
+            '8deg',
+        },
+      ],
+
+      width:
+        72,
+    },
+
+    closedPharmacyCrossVertical: {
+      backgroundColor:
+        '#82F1AE',
+
+      borderRadius:
+        4,
+
+      height:
+        36,
+
+      position:
+        'absolute',
+
+      width:
+        12,
+    },
+
+    closedPharmacyCrossHorizontal: {
+      backgroundColor:
+        '#82F1AE',
+
+      borderRadius:
+        4,
+
+      height:
+        12,
+
+      position:
+        'absolute',
+
+      width:
+        36,
+    },
+
+    closedPharmacyStore: {
+      height:
+        260,
+
+      marginTop:
+        -60,
+
+      position:
+        'relative',
+
+      width:
+        270,
+    },
+
+    closedPharmacyRoof: {
+      backgroundColor:
+        '#F4F7F4',
+
+      borderRadius:
+        18,
+
+      height:
+        34,
+
+      left:
+        22,
+
+      position:
+        'absolute',
+
+      right:
+        22,
+
+      top:
+        7,
+    },
+
+    closedPharmacyAwning: {
+      borderBottomLeftRadius:
+        18,
+
+      borderBottomRightRadius:
+        18,
+
+      flexDirection:
+        'row',
+
+      height:
+        54,
+
+      left:
+        8,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      right:
+        8,
+
+      top:
+        31,
+    },
+
+    closedPharmacyAwningStripe: {
+      flex:
+        1,
+    },
+
+    closedPharmacyBuilding: {
+      backgroundColor:
+        '#F4F7F4',
+
+      borderBottomLeftRadius:
+        28,
+
+      borderBottomRightRadius:
+        28,
+
+      bottom:
+        24,
+
+      left:
+        19,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      right:
+        19,
+
+      top:
+        75,
+    },
+
+    closedPharmacyWindow: {
+      backgroundColor:
+        '#172B22',
+
+      borderRadius:
+        16,
+
+      height:
+        102,
+
+      left:
+        23,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      right:
+        23,
+
+      top:
+        22,
+    },
+
+    closedPharmacyShelfTop: {
+      alignItems:
+        'flex-end',
+
+      bottom:
+        53,
+
+      flexDirection:
+        'row',
+
+      gap:
+        8,
+
+      left:
+        14,
+
+      position:
+        'absolute',
+
+      right:
+        14,
+    },
+
+    closedPharmacyShelfBottom: {
+      alignItems:
+        'flex-end',
+
+      bottom:
+        14,
+
+      flexDirection:
+        'row',
+
+      gap:
+        8,
+
+      left:
+        14,
+
+      position:
+        'absolute',
+
+      right:
+        14,
+    },
+
+    closedPharmacyMedicineBox: {
+      borderRadius:
+        4,
+
+      height:
+        23,
+
+      width:
+        29,
+    },
+
+    closedPharmacyMedicineBoxSmall: {
+      borderRadius:
+        4,
+
+      height:
+        17,
+
+      width:
+        22,
+    },
+
+    closedPharmacyBottle: {
+      borderRadius:
+        6,
+
+      height:
+        27,
+
+      width:
+        20,
+    },
+
+    closedPharmacyBottleSmall: {
+      borderRadius:
+        5,
+
+      height:
+        20,
+
+      width:
+        16,
+    },
+
+    closedPharmacyMedicineGreen: {
+      backgroundColor:
+        '#70D89C',
+    },
+
+    closedPharmacyMedicineMint: {
+      backgroundColor:
+        '#BDEFD0',
+    },
+
+    closedPharmacyMedicineWhite: {
+      backgroundColor:
+        '#EEF6F0',
+    },
+
+    closedPharmacyMedicineWarm: {
+      backgroundColor:
+        '#F2BA7E',
+    },
+
+    closedPharmacyShutter: {
+      backgroundColor:
+        '#AEB6B1',
+
+      bottom:
+        0,
+
+      left:
+        0,
+
+      position:
+        'absolute',
+
+      right:
+        0,
+
+      top:
+        17,
+
+      zIndex:
+        5,
+    },
+
+    closedPharmacyShutterLine: {
+      backgroundColor:
+        'rgba(255, 255, 255, 0.42)',
+
+      height:
+        2,
+
+      marginTop:
+        10,
+    },
+
+    closedPharmacyDoorBase: {
+      alignItems:
+        'center',
+
+      bottom:
+        7,
+
+      height:
+        28,
+
+      justifyContent:
+        'center',
+
+      left:
+        0,
+
+      position:
+        'absolute',
+
+      right:
+        0,
+    },
+
+    closedPharmacyLock: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        12,
+
+      height:
+        25,
+
+      justifyContent:
+        'center',
+
+      width:
+        25,
+    },
+
+    closedPharmacyLockDot: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius:
+        999,
+
+      height:
+        5,
+
+      width:
+        5,
+    },
+
+    closedPharmacyGroundShadow: {
+      backgroundColor:
+        'rgba(0, 0, 0, 0.22)',
+
+      borderRadius:
+        999,
+
+      bottom:
+        3,
+
+      height:
+        18,
+
+      left:
+        34,
+
+      position:
+        'absolute',
+
+      right:
+        34,
+
+      transform: [
+        {
+          scaleX:
+            0.88,
+        },
+      ],
+    },
+
+    closedPharmacyCapsule: {
+      bottom:
+        '31%',
+
+      flexDirection:
+        'row',
+
+      height:
+        36,
+
+      left:
+        28,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      width:
+        76,
+    },
+
+    closedPharmacyCapsuleHalfGreen: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderBottomLeftRadius:
+        18,
+
+      borderTopLeftRadius:
+        18,
+
+      flex:
+        1,
+    },
+
+    closedPharmacyCapsuleHalfWhite: {
+      backgroundColor:
+        '#F0F6F2',
+
+      borderBottomRightRadius:
+        18,
+
+      borderTopRightRadius:
+        18,
+
+      flex:
+        1,
+    },
+
+    closedPharmacyBottleHero: {
+      backgroundColor:
+        '#EAF4EC',
+
+      borderRadius:
+        17,
+
+      bottom:
+        '29%',
+
+      height:
+        83,
+
+      position:
+        'absolute',
+
+      right:
+        22,
+
+      transform: [
+        {
+          rotate:
+            '8deg',
+        },
+      ],
+
+      width:
+        56,
+    },
+
+    closedPharmacyBottleCap: {
+      backgroundColor:
+        '#99A49E',
+
+      borderRadius:
+        5,
+
+      height:
+        13,
+
+      left:
         10,
 
       position:
         'absolute',
 
       right:
-        16,
+        10,
 
       top:
-        68,
-
-      zIndex:
-        50,
+        -9,
     },
 
-    closedOverlayText: {
+    closedPharmacyBottleLabel: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#BFECD0',
+
+      borderRadius:
+        9,
+
+      bottom:
+        10,
+
+      justifyContent:
+        'center',
+
+      left:
+        7,
+
+      position:
+        'absolute',
+
+      right:
+        7,
+
+      top:
+        21,
+    },
+
+    closedPharmacyBottleLabelCrossVertical: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        2,
+
+      height:
+        22,
+
+      position:
+        'absolute',
+
+      width:
+        7,
+    },
+
+    closedPharmacyBottleLabelCrossHorizontal: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        2,
+
+      height:
+        7,
+
+      position:
+        'absolute',
+
+      width:
+        22,
+    },
+
+    closedPharmacyCopy: {
+      alignItems:
+        'center',
+
+      marginTop:
+        18,
+
+      paddingHorizontal:
+        28,
+
+      width:
+        '100%',
+    },
+
+    closedPharmacyTitle: {
       color:
         '#FFFFFF',
 
       fontSize:
-        12,
+        28,
 
       fontWeight:
-        '600',
+        '900',
+
+      lineHeight:
+        38,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    closedPharmacyOpeningPill: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(255, 255, 255, 0.10)',
+
+      borderColor:
+        'rgba(255, 255, 255, 0.15)',
+
+      borderRadius:
+        999,
+
+      borderWidth:
+        1,
+
+      marginTop:
+        18,
+
+      minHeight:
+        46,
+
+      paddingHorizontal:
+        18,
+
+      paddingVertical:
+        10,
+    },
+
+    closedPharmacyOpeningText: {
+      color:
+        '#FFFFFF',
+
+      fontSize:
+        14,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    closedPharmacyOpeningFallback: {
+      color:
+        '#DFF9E8',
+
+      fontSize:
+        13,
+
+      fontWeight:
+        '700',
+
+      marginTop:
+        17,
 
       textAlign:
         'center',

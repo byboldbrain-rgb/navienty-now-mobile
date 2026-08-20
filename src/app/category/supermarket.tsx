@@ -26,6 +26,7 @@ import {
   type CatalogSection,
   getStoreCatalog,
   listStores,
+  type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
 import {
@@ -496,6 +497,749 @@ function BackArrowIcon() {
           styles.backArrowBottom,
         ]}
       />
+    </View>
+  );
+}
+
+
+const ARABIC_WEEK_DAYS = [
+  'الأحد',
+  'الاثنين',
+  'الثلاثاء',
+  'الأربعاء',
+  'الخميس',
+  'الجمعة',
+  'السبت',
+];
+
+function parseBusinessTime(
+  value: string | null,
+): {
+  hours: number;
+  minutes: number;
+} | null {
+  if (!value) {
+    return null;
+  }
+
+  const parts =
+    value.split(':');
+
+  const hours =
+    Number(parts[0]);
+
+  const minutes =
+    Number(parts[1] ?? 0);
+
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return {
+    hours,
+    minutes,
+  };
+}
+
+function getBusinessMinutes(
+  value: string | null,
+): number | null {
+  const parsed =
+    parseBusinessTime(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  return (
+    parsed.hours * 60 +
+    parsed.minutes
+  );
+}
+
+function formatBusinessTime(
+  value: string | null,
+): string | null {
+  const parsed =
+    parseBusinessTime(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const period =
+    parsed.hours >= 12
+      ? 'م'
+      : 'ص';
+
+  let displayHours =
+    parsed.hours % 12;
+
+  if (
+    displayHours === 0
+  ) {
+    displayHours = 12;
+  }
+
+  return `${displayHours}:${String(
+    parsed.minutes,
+  ).padStart(2, '0')} ${period}`;
+}
+
+function isStoreOpenByBusinessHours(
+  businessHours:
+    StoreBusinessHour[],
+  now = new Date(),
+): boolean {
+  /*
+   * حفاظًا على السلوك الحالي:
+   * لو المتجر ليس له مواعيد مسجلة،
+   * لا نعتبره مغلقًا تلقائيًا.
+   */
+  if (
+    businessHours.length === 0
+  ) {
+    return true;
+  }
+
+  const currentDay =
+    now.getDay();
+
+  const previousDay =
+    (currentDay + 6) % 7;
+
+  const currentMinutes =
+    now.getHours() * 60 +
+    now.getMinutes();
+
+  const todayHours =
+    businessHours.find(
+      (item) =>
+        item.dayOfWeek ===
+        currentDay,
+    );
+
+  if (
+    todayHours?.isOpen
+  ) {
+    const openMinutes =
+      getBusinessMinutes(
+        todayHours.openTime,
+      );
+
+    const closeMinutes =
+      getBusinessMinutes(
+        todayHours.closeTime,
+      );
+
+    if (
+      openMinutes !== null &&
+      closeMinutes !== null
+    ) {
+      if (
+        closeMinutes >
+        openMinutes
+      ) {
+        if (
+          currentMinutes >=
+            openMinutes &&
+          currentMinutes <
+            closeMinutes
+        ) {
+          return true;
+        }
+      } else if (
+        closeMinutes <
+        openMinutes
+      ) {
+        /*
+         * مثال:
+         * 08:00 → 01:00
+         *
+         * الجزء بعد 08:00 وحتى منتصف الليل.
+         */
+        if (
+          currentMinutes >=
+          openMinutes
+        ) {
+          return true;
+        }
+      } else {
+        /*
+         * نفس وقت الفتح والإغلاق
+         * نعتبره 24 ساعة.
+         */
+        return true;
+      }
+    }
+  }
+
+  /*
+   * الجزء الممتد بعد منتصف الليل
+   * يأتي من جدول اليوم السابق.
+   *
+   * مثال:
+   * أمس 08:00 → اليوم 01:00.
+   */
+  const previousHours =
+    businessHours.find(
+      (item) =>
+        item.dayOfWeek ===
+        previousDay,
+    );
+
+  if (
+    previousHours?.isOpen
+  ) {
+    const previousOpenMinutes =
+      getBusinessMinutes(
+        previousHours.openTime,
+      );
+
+    const previousCloseMinutes =
+      getBusinessMinutes(
+        previousHours.closeTime,
+      );
+
+    if (
+      previousOpenMinutes !== null &&
+      previousCloseMinutes !== null &&
+      previousCloseMinutes <
+        previousOpenMinutes &&
+      currentMinutes <
+        previousCloseMinutes
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getNextOpeningLabel(
+  businessHours:
+    StoreBusinessHour[],
+  now = new Date(),
+): string | null {
+  if (
+    businessHours.length === 0
+  ) {
+    return null;
+  }
+
+  const currentDay =
+    now.getDay();
+
+  for (
+    let dayOffset = 0;
+    dayOffset <= 7;
+    dayOffset += 1
+  ) {
+    const targetDay =
+      (currentDay +
+        dayOffset) %
+      7;
+
+    const schedule =
+      businessHours.find(
+        (item) =>
+          item.dayOfWeek ===
+          targetDay &&
+          item.isOpen,
+      );
+
+    if (
+      !schedule ||
+      !schedule.openTime
+    ) {
+      continue;
+    }
+
+    const parsedOpenTime =
+      parseBusinessTime(
+        schedule.openTime,
+      );
+
+    const displayTime =
+      formatBusinessTime(
+        schedule.openTime,
+      );
+
+    if (
+      !parsedOpenTime ||
+      !displayTime
+    ) {
+      continue;
+    }
+
+    const openingDate =
+      new Date(now);
+
+    openingDate.setDate(
+      now.getDate() +
+        dayOffset,
+    );
+
+    openingDate.setHours(
+      parsedOpenTime.hours,
+      parsedOpenTime.minutes,
+      0,
+      0,
+    );
+
+    if (
+      openingDate.getTime() <=
+      now.getTime()
+    ) {
+      continue;
+    }
+
+    if (
+      dayOffset === 0
+    ) {
+      return `يفتح اليوم الساعة ${displayTime}`;
+    }
+
+    if (
+      dayOffset === 1
+    ) {
+      return `يفتح بكرة الساعة ${displayTime}`;
+    }
+
+    return `يفتح يوم ${ARABIC_WEEK_DAYS[targetDay]} الساعة ${displayTime}`;
+  }
+
+  return null;
+}
+
+function ClosedBackArrowIcon() {
+  return (
+    <View
+      style={
+        styles.closedBackArrowCanvas
+      }
+    >
+      <View
+        style={
+          styles.closedBackArrowStem
+        }
+      />
+
+      <View
+        style={[
+          styles.closedBackArrowDiagonal,
+          styles.closedBackArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.closedBackArrowDiagonal,
+          styles.closedBackArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
+function ClosedSupermarketExperience({
+  nextOpeningLabel,
+}: {
+  nextOpeningLabel: string | null;
+}) {
+  const floatY =
+    useRef(
+      new Animated.Value(0),
+    ).current;
+
+  const pulse =
+    useRef(
+      new Animated.Value(0),
+    ).current;
+
+  useEffect(() => {
+    const floatAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            floatY,
+            {
+              toValue: -5,
+              duration: 1600,
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            floatY,
+            {
+              toValue: 0,
+              duration: 1600,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    const pulseAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            pulse,
+            {
+              toValue: 1,
+              duration: 1800,
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            pulse,
+            {
+              toValue: 0,
+              duration: 1800,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    floatAnimation.start();
+    pulseAnimation.start();
+
+    return () => {
+      floatAnimation.stop();
+      pulseAnimation.stop();
+    };
+  }, [
+    floatY,
+    pulse,
+  ]);
+
+  const glowOpacity =
+    pulse.interpolate({
+      inputRange: [
+        0,
+        1,
+      ],
+
+      outputRange: [
+        0.13,
+        0.28,
+      ],
+    });
+
+  const starOpacity =
+    pulse.interpolate({
+      inputRange: [
+        0,
+        1,
+      ],
+
+      outputRange: [
+        0.38,
+        0.92,
+      ],
+    });
+
+  return (
+    <View
+      style={
+        styles.closedExperience
+      }
+    >
+      <Animated.View
+        style={[
+          styles.closedExperienceGlow,
+
+          {
+            opacity:
+              glowOpacity,
+          },
+        ]}
+      />
+
+      <View
+        style={
+          styles.closedExperienceMoon
+        }
+      >
+        <View
+          style={
+            styles.closedExperienceMoonCutout
+          }
+        />
+      </View>
+
+      <Animated.View
+        style={[
+          styles.closedExperienceStar,
+          styles.closedExperienceStarOne,
+
+          {
+            opacity:
+              starOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedExperienceStar,
+          styles.closedExperienceStarTwo,
+
+          {
+            opacity:
+              starOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedExperienceStar,
+          styles.closedExperienceStarThree,
+
+          {
+            opacity:
+              starOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedExperienceStore,
+
+          {
+            transform: [
+              {
+                translateY:
+                  floatY,
+              },
+            ],
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.closedStoreRoof
+          }
+        />
+
+        <View
+          style={
+            styles.closedStoreAwning
+          }
+        >
+          {[
+            '#00B956',
+            '#E7F8ED',
+            '#00B956',
+            '#E7F8ED',
+            '#00B956',
+          ].map(
+            (
+              color,
+              index,
+            ) => (
+              <View
+                key={`closed-store-awning-${index}`}
+                style={[
+                  styles.closedStoreAwningStripe,
+
+                  {
+                    backgroundColor:
+                      color,
+                  },
+                ]}
+              />
+            ),
+          )}
+        </View>
+
+        <View
+          style={
+            styles.closedStoreBuilding
+          }
+        >
+          <View
+            style={
+              styles.closedStoreWindow
+            }
+          >
+            <View
+              style={
+                styles.closedStoreProductsTop
+              }
+            >
+              <View
+                style={[
+                  styles.closedStoreProduct,
+                  styles.closedStoreProductGreen,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedStoreProduct,
+                  styles.closedStoreProductCream,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedStoreProduct,
+                  styles.closedStoreProductOrange,
+                ]}
+              />
+            </View>
+
+            <View
+              style={
+                styles.closedStoreProductsBottom
+              }
+            >
+              <View
+                style={[
+                  styles.closedStoreProductSmall,
+                  styles.closedStoreProductCream,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedStoreProductSmall,
+                  styles.closedStoreProductGreen,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedStoreProductSmall,
+                  styles.closedStoreProductOrange,
+                ]}
+              />
+
+              <View
+                style={[
+                  styles.closedStoreProductSmall,
+                  styles.closedStoreProductCream,
+                ]}
+              />
+            </View>
+
+            <View
+              style={
+                styles.closedStoreShutter
+              }
+            >
+              {Array.from({
+                length: 8,
+              }).map(
+                (
+                  _,
+                  index,
+                ) => (
+                  <View
+                    key={`closed-store-shutter-${index}`}
+                    style={
+                      styles.closedStoreShutterLine
+                    }
+                  />
+                ),
+              )}
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.closedStoreDoorBase
+            }
+          >
+            <View
+              style={
+                styles.closedStoreLock
+              }
+            >
+              <View
+                style={
+                  styles.closedStoreLockDot
+                }
+              />
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={
+            styles.closedStoreGroundShadow
+          }
+        />
+      </Animated.View>
+
+      <View
+        style={
+          styles.closedExperienceBag
+        }
+      >
+        <View
+          style={
+            styles.closedExperienceBagHandle
+          }
+        />
+
+        <View
+          style={
+            styles.closedExperienceBagMark
+          }
+        />
+      </View>
+
+      <View
+        style={
+          styles.closedExperienceCopy
+        }
+      >
+        <Text
+          style={
+            styles.closedExperienceTitle
+          }
+        >
+          السوبر ماركت مغلق
+        </Text>
+
+        {nextOpeningLabel ? (
+          <View
+            style={
+              styles.closedOpeningPill
+            }
+          >
+            <Text
+              style={
+                styles.closedOpeningText
+              }
+            >
+              {nextOpeningLabel}
+            </Text>
+          </View>
+        ) : (
+          <Text
+            style={
+              styles.closedOpeningFallback
+            }
+          >
+            هنرجع نستقبل طلباتك قريب
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -1171,7 +1915,15 @@ export default function SupermarketScreen() {
     catalog.delivery;
 
   const isStoreClosed =
-    currentStore.isManuallyClosed;
+    currentStore.isManuallyClosed ||
+    !isStoreOpenByBusinessHours(
+      catalog.businessHours,
+    );
+
+  const nextOpeningLabel =
+    getNextOpeningLabel(
+      catalog.businessHours,
+    );
 
   const currentStoreItemCount =
     cartItems.reduce(
@@ -1328,6 +2080,54 @@ export default function SupermarketScreen() {
           item.id ===
           productId,
       )?.quantity ?? 0
+    );
+  }
+
+  if (isStoreClosed) {
+    return (
+      <SafeAreaView
+        style={
+          styles.closedStateScreen
+        }
+        edges={[
+          'top',
+          'bottom',
+        ]}
+      >
+        <StatusBar
+          style="light"
+        />
+
+        <View
+          style={
+            styles.closedStateHeader
+          }
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="رجوع"
+            style={({
+              pressed,
+            }) => [
+              styles.closedBackButton,
+
+              pressed &&
+                styles.closedBackButtonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <ClosedBackArrowIcon />
+          </Pressable>
+        </View>
+
+        <ClosedSupermarketExperience
+          nextOpeningLabel={
+            nextOpeningLabel
+          }
+        />
+      </SafeAreaView>
     );
   }
 
@@ -1623,23 +2423,6 @@ export default function SupermarketScreen() {
             ),
           )}
         </ScrollView>
-
-        {isStoreClosed && (
-          <View
-            style={
-              styles.closedOverlay
-            }
-          >
-            <Text
-              style={
-                styles.closedOverlayText
-              }
-            >
-              {currentStore.manualClosedNote ??
-                'السوبر ماركت مغلق حاليًا.'}
-            </Text>
-          </View>
-        )}
 
         {shouldShowCartBar && (
           <View
@@ -2595,36 +3378,800 @@ const styles =
         'rtl',
     },
 
-    closedOverlay: {
-      backgroundColor:
-        '#252525',
+    /* ========================================================
+     * CLOSED SUPERMARKET — FULL SCREEN EXPERIENCE
+     * ========================================================
+     */
 
-      left: 16,
+    closedStateScreen: {
+      backgroundColor:
+        '#102019',
+
+      flex: 1,
+    },
+
+    closedStateHeader: {
+      alignItems:
+        'flex-start',
+
+      height:
+        62,
+
+      justifyContent:
+        'center',
 
       paddingHorizontal:
-        15,
+        16,
 
-      paddingVertical:
-        10,
+      zIndex:
+        20,
+    },
+
+    closedBackButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(255, 255, 255, 0.09)',
+
+      borderColor:
+        'rgba(255, 255, 255, 0.16)',
+
+      borderRadius:
+        24,
+
+      borderWidth:
+        1,
+
+      height:
+        46,
+
+      justifyContent:
+        'center',
+
+      width:
+        46,
+    },
+
+    closedBackButtonPressed: {
+      backgroundColor:
+        'rgba(255, 255, 255, 0.15)',
+
+      transform: [
+        {
+          scale:
+            0.97,
+        },
+      ],
+    },
+
+    closedBackArrowCanvas: {
+      height:
+        23,
+
+      position:
+        'relative',
+
+      width:
+        24,
+    },
+
+    closedBackArrowStem: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius:
+        2,
+
+      height:
+        2.2,
+
+      left:
+        3,
 
       position:
         'absolute',
 
-      right: 16,
+      top:
+        10.3,
 
-      top: 68,
-
-      zIndex: 50,
+      width:
+        19,
     },
 
-    closedOverlayText: {
+    closedBackArrowDiagonal: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius:
+        2,
+
+      height:
+        2.2,
+
+      left:
+        2,
+
+      position:
+        'absolute',
+
+      width:
+        10,
+    },
+
+    closedBackArrowTop: {
+      top:
+        7,
+
+      transform: [
+        {
+          rotate:
+            '-42deg',
+        },
+      ],
+    },
+
+    closedBackArrowBottom: {
+      top:
+        14,
+
+      transform: [
+        {
+          rotate:
+            '42deg',
+        },
+      ],
+    },
+
+    closedExperience: {
+      alignItems:
+        'center',
+
+      flex:
+        1,
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+
+      paddingBottom:
+        42,
+
+      position:
+        'relative',
+
+      width:
+        '100%',
+    },
+
+    closedExperienceGlow: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        999,
+
+      height:
+        430,
+
+      position:
+        'absolute',
+
+      top:
+        24,
+
+      width:
+        430,
+    },
+
+    closedExperienceMoon: {
+      backgroundColor:
+        '#DFF9E8',
+
+      borderRadius:
+        999,
+
+      height:
+        54,
+
+      position:
+        'absolute',
+
+      right:
+        36,
+
+      top:
+        34,
+
+      width:
+        54,
+    },
+
+    closedExperienceMoonCutout: {
+      backgroundColor:
+        '#102019',
+
+      borderRadius:
+        999,
+
+      height:
+        49,
+
+      left:
+        18,
+
+      position:
+        'absolute',
+
+      top:
+        -3,
+
+      width:
+        49,
+    },
+
+    closedExperienceStar: {
+      backgroundColor:
+        '#DFF9E8',
+
+      borderRadius:
+        999,
+
+      height:
+        5,
+
+      position:
+        'absolute',
+
+      width:
+        5,
+    },
+
+    closedExperienceStarOne: {
+      right:
+        109,
+
+      top:
+        61,
+    },
+
+    closedExperienceStarTwo: {
+      height:
+        3,
+
+      right:
+        76,
+
+      top:
+        111,
+
+      width:
+        3,
+    },
+
+    closedExperienceStarThree: {
+      height:
+        4,
+
+      left:
+        44,
+
+      top:
+        116,
+
+      width:
+        4,
+    },
+
+    closedExperienceStore: {
+      height:
+        260,
+
+      marginTop:
+        -58,
+
+      position:
+        'relative',
+
+      width:
+        270,
+    },
+
+    closedStoreRoof: {
+      backgroundColor:
+        '#F5F0E7',
+
+      borderRadius:
+        18,
+
+      height:
+        34,
+
+      left:
+        22,
+
+      position:
+        'absolute',
+
+      right:
+        22,
+
+      top:
+        7,
+    },
+
+    closedStoreAwning: {
+      borderBottomLeftRadius:
+        18,
+
+      borderBottomRightRadius:
+        18,
+
+      flexDirection:
+        'row',
+
+      height:
+        54,
+
+      left:
+        8,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      right:
+        8,
+
+      top:
+        31,
+    },
+
+    closedStoreAwningStripe: {
+      flex:
+        1,
+    },
+
+    closedStoreBuilding: {
+      backgroundColor:
+        '#F5F0E7',
+
+      borderBottomLeftRadius:
+        28,
+
+      borderBottomRightRadius:
+        28,
+
+      bottom:
+        24,
+
+      left:
+        19,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      right:
+        19,
+
+      top:
+        75,
+    },
+
+    closedStoreWindow: {
+      backgroundColor:
+        '#1A2D24',
+
+      borderRadius:
+        16,
+
+      height:
+        102,
+
+      left:
+        23,
+
+      overflow:
+        'hidden',
+
+      position:
+        'absolute',
+
+      right:
+        23,
+
+      top:
+        22,
+    },
+
+    closedStoreProductsTop: {
+      alignItems:
+        'flex-end',
+
+      bottom:
+        52,
+
+      flexDirection:
+        'row',
+
+      gap:
+        9,
+
+      left:
+        14,
+
+      position:
+        'absolute',
+
+      right:
+        14,
+    },
+
+    closedStoreProductsBottom: {
+      alignItems:
+        'flex-end',
+
+      bottom:
+        15,
+
+      flexDirection:
+        'row',
+
+      gap:
+        8,
+
+      left:
+        14,
+
+      position:
+        'absolute',
+
+      right:
+        14,
+    },
+
+    closedStoreProduct: {
+      borderRadius:
+        5,
+
+      height:
+        24,
+
+      width:
+        28,
+    },
+
+    closedStoreProductSmall: {
+      borderRadius:
+        4,
+
+      height:
+        18,
+
+      width:
+        21,
+    },
+
+    closedStoreProductGreen: {
+      backgroundColor:
+        '#7ED29F',
+    },
+
+    closedStoreProductCream: {
+      backgroundColor:
+        '#F2DFB6',
+    },
+
+    closedStoreProductOrange: {
+      backgroundColor:
+        '#F2A06A',
+    },
+
+    closedStoreShutter: {
+      backgroundColor:
+        '#AEB5B1',
+
+      bottom:
+        0,
+
+      left:
+        0,
+
+      position:
+        'absolute',
+
+      right:
+        0,
+
+      top:
+        17,
+
+      zIndex:
+        5,
+    },
+
+    closedStoreShutterLine: {
+      backgroundColor:
+        'rgba(255, 255, 255, 0.42)',
+
+      height:
+        2,
+
+      marginTop:
+        10,
+    },
+
+    closedStoreDoorBase: {
+      alignItems:
+        'center',
+
+      bottom:
+        7,
+
+      height:
+        28,
+
+      justifyContent:
+        'center',
+
+      left:
+        0,
+
+      position:
+        'absolute',
+
+      right:
+        0,
+    },
+
+    closedStoreLock: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        12,
+
+      height:
+        25,
+
+      justifyContent:
+        'center',
+
+      width:
+        25,
+    },
+
+    closedStoreLockDot: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius:
+        999,
+
+      height:
+        5,
+
+      width:
+        5,
+    },
+
+    closedStoreGroundShadow: {
+      backgroundColor:
+        'rgba(0, 0, 0, 0.22)',
+
+      borderRadius:
+        999,
+
+      bottom:
+        3,
+
+      height:
+        18,
+
+      left:
+        34,
+
+      position:
+        'absolute',
+
+      right:
+        34,
+
+      transform: [
+        {
+          scaleX:
+            0.88,
+        },
+      ],
+    },
+
+    closedExperienceBag: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius:
+        18,
+
+      height:
+        76,
+
+      left:
+        28,
+
+      position:
+        'absolute',
+
+      top:
+        '45%',
+
+      transform: [
+        {
+          rotate:
+            '-10deg',
+        },
+      ],
+
+      width:
+        62,
+    },
+
+    closedExperienceBagHandle: {
+      borderBottomWidth:
+        0,
+
+      borderColor:
+        '#DFF9E8',
+
+      borderRadius:
+        15,
+
+      borderWidth:
+        4,
+
+      height:
+        24,
+
+      left:
+        16,
+
+      position:
+        'absolute',
+
+      top:
+        -12,
+
+      width:
+        30,
+    },
+
+    closedExperienceBagMark: {
+      backgroundColor:
+        '#DFF9E8',
+
+      borderRadius:
+        999,
+
+      height:
+        15,
+
+      left:
+        23.5,
+
+      position:
+        'absolute',
+
+      top:
+        31,
+
+      width:
+        15,
+    },
+
+    closedExperienceCopy: {
+      alignItems:
+        'center',
+
+      marginTop:
+        18,
+
+      paddingHorizontal:
+        28,
+
+      width:
+        '100%',
+    },
+
+    closedExperienceTitle: {
       color:
         '#FFFFFF',
 
-      fontSize: 12,
+      fontSize:
+        28,
 
       fontWeight:
-        '600',
+        '900',
+
+      lineHeight:
+        38,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    closedOpeningPill: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(255, 255, 255, 0.10)',
+
+      borderColor:
+        'rgba(255, 255, 255, 0.15)',
+
+      borderRadius:
+        999,
+
+      borderWidth:
+        1,
+
+      flexDirection:
+        'row-reverse',
+
+      marginTop:
+        18,
+
+      minHeight:
+        46,
+
+      paddingHorizontal:
+        18,
+
+      paddingVertical:
+        10,
+    },
+
+    closedOpeningText: {
+      color:
+        '#FFFFFF',
+
+      fontSize:
+        14,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    closedOpeningFallback: {
+      color:
+        '#DFF9E8',
+
+      fontSize:
+        13,
+
+      fontWeight:
+        '700',
+
+      marginTop:
+        17,
 
       textAlign:
         'center',

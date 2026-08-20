@@ -1,3 +1,4 @@
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
   useEffect,
@@ -479,9 +480,39 @@ function getStoreInitial(
   return source.charAt(0);
 }
 
+function prefetchRestaurantImages(
+  stores: StoreSummary[],
+) {
+  const urls = Array.from(
+    new Set(
+      stores
+        .slice(0, 6)
+        .flatMap((store) => [
+          getStoreCoverUrl(store),
+          getStoreLogoUrl(store),
+        ])
+        .filter(
+          (url): url is string =>
+            Boolean(url),
+        ),
+    ),
+  );
+
+  if (urls.length === 0) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    urls,
+    'memory-disk',
+  );
+}
+
 function StoreArtwork({
+  priority = 'normal',
   store,
 }: {
+  priority?: 'high' | 'normal' | 'low';
   store: StoreSummary;
 }) {
   const [
@@ -511,16 +542,16 @@ function StoreArtwork({
   return (
     <View style={styles.storeArtwork}>
       {canShowCover ? (
-        <Image
-          accessibilityIgnoresInvertColors
+        <ExpoImage
           accessibilityLabel={`صورة الغلاف الخاصة بـ ${store.name}`}
-          resizeMode="cover"
-          source={{
-            uri: coverUrl ?? '',
-          }}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          priority={priority}
+          source={coverUrl ?? ''}
           style={
             styles.storeCoverImage
           }
+          transition={120}
           onError={() => {
             setCoverFailed(true);
           }}
@@ -550,14 +581,14 @@ function StoreArtwork({
 
       <View style={styles.logoBadge}>
         {canShowLogo ? (
-          <Image
-            accessibilityIgnoresInvertColors
+          <ExpoImage
             accessibilityLabel={`لوجو ${store.name}`}
-            resizeMode="cover"
-            source={{
-              uri: logoUrl ?? '',
-            }}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            priority={priority}
+            source={logoUrl ?? ''}
             style={styles.logoImage}
+            transition={100}
             onError={() => {
               setLogoFailed(true);
             }}
@@ -649,6 +680,13 @@ export default function RestaurantsScreen() {
   ] = useState(false);
 
   const [
+    closedStoreNotice,
+    setClosedStoreNotice,
+  ] = useState<StoreSummary | null>(
+    null,
+  );
+
+  const [
     isLoading,
     setIsLoading,
   ] = useState(true);
@@ -686,6 +724,10 @@ export default function RestaurantsScreen() {
             item.slug ===
             RESTAURANTS_SLUG,
         ) ?? null;
+
+      prefetchRestaurantImages(
+        loadedStores,
+      );
 
       setCategory(loadedCategory);
       setStores(loadedStores);
@@ -980,10 +1022,7 @@ export default function RestaurantsScreen() {
             )}
 
             <CuisinePreviewItem
-              active={
-                selectedCuisineKeys.length >
-                0
-              }
+              active={false}
               cuisine={{
                 key: 'view-all',
                 label: 'عرض الكل',
@@ -1085,7 +1124,7 @@ export default function RestaurantsScreen() {
               }
             >
               {visibleStores.map(
-                (store) => {
+                (store, storeIndex) => {
                   const ratingInfo =
                     getStoreRatingInfo(
                       store,
@@ -1094,38 +1133,62 @@ export default function RestaurantsScreen() {
                   return (
                     <Pressable
                       key={store.id}
-                      accessibilityLabel={`فتح ${store.name}`}
+                      accessibilityLabel={
+                        store.isManuallyClosed
+                          ? `${store.name} مغلق`
+                          : `فتح ${store.name}`
+                      }
                       accessibilityRole="button"
                       style={({
                         pressed,
                       }) => [
                         styles.storeRow,
+                        store.isManuallyClosed &&
+                          styles.storeRowClosed,
                         pressed &&
                           styles.storeRowPressed,
                       ]}
-                      onPress={() =>
+                      onPress={() => {
+                        if (
+                          store.isManuallyClosed
+                        ) {
+                          setClosedStoreNotice(
+                            store,
+                          );
+                          return;
+                        }
+
                         router.push({
                           pathname:
                             '/store/[id]',
                           params: {
                             id: store.id,
                           },
-                        })
-                      }
+                        });
+                      }}
                     >
                       <StoreArtwork
+                        priority={
+                          storeIndex < 4
+                            ? 'high'
+                            : 'normal'
+                        }
                         store={store}
                       />
 
                       <View
-                        style={
-                          styles.storeBody
-                        }
+                        style={[
+                          styles.storeBody,
+                          store.isManuallyClosed &&
+                            styles.storeBodyClosed,
+                        ]}
                       >
                         <View
-                          style={
-                            styles.storeNameRow
-                          }
+                          style={[
+                            styles.storeNameRow,
+                            store.isManuallyClosed &&
+                              styles.storeNameRowClosed,
+                          ]}
                         >
                           {store.isFeatured && (
                             <View
@@ -1147,64 +1210,96 @@ export default function RestaurantsScreen() {
                             numberOfLines={
                               1
                             }
-                            style={
-                              styles.storeName
-                            }
+                            style={[
+                              styles.storeName,
+                              store.isManuallyClosed &&
+                                styles.storeNameClosed,
+                            ]}
                           >
                             {store.name}
                           </Text>
                         </View>
 
-                        <View
-                          style={
-                            styles.storeMetaRow
-                          }
-                        >
-                          {ratingInfo.hasRatings &&
-                          ratingInfo.rating !==
-                            null ? (
-                            <>
-                              <Text
-                                style={
-                                  styles.ratingStar
-                                }
-                              >
-                                ★
-                              </Text>
-
-                              <Text
-                                style={
-                                  styles.ratingText
-                                }
-                              >
-                                {ratingInfo.rating.toFixed(
-                                  1,
-                                )}
-                              </Text>
-                            </>
-                          ) : (
-                            <Text
-                              style={
-                                styles.newStoreText
-                              }
-                            >
-                              New
-                            </Text>
-                          )}
-                        </View>
-
-                        {store.isManuallyClosed && (
-                          <Text
-                            numberOfLines={
-                              1
-                            }
+                        {store.isManuallyClosed ? (
+                          <View
                             style={
-                              styles.closedMessage
+                              styles.closedStoreMetaRow
                             }
                           >
-                            {store.manualClosedNote ||
-                              'المطعم مغلق مؤقتًا'}
-                          </Text>
+                            {ratingInfo.hasRatings &&
+                            ratingInfo.rating !==
+                              null ? (
+                              <View
+                                style={
+                                  styles.closedRatingGroup
+                                }
+                              >
+                                <Text
+                                  style={
+                                    styles.closedRatingStar
+                                  }
+                                >
+                                  ★
+                                </Text>
+
+                                <Text
+                                  style={
+                                    styles.closedMetaText
+                                  }
+                                >
+                                  {ratingInfo.rating.toFixed(
+                                    1,
+                                  )}
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text
+                                style={
+                                  styles.closedMetaText
+                                }
+                              >
+                                New
+                              </Text>
+                            )}
+                          </View>
+                        ) : (
+                          <View
+                            style={
+                              styles.storeMetaRow
+                            }
+                          >
+                            {ratingInfo.hasRatings &&
+                            ratingInfo.rating !==
+                              null ? (
+                              <>
+                                <Text
+                                  style={
+                                    styles.ratingStar
+                                  }
+                                >
+                                  ★
+                                </Text>
+
+                                <Text
+                                  style={
+                                    styles.ratingText
+                                  }
+                                >
+                                  {ratingInfo.rating.toFixed(
+                                    1,
+                                  )}
+                                </Text>
+                              </>
+                            ) : (
+                              <Text
+                                style={
+                                  styles.newStoreText
+                                }
+                              >
+                                New
+                              </Text>
+                            )}
+                          </View>
                         )}
                       </View>
                     </Pressable>
@@ -1215,6 +1310,13 @@ export default function RestaurantsScreen() {
           )}
         </View>
       </ScrollView>
+
+      <ClosedStoreNotice
+        store={closedStoreNotice}
+        onClose={() =>
+          setClosedStoreNotice(null)
+        }
+      />
 
       <CuisinesModal
         draftCuisineKeys={
@@ -1237,6 +1339,101 @@ export default function RestaurantsScreen() {
         }
       />
     </View>
+  );
+}
+
+function ClosedStoreNotice({
+  onClose,
+  store,
+}: {
+  onClose: () => void;
+  store: StoreSummary | null;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      statusBarTranslucent
+      transparent
+      visible={Boolean(store)}
+      onRequestClose={onClose}
+    >
+      <View
+        style={
+          styles.closedNoticeModal
+        }
+      >
+        <Pressable
+          accessibilityLabel="إغلاق التنبيه"
+          style={
+            styles.closedNoticeBackdrop
+          }
+          onPress={onClose}
+        />
+
+        <View
+          style={
+            styles.closedNoticeCard
+          }
+        >
+          <Pressable
+            accessibilityLabel="إغلاق"
+            accessibilityRole="button"
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.closedNoticeCloseButton,
+              pressed &&
+                styles.closedNoticePressed,
+            ]}
+            onPress={onClose}
+          >
+            <Text
+              style={
+                styles.closedNoticeCloseText
+              }
+            >
+              ×
+            </Text>
+          </Pressable>
+
+          <View
+            style={
+              styles.closedNoticeContent
+            }
+          >
+            <Text
+              numberOfLines={2}
+              style={
+                styles.closedNoticeTitle
+              }
+            >
+              {store?.name ?? 'المطعم'} مغلق حالياً
+            </Text>
+
+            <Text
+              style={
+                styles.closedNoticeDescription
+              }
+            >
+              بإمكانك إضافة الأصناف إلى سلتك وتنفيذ الطلب عند توفر المطعم.
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.closedNoticeWarningIcon
+            }
+          >
+            <Text
+              style={
+                styles.closedNoticeWarningText
+              }
+            >
+              !
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1320,6 +1517,9 @@ function CuisinesModal({
 
   const isClosingRef =
     useRef(false);
+
+  const cuisineScrollOffsetRef =
+    useRef(0);
 
   useEffect(() => {
     if (!visible) {
@@ -1419,6 +1619,10 @@ function CuisinesModal({
               _event,
               gestureState,
             ) => {
+              const isAtTop =
+                cuisineScrollOffsetRef.current <=
+                1;
+
               const isMovingDown =
                 gestureState.dy > 4;
 
@@ -1431,6 +1635,34 @@ function CuisinesModal({
                 );
 
               return (
+                isAtTop &&
+                isMovingDown &&
+                isMostlyVertical
+              );
+            },
+
+          onMoveShouldSetPanResponderCapture:
+            (
+              _event,
+              gestureState,
+            ) => {
+              const isAtTop =
+                cuisineScrollOffsetRef.current <=
+                1;
+
+              const isMovingDown =
+                gestureState.dy > 4;
+
+              const isMostlyVertical =
+                Math.abs(
+                  gestureState.dy,
+                ) >
+                Math.abs(
+                  gestureState.dx,
+                );
+
+              return (
+                isAtTop &&
                 isMovingDown &&
                 isMostlyVertical
               );
@@ -1445,9 +1677,12 @@ function CuisinesModal({
             gestureState,
           ) => {
             const nextTranslateY =
-              Math.max(
-                0,
-                gestureState.dy,
+              Math.min(
+                windowHeight,
+                Math.max(
+                  0,
+                  gestureState.dy,
+                ),
               );
 
             sheetTranslateY.setValue(
@@ -1460,11 +1695,11 @@ function CuisinesModal({
             gestureState,
           ) => {
             const draggedFarEnough =
-              gestureState.dy > 120;
+              gestureState.dy > 110;
 
             const flickedDownFast =
-              gestureState.dy > 30 &&
-              gestureState.vy > 1.1;
+              gestureState.dy > 24 &&
+              gestureState.vy > 0.9;
 
             if (
               draggedFarEnough ||
@@ -1525,12 +1760,12 @@ function CuisinesModal({
               ],
             },
           ]}
+          {...panResponder.panHandlers}
         >
           <View
             style={
               styles.sheetDragArea
             }
-            {...panResponder.panHandlers}
           >
             <View
               style={
@@ -1612,6 +1847,15 @@ function CuisinesModal({
             }
             bounces
             overScrollMode="never"
+            scrollEventThrottle={16}
+            onScroll={(event) => {
+              cuisineScrollOffsetRef.current =
+                Math.max(
+                  0,
+                  event.nativeEvent.contentOffset
+                    .y,
+                );
+            }}
           >
             {CUISINES.map(
               (cuisine) => {
@@ -1658,21 +1902,6 @@ function CuisinesModal({
                         }
                       />
 
-                      {active && (
-                        <View
-                          style={
-                            styles.cuisineSelectedBadge
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.cuisineSelectedBadgeText
-                            }
-                          >
-                            ✓
-                          </Text>
-                        </View>
-                      )}
                     </View>
 
                     <Text
@@ -1929,6 +2158,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
+  storeRowClosed: {
+    direction: 'rtl',
+    flexDirection: 'row-reverse',
+  },
+
   storeRowPressed: {
     opacity: 0.76,
   },
@@ -2011,7 +2245,7 @@ const styles = StyleSheet.create({
   closedOverlay: {
     alignItems: 'center',
     backgroundColor:
-      'rgba(23,23,26,0.58)',
+      'rgba(18,18,20,0.66)',
     bottom: 0,
     justifyContent: 'center',
     left: 0,
@@ -2023,8 +2257,18 @@ const styles = StyleSheet.create({
 
   closedOverlayText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 26,
     fontWeight: '900',
+    letterSpacing: -0.35,
+    lineHeight: 32,
+    textAlign: 'center',
+    textShadowColor:
+      'rgba(0,0,0,0.22)',
+    textShadowOffset: {
+      height: 1,
+      width: 0,
+    },
+    textShadowRadius: 3,
   },
 
   storeBody: {
@@ -2035,11 +2279,21 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
 
+  storeBodyClosed: {
+    alignItems: 'stretch',
+    paddingLeft: 2,
+    paddingRight: 0,
+  },
+
   storeNameRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 6,
     width: '100%',
+  },
+
+  storeNameRowClosed: {
+    flexDirection: 'row-reverse',
   },
 
   storeName: {
@@ -2051,6 +2305,14 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     textAlign: 'left',
     writingDirection: 'auto',
+  },
+
+  storeNameClosed: {
+    color: '#202024',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   proBadge: {
@@ -2102,12 +2364,133 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
 
-  closedMessage: {
-    color: '#C23D3D',
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 5,
-    textAlign: 'left',
+  closedStoreMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 5,
+    justifyContent: 'flex-start',
+    marginTop: 8,
+    minHeight: 22,
+    width: '100%',
+  },
+
+  closedRatingGroup: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 4,
+  },
+
+  closedRatingStar: {
+    color: '#F4AF00',
+    fontSize: 18,
+    lineHeight: 20,
+  },
+
+  closedMetaText: {
+    color: '#4D4D53',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 20,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  closedNoticeModal: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+
+  closedNoticeBackdrop: {
+    backgroundColor:
+      'rgba(18,18,20,0.28)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+
+  closedNoticeCard: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#FFF4D8',
+    borderRadius: 24,
+    flexDirection: 'row',
+    marginBottom: 18,
+    marginHorizontal: 16,
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    minHeight: 106,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 4,
+      width: 0,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    width: '92%',
+  },
+
+  closedNoticeCloseButton: {
+    alignItems: 'center',
+    flexShrink: 0,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+
+  closedNoticeCloseText: {
+    color: '#262626',
+    fontSize: 34,
+    fontWeight: '300',
+    lineHeight: 34,
+  },
+
+  closedNoticeContent: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+
+  closedNoticeTitle: {
+    color: '#252525',
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 21,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  closedNoticeDescription: {
+    color: '#343434',
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 19,
+    marginTop: 4,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  closedNoticeWarningIcon: {
+    alignItems: 'center',
+    flexShrink: 0,
+    height: 38,
+    justifyContent: 'center',
+    marginLeft: 2,
+    width: 38,
+  },
+
+  closedNoticeWarningText: {
+    color: '#9A6A00',
+    fontSize: 31,
+    fontWeight: '900',
+    lineHeight: 34,
+  },
+
+  closedNoticePressed: {
+    opacity: 0.55,
   },
 
   emptyCard: {
@@ -2223,23 +2606,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E3E3E6',
-    borderRadius: 27,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 54,
+    height: 44,
     justifyContent: 'center',
-    width: 54,
+    width: 44,
   },
 
   sheetCloseIcon: {
     color: '#151518',
-    fontSize: 34,
+    fontSize: 26,
     fontWeight: '300',
-    lineHeight: 35,
+    lineHeight: 28,
   },
 
   sheetTitle: {
     color: '#18181B',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
   },
 
@@ -2247,16 +2630,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E3E3E6',
-    borderRadius: 27,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 54,
+    height: 44,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
 
   resetCuisineButtonText: {
     color: '#1C1C1F',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
   },
 
@@ -2307,26 +2690,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
-  cuisineSelectedBadge: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderColor: '#FFFFFF',
-    borderRadius: 11,
-    borderWidth: 2,
-    height: 22,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: -2,
-    top: -2,
-    width: 22,
-  },
 
-  cuisineSelectedBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-  },
 
   cuisineGridLabel: {
     color: '#6B6B70',

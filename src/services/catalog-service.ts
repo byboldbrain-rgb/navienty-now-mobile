@@ -106,6 +106,7 @@ export type StoreSummary = {
   coverImageUrl: string | null;
 
   rating: number;
+  ratingCount: number;
 
   deliveryTime: string;
   deliveryFee: number;
@@ -304,6 +305,7 @@ export type StoreDetails = {
     | null;
 
   rating: number;
+  ratingCount: number;
 
   deliveryTime: string;
 
@@ -455,6 +457,9 @@ type RawStoreSummary = {
     | null;
 
   rating_avg:
+    NumericValue;
+
+  rating_count?:
     NumericValue;
 
   delivery_time_label_ar:
@@ -688,6 +693,9 @@ type RawStoreCatalog = {
     rating_avg:
       NumericValue;
 
+    rating_count?:
+      NumericValue;
+
     delivery_time_label_ar:
       | string
       | null;
@@ -810,6 +818,11 @@ function mapStoreSummary(
     rating:
       toNumber(
         store.rating_avg,
+      ),
+
+    ratingCount:
+      toNumber(
+        store.rating_count,
       ),
 
     deliveryTime:
@@ -1366,6 +1379,12 @@ function mapStoreCatalog(
         toNumber(
           catalog.store
             .rating_avg,
+        ),
+
+      ratingCount:
+        toNumber(
+          catalog.store
+            .rating_count,
         ),
 
       deliveryTime:

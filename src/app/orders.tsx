@@ -29,9 +29,14 @@ import {
   getMyOrders,
 } from '../services/order-service';
 import {
+  getOrderRating,
+  submitOrderRating,
+  type OrderRating,
+} from '../services/rating-service';
+import {
+  useOrdersStore,
   type Order,
   type OrderStatus,
-  useOrdersStore,
 } from '../store/orders-store';
 import {
   NAVIENTY_NOW_LAYOUT,
@@ -337,33 +342,288 @@ function StoreImage({
   );
 }
 
-function RatingStars() {
+function OrderRatingFooter({
+  order,
+}: {
+  order: Order;
+}) {
+  const [
+    orderRating,
+    setOrderRating,
+  ] = useState<OrderRating>({
+    rated: false,
+    rating: null,
+    createdAt: null,
+  });
+
+  const [
+    selectedRating,
+    setSelectedRating,
+  ] = useState<number | null>(
+    null,
+  );
+
+  const [
+    isLoadingRating,
+    setIsLoadingRating,
+  ] = useState(true);
+
+  const [
+    isSubmittingRating,
+    setIsSubmittingRating,
+  ] = useState(false);
+
+  const [
+    ratingError,
+    setRatingError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const loadRating =
+    useCallback(async () => {
+      try {
+        setIsLoadingRating(
+          true,
+        );
+
+        setRatingError(
+          null,
+        );
+
+        const result =
+          await getOrderRating(
+            order.id,
+          );
+
+        setOrderRating(
+          result,
+        );
+
+        setSelectedRating(
+          result.rating,
+        );
+      } catch (
+        error
+      ) {
+        setRatingError(
+          error instanceof Error
+            ? error.message
+            : 'تعذر تحميل التقييم.',
+        );
+      } finally {
+        setIsLoadingRating(
+          false,
+        );
+      }
+    }, [
+      order.id,
+    ]);
+
+  useEffect(() => {
+    void loadRating();
+  }, [
+    loadRating,
+  ]);
+
+  async function handleRating(
+    rating: number,
+  ) {
+    if (
+      orderRating.rated ||
+      isSubmittingRating ||
+      isLoadingRating
+    ) {
+      return;
+    }
+
+    setSelectedRating(
+      rating,
+    );
+
+    setRatingError(
+      null,
+    );
+
+    try {
+      setIsSubmittingRating(
+        true,
+      );
+
+      const result =
+        await submitOrderRating(
+          order.id,
+          rating,
+        );
+
+      setOrderRating({
+        rated: true,
+        rating:
+          result.rating,
+        createdAt:
+          result.createdAt,
+      });
+
+      setSelectedRating(
+        result.rating,
+      );
+    } catch (
+      error
+    ) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'تعذر إرسال التقييم.';
+
+      setRatingError(
+        message,
+      );
+
+      if (
+        message.includes(
+          'تم تقييم هذا الطلب بالفعل',
+        )
+      ) {
+        await loadRating();
+      }
+    } finally {
+      setIsSubmittingRating(
+        false,
+      );
+    }
+  }
+
+  const activeRating =
+    orderRating.rating ??
+    selectedRating ??
+    0;
+
   return (
     <View
       style={
-        styles.ratingStars
+        styles.ratingFooter
       }
     >
-      {Array.from({
-        length: 5,
-      }).map(
-        (
-          _,
-          index,
-        ) => (
-          <Ionicons
-            key={index}
-            name="star-outline"
-            size={25}
-            color="#C7C7C7"
-            style={
-              index > 0
-                ? styles.ratingStarSpacing
-                : undefined
-            }
+      <View
+        style={
+          styles.ratingLabelContainer
+        }
+      >
+        {isLoadingRating ? (
+          <ActivityIndicator
+            size="small"
+            color="#00B85C"
           />
-        ),
-      )}
+        ) : (
+          <>
+            <Text
+              style={
+                styles.ratingLabel
+              }
+            >
+              {orderRating.rated
+                ? 'تم التقييم'
+                : 'قيّم'}
+            </Text>
+
+            {ratingError && (
+              <Text
+                numberOfLines={1}
+                style={
+                  styles.ratingErrorText
+                }
+              >
+                {
+                  ratingError
+                }
+              </Text>
+            )}
+          </>
+        )}
+      </View>
+
+      <View
+        accessibilityRole="radiogroup"
+        style={
+          styles.ratingStars
+        }
+      >
+        {[1, 2, 3, 4, 5].map(
+          (
+            star,
+          ) => {
+            const isFilled =
+              star <=
+              activeRating;
+
+            return (
+              <Pressable
+                key={
+                  star
+                }
+                accessibilityRole="radio"
+                accessibilityLabel={`${star} نجوم`}
+                accessibilityState={{
+                  checked:
+                    activeRating ===
+                    star,
+
+                  disabled:
+                    orderRating.rated ||
+                    isSubmittingRating ||
+                    isLoadingRating,
+                }}
+                disabled={
+                  orderRating.rated ||
+                  isSubmittingRating ||
+                  isLoadingRating
+                }
+                hitSlop={5}
+                style={( {
+                  pressed,
+                } ) => [
+                  styles.ratingStarButton,
+
+                  star > 1 &&
+                    styles.ratingStarSpacing,
+
+                  pressed &&
+                    !orderRating.rated &&
+                    styles.ratingStarButtonPressed,
+                ]}
+                onPress={() => {
+                  void handleRating(
+                    star,
+                  );
+                }}
+              >
+                {isSubmittingRating &&
+                selectedRating ===
+                  star ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#F4AF00"
+                  />
+                ) : (
+                  <Ionicons
+                    name={
+                      isFilled
+                        ? 'star'
+                        : 'star-outline'
+                    }
+                    size={25}
+                    color={
+                      isFilled
+                        ? '#F4AF00'
+                        : '#C7C7C7'
+                    }
+                  />
+                )}
+              </Pressable>
+            );
+          },
+        )}
+      </View>
     </View>
   );
 }
@@ -404,9 +664,9 @@ function OrderCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`فتح تفاصيل الطلب ${order.orderCode}`}
-        style={({
+        style={( {
           pressed,
-        }) => [
+        } ) => [
           styles.orderCardMain,
 
           pressed &&
@@ -557,9 +817,9 @@ function OrderCard({
                 accessibilityRole="button"
                 accessibilityLabel="اطلب مجددًا"
                 hitSlop={8}
-                style={({
+                style={( {
                   pressed,
-                }) => [
+                } ) => [
                   styles.reorderButton,
 
                   pressed &&
@@ -593,31 +853,11 @@ function OrderCard({
       </Pressable>
 
       {canRate && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="تقييم الطلب"
-          style={({
-            pressed,
-          }) => [
-            styles.ratingFooter,
-
-            pressed &&
-              styles.ratingFooterPressed,
-          ]}
-          onPress={
-            onPress
+        <OrderRatingFooter
+          order={
+            order
           }
-        >
-          <Text
-            style={
-              styles.ratingLabel
-            }
-          >
-            قيّم
-          </Text>
-
-          <RatingStars />
-        </Pressable>
+        />
       )}
     </View>
   );
@@ -1144,9 +1384,9 @@ export default function OrdersScreen() {
 
                 <Pressable
                   accessibilityRole="button"
-                  style={({
+                  style={( {
                     pressed,
-                  }) => [
+                  } ) => [
                     styles.pendingButton,
 
                     pressed &&
@@ -1205,9 +1445,9 @@ export default function OrdersScreen() {
 
               <Pressable
                 accessibilityRole="button"
-                style={({
+                style={( {
                   pressed,
-                }) => [
+                } ) => [
                   styles.shopButton,
 
                   pressed &&
@@ -1738,9 +1978,11 @@ const styles =
         '#F7F7F7',
     },
 
-    ratingFooterPressed: {
-      backgroundColor:
-        '#F1F1F1',
+    ratingLabelContainer: {
+      alignItems:
+        'flex-end',
+
+      flex: 1,
     },
 
     ratingLabel: {
@@ -1761,12 +2003,53 @@ const styles =
         'rtl',
     },
 
+    ratingErrorText: {
+      color:
+        '#A34444',
+
+      fontSize: 8.5,
+
+      lineHeight: 12,
+
+      marginTop: 2,
+
+      maxWidth: 170,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
     ratingStars: {
       flexDirection:
         'row',
 
       alignItems:
         'center',
+    },
+
+    ratingStarButton: {
+      width: 31,
+
+      height: 38,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    ratingStarButtonPressed: {
+      opacity: 0.65,
+
+      transform: [
+        {
+          scale: 0.9,
+        },
+      ],
     },
 
     ratingStarSpacing: {
