@@ -59,31 +59,31 @@ const BOOKSTORE_CATEGORY_IMAGES: Partial<
   Record<string, ImageSourcePropType>
 > = {
   'writing-tools': require(
-    '../../../assets/images/bookstore-categories/writing-tools.png',
+    '../../../assets/images/bookstore-categories/writing-tools.webp',
   ),
   notebooks: require(
-    '../../../assets/images/bookstore-categories/notebooks.png',
+    '../../../assets/images/bookstore-categories/notebooks.webp',
   ),
   'printing-paper': require(
-    '../../../assets/images/bookstore-categories/printing-paper.png',
+    '../../../assets/images/bookstore-categories/printing-paper.webp',
   ),
   'files-organization': require(
-    '../../../assets/images/bookstore-categories/files-organization.png',
+    '../../../assets/images/bookstore-categories/files-organization.webp',
   ),
   'study-supplies': require(
-    '../../../assets/images/bookstore-categories/study-supplies.png',
+    '../../../assets/images/bookstore-categories/study-supplies.webp',
   ),
   'geometry-tools': require(
-    '../../../assets/images/bookstore-categories/geometry-tools.png',
+    '../../../assets/images/bookstore-categories/geometry-tools.webp',
   ),
   'art-supplies': require(
-    '../../../assets/images/bookstore-categories/art-supplies.png',
+    '../../../assets/images/bookstore-categories/art-supplies.webp',
   ),
   calculators: require(
-    '../../../assets/images/bookstore-categories/calculators.png',
+    '../../../assets/images/bookstore-categories/calculators.webp',
   ),
   'pencil-cases-bags': require(
-    '../../../assets/images/bookstore-categories/pencil-cases-bags.png',
+    '../../../assets/images/bookstore-categories/pencil-cases-bags.webp',
   ),
 };
 

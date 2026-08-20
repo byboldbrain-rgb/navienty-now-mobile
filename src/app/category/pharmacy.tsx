@@ -57,63 +57,63 @@ const PHARMACY_CATEGORY_IMAGES: Partial<
   Record<string, ImageSourcePropType>
 > = {
   'medicines-treatments': require(
-    '../../../assets/images/pharmacy-categories/medicines-treatments.png',
+    '../../../assets/images/pharmacy-categories/medicines-treatments.webp',
   ),
 
   'cold-flu-allergy': require(
-    '../../../assets/images/pharmacy-categories/cold-flu-allergy.png',
+    '../../../assets/images/pharmacy-categories/cold-flu-allergy.webp',
   ),
 
   'headache-pain-fever': require(
-    '../../../assets/images/pharmacy-categories/headache-pain-fever.png',
+    '../../../assets/images/pharmacy-categories/headache-pain-fever.webp',
   ),
 
   'stomach-digestive': require(
-    '../../../assets/images/pharmacy-categories/stomach-digestive.png',
+    '../../../assets/images/pharmacy-categories/stomach-digestive.webp',
   ),
 
   'first-aid-wounds': require(
-    '../../../assets/images/pharmacy-categories/first-aid-wounds.png',
+    '../../../assets/images/pharmacy-categories/first-aid-wounds.webp',
   ),
 
   skincare: require(
-    '../../../assets/images/pharmacy-categories/skincare.png',
+    '../../../assets/images/pharmacy-categories/skincare.webp',
   ),
 
   'hair-scalp-care': require(
-    '../../../assets/images/pharmacy-categories/hair-scalp-care.png',
+    '../../../assets/images/pharmacy-categories/hair-scalp-care.webp',
   ),
 
   'oral-dental-care': require(
-    '../../../assets/images/pharmacy-categories/oral-dental-care.png',
+    '../../../assets/images/pharmacy-categories/oral-dental-care.webp',
   ),
 
   'vitamins-supplements': require(
-    '../../../assets/images/pharmacy-categories/vitamins-supplements.png',
+    '../../../assets/images/pharmacy-categories/vitamins-supplements.webp',
   ),
 
   'women-care': require(
-    '../../../assets/images/pharmacy-categories/women-care.png',
+    '../../../assets/images/pharmacy-categories/women-care.webp',
   ),
 
   'men-care': require(
-    '../../../assets/images/pharmacy-categories/men-care.png',
+    '../../../assets/images/pharmacy-categories/men-care.webp',
   ),
 
   'eyes-lenses': require(
-    '../../../assets/images/pharmacy-categories/eyes-lenses.png',
+    '../../../assets/images/pharmacy-categories/eyes-lenses.webp',
   ),
 
   cosmetics: require(
-    '../../../assets/images/pharmacy-categories/cosmetics.png',
+    '../../../assets/images/pharmacy-categories/cosmetics.webp',
   ),
 
   'sun-insect-protection': require(
-    '../../../assets/images/pharmacy-categories/sun-insect-protection.png',
+    '../../../assets/images/pharmacy-categories/sun-insect-protection.webp',
   ),
 
   'sanitization-disinfection': require(
-    '../../../assets/images/pharmacy-categories/sanitization-disinfection.png',
+    '../../../assets/images/pharmacy-categories/sanitization-disinfection.webp',
   ),
 };
 

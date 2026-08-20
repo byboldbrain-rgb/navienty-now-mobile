@@ -54,16 +54,16 @@ const BRAND_GREEN_SOFT = '#EAF8F0';
 const PAYMENT_METHOD_IMAGES:
   Record<string, ImageSourcePropType> = {
     'vodafone-cash': require(
-      '../../../assets/payment-methods/vodafone-cash.png',
+      '../../../assets/payment-methods/vodafone-cash.webp',
     ),
     'orange-cash': require(
-      '../../../assets/payment-methods/orange-cash.png',
+      '../../../assets/payment-methods/orange-cash.webp',
     ),
     'etisalat-cash': require(
-      '../../../assets/payment-methods/etisalat-cash.png',
+      '../../../assets/payment-methods/etisalat-cash.webp',
     ),
     instapay: require(
-      '../../../assets/payment-methods/instapay.png',
+      '../../../assets/payment-methods/instapay.webp',
     ),
   };
 

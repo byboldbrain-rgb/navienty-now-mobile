@@ -91,7 +91,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'arabic',
     label: 'أكل عربي',
-    image: require('../../assets/cuisines/arabic.png'),
+    image: require('../../assets/cuisines/arabic.webp'),
     keywords: [
       'عربي',
       'شامي',
@@ -102,7 +102,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'arabic-sweets',
     label: 'حلويات شرقية',
-    image: require('../../assets/cuisines/arabic-sweets.png'),
+    image: require('../../assets/cuisines/arabic-sweets.webp'),
     keywords: [
       'حلويات شرقية',
       'بقلاوة',
@@ -112,7 +112,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'bakery',
     label: 'مخبوزات',
-    image: require('../../assets/cuisines/bakery.png'),
+    image: require('../../assets/cuisines/bakery.webp'),
     keywords: [
       'مخبوزات',
       'مخبز',
@@ -123,7 +123,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'beverages',
     label: 'مشروبات',
-    image: require('../../assets/cuisines/beverages.png'),
+    image: require('../../assets/cuisines/beverages.webp'),
     keywords: [
       'مشروبات',
       'عصير',
@@ -133,7 +133,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'breakfast',
     label: 'فطار',
-    image: require('../../assets/cuisines/breakfast.png'),
+    image: require('../../assets/cuisines/breakfast.webp'),
     keywords: [
       'فطار',
       'إفطار',
@@ -143,7 +143,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'burgers',
     label: 'برجر',
-    image: require('../../assets/cuisines/burgers.png'),
+    image: require('../../assets/cuisines/burgers.webp'),
     keywords: [
       'برجر',
       'burger',
@@ -152,7 +152,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'cakes',
     label: 'كيك',
-    image: require('../../assets/cuisines/cakes.png'),
+    image: require('../../assets/cuisines/cakes.webp'),
     keywords: [
       'كيك',
       'تورتة',
@@ -162,7 +162,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'chicken',
     label: 'فراخ',
-    image: require('../../assets/cuisines/chicken.png'),
+    image: require('../../assets/cuisines/chicken.webp'),
     keywords: [
       'فراخ',
       'دجاج',
@@ -172,7 +172,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'chocolate',
     label: 'شوكولاتة',
-    image: require('../../assets/cuisines/chocolate.png'),
+    image: require('../../assets/cuisines/chocolate.webp'),
     keywords: [
       'شوكولاتة',
       'chocolate',
@@ -181,7 +181,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'coffee',
     label: 'قهوة وشاي',
-    image: require('../../assets/cuisines/coffee.png'),
+    image: require('../../assets/cuisines/coffee.webp'),
     keywords: [
       'قهوة',
       'شاي',
@@ -192,7 +192,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'crepes',
     label: 'كريب',
-    image: require('../../assets/cuisines/crepes.png'),
+    image: require('../../assets/cuisines/crepes.webp'),
     keywords: [
       'كريب',
       'crepe',
@@ -201,7 +201,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'desserts',
     label: 'حلويات',
-    image: require('../../assets/cuisines/desserts.png'),
+    image: require('../../assets/cuisines/desserts.webp'),
     keywords: [
       'حلويات',
       'ديسرت',
@@ -211,7 +211,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'egyptian',
     label: 'أكل مصري',
-    image: require('../../assets/cuisines/egyptian.png'),
+    image: require('../../assets/cuisines/egyptian.webp'),
     keywords: [
       'مصري',
       'طواجن',
@@ -221,7 +221,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'fast-food',
     label: 'وجبات سريعة',
-    image: require('../../assets/cuisines/fast-food.png'),
+    image: require('../../assets/cuisines/fast-food.webp'),
     keywords: [
       'وجبات سريعة',
       'fast food',
@@ -230,7 +230,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'foul-falafel',
     label: 'فول وطعمية',
-    image: require('../../assets/cuisines/foul-falafel.png'),
+    image: require('../../assets/cuisines/foul-falafel.webp'),
     keywords: [
       'فول',
       'طعمية',
@@ -240,7 +240,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'fried-chicken',
     label: 'فراخ مقلية',
-    image: require('../../assets/cuisines/fried-chicken.png'),
+    image: require('../../assets/cuisines/fried-chicken.webp'),
     keywords: [
       'فراخ مقلية',
       'بروست',
@@ -250,7 +250,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'grills',
     label: 'مشويات',
-    image: require('../../assets/cuisines/grills.png'),
+    image: require('../../assets/cuisines/grills.webp'),
     keywords: [
       'مشويات',
       'كباب',
@@ -261,7 +261,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'healthy',
     label: 'أكل صحي',
-    image: require('../../assets/cuisines/healthy.png'),
+    image: require('../../assets/cuisines/healthy.webp'),
     keywords: [
       'صحي',
       'دايت',
@@ -272,7 +272,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'koshary',
     label: 'كشري',
-    image: require('../../assets/cuisines/koshary.png'),
+    image: require('../../assets/cuisines/koshary.webp'),
     keywords: [
       'كشري',
       'koshary',
@@ -281,7 +281,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'pasta',
     label: 'مكرونة',
-    image: require('../../assets/cuisines/pasta.png'),
+    image: require('../../assets/cuisines/pasta.webp'),
     keywords: [
       'مكرونة',
       'باستا',
@@ -291,7 +291,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'pies',
     label: 'فطير',
-    image: require('../../assets/cuisines/pies.png'),
+    image: require('../../assets/cuisines/pies.webp'),
     keywords: [
       'فطير',
       'فطائر',
@@ -301,7 +301,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'pizza',
     label: 'بيتزا',
-    image: require('../../assets/cuisines/pizza.png'),
+    image: require('../../assets/cuisines/pizza.webp'),
     keywords: [
       'بيتزا',
       'pizza',
@@ -310,7 +310,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'sandwiches',
     label: 'ساندوتشات',
-    image: require('../../assets/cuisines/sandwiches.png'),
+    image: require('../../assets/cuisines/sandwiches.webp'),
     keywords: [
       'ساندوتش',
       'سندوتش',
@@ -320,7 +320,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'seafood',
     label: 'مأكولات بحرية',
-    image: require('../../assets/cuisines/seafood.png'),
+    image: require('../../assets/cuisines/seafood.webp'),
     keywords: [
       'سمك',
       'سي فود',
@@ -331,7 +331,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'shawarma',
     label: 'شاورما',
-    image: require('../../assets/cuisines/shawarma.png'),
+    image: require('../../assets/cuisines/shawarma.webp'),
     keywords: [
       'شاورما',
       'shawarma',
@@ -987,7 +987,7 @@ export default function RestaurantsScreen() {
               cuisine={{
                 key: 'view-all',
                 label: 'عرض الكل',
-                image: require('../../assets/cuisines/view-all.jpg'),
+                image: require('../../assets/cuisines/view-all.webp'),
                 keywords: [],
               }}
               onPress={

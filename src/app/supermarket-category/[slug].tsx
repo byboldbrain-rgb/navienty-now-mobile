@@ -65,37 +65,37 @@ const ROOT_CATEGORY_IMAGES: Record<
   string,
   ImageSourcePropType
 > = {
-  offers: require('../../../assets/images/supermarket-categories/offers.png'),
+  offers: require('../../../assets/images/supermarket-categories/offers.webp'),
 
-  'fruit-veg': require('../../../assets/images/supermarket-categories/fruit-veg.png'),
+  'fruit-veg': require('../../../assets/images/supermarket-categories/fruit-veg.webp'),
 
-  bakery: require('../../../assets/images/supermarket-categories/bakery.png'),
+  bakery: require('../../../assets/images/supermarket-categories/bakery.webp'),
 
-  'poultry-meat-seafood': require('../../../assets/images/supermarket-categories/poultry-meat-seafood.png'),
+  'poultry-meat-seafood': require('../../../assets/images/supermarket-categories/poultry-meat-seafood.webp'),
 
-  'coffee-tea': require('../../../assets/images/supermarket-categories/coffee-tea.png'),
+  'coffee-tea': require('../../../assets/images/supermarket-categories/coffee-tea.webp'),
 
-  'cooking-baking': require('../../../assets/images/supermarket-categories/cooking-baking.png'),
+  'cooking-baking': require('../../../assets/images/supermarket-categories/cooking-baking.webp'),
 
-  'fresh-food': require('../../../assets/images/supermarket-categories/fresh-food.png'),
+  'fresh-food': require('../../../assets/images/supermarket-categories/fresh-food.webp'),
 
-  'ready-to-eat': require('../../../assets/images/supermarket-categories/ready-to-eat.png'),
+  'ready-to-eat': require('../../../assets/images/supermarket-categories/ready-to-eat.webp'),
 
-  'frozen-food': require('../../../assets/images/supermarket-categories/frozen-food.png'),
+  'frozen-food': require('../../../assets/images/supermarket-categories/frozen-food.webp'),
 
-  'dairy-eggs': require('../../../assets/images/supermarket-categories/dairy-eggs.png'),
+  'dairy-eggs': require('../../../assets/images/supermarket-categories/dairy-eggs.webp'),
 
-  'breakfast-food': require('../../../assets/images/supermarket-categories/breakfast-food.png'),
+  'breakfast-food': require('../../../assets/images/supermarket-categories/breakfast-food.webp'),
 
-  'canned-jarred': require('../../../assets/images/supermarket-categories/canned-jarred.png'),
+  'canned-jarred': require('../../../assets/images/supermarket-categories/canned-jarred.webp'),
 
-  'household-essentials': require('../../../assets/images/supermarket-categories/household-essentials.png'),
+  'household-essentials': require('../../../assets/images/supermarket-categories/household-essentials.webp'),
 
-  beverages: require('../../../assets/images/supermarket-categories/beverages.png'),
+  beverages: require('../../../assets/images/supermarket-categories/beverages.webp'),
 
-  'snacks-chocolate': require('../../../assets/images/supermarket-categories/snacks-chocolate.png'),
+  'snacks-chocolate': require('../../../assets/images/supermarket-categories/snacks-chocolate.webp'),
 
-  condiments: require('../../../assets/images/supermarket-categories/condiments.png'),
+  condiments: require('../../../assets/images/supermarket-categories/condiments.webp'),
 };
 
 /*
@@ -110,167 +110,167 @@ const SUBCATEGORY_IMAGES: Record<
   string,
   ImageSourcePropType
 > = {
-  'fruit-veg-fresh-vegetables': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-vegetables.png'),
+  'fruit-veg-fresh-vegetables': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-vegetables.webp'),
 
-  'fruit-veg-fresh-fruit': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-fruits.png'),
+  'fruit-veg-fresh-fruit': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-fruits.webp'),
 
-  'fruit-veg-fresh-herbs': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-aromatic-herbs.png'),
+  'fruit-veg-fresh-herbs': require('../../../assets/images/supermarket-subcategories/fruit-veg-fresh-aromatic-herbs.webp'),
 
-  'bakery-baked-goods': require('../../../assets/images/supermarket-subcategories/bakery-baked-goods.png'),
+  'bakery-baked-goods': require('../../../assets/images/supermarket-subcategories/bakery-baked-goods.webp'),
 
-  'bakery-baladi-tortilla': require('../../../assets/images/supermarket-subcategories/bakery-baladi-bread-tortilla.png'),
+  'bakery-baladi-tortilla': require('../../../assets/images/supermarket-subcategories/bakery-baladi-bread-tortilla.webp'),
 
-  'bakery-kaiser-pate': require('../../../assets/images/supermarket-subcategories/bakery-kaiser-pate.png'),
+  'bakery-kaiser-pate': require('../../../assets/images/supermarket-subcategories/bakery-kaiser-pate.webp'),
 
-  'bakery-toast': require('../../../assets/images/supermarket-subcategories/bakery-toast.png'),
+  'bakery-toast': require('../../../assets/images/supermarket-subcategories/bakery-toast.webp'),
 
-  'bakery-rusks': require('../../../assets/images/supermarket-subcategories/bakery-rusk.png'),
+  'bakery-rusks': require('../../../assets/images/supermarket-subcategories/bakery-rusk.webp'),
 
-  'bakery-packaged-baked-goods': require('../../../assets/images/supermarket-subcategories/bakery-packaged-bakery.png'),
+  'bakery-packaged-baked-goods': require('../../../assets/images/supermarket-subcategories/bakery-packaged-bakery.webp'),
 
-  'poultry-meat-seafood-poultry': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-poultry.png'),
+  'poultry-meat-seafood-poultry': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-poultry.webp'),
 
-  'poultry-meat-seafood-meat': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-meat.png'),
+  'poultry-meat-seafood-meat': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-meat.webp'),
 
-  'poultry-meat-seafood-seafood-fish': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-seafood-fish.png'),
+  'poultry-meat-seafood-seafood-fish': require('../../../assets/images/supermarket-subcategories/poultry-meat-seafood-seafood-fish.webp'),
 
-  'coffee-tea-coffee': require('../../../assets/images/supermarket-subcategories/coffee-tea-coffee.png'),
+  'coffee-tea-coffee': require('../../../assets/images/supermarket-subcategories/coffee-tea-coffee.webp'),
 
-  'coffee-tea-tea': require('../../../assets/images/supermarket-subcategories/coffee-tea-tea.png'),
+  'coffee-tea-tea': require('../../../assets/images/supermarket-subcategories/coffee-tea-tea.webp'),
 
-  'coffee-tea-herbs': require('../../../assets/images/supermarket-subcategories/coffee-tea-herbs.png'),
+  'coffee-tea-herbs': require('../../../assets/images/supermarket-subcategories/coffee-tea-herbs.webp'),
 
-  'coffee-tea-hot-drinks': require('../../../assets/images/supermarket-subcategories/coffee-tea-hot-drinks.png'),
+  'coffee-tea-hot-drinks': require('../../../assets/images/supermarket-subcategories/coffee-tea-hot-drinks.webp'),
 
-  'cooking-baking-baking-ingredients': require('../../../assets/images/supermarket-subcategories/cooking-baking-baking-ingredients.png'),
+  'cooking-baking-baking-ingredients': require('../../../assets/images/supermarket-subcategories/cooking-baking-baking-ingredients.webp'),
 
-  'cooking-baking-frying-oil': require('../../../assets/images/supermarket-subcategories/cooking-baking-frying-oil.png'),
+  'cooking-baking-frying-oil': require('../../../assets/images/supermarket-subcategories/cooking-baking-frying-oil.webp'),
 
-  'cooking-baking-olive-oil': require('../../../assets/images/supermarket-subcategories/cooking-baking-olive-oil.png'),
+  'cooking-baking-olive-oil': require('../../../assets/images/supermarket-subcategories/cooking-baking-olive-oil.webp'),
 
-  'cooking-baking-ghee': require('../../../assets/images/supermarket-subcategories/cooking-baking-ghee.png'),
+  'cooking-baking-ghee': require('../../../assets/images/supermarket-subcategories/cooking-baking-ghee.webp'),
 
-  'cooking-baking-sugar-sweeteners': require('../../../assets/images/supermarket-subcategories/cooking-baking-sugar-sweeteners.png'),
+  'cooking-baking-sugar-sweeteners': require('../../../assets/images/supermarket-subcategories/cooking-baking-sugar-sweeteners.webp'),
 
-  'cooking-baking-pasta': require('../../../assets/images/supermarket-subcategories/cooking-baking-pasta.png'),
+  'cooking-baking-pasta': require('../../../assets/images/supermarket-subcategories/cooking-baking-pasta.webp'),
 
-  'cooking-baking-noodles-soup': require('../../../assets/images/supermarket-subcategories/cooking-baking-noodles-soup.png'),
+  'cooking-baking-noodles-soup': require('../../../assets/images/supermarket-subcategories/cooking-baking-noodles-soup.webp'),
 
-  'cooking-baking-asian-food': require('../../../assets/images/supermarket-subcategories/cooking-baking-asian-food.png'),
+  'cooking-baking-asian-food': require('../../../assets/images/supermarket-subcategories/cooking-baking-asian-food.webp'),
 
-  'cooking-baking-rice': require('../../../assets/images/supermarket-subcategories/cooking-baking-rice.png'),
+  'cooking-baking-rice': require('../../../assets/images/supermarket-subcategories/cooking-baking-rice.webp'),
 
-  'cooking-baking-legumes': require('../../../assets/images/supermarket-subcategories/cooking-baking-legumes.png'),
+  'cooking-baking-legumes': require('../../../assets/images/supermarket-subcategories/cooking-baking-legumes.webp'),
 
-  'cooking-baking-tomato-sauce': require('../../../assets/images/supermarket-subcategories/cooking-baking-tomato-sauce.png'),
+  'cooking-baking-tomato-sauce': require('../../../assets/images/supermarket-subcategories/cooking-baking-tomato-sauce.webp'),
 
-  'fresh-food-cheese': require('../../../assets/images/supermarket-subcategories/fresh-food-cheese.png'),
+  'fresh-food-cheese': require('../../../assets/images/supermarket-subcategories/fresh-food-cheese.webp'),
 
-  'fresh-food-meat': require('../../../assets/images/supermarket-subcategories/fresh-food-meat.png'),
+  'fresh-food-meat': require('../../../assets/images/supermarket-subcategories/fresh-food-meat.webp'),
 
-  'fresh-food-pickles': require('../../../assets/images/supermarket-subcategories/fresh-food-pickles.png'),
+  'fresh-food-pickles': require('../../../assets/images/supermarket-subcategories/fresh-food-pickles.webp'),
 
-  'ready-to-eat-stuffed-vegetables': require('../../../assets/images/supermarket-subcategories/ready-to-eat-mahashi.png'),
+  'ready-to-eat-stuffed-vegetables': require('../../../assets/images/supermarket-subcategories/ready-to-eat-mahashi.webp'),
 
-  'ready-to-eat-stuffed-poultry': require('../../../assets/images/supermarket-subcategories/ready-to-eat-stuffed-birds-poultry.png'),
+  'ready-to-eat-stuffed-poultry': require('../../../assets/images/supermarket-subcategories/ready-to-eat-stuffed-birds-poultry.webp'),
 
-  'ready-to-eat-seasoned-meat-mince': require('../../../assets/images/supermarket-subcategories/ready-to-eat-marinated-meat-minced-meat.png'),
+  'ready-to-eat-seasoned-meat-mince': require('../../../assets/images/supermarket-subcategories/ready-to-eat-marinated-meat-minced-meat.webp'),
 
-  'frozen-food-ready-meals': require('../../../assets/images/supermarket-subcategories/frozen-food-ready-meals.png'),
+  'frozen-food-ready-meals': require('../../../assets/images/supermarket-subcategories/frozen-food-ready-meals.webp'),
 
-  'frozen-food-fruit-veg': require('../../../assets/images/supermarket-subcategories/frozen-food-fruits-vegetables.png'),
+  'frozen-food-fruit-veg': require('../../../assets/images/supermarket-subcategories/frozen-food-fruits-vegetables.webp'),
 
-  'frozen-food-fries': require('../../../assets/images/supermarket-subcategories/frozen-food-french-fries.png'),
+  'frozen-food-fries': require('../../../assets/images/supermarket-subcategories/frozen-food-french-fries.webp'),
 
-  'frozen-food-poultry': require('../../../assets/images/supermarket-subcategories/frozen-food-poultry.png'),
+  'frozen-food-poultry': require('../../../assets/images/supermarket-subcategories/frozen-food-poultry.webp'),
 
-  'frozen-food-seafood': require('../../../assets/images/supermarket-subcategories/frozen-food-frozen-seafood.png'),
+  'frozen-food-seafood': require('../../../assets/images/supermarket-subcategories/frozen-food-frozen-seafood.webp'),
 
-  'frozen-food-meat': require('../../../assets/images/supermarket-subcategories/frozen-food-meat.png'),
+  'frozen-food-meat': require('../../../assets/images/supermarket-subcategories/frozen-food-meat.webp'),
 
-  'frozen-food-bakery-desserts': require('../../../assets/images/supermarket-subcategories/frozen-food-bakery-desserts.png'),
+  'frozen-food-bakery-desserts': require('../../../assets/images/supermarket-subcategories/frozen-food-bakery-desserts.webp'),
 
-  'dairy-eggs-milk-dairy': require('../../../assets/images/supermarket-subcategories/dairy-eggs-milk-dairy.png'),
+  'dairy-eggs-milk-dairy': require('../../../assets/images/supermarket-subcategories/dairy-eggs-milk-dairy.webp'),
 
-  'dairy-eggs-eggs': require('../../../assets/images/supermarket-subcategories/dairy-eggs-eggs.png'),
+  'dairy-eggs-eggs': require('../../../assets/images/supermarket-subcategories/dairy-eggs-eggs.webp'),
 
-  'dairy-eggs-yogurt-laban-rayeb': require('../../../assets/images/supermarket-subcategories/dairy-eggs-yogurt-laban-rayeb.png'),
+  'dairy-eggs-yogurt-laban-rayeb': require('../../../assets/images/supermarket-subcategories/dairy-eggs-yogurt-laban-rayeb.webp'),
 
-  'dairy-eggs-cream-butter-ghee': require('../../../assets/images/supermarket-subcategories/dairy-eggs-cream-butter-ghee.png'),
+  'dairy-eggs-cream-butter-ghee': require('../../../assets/images/supermarket-subcategories/dairy-eggs-cream-butter-ghee.webp'),
 
-  'dairy-eggs-cheese': require('../../../assets/images/supermarket-subcategories/dairy-eggs-cheese.png'),
+  'dairy-eggs-cheese': require('../../../assets/images/supermarket-subcategories/dairy-eggs-cheese.webp'),
 
-  'breakfast-food-cereals': require('../../../assets/images/supermarket-subcategories/breakfast-food-breakfast-cereals.png'),
+  'breakfast-food-cereals': require('../../../assets/images/supermarket-subcategories/breakfast-food-breakfast-cereals.webp'),
 
-  'breakfast-food-spreads': require('../../../assets/images/supermarket-subcategories/breakfast-food-spreadables.png'),
+  'breakfast-food-spreads': require('../../../assets/images/supermarket-subcategories/breakfast-food-spreadables.webp'),
 
-  'breakfast-food-halawa': require('../../../assets/images/supermarket-subcategories/breakfast-food-halawa.png'),
+  'breakfast-food-halawa': require('../../../assets/images/supermarket-subcategories/breakfast-food-halawa.webp'),
 
-  'breakfast-food-honey': require('../../../assets/images/supermarket-subcategories/breakfast-food-honey.png'),
+  'breakfast-food-honey': require('../../../assets/images/supermarket-subcategories/breakfast-food-honey.webp'),
 
-  'breakfast-food-jam': require('../../../assets/images/supermarket-subcategories/breakfast-food-jam.png'),
+  'breakfast-food-jam': require('../../../assets/images/supermarket-subcategories/breakfast-food-jam.webp'),
 
-  'canned-jarred-seafood': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-seafood.png'),
+  'canned-jarred-seafood': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-seafood.webp'),
 
-  'canned-jarred-vegetables': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-vegetables.png'),
+  'canned-jarred-vegetables': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-vegetables.webp'),
 
-  'canned-jarred-foul-medames': require('../../../assets/images/supermarket-subcategories/canned-jarred-fava-beans.png'),
+  'canned-jarred-foul-medames': require('../../../assets/images/supermarket-subcategories/canned-jarred-fava-beans.webp'),
 
-  'canned-jarred-fruit': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-fruits.png'),
+  'canned-jarred-fruit': require('../../../assets/images/supermarket-subcategories/canned-jarred-canned-fruits.webp'),
 
-  'household-essentials-laundry-detergents': require('../../../assets/images/supermarket-subcategories/household-essentials-laundry-detergents.png'),
+  'household-essentials-laundry-detergents': require('../../../assets/images/supermarket-subcategories/household-essentials-laundry-detergents.webp'),
 
-  'household-essentials-dishwashing': require('../../../assets/images/supermarket-subcategories/household-essentials-dish-detergents.png'),
+  'household-essentials-dishwashing': require('../../../assets/images/supermarket-subcategories/household-essentials-dish-detergents.webp'),
 
-  'household-essentials-surface-floor-cleaners': require('../../../assets/images/supermarket-subcategories/household-essentials-surface-floor-cleaners.png'),
+  'household-essentials-surface-floor-cleaners': require('../../../assets/images/supermarket-subcategories/household-essentials-surface-floor-cleaners.webp'),
 
-  'household-essentials-air-fresheners': require('../../../assets/images/supermarket-subcategories/household-essentials-air-fresheners.png'),
+  'household-essentials-air-fresheners': require('../../../assets/images/supermarket-subcategories/household-essentials-air-fresheners.webp'),
 
-  'household-essentials-paper-plastic': require('../../../assets/images/supermarket-subcategories/household-essentials-paper-plastic-products.png'),
+  'household-essentials-paper-plastic': require('../../../assets/images/supermarket-subcategories/household-essentials-paper-plastic-products.webp'),
 
-  'household-essentials-cleaning-tools': require('../../../assets/images/supermarket-subcategories/household-essentials-cleaning-tools-equipment.png'),
+  'household-essentials-cleaning-tools': require('../../../assets/images/supermarket-subcategories/household-essentials-cleaning-tools-equipment.webp'),
 
-  'beverages-water': require('../../../assets/images/supermarket-subcategories/beverages-water.png'),
+  'beverages-water': require('../../../assets/images/supermarket-subcategories/beverages-water.webp'),
 
-  'beverages-soft-drinks': require('../../../assets/images/supermarket-subcategories/beverages-soft-drinks.png'),
+  'beverages-soft-drinks': require('../../../assets/images/supermarket-subcategories/beverages-soft-drinks.webp'),
 
-  'beverages-malt': require('../../../assets/images/supermarket-subcategories/beverages-malt-drinks.png'),
+  'beverages-malt': require('../../../assets/images/supermarket-subcategories/beverages-malt-drinks.webp'),
 
-  'beverages-energy-drinks': require('../../../assets/images/supermarket-subcategories/beverages-energy-drinks.png'),
+  'beverages-energy-drinks': require('../../../assets/images/supermarket-subcategories/beverages-energy-drinks.webp'),
 
-  'beverages-juices': require('../../../assets/images/supermarket-subcategories/beverages-juices.png'),
+  'beverages-juices': require('../../../assets/images/supermarket-subcategories/beverages-juices.webp'),
 
-  'beverages-powder-drinks': require('../../../assets/images/supermarket-subcategories/beverages-powder-drinks.png'),
+  'beverages-powder-drinks': require('../../../assets/images/supermarket-subcategories/beverages-powder-drinks.webp'),
 
-  'snacks-chocolate-chocolate': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-chocolate.png'),
+  'snacks-chocolate-chocolate': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-chocolate.webp'),
 
-  'snacks-chocolate-candy-gum': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-candy-gum.png'),
+  'snacks-chocolate-candy-gum': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-candy-gum.webp'),
 
-  'snacks-chocolate-biscuits': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-biscuits.png'),
+  'snacks-chocolate-biscuits': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-biscuits.webp'),
 
-  'snacks-chocolate-cake': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-cakes.png'),
+  'snacks-chocolate-cake': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-cakes.webp'),
 
-  'snacks-chocolate-chips': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-chips.png'),
+  'snacks-chocolate-chips': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-chips.webp'),
 
-  'snacks-chocolate-nuts': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-nuts.png'),
+  'snacks-chocolate-nuts': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-nuts.webp'),
 
-  'snacks-chocolate-popcorn': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-popcorn.png'),
+  'snacks-chocolate-popcorn': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-popcorn.webp'),
 
-  'snacks-chocolate-crackers': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-crackers.png'),
+  'snacks-chocolate-crackers': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-crackers.webp'),
 
-  'snacks-chocolate-dried-snacks': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-dried-snacks.png'),
+  'snacks-chocolate-dried-snacks': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-dried-snacks.webp'),
 
-  'snacks-chocolate-ice-cream': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-ice-cream.png'),
+  'snacks-chocolate-ice-cream': require('../../../assets/images/supermarket-subcategories/snacks-chocolate-ice-cream.webp'),
 
-  'condiments-basic-spices': require('../../../assets/images/supermarket-subcategories/condiments-basic-spices-seasonings.png'),
+  'condiments-basic-spices': require('../../../assets/images/supermarket-subcategories/condiments-basic-spices-seasonings.webp'),
 
-  'condiments-dried-herbs': require('../../../assets/images/supermarket-subcategories/condiments-dried-herbs.png'),
+  'condiments-dried-herbs': require('../../../assets/images/supermarket-subcategories/condiments-dried-herbs.webp'),
 
-  'condiments-mixed-spices': require('../../../assets/images/supermarket-subcategories/condiments-mixed-seasonings-blends.png'),
+  'condiments-mixed-spices': require('../../../assets/images/supermarket-subcategories/condiments-mixed-seasonings-blends.webp'),
 
-  'condiments-specialty-salts': require('../../../assets/images/supermarket-subcategories/condiments-specialty-salts.png'),
+  'condiments-specialty-salts': require('../../../assets/images/supermarket-subcategories/condiments-specialty-salts.webp'),
 
-  'condiments-sesame-grains': require('../../../assets/images/supermarket-subcategories/condiments-sesame-grains.png'),
+  'condiments-sesame-grains': require('../../../assets/images/supermarket-subcategories/condiments-sesame-grains.webp'),
 
 };
 

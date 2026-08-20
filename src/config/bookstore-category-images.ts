@@ -17,7 +17,7 @@ import type { ImageSourcePropType } from 'react-native';
  * 3. Replace `null` below with a static require, for example:
  *
  *    'writing-tools': require(
- *      '../assets/images/bookstore-categories/writing-tools.png'
+ *      '../assets/images/bookstore-categories/writing-tools.webp'
  *    ),
  *
  * IMPORTANT

@@ -51,7 +51,7 @@ const HORIZONTAL_PADDING = 16;
 const PRODUCT_GAP = 10;
 
 const OFFERS_CATEGORY_IMAGE = require(
-  '../../../assets/images/supermarket-categories/offers.png',
+  '../../../assets/images/supermarket-categories/offers.webp',
 );
 
 type ProductFilterKey =
@@ -93,31 +93,31 @@ const BOOKSTORE_ROOT_CATEGORY_IMAGES: Partial<
   Record<string, ImageSourcePropType>
 > = {
   'writing-tools': require(
-    '../../../assets/images/bookstore-categories/writing-tools.png',
+    '../../../assets/images/bookstore-categories/writing-tools.webp',
   ),
   notebooks: require(
-    '../../../assets/images/bookstore-categories/notebooks.png',
+    '../../../assets/images/bookstore-categories/notebooks.webp',
   ),
   'printing-paper': require(
-    '../../../assets/images/bookstore-categories/printing-paper.png',
+    '../../../assets/images/bookstore-categories/printing-paper.webp',
   ),
   'files-organization': require(
-    '../../../assets/images/bookstore-categories/files-organization.png',
+    '../../../assets/images/bookstore-categories/files-organization.webp',
   ),
   'study-supplies': require(
-    '../../../assets/images/bookstore-categories/study-supplies.png',
+    '../../../assets/images/bookstore-categories/study-supplies.webp',
   ),
   'geometry-tools': require(
-    '../../../assets/images/bookstore-categories/geometry-tools.png',
+    '../../../assets/images/bookstore-categories/geometry-tools.webp',
   ),
   'art-supplies': require(
-    '../../../assets/images/bookstore-categories/art-supplies.png',
+    '../../../assets/images/bookstore-categories/art-supplies.webp',
   ),
   calculators: require(
-    '../../../assets/images/bookstore-categories/calculators.png',
+    '../../../assets/images/bookstore-categories/calculators.webp',
   ),
   'pencil-cases-bags': require(
-    '../../../assets/images/bookstore-categories/pencil-cases-bags.png',
+    '../../../assets/images/bookstore-categories/pencil-cases-bags.webp',
   ),
 };
 
@@ -127,101 +127,101 @@ const BOOKSTORE_SUBCATEGORY_IMAGES: Record<
 > = {
   /* أقلام وأدوات الكتابة */
   'writing-tools-ballpoint-pens': require(
-    '../../../assets/images/bookstore-subcategories/ballpoint-pens.png',
+    '../../../assets/images/bookstore-subcategories/ballpoint-pens.webp',
   ),
   'writing-tools-pencils-leads': require(
-    '../../../assets/images/bookstore-subcategories/pencils-and-leads.png',
+    '../../../assets/images/bookstore-subcategories/pencils-and-leads.webp',
   ),
   'writing-tools-markers-highlighters': require(
-    '../../../assets/images/bookstore-subcategories/markers-and-highlighters.png',
+    '../../../assets/images/bookstore-subcategories/markers-and-highlighters.webp',
   ),
   'writing-tools-calligraphy-design-pens': require(
-    '../../../assets/images/bookstore-subcategories/calligraphy-and-design-pens.png',
+    '../../../assets/images/bookstore-subcategories/calligraphy-and-design-pens.webp',
   ),
   'writing-tools-erasers': require(
-    '../../../assets/images/bookstore-subcategories/erasers.png',
+    '../../../assets/images/bookstore-subcategories/erasers.webp',
   ),
   'writing-tools-sharpeners': require(
-    '../../../assets/images/bookstore-subcategories/sharpeners.png',
+    '../../../assets/images/bookstore-subcategories/sharpeners.webp',
   ),
 
   /* ملفات وتنظيم الأوراق */
   'files-organization-files-paper-holders': require(
-    '../../../assets/images/bookstore-subcategories/files-and-document-holders.png',
+    '../../../assets/images/bookstore-subcategories/files-and-document-holders.webp',
   ),
   'files-organization-archive-files': require(
-    '../../../assets/images/bookstore-subcategories/archive-files.png',
+    '../../../assets/images/bookstore-subcategories/archive-files.webp',
   ),
 
   /* رسم وفنون */
   'art-supplies-colors-materials': require(
-    '../../../assets/images/bookstore-subcategories/colors-and-art-materials.png',
+    '../../../assets/images/bookstore-subcategories/colors-and-art-materials.webp',
   ),
   'art-supplies-drawing-surfaces-canvases': require(
-    '../../../assets/images/bookstore-subcategories/drawing-surfaces-and-canvases.png',
+    '../../../assets/images/bookstore-subcategories/drawing-surfaces-and-canvases.webp',
   ),
   'art-supplies-drawing-shading-pencils': require(
-    '../../../assets/images/bookstore-subcategories/drawing-and-shading-pencils.png',
+    '../../../assets/images/bookstore-subcategories/drawing-and-shading-pencils.webp',
   ),
   'art-supplies-brushes-coloring-tools': require(
-    '../../../assets/images/bookstore-subcategories/brushes-and-coloring-tools.png',
+    '../../../assets/images/bookstore-subcategories/brushes-and-coloring-tools.webp',
   ),
 
   /* كراسات ونوت بوك */
   'notebooks-school-exercise-books': require(
-    '../../../assets/images/bookstore-subcategories/school-notebooks.png',
+    '../../../assets/images/bookstore-subcategories/school-notebooks.webp',
   ),
   'notebooks-personal-journals': require(
-    '../../../assets/images/bookstore-subcategories/notebooks-and-journals.png',
+    '../../../assets/images/bookstore-subcategories/notebooks-and-journals.webp',
   ),
   'notebooks-planners-time-management': require(
-    '../../../assets/images/bookstore-subcategories/planners-and-agendas.png',
+    '../../../assets/images/bookstore-subcategories/planners-and-agendas.webp',
   ),
   'notebooks-paper-blocks-note-pads': require(
-    '../../../assets/images/bookstore-subcategories/notepads-and-note-paper.png',
+    '../../../assets/images/bookstore-subcategories/notepads-and-note-paper.webp',
   ),
   'notebooks-custom-inner-papers-shapes': require(
-    '../../../assets/images/bookstore-subcategories/refill-and-specialty-inserts.png',
+    '../../../assets/images/bookstore-subcategories/refill-and-specialty-inserts.webp',
   ),
 
   /* مستلزمات المذاكرة */
   'study-supplies-highlighting-learning': require(
-    '../../../assets/images/bookstore-subcategories/highlighting-and-marking.png',
+    '../../../assets/images/bookstore-subcategories/highlighting-and-marking.webp',
   ),
   'study-supplies-organization-review-tools': require(
-    '../../../assets/images/bookstore-subcategories/study-organization-and-review.png',
+    '../../../assets/images/bookstore-subcategories/study-organization-and-review.webp',
   ),
 
   /* آلات حاسبة */
   'calculators-scientific': require(
-    '../../../assets/images/bookstore-subcategories/scientific-calculators.png',
+    '../../../assets/images/bookstore-subcategories/scientific-calculators.webp',
   ),
 
   /* ورق ومستلزمات الطباعة */
   'printing-paper-printing-service': require(
-    '../../../assets/images/bookstore-subcategories/paper-printing.png',
+    '../../../assets/images/bookstore-subcategories/paper-printing.webp',
   ),
   'printing-paper-binding-lamination-supplies': require(
-    '../../../assets/images/bookstore-subcategories/binding-and-lamination-supplies.png',
+    '../../../assets/images/bookstore-subcategories/binding-and-lamination-supplies.webp',
   ),
 
   /* مساطر وأدوات هندسية */
   'geometry-tools-rulers': require(
-    '../../../assets/images/bookstore-subcategories/rulers.png',
+    '../../../assets/images/bookstore-subcategories/rulers.webp',
   ),
   'geometry-tools-compasses': require(
-    '../../../assets/images/bookstore-subcategories/compasses-and-dividers.png',
+    '../../../assets/images/bookstore-subcategories/compasses-and-dividers.webp',
   ),
   'geometry-tools-triangles-protractors': require(
-    '../../../assets/images/bookstore-subcategories/set-squares-and-protractors.png',
+    '../../../assets/images/bookstore-subcategories/set-squares-and-protractors.webp',
   ),
 
   /* مقالم وشنط */
   'pencil-cases-bags-pencil-cases-pen-pouches': require(
-    '../../../assets/images/bookstore-subcategories/pencil-cases-and-pen-pouches.png',
+    '../../../assets/images/bookstore-subcategories/pencil-cases-and-pen-pouches.webp',
   ),
   'pencil-cases-bags-laptop-university-bags': require(
-    '../../../assets/images/bookstore-subcategories/laptop-and-university-bags.png',
+    '../../../assets/images/bookstore-subcategories/laptop-and-university-bags.webp',
   ),
 };
 

@@ -94,7 +94,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'discounted-products',
       'discounted',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/offers.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/offers.webp'),
     isOffers: true,
   },
   {
@@ -111,7 +111,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'fresh-fruit-vegetables',
       'fresh-fruits-vegetables',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/fruit-veg.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/fruit-veg.webp'),
   },
   {
     key: 'bakery',
@@ -123,7 +123,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'baked-goods',
       'breads',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/bakery.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/bakery.webp'),
   },
   {
     key: 'poultry-meat-seafood',
@@ -138,7 +138,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'meat-poultry-seafood',
       'meat-poultry-and-seafood',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/poultry-meat-seafood.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/poultry-meat-seafood.webp'),
   },
   {
     key: 'coffee-tea',
@@ -151,7 +151,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'coffee',
       'tea',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/coffee-tea.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/coffee-tea.webp'),
   },
   {
     key: 'cooking-baking',
@@ -165,7 +165,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'baking-essentials',
       'cooking-and-baking-essentials',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/cooking-baking.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/cooking-baking.webp'),
   },
   {
     key: 'fresh-food',
@@ -183,7 +183,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'cold-cuts-and-deli',
       'deli',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/fresh-food.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/fresh-food.webp'),
   },
   {
     key: 'ready-to-eat',
@@ -201,7 +201,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'ready-food',
       'ready-foods',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/ready-to-eat.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/ready-to-eat.webp'),
   },
   {
     key: 'frozen-food',
@@ -213,7 +213,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'frozen-products',
       'frozen-groceries',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/frozen-food.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/frozen-food.webp'),
   },
   {
     key: 'dairy-eggs',
@@ -226,7 +226,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'milk-and-eggs',
       'dairy-products',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/dairy-eggs.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/dairy-eggs.webp'),
   },
   {
     key: 'breakfast-food',
@@ -238,7 +238,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'breakfast-products',
       'breakfast-essentials',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/breakfast-food.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/breakfast-food.webp'),
   },
   {
     key: 'canned-jarred',
@@ -254,7 +254,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'jarred-food',
       'jarred-foods',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/canned-jarred.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/canned-jarred.webp'),
   },
   {
     key: 'household-essentials',
@@ -274,7 +274,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'cleaning',
       'laundry',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/household-essentials.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/household-essentials.webp'),
   },
   {
     key: 'beverages',
@@ -288,7 +288,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'juices',
       'juice',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/beverages.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/beverages.webp'),
   },
   {
     key: 'snacks-chocolate',
@@ -304,7 +304,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'chocolate-snacks',
       'chocolate-and-snacks',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/snacks-chocolate.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/snacks-chocolate.webp'),
   },
   {
     key: 'condiments',
@@ -323,7 +323,7 @@ const SUPERMARKET_CATEGORIES: SupermarketCategoryDefinition[] = [
       'sauces-condiments',
       'sauces-and-condiments',
     ],
-    imageSource: require('../../../assets/images/supermarket-categories/condiments.png'),
+    imageSource: require('../../../assets/images/supermarket-categories/condiments.webp'),
   },
 ];
 
