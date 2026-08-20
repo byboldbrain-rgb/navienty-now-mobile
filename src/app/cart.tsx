@@ -19,6 +19,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -36,6 +37,9 @@ import {
 import {
   useCustomerStore,
 } from '../store/customer-store';
+import {
+  useOrderNotesStore,
+} from '../store/order-notes-store';
 import {
   useVoucherStore,
 } from '../store/voucher-store';
@@ -525,6 +529,25 @@ function StoreCartScreen() {
       (state) => state.clearVoucher,
     );
 
+  const orderNotes =
+    useOrderNotesStore(
+      (state) =>
+        storeId
+          ? state.notes[storeId] ??
+            ''
+          : '',
+    );
+
+  const setOrderNote =
+    useOrderNotesStore(
+      (state) => state.setNote,
+    );
+
+  const clearOrderNotes =
+    useOrderNotesStore(
+      (state) => state.clearNote,
+    );
+
   const storeName =
     currentCart?.storeName ?? null;
 
@@ -863,6 +886,7 @@ function StoreCartScreen() {
     }
 
     clearVoucher(storeId);
+    clearOrderNotes(storeId);
     clearStoreCart(storeId);
 
     setClearModalVisible(false);
@@ -1302,6 +1326,7 @@ function StoreCartScreen() {
         contentContainerStyle={
           styles.pageContent
         }
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={
           false
         }
@@ -1539,6 +1564,14 @@ function StoreCartScreen() {
                           if (
                             item.quantity <= 1
                           ) {
+                            if (
+                              items.length === 1
+                            ) {
+                              clearOrderNotes(
+                                storeId,
+                              );
+                            }
+
                             removeStoreItem(
                               storeId,
                               item.id,
@@ -1766,6 +1799,78 @@ function StoreCartScreen() {
             </ScrollView>
           </View>
         )}
+
+
+        {/* ORDER NOTES */}
+
+        <View
+          style={
+            styles.orderNotesSection
+          }
+        >
+          <View
+            style={
+              styles.orderNotesHeader
+            }
+          >
+            <View
+              style={
+                styles.orderNotesIcon
+              }
+            >
+              <Ionicons
+                name="chatbox-ellipses-outline"
+                size={18}
+                color={BRAND_GREEN}
+              />
+            </View>
+
+            <View
+              style={
+                styles.orderNotesHeaderCopy
+              }
+            >
+              <Text
+                style={
+                  styles.orderNotesTitle
+                }
+              >
+                ملاحظات إضافية على الطلب
+              </Text>
+
+              <Text
+                style={
+                  styles.orderNotesOptional
+                }
+              >
+                اختياري
+              </Text>
+            </View>
+          </View>
+
+          <TextInput
+            style={
+              styles.orderNotesInput
+            }
+            value={orderNotes}
+            onChangeText={(value) => {
+              if (!storeId) {
+                return;
+              }
+
+              setOrderNote(
+                storeId,
+                value,
+              );
+            }}
+            placeholder="أي تفاصيل مهمة للمتجر أو المندوب"
+            placeholderTextColor="#a0a0a0"
+            multiline
+            numberOfLines={3}
+            textAlign="right"
+            textAlignVertical="top"
+          />
+        </View>
 
         {/* VOUCHER */}
 
@@ -2625,6 +2730,72 @@ const styles = StyleSheet.create({
     color: '#363636',
     fontSize: 13,
     marginTop: 4,
+  },
+
+
+  /* ---------------------------------- */
+  /* ORDER NOTES                        */
+  /* ---------------------------------- */
+
+  orderNotesSection: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e9e9e9',
+    borderRadius: 16,
+    borderWidth: 1,
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 14,
+  },
+
+  orderNotesHeader: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+  },
+
+  orderNotesIcon: {
+    alignItems: 'center',
+    backgroundColor: BRAND_GREEN_SOFT,
+    borderRadius: 16,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+
+  orderNotesHeaderCopy: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 10,
+  },
+
+  orderNotesTitle: {
+    color: '#242424',
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  orderNotesOptional: {
+    color: '#929292',
+    fontSize: 10,
+    marginTop: 2,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  orderNotesInput: {
+    backgroundColor: '#f7f7f7',
+    borderColor: '#ebebeb',
+    borderRadius: 13,
+    borderWidth: 1,
+    color: '#252525',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 12,
+    minHeight: 88,
+    paddingHorizontal: 12,
+    paddingTop: 11,
+    writingDirection: 'rtl',
   },
 
   /* ---------------------------------- */

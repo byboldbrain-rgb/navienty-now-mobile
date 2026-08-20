@@ -61,6 +61,9 @@ import {
   useOrdersStore,
 } from '../store/orders-store';
 import {
+  useOrderNotesStore,
+} from '../store/order-notes-store';
+import {
   useVoucherStore,
 } from '../store/voucher-store';
 
@@ -326,6 +329,20 @@ function StoreCheckoutScreen() {
       (state) => state.setVoucher,
     );
 
+  const notes =
+    useOrderNotesStore(
+      (state) =>
+        storeId
+          ? state.notes[storeId] ??
+            ''
+          : '',
+    );
+
+  const clearOrderNotes =
+    useOrderNotesStore(
+      (state) => state.clearNote,
+    );
+
   const storeName =
     checkoutCart?.storeName ??
     null;
@@ -537,11 +554,6 @@ function StoreCheckoutScreen() {
   /* -------------------------------- */
   /* LOCAL STATE                      */
   /* -------------------------------- */
-
-  const [
-    notes,
-    setNotes,
-  ] = useState('');
 
   const [
     submitted,
@@ -1469,6 +1481,10 @@ function StoreCheckoutScreen() {
         null,
       );
 
+      clearOrderNotes(
+        activeStoreId,
+      );
+
       createdOrder = null;
 
       router.replace(
@@ -1985,51 +2001,6 @@ function StoreCheckoutScreen() {
                   اكتب عنوانًا واضحًا ومفصلًا للتوصيل.
                 </Text>
               )}
-          </View>
-
-          <View
-            style={styles.field}
-          >
-            <Text
-              style={
-                styles.fieldLabel
-              }
-            >
-              ملاحظات على الطلب
-            </Text>
-
-            <View
-              style={[
-                styles.inputContainer,
-                styles.notesContainer,
-              ]}
-            >
-              <Ionicons
-                name="chatbox-outline"
-                size={21}
-                color="#777777"
-                style={
-                  styles.multilineIcon
-                }
-              />
-
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.notesInput,
-                ]}
-                value={notes}
-                onChangeText={
-                  setNotes
-                }
-                placeholder="أي تفاصيل مهمة للمتجر أو المندوب"
-                placeholderTextColor="#a1a1a1"
-                multiline
-                numberOfLines={3}
-                textAlign="right"
-                textAlignVertical="top"
-              />
-            </View>
           </View>
         </View>
 
