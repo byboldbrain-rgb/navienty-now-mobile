@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  isNotificationTestBuild,
   isRunningInExpoGo,
   registerPushNotifications,
   scheduleLocalNotificationTest,
@@ -30,6 +31,8 @@ type TestState =
 export default function NotificationTestScreen() {
   const router = useRouter();
   const expoGo = isRunningInExpoGo();
+  const notificationTestEnabled =
+    isNotificationTestBuild();
 
   const [
     testState,
@@ -128,7 +131,7 @@ export default function NotificationTestScreen() {
 
       setResultMessage(
         expoGo
-          ? 'Remote Push غير متاح داخل Expo Go. استخدم Development Build للاختبار الحقيقي.'
+          ? 'Remote Push غير متاح داخل Expo Go. استخدم نسخة Native للاختبار الحقيقي.'
           : 'Remote Push غير مدعوم في البيئة الحالية.',
       );
     } catch (error) {
@@ -142,7 +145,7 @@ export default function NotificationTestScreen() {
     }
   }
 
-  if (!__DEV__) {
+  if (!notificationTestEnabled) {
     return (
       <SafeAreaView
         edges={['top', 'bottom']}
@@ -156,7 +159,7 @@ export default function NotificationTestScreen() {
           </Text>
 
           <Text style={styles.releaseDescription}>
-            أدوات اختبار الإشعارات متاحة في وضع التطوير فقط.
+            أدوات اختبار الإشعارات متاحة في نسخ الاختبار فقط.
           </Text>
         </View>
       </SafeAreaView>
@@ -220,14 +223,14 @@ export default function NotificationTestScreen() {
               <Text style={styles.environmentTitle}>
                 {expoGo
                   ? 'Expo Go'
-                  : 'Development / Native Build'}
+                  : 'Internal / Native Build'}
               </Text>
 
               <Text
                 style={styles.environmentDescription}
               >
                 {expoGo
-                  ? 'Local Notifications متاحة. Remote Push يحتاج Development Build.'
+                  ? 'Local Notifications متاحة. Remote Push يحتاج Native Build.'
                   : 'يمكن اختبار Local Notifications وتسجيل Remote Push Token.'}
               </Text>
             </View>
