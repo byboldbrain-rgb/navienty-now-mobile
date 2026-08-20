@@ -412,6 +412,57 @@ export default function AccountScreen() {
             </View>
           </View>
 
+          {__DEV__ && (
+            <Pressable
+              accessibilityLabel="اختبار الإشعارات"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.notificationDevCard,
+                pressed &&
+                  styles.notificationDevCardPressed,
+              ]}
+              onPress={() => {
+                router.push('/notification-test');
+              }}
+            >
+              <View
+                style={styles.notificationDevIcon}
+              >
+                <Ionicons
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                  name="notifications-outline"
+                  size={19}
+                />
+              </View>
+
+              <View
+                style={styles.notificationDevCopy}
+              >
+                <Text
+                  style={styles.notificationDevTitle}
+                >
+                  اختبار الإشعارات
+                </Text>
+
+                <Text
+                  style={
+                    styles.notificationDevDescription
+                  }
+                >
+                  أدوات تطوير لاختبار Local وRemote Push
+                </Text>
+              </View>
+
+              <Ionicons
+                color="#9A9A9E"
+                name="chevron-back"
+                size={17}
+              />
+            </Pressable>
+          )}
+
           {/* ======================================= */}
           {/* ERROR                                   */}
           {/* ======================================= */}
@@ -851,6 +902,78 @@ const styles = StyleSheet.create({
 
     textAlign: 'right',
 
+    writingDirection: 'rtl',
+  },
+
+  /* ========================================================= */
+  /* NOTIFICATION DEV TOOLS                                    */
+  /* ========================================================= */
+
+  notificationDevCard: {
+    alignItems: 'center',
+
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+
+    borderColor: '#D8EDE5',
+
+    borderRadius: 16,
+    borderWidth: 1,
+
+    flexDirection: 'row-reverse',
+
+    marginTop: 14,
+
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+  },
+
+  notificationDevCardPressed: {
+    opacity: 0.82,
+  },
+
+  notificationDevIcon: {
+    alignItems: 'center',
+
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+
+    borderRadius: 12,
+
+    height: 38,
+
+    justifyContent: 'center',
+
+    marginLeft: 10,
+
+    width: 38,
+  },
+
+  notificationDevCopy: {
+    alignItems: 'flex-end',
+
+    flex: 1,
+  },
+
+  notificationDevTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+
+    fontSize: 12,
+    fontWeight: '800',
+
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  notificationDevDescription: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+
+    fontSize: 9.5,
+    lineHeight: 15,
+
+    marginTop: 2,
+
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
 

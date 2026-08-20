@@ -41,6 +41,10 @@ function isSupportedPlatform() {
   );
 }
 
+export function isRunningInExpoGo() {
+  return Constants.expoGoConfig !== null;
+}
+
 function getProjectId(): string | null {
   const configuredProjectId =
     Constants.expoConfig?.extra?.eas
@@ -131,6 +135,19 @@ async function registerPushNotificationsInternal(
   ) {
     return {
       status: 'permission-not-granted',
+      expoPushToken: null,
+    };
+  }
+
+  /**
+   * Local notifications remain available in Expo Go, but remote push token
+   * registration does not. Stop here after permission handling so Expo Go
+   * can still be used to verify the local notification UX without logging a
+   * misleading token-registration error.
+   */
+  if (isRunningInExpoGo()) {
+    return {
+      status: 'unsupported',
       expoPushToken: null,
     };
   }
@@ -244,4 +261,62 @@ export async function registerPushNotifications(
   } finally {
     registrationPromise = null;
   }
+}
+
+export type LocalNotificationTestResult =
+  | 'scheduled'
+  | 'permission-not-granted'
+  | 'unsupported';
+
+/**
+ * Developer smoke test for the notification presentation layer.
+ *
+ * This intentionally uses a local notification, so it works in Expo Go and
+ * does not depend on FCM/APNs credentials. Remote delivery is validated
+ * separately from a development build.
+ */
+export async function scheduleLocalNotificationTest():
+  Promise<LocalNotificationTestResult> {
+  if (!isSupportedPlatform()) {
+    return 'unsupported';
+  }
+
+  await ensureOrderNotificationChannel();
+
+  const existingPermissions =
+    await Notifications.getPermissionsAsync();
+
+  let permissionStatus =
+    existingPermissions.status;
+
+  if (
+    String(permissionStatus).toLowerCase() !== 'granted' &&
+    existingPermissions.canAskAgain !== false
+  ) {
+    const requestedPermissions =
+      await Notifications.requestPermissionsAsync();
+
+    permissionStatus =
+      requestedPermissions.status;
+  }
+
+  if (
+    String(permissionStatus).toLowerCase() !== 'granted'
+  ) {
+    return 'permission-not-granted';
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Navienty Now',
+      body: 'الإشعارات المحلية شغالة بنجاح ✅',
+      sound: 'default',
+      data: {
+        type: 'local_notification_test',
+      },
+    },
+    trigger: null,
+  });
+
+  return 'scheduled';
 }

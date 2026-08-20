@@ -24,6 +24,7 @@ import {
 import AppLaunchBlockScreen from '../components/app-launch-block-screen';
 import OrderRealtimeBridge from '../components/order-realtime-bridge';
 import PaymentProofRouteBridge from '../components/payment-proof-route-bridge';
+import PushNotificationsBridge from '../components/push-notifications-bridge';
 import {
   getAppLaunchGate,
   type AppLaunchGateResult,
@@ -457,6 +458,9 @@ export default function RootLayout() {
 
       {startupHasResolved && appIsAllowed ? (
         <>
+          <PushNotificationsBridge
+            enabled={!showBootstrapScreen}
+          />
           <OrderRealtimeBridge />
           <PaymentProofRouteBridge />
 
