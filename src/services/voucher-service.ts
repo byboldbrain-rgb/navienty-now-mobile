@@ -235,7 +235,7 @@ export async function validateVoucher(
     code: string;
     storeId: string;
     subtotal: number;
-    deliveryFee: number;
+    deliveryFee?: number | null;
     customerPhone?: string | null;
   },
 ): Promise<VoucherQuote> {
@@ -253,39 +253,64 @@ export async function validateVoucher(
     );
   }
 
+  const hasDeliveryFee =
+    input.deliveryFee !== null &&
+    input.deliveryFee !== undefined;
+
   if (
     !input.storeId.trim() ||
     !Number.isFinite(
       input.subtotal,
     ) ||
     input.subtotal < 0 ||
-    !Number.isFinite(
-      input.deliveryFee,
-    ) ||
-    input.deliveryFee < 0
+    (
+      hasDeliveryFee &&
+      (
+        !Number.isFinite(
+          input.deliveryFee,
+        ) ||
+        Number(input.deliveryFee) < 0
+      )
+    )
   ) {
     throw new Error(
       'تعذر التحقق من الكوبون للطلب الحالي.',
     );
   }
 
+  const rpcArgs =
+    hasDeliveryFee
+      ? {
+          p_code: code,
+          p_store_id:
+            input.storeId,
+          p_subtotal:
+            input.subtotal,
+          p_delivery_fee:
+            Number(
+              input.deliveryFee,
+            ),
+          p_customer_phone:
+            input.customerPhone ??
+            null,
+        }
+      : {
+          p_code: code,
+          p_store_id:
+            input.storeId,
+          p_subtotal:
+            input.subtotal,
+          p_customer_phone:
+            input.customerPhone ??
+            null,
+        };
+
   const {
     data,
     error,
   } = await supabase.rpc(
     'validate_voucher',
-    {
-      p_code: code,
-      p_store_id:
-        input.storeId,
-      p_subtotal:
-        input.subtotal,
-      p_delivery_fee:
-        input.deliveryFee,
-      p_customer_phone:
-        input.customerPhone ??
-        null,
-    },
+    rpcArgs,
   );
 
   if (error) {
@@ -327,12 +352,8 @@ export async function validateVoucher(
   const deliveryFeeBeforeDiscount =
     toNumber(
       raw.delivery_fee_before_discount ??
-        input.deliveryFee,
-    );
-
-  const discountAmount =
-    toNumber(
-      raw.discount_amount,
+        input.deliveryFee ??
+        0,
     );
 
   return {
@@ -354,7 +375,10 @@ export async function validateVoucher(
       toNumber(
         raw.discount_value,
       ),
-    discountAmount,
+    discountAmount:
+      toNumber(
+        raw.discount_amount,
+      ),
     discountBaseAmount:
       toNumber(
         raw.discount_base_amount ??
