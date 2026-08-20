@@ -575,6 +575,12 @@ function StoreCheckoutScreen() {
       return;
     }
 
+    const voucherForRefresh =
+      appliedVoucher;
+
+    const storeIdForRefresh =
+      storeId;
+
     const subtotalChanged =
       Math.abs(
         appliedVoucher
@@ -611,10 +617,14 @@ function StoreCheckoutScreen() {
         const refreshedVoucher =
           await validateVoucher({
             code:
-              appliedVoucher.code,
-            storeId,
+              voucherForRefresh.code,
+
+            storeId:
+              storeIdForRefresh,
+
             subtotal,
             deliveryFee,
+
             customerPhone:
               voucherPhone ||
               null,
@@ -622,14 +632,14 @@ function StoreCheckoutScreen() {
 
         if (!cancelled) {
           setStoreVoucher(
-            storeId,
+            storeIdForRefresh,
             refreshedVoucher,
           );
         }
       } catch {
         if (!cancelled) {
           setStoreVoucher(
-            storeId,
+            storeIdForRefresh,
             null,
           );
         }

@@ -313,7 +313,8 @@ export default function OrderLayout() {
                           isSubmittingRating) &&
                           styles.submitButtonDisabled,
                         pressed &&
-                          selectedRating &&
+                          selectedRating !==
+                            null &&
                           !isSubmittingRating &&
                           styles.buttonPressed,
                       ]}
