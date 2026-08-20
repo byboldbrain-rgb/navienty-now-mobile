@@ -8,7 +8,9 @@ module.exports = function navientyCachedImagePlugin({ types: t }) {
 
     visitor: {
       Program(programPath, state) {
-        const filename = state.filename;
+        const filename =
+          state.filename ??
+          state.file?.opts?.filename;
 
         if (
           !filename ||
