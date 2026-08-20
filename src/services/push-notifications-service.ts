@@ -57,6 +57,25 @@ export function isNotificationTestBuild() {
   );
 }
 
+export function shouldAutoRegisterPushNotifications() {
+  const configuredValue =
+    Constants.expoConfig?.extra?.pushAutoRegister;
+
+  if (configuredValue === false) {
+    return false;
+  }
+
+  if (
+    typeof configuredValue === 'string' &&
+    configuredValue.trim().toLowerCase() ===
+      'false'
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function getProjectId(): string | null {
   const configuredProjectId =
     Constants.expoConfig?.extra?.eas
