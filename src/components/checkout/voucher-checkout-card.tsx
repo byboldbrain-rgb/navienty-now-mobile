@@ -14,16 +14,17 @@ import {
 } from 'react-native';
 
 import {
+  ensureAppSession,
+} from '../../services/anonymous-auth-service';
+import {
   validateVoucher,
   type VoucherQuote,
 } from '../../services/voucher-service';
-import {
-  ensureAppSession,
-} from '../../services/anonymous-auth-service';
 
 type VoucherCheckoutCardProps = {
   storeId: string | null;
   subtotal: number;
+  deliveryFee: number;
   customerPhone: string;
   currencyCode: string;
   value: VoucherQuote | null;
@@ -54,6 +55,7 @@ function formatMoney(
 export default function VoucherCheckoutCard({
   storeId,
   subtotal,
+  deliveryFee,
   customerPhone,
   currencyCode,
   value,
@@ -82,12 +84,15 @@ export default function VoucherCheckoutCard({
     useRef<{
       storeId: string;
       subtotal: number;
+      deliveryFee: number;
     } | null>(
       value && storeId
         ? {
             storeId,
             subtotal:
               value.subtotalBeforeDiscount,
+            deliveryFee:
+              value.deliveryFeeBeforeDiscount,
           }
         : null,
     );
@@ -109,14 +114,19 @@ export default function VoucherCheckoutCard({
       Math.abs(
         snapshot.subtotal -
           subtotal,
+      ) > 0.009 ||
+      Math.abs(
+        snapshot.deliveryFee -
+          deliveryFee,
       ) > 0.009
     ) {
       onChange(null);
       setErrorMessage(
-        'تغيّرت السلة. طبّق الكوبون مرة أخرى.',
+        'تغيّرت السلة أو رسوم التوصيل. طبّق الكوبون مرة أخرى.',
       );
     }
   }, [
+    deliveryFee,
     onChange,
     storeId,
     subtotal,
@@ -187,6 +197,7 @@ export default function VoucherCheckoutCard({
           code: normalizedCode,
           storeId,
           subtotal,
+          deliveryFee,
           customerPhone:
             customerPhone || null,
         });
@@ -195,6 +206,7 @@ export default function VoucherCheckoutCard({
       appliedSnapshotRef.current = {
         storeId,
         subtotal,
+        deliveryFee,
       };
       onChange(quote);
     } catch (error) {
@@ -211,6 +223,12 @@ export default function VoucherCheckoutCard({
       setIsApplying(false);
     }
   }
+
+  const targetLabel =
+    value?.discountTarget ===
+      'delivery_fee'
+      ? 'من قيمة التوصيل'
+      : 'من قيمة الطلب';
 
   return (
     <View
@@ -299,7 +317,8 @@ export default function VoucherCheckoutCard({
               وفرت {formatMoney(
                 value.discountAmount,
                 currencyCode,
-              )}
+              )}{' '}
+              {targetLabel}
               {value.titleAr
                 ? ` • ${value.titleAr}`
                 : ''}
