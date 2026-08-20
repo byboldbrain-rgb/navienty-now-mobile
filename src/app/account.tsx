@@ -20,6 +20,9 @@ import { supabase } from '../lib/supabase';
 import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
+import {
+  isNotificationTestBuild,
+} from '../services/push-notifications-service';
 import { useCustomerStore } from '../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -412,7 +415,7 @@ export default function AccountScreen() {
             </View>
           </View>
 
-          {__DEV__ && (
+          {isNotificationTestBuild() && (
             <Pressable
               accessibilityLabel="اختبار الإشعارات"
               accessibilityRole="button"
@@ -451,7 +454,7 @@ export default function AccountScreen() {
                     styles.notificationDevDescription
                   }
                 >
-                  أدوات تطوير لاختبار Local وRemote Push
+                  أدوات اختبار Local وRemote Push
                 </Text>
               </View>
 
