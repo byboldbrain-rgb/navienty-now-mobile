@@ -52,3 +52,7 @@ example
 # Firebase app configuration - local only
 google-services.json
 google-services.dev.json
+
+# Required by EAS Build
+!google-services.json
+!google-services.dev.json
