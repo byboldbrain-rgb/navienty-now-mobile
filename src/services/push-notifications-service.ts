@@ -1,4 +1,6 @@
-import Constants from 'expo-constants';
+import Constants, {
+  ExecutionEnvironment,
+} from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -42,7 +44,10 @@ function isSupportedPlatform() {
 }
 
 export function isRunningInExpoGo() {
-  return Constants.expoGoConfig != null;
+  return (
+    Constants.executionEnvironment ===
+    ExecutionEnvironment.StoreClient
+  );
 }
 
 export function isNotificationTestBuild() {
