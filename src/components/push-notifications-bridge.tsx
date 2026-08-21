@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   registerPushNotifications,
+  shouldAutoRegisterPushNotifications,
 } from '../services/push-notifications-service';
 
 Notifications.setNotificationHandler({
@@ -174,34 +175,17 @@ export default function PushNotificationsBridge({
       isUuid(currentServiceBookingId)
     );
 
+  const autoRegistrationEnabled =
+    shouldAutoRegisterPushNotifications();
+
+  /**
+   * Notification response routing is safe to keep enabled in every native
+   * build. It does not request permission or fetch/register a push token.
+   */
   useEffect(() => {
     if (!enabled) {
       return;
     }
-
-    let disposed = false;
-
-    async function registerExistingPermission() {
-      try {
-        await registerPushNotifications({
-          requestPermission: false,
-        });
-      } catch (error) {
-        if (!disposed) {
-          console.warn(
-            'Unable to refresh push notification registration:',
-            error,
-          );
-        }
-      }
-    }
-
-    /**
-     * If the customer already granted notification permission in a previous
-     * session, silently refresh ownership/app-version metadata on launch.
-     * This does not display a permission prompt.
-     */
-    void registerExistingPermission();
 
     const lastResponse =
       Notifications.getLastNotificationResponse();
@@ -222,6 +206,44 @@ export default function PushNotificationsBridge({
           );
         },
       );
+
+    return () => {
+      responseSubscription.remove();
+    };
+  }, [enabled]);
+
+  /**
+   * Production and normal development builds silently refresh an existing
+   * push registration on launch and after auth/token changes. Internal test
+   * builds can disable this whole path so the app opens before any FCM/Expo
+   * token call; manual notification diagnostics still remain available.
+   */
+  useEffect(() => {
+    if (
+      !enabled ||
+      !autoRegistrationEnabled
+    ) {
+      return;
+    }
+
+    let disposed = false;
+
+    async function registerExistingPermission() {
+      try {
+        await registerPushNotifications({
+          requestPermission: false,
+        });
+      } catch (error) {
+        if (!disposed) {
+          console.warn(
+            'Unable to refresh push notification registration:',
+            error,
+          );
+        }
+      }
+    }
+
+    void registerExistingPermission();
 
     const tokenSubscription =
       Notifications.addPushTokenListener(
@@ -249,12 +271,6 @@ export default function PushNotificationsBridge({
             return;
           }
 
-          /**
-           * A token can survive an anonymous -> permanent account upgrade.
-           * Re-register it so the server atomically moves token ownership to
-           * the current auth.uid(). Schedule outside the auth callback to
-           * avoid blocking Supabase Auth internals.
-           */
           setTimeout(() => {
             if (!disposed) {
               void registerExistingPermission();
@@ -266,16 +282,19 @@ export default function PushNotificationsBridge({
     return () => {
       disposed = true;
 
-      responseSubscription.remove();
       tokenSubscription.remove();
       authListener.subscription
         .unsubscribe();
     };
-  }, [enabled]);
+  }, [
+    enabled,
+    autoRegistrationEnabled,
+  ]);
 
   useEffect(() => {
     if (
       !enabled ||
+      !autoRegistrationEnabled ||
       !isTrackingCustomerOrder
     ) {
       return;
@@ -283,8 +302,9 @@ export default function PushNotificationsBridge({
 
     /**
      * Ask for notification permission only when the customer has a real
-     * order/service booking to track. This gives the system prompt clear
-     * context instead of interrupting a first-time visitor on the Home page.
+     * order/service booking to track. Internal test builds intentionally
+     * keep this manual so a native push-token failure cannot happen at app
+     * startup or during navigation before diagnostics are opened.
      */
     void registerPushNotifications({
       requestPermission: true,
@@ -296,6 +316,7 @@ export default function PushNotificationsBridge({
     });
   }, [
     enabled,
+    autoRegistrationEnabled,
     isTrackingCustomerOrder,
   ]);
 
