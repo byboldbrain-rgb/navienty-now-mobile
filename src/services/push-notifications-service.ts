@@ -42,7 +42,7 @@ function isSupportedPlatform() {
 }
 
 export function isRunningInExpoGo() {
-  return Constants.expoGoConfig !== null;
+  return Constants.expoGoConfig != null;
 }
 
 export function isNotificationTestBuild() {
