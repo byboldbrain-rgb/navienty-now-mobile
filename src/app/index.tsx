@@ -281,8 +281,10 @@ function getUserDisplayName(
 
 function CategoryArtwork({
   category,
+  size,
 }: {
   category: BootstrapCategory;
+  size: number;
 }) {
   const [remoteImageFailed, setRemoteImageFailed] =
     useState(false);
@@ -303,7 +305,15 @@ function CategoryArtwork({
     : getCategoryIcon(category.slug);
 
   return (
-    <View style={styles.categoryArtwork}>
+    <View
+      style={[
+        styles.categoryArtwork,
+        {
+          height: size,
+          width: size,
+        },
+      ]}
+    >
       <Image
         accessibilityIgnoresInvertColors
         accessibilityLabel={
@@ -622,6 +632,9 @@ function CategoryStrip({
     categorySlug: string,
   ) => void;
 }) {
+  const { width: viewportWidth } =
+    useWindowDimensions();
+
   if (categories.length === 0) {
     return (
       <View style={styles.compactEmptyCard}>
@@ -637,13 +650,56 @@ function CategoryStrip({
     );
   }
 
+  /*
+   * Keep the four primary categories perfectly centered on every phone width.
+   *
+   * The old layout used four fixed 90px items plus page padding. On common
+   * 360px Android devices that total is wider than the visible viewport, so
+   * the horizontal ScrollView starts slightly off-center. Here each slot is
+   * calculated from the actual available width while keeping 90px as the
+   * maximum artwork size. If more than four categories are enabled, the rail
+   * remains horizontally scrollable without changing the visual rhythm.
+   */
+  const stripWidth = Math.min(
+    viewportWidth,
+    NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+  );
+
+  const visibleSlots = Math.min(
+    4,
+    Math.max(1, categories.length),
+  );
+
+  const categoryGap = 8;
+  const horizontalPadding =
+    NAVIENTY_NOW_LAYOUT.pageGutter;
+
+  const availableWidth = Math.max(
+    1,
+    stripWidth - horizontalPadding * 2,
+  );
+
+  const categoryItemWidth = Math.floor(
+    (availableWidth -
+      categoryGap * (visibleSlots - 1)) /
+      visibleSlots,
+  );
+
+  const categoryArtworkSize = Math.min(
+    90,
+    categoryItemWidth,
+  );
+
   return (
     <ScrollView
       horizontal
+      alwaysBounceHorizontal={false}
+      bounces={false}
       contentContainerStyle={
         styles.categoryListContent
       }
       directionalLockEnabled
+      overScrollMode="never"
       showsHorizontalScrollIndicator={false}
       style={styles.categoryList}
     >
@@ -656,6 +712,9 @@ function CategoryStrip({
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.categoryItem,
+            {
+              width: categoryItemWidth,
+            },
             pressed &&
               styles.categoryItemPressed,
           ]}
@@ -665,6 +724,7 @@ function CategoryStrip({
         >
           <CategoryArtwork
             category={category}
+            size={categoryArtworkSize}
           />
 
           <Text
@@ -2767,7 +2827,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row-reverse',
     flexGrow: 1,
-    justifyContent: 'space-between',
+    gap: 8,
+    justifyContent: 'center',
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
     paddingVertical: 8,
@@ -2775,7 +2836,6 @@ const styles = StyleSheet.create({
 
   categoryItem: {
     alignItems: 'center',
-    width: 90,
   },
 
   categoryItemPressed: {
