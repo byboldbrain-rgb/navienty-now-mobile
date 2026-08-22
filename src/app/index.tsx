@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 // NAVIENTY_BIKE_HEADER_V8_24H_JOURNEY_2026_08_11
+import { Image as ExpoImage } from 'expo-image';
 import {
   useFocusEffect,
   useRouter,
@@ -336,7 +337,7 @@ function CategoryArtwork({
 // passing through night, morning, daytime, and sunset without ever reversing.
 // The reset happens only while the bike is fully off-screen, so the loop feels
 // like a continuous delivery route rather than a ping-pong animation.
-function DeliveryBikeHero() {
+function IosDeliveryBikeHero() {
   const { width: viewportWidth } = useWindowDimensions();
   const rideX = useRef(new Animated.Value(0)).current;
   const bounceY = useRef(new Animated.Value(0)).current;
@@ -470,6 +471,211 @@ function DeliveryBikeHero() {
       </Animated.View>
     </Animated.View>
   );
+}
+
+const ANDROID_BIKE_WIDTH = 166;
+const IOS_BIKE_RIGHT_OFFSET = 10;
+
+function AndroidDeliveryBikeHero() {
+  const { width: viewportWidth } =
+    useWindowDimensions();
+
+  /*
+   * Match the iOS physical journey exactly.
+   *
+   * iOS uses:
+   *   right: -176
+   *   width: 166
+   *
+   * which means the bike's physical starting X is:
+   *   viewportWidth + 10
+   *
+   * The same iOS travel distance then moves the bike fully beyond
+   * the left edge before the invisible reset.
+   */
+  const startX =
+    viewportWidth + IOS_BIKE_RIGHT_OFFSET;
+
+  const travelDistance = Math.max(
+    620,
+    viewportWidth + 360,
+  );
+
+  const endX =
+    startX - travelDistance;
+
+  const rideX = useRef(
+    new Animated.Value(startX),
+  ).current;
+
+  const bounceY = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const bikeLean = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const leanRotation = bikeLean.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [
+      '-0.55deg',
+      '0deg',
+      '0.55deg',
+    ],
+  });
+
+  useEffect(() => {
+    rideX.setValue(startX);
+    bounceY.setValue(0);
+    bikeLean.setValue(0);
+
+    const rideAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(420),
+
+        Animated.parallel([
+          Animated.timing(rideX, {
+            toValue: endX,
+            duration: 9000,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+            isInteraction: false,
+          }),
+
+          Animated.sequence([
+            Animated.timing(bikeLean, {
+              toValue: -0.38,
+              duration: 720,
+              easing: Easing.out(Easing.quad),
+              useNativeDriver: true,
+              isInteraction: false,
+            }),
+            Animated.timing(bikeLean, {
+              toValue: 0,
+              duration: 1250,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+              isInteraction: false,
+            }),
+            Animated.delay(4750),
+            Animated.timing(bikeLean, {
+              toValue: 0.22,
+              duration: 650,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+              isInteraction: false,
+            }),
+            Animated.timing(bikeLean, {
+              toValue: 0,
+              duration: 900,
+              easing: Easing.inOut(Easing.quad),
+              useNativeDriver: true,
+              isInteraction: false,
+            }),
+          ]),
+        ]),
+
+        /*
+         * Reset only after the bike is completely outside the left edge.
+         * Because the next position is also completely outside the right
+         * edge, the reset itself is never visible.
+         */
+        Animated.timing(rideX, {
+          toValue: startX,
+          duration: 0,
+          useNativeDriver: true,
+          isInteraction: false,
+        }),
+      ]),
+    );
+
+    const bounceAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bounceY, {
+          toValue: -1.45,
+          duration: 260,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+          isInteraction: false,
+        }),
+        Animated.timing(bounceY, {
+          toValue: 0.65,
+          duration: 300,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+          isInteraction: false,
+        }),
+        Animated.timing(bounceY, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+          isInteraction: false,
+        }),
+      ]),
+    );
+
+    rideAnimation.start();
+    bounceAnimation.start();
+
+    return () => {
+      rideAnimation.stop();
+      bounceAnimation.stop();
+    };
+  }, [
+    bikeLean,
+    bounceY,
+    endX,
+    rideX,
+    startX,
+  ]);
+
+  return (
+    <View
+      collapsable={false}
+      pointerEvents="none"
+      style={styles.androidBikeLayer}
+    >
+      <Animated.View
+        collapsable={false}
+        renderToHardwareTextureAndroid
+        style={[
+          styles.androidBikeTrack,
+          {
+            transform: [
+              { translateX: rideX },
+            ],
+          },
+        ]}
+      >
+        <Animated.View
+          style={{
+            transform: [
+              { translateY: bounceY },
+              { rotate: leanRotation },
+            ],
+          }}
+        >
+          <View style={styles.deliveryBikeShadow} />
+
+          <ExpoImage
+            accessibilityLabel="Navienty delivery motorcycle"
+            contentFit="contain"
+            source={navientyDeliveryBike}
+            style={styles.deliveryBikeImage}
+            transition={0}
+          />
+        </Animated.View>
+      </Animated.View>
+    </View>
+  );
+}
+
+function DeliveryBikeHero() {
+  return Platform.OS === 'android'
+    ? <AndroidDeliveryBikeHero />
+    : <IosDeliveryBikeHero />;
 }
 
 // One panoramic 24/7 world lives behind the same road at the same time.
@@ -2423,6 +2629,7 @@ export default function HomeScreen() {
           styles.pageContent
         }
         keyboardShouldPersistTaps="handled"
+        removeClippedSubviews={false}
         showsVerticalScrollIndicator={false}
       >
         <HomeHeader />
@@ -2759,6 +2966,25 @@ const styles = StyleSheet.create({
     right: -176,
     width: 166,
     zIndex: 6,
+  },
+
+  // Android mirrors the iOS physical journey inside a clipped full-width
+  // layer. The bike begins completely outside the right edge, crosses the
+  // header, exits completely outside the left edge, then resets invisibly.
+  androidBikeLayer: {
+    ...StyleSheet.absoluteFillObject,
+    direction: 'ltr',
+    elevation: 40,
+    overflow: 'hidden',
+    zIndex: 40,
+  },
+
+  androidBikeTrack: {
+    bottom: 11,
+    height: 132,
+    left: 0,
+    position: 'absolute',
+    width: 166,
   },
 
   deliveryBikeShadow: {
@@ -3816,3 +4042,4 @@ const styles = StyleSheet.create({
   },
 });
 
+  

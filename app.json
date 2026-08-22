@@ -10,7 +10,7 @@
 
     "ios": {
       "bundleIdentifier": "com.navienty.now",
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -19,10 +19,11 @@
     "android": {
       "package": "com.navienty.now",
 
+      "icon": "./assets/images/icon.png",
+
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
 

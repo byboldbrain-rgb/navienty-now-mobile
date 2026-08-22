@@ -26,17 +26,25 @@ import OrderRealtimeBridge from '../components/order-realtime-bridge';
 import PaymentProofRouteBridge from '../components/payment-proof-route-bridge';
 import PushNotificationsBridge from '../components/push-notifications-bridge';
 import {
+  ensureAppSession,
+} from '../services/anonymous-auth-service';
+import {
   getAppLaunchGate,
   type AppLaunchGateResult,
 } from '../services/app-launch-gate-service';
-import {
-  ensureAppSession,
-} from '../services/anonymous-auth-service';
 import { logMobileClientError } from '../services/mobile-error-telemetry-service';
 import { useCartStore } from '../store/cart-store';
 import { useCustomerStore } from '../store/customer-store';
 import { useOrdersStore } from '../store/orders-store';
 import { NAVIENTY_NOW_COLORS } from '../theme/navienty-now-theme';
+
+/*
+ * Force Expo Router to use the Home route
+ * as the initial screen for this Stack.
+ */
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 const bootstrapFullLogo = require(
   '../assets/images/navienty-now-bootstrap-full.png',
@@ -68,15 +76,24 @@ function AppBootstrapScreen({
   isReady,
   onFinished,
 }: AppBootstrapScreenProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth } =
+    useWindowDimensions();
 
-  const nativeSplashHiddenRef = useRef(false);
-  const exitStartedRef = useRef(false);
+  const nativeSplashHiddenRef =
+    useRef(false);
+
+  const exitStartedRef =
+    useRef(false);
+
   const holdTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+    useRef<
+      ReturnType<typeof setTimeout> | null
+    >(null);
 
-  const [introFinished, setIntroFinished] =
-    useState(false);
+  const [
+    introFinished,
+    setIntroFinished,
+  ] = useState(false);
 
   const dotOpacity = useRef(
     new Animated.Value(0),
@@ -100,76 +117,114 @@ function AppBootstrapScreen({
 
   const logoWidth = Math.min(
     330,
-    Math.max(235, windowWidth * 0.7),
+    Math.max(
+      235,
+      windowWidth * 0.7,
+    ),
   );
 
   const logoHeight =
-    logoWidth / BOOTSTRAP_LOGO_ASPECT_RATIO;
+    logoWidth /
+    BOOTSTRAP_LOGO_ASPECT_RATIO;
 
-  const hideNativeSplash = useCallback(() => {
-    if (nativeSplashHiddenRef.current) {
-      return;
-    }
+  const hideNativeSplash =
+    useCallback(() => {
+      if (
+        nativeSplashHiddenRef.current
+      ) {
+        return;
+      }
 
-    nativeSplashHiddenRef.current = true;
+      nativeSplashHiddenRef.current =
+        true;
 
-    void SplashScreen.hideAsync().catch(() => {
-      // Safe in Expo Go / Fast Refresh.
-    });
-  }, []);
+      void SplashScreen.hideAsync().catch(
+        () => {
+          // Safe in Expo Go / Fast Refresh.
+        },
+      );
+    }, []);
 
   useEffect(() => {
     revealWidth.setValue(0);
 
-    const introAnimation = Animated.sequence([
-      Animated.delay(DOT_START_DELAY_MS),
-
-      Animated.parallel([
-        Animated.timing(dotOpacity, {
-          toValue: 1,
-          duration: 90,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-
-        Animated.timing(dotTranslateY, {
-          toValue: 0,
-          duration: DOT_DROP_DURATION_MS,
-          easing: Easing.bezier(
-            0.22,
-            0.84,
-            0.31,
-            1,
-          ),
-          useNativeDriver: true,
-        }),
-
-        Animated.timing(dotScale, {
-          toValue: 1,
-          duration: DOT_DROP_DURATION_MS,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-
-      Animated.timing(revealWidth, {
-        toValue: logoWidth,
-        duration: WORDMARK_REVEAL_DURATION_MS,
-        easing: Easing.bezier(
-          0.22,
-          0.72,
-          0.22,
-          1,
+    const introAnimation =
+      Animated.sequence([
+        Animated.delay(
+          DOT_START_DELAY_MS,
         ),
-        useNativeDriver: false,
-      }),
-    ]);
 
-    introAnimation.start(({ finished }) => {
-      if (finished) {
-        setIntroFinished(true);
-      }
-    });
+        Animated.parallel([
+          Animated.timing(
+            dotOpacity,
+            {
+              toValue: 1,
+              duration: 90,
+              easing:
+                Easing.out(
+                  Easing.quad,
+                ),
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            dotTranslateY,
+            {
+              toValue: 0,
+              duration:
+                DOT_DROP_DURATION_MS,
+              easing:
+                Easing.bezier(
+                  0.22,
+                  0.84,
+                  0.31,
+                  1,
+                ),
+              useNativeDriver: true,
+            },
+          ),
+
+          Animated.timing(
+            dotScale,
+            {
+              toValue: 1,
+              duration:
+                DOT_DROP_DURATION_MS,
+              easing:
+                Easing.out(
+                  Easing.cubic,
+                ),
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+
+        Animated.timing(
+          revealWidth,
+          {
+            toValue: logoWidth,
+            duration:
+              WORDMARK_REVEAL_DURATION_MS,
+            easing:
+              Easing.bezier(
+                0.22,
+                0.72,
+                0.22,
+                1,
+              ),
+            useNativeDriver: false,
+          },
+        ),
+      ]);
+
+    introAnimation.start(
+      ({ finished }) => {
+        if (finished) {
+          setIntroFinished(true);
+        }
+      },
+    );
 
     return () => {
       introAnimation.stop();
@@ -193,23 +248,39 @@ function AppBootstrapScreen({
 
     exitStartedRef.current = true;
 
-    holdTimerRef.current = setTimeout(() => {
-      Animated.timing(screenOpacity, {
-        toValue: 0,
-        duration: EXIT_FADE_DURATION_MS,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) {
-          onFinished();
-        }
-      });
-    }, READY_HOLD_MS);
+    holdTimerRef.current =
+      setTimeout(() => {
+        Animated.timing(
+          screenOpacity,
+          {
+            toValue: 0,
+            duration:
+              EXIT_FADE_DURATION_MS,
+            easing:
+              Easing.inOut(
+                Easing.quad,
+              ),
+            useNativeDriver: true,
+          },
+        ).start(
+          ({ finished }) => {
+            if (finished) {
+              onFinished();
+            }
+          },
+        );
+      }, READY_HOLD_MS);
 
     return () => {
-      if (holdTimerRef.current) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
+      if (
+        holdTimerRef.current
+      ) {
+        clearTimeout(
+          holdTimerRef.current,
+        );
+
+        holdTimerRef.current =
+          null;
       }
     };
   }, [
@@ -226,17 +297,22 @@ function AppBootstrapScreen({
       style={[
         styles.bootstrapScreen,
         {
-          opacity: screenOpacity,
+          opacity:
+            screenOpacity,
         },
       ]}
-      onLayout={hideNativeSplash}
+      onLayout={
+        hideNativeSplash
+      }
     >
       <View
         style={[
           styles.logoStage,
           {
-            height: logoHeight,
-            width: logoWidth,
+            height:
+              logoHeight,
+            width:
+              logoWidth,
           },
         ]}
       >
@@ -245,18 +321,24 @@ function AppBootstrapScreen({
           style={[
             styles.wordmarkClip,
             {
-              height: logoHeight,
-              width: revealWidth,
+              height:
+                logoHeight,
+              width:
+                revealWidth,
             },
           ]}
         >
           <Image
             accessibilityIgnoresInvertColors
             resizeMode="contain"
-            source={bootstrapFullLogo}
+            source={
+              bootstrapFullLogo
+            }
             style={{
-              height: logoHeight,
-              width: logoWidth,
+              height:
+                logoHeight,
+              width:
+                logoWidth,
             }}
           />
         </Animated.View>
@@ -268,17 +350,22 @@ function AppBootstrapScreen({
           style={[
             styles.dotLayer,
             {
-              height: logoHeight,
-              opacity: dotOpacity,
+              height:
+                logoHeight,
+              opacity:
+                dotOpacity,
               transform: [
                 {
-                  translateY: dotTranslateY,
+                  translateY:
+                    dotTranslateY,
                 },
                 {
-                  scale: dotScale,
+                  scale:
+                    dotScale,
                 },
               ],
-              width: logoWidth,
+              width:
+                logoWidth,
             },
           ]}
         />
@@ -293,19 +380,34 @@ export function ErrorBoundary({
 }: ErrorBoundaryProps) {
   useEffect(() => {
     void logMobileClientError({
-      source: 'react_error_boundary',
+      source:
+        'react_error_boundary',
       error,
     });
   }, [error]);
 
   return (
-    <View style={styles.errorBoundaryScreen}>
-      <Text style={styles.errorBoundaryTitle}>
+    <View
+      style={
+        styles.errorBoundaryScreen
+      }
+    >
+      <Text
+        style={
+          styles.errorBoundaryTitle
+        }
+      >
         حدث خطأ غير متوقع
       </Text>
 
-      <Text style={styles.errorBoundaryMessage}>
-        لم نتمكن من عرض هذه الصفحة. حاول مرة أخرى، وإذا استمرت المشكلة تواصل مع الدعم.
+      <Text
+        style={
+          styles.errorBoundaryMessage
+        }
+      >
+        لم نتمكن من عرض هذه الصفحة.
+        حاول مرة أخرى، وإذا استمرت
+        المشكلة تواصل مع الدعم.
       </Text>
 
       <Pressable
@@ -315,10 +417,15 @@ export function ErrorBoundary({
         }}
         style={({ pressed }) => [
           styles.errorBoundaryButton,
-          pressed && styles.errorBoundaryButtonPressed,
+          pressed &&
+            styles.errorBoundaryButtonPressed,
         ]}
       >
-        <Text style={styles.errorBoundaryButtonText}>
+        <Text
+          style={
+            styles.errorBoundaryButtonText
+          }
+        >
           إعادة المحاولة
         </Text>
       </Pressable>
@@ -327,18 +434,22 @@ export function ErrorBoundary({
 }
 
 export default function RootLayout() {
-  const cartHasHydrated = useCartStore(
-    (state) => state.hasHydrated,
-  );
+  const cartHasHydrated =
+    useCartStore(
+      (state) =>
+        state.hasHydrated,
+    );
 
   const customerHasHydrated =
     useCustomerStore(
-      (state) => state.hasHydrated,
+      (state) =>
+        state.hasHydrated,
     );
 
   const ordersHasHydrated =
     useOrdersStore(
-      (state) => state.hasHydrated,
+      (state) =>
+        state.hasHydrated,
     );
 
   const [
@@ -349,15 +460,23 @@ export default function RootLayout() {
   const [
     launchGate,
     setLaunchGate,
-  ] = useState<AppLaunchGateResult | null>(
-    null,
-  );
+  ] =
+    useState<AppLaunchGateResult | null>(
+      null,
+    );
 
   const [
     isRefreshingLaunchGate,
     setIsRefreshingLaunchGate,
   ] = useState(false);
 
+  /*
+   * Authentication bootstrap.
+   *
+   * Supabase may be unavailable while testing
+   * locally, but the bootstrap is always marked
+   * as finished so development can continue.
+   */
   useEffect(() => {
     let cancelled = false;
 
@@ -371,7 +490,9 @@ export default function RootLayout() {
         );
       } finally {
         if (!cancelled) {
-          setAuthBootstrapFinished(true);
+          setAuthBootstrapFinished(
+            true,
+          );
         }
       }
     }
@@ -383,8 +504,36 @@ export default function RootLayout() {
     };
   }, []);
 
+  /*
+   * DEVELOPMENT-ONLY LAUNCH GATE BYPASS
+   *
+   * During local development / Expo Go testing,
+   * allow the app to render even when Supabase
+   * is temporarily unreachable.
+   *
+   * Production behavior remains unchanged.
+   */
   useEffect(() => {
-    if (!authBootstrapFinished) {
+    if (
+      !authBootstrapFinished
+    ) {
+      return;
+    }
+
+    if (__DEV__) {
+      console.log(
+        '[Navienty] Development launch gate bypass enabled.',
+      );
+
+      setLaunchGate({
+        status: 'allowed',
+        currentVersion: null,
+        minimumVersion: null,
+        messageAr: null,
+        updateUrl: null,
+        supportWhatsapp: null,
+      });
+
       return;
     }
 
@@ -395,7 +544,9 @@ export default function RootLayout() {
         await getAppLaunchGate();
 
       if (!cancelled) {
-        setLaunchGate(result);
+        setLaunchGate(
+          result,
+        );
       }
     }
 
@@ -404,25 +555,54 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, [authBootstrapFinished]);
+  }, [
+    authBootstrapFinished,
+  ]);
 
   const refreshLaunchGate =
     useCallback(async () => {
-      if (isRefreshingLaunchGate) {
+      if (
+        isRefreshingLaunchGate
+      ) {
         return;
       }
 
-      setIsRefreshingLaunchGate(true);
+      setIsRefreshingLaunchGate(
+        true,
+      );
 
       try {
+        /*
+         * Keep development testing available
+         * even when Supabase cannot be reached.
+         */
+        if (__DEV__) {
+          setLaunchGate({
+            status: 'allowed',
+            currentVersion: null,
+            minimumVersion: null,
+            messageAr: null,
+            updateUrl: null,
+            supportWhatsapp: null,
+          });
+
+          return;
+        }
+
         const result =
           await getAppLaunchGate();
 
-        setLaunchGate(result);
+        setLaunchGate(
+          result,
+        );
       } finally {
-        setIsRefreshingLaunchGate(false);
+        setIsRefreshingLaunchGate(
+          false,
+        );
       }
-    }, [isRefreshingLaunchGate]);
+    }, [
+      isRefreshingLaunchGate,
+    ]);
 
   const appHasHydrated =
     cartHasHydrated &&
@@ -435,19 +615,25 @@ export default function RootLayout() {
     launchGate !== null;
 
   const appIsAllowed =
-    launchGate?.status === 'allowed';
+    launchGate?.status ===
+    'allowed';
 
   const [
     showBootstrapScreen,
     setShowBootstrapScreen,
   ] = useState(true);
 
-  const finishBootstrap = useCallback(() => {
-    setShowBootstrapScreen(false);
-  }, []);
+  const finishBootstrap =
+    useCallback(() => {
+      setShowBootstrapScreen(
+        false,
+      );
+    }, []);
 
   return (
-    <View style={styles.root}>
+    <View
+      style={styles.root}
+    >
       <StatusBar
         style={
           showBootstrapScreen
@@ -456,12 +642,17 @@ export default function RootLayout() {
         }
       />
 
-      {startupHasResolved && appIsAllowed ? (
+      {startupHasResolved &&
+      appIsAllowed ? (
         <>
           <PushNotificationsBridge
-            enabled={!showBootstrapScreen}
+            enabled={
+              !showBootstrapScreen
+            }
           />
+
           <OrderRealtimeBridge />
+
           <PaymentProofRouteBridge />
 
           <Stack
@@ -475,20 +666,32 @@ export default function RootLayout() {
             }}
           >
             <Stack.Screen
+              name="index"
+              options={{
+                headerShown:
+                  false,
+              }}
+            />
+
+            <Stack.Screen
               name="location-picker"
               options={{
                 animation:
                   'slide_from_right',
-                headerShown: false,
+                headerShown:
+                  false,
               }}
             />
 
             <Stack.Screen
               name="promo/[id]"
               options={{
-                animation: 'slide_from_right',
-                gestureEnabled: true,
-                headerShown: false,
+                animation:
+                  'slide_from_right',
+                gestureEnabled:
+                  true,
+                headerShown:
+                  false,
               }}
             />
           </Stack>
@@ -511,94 +714,121 @@ export default function RootLayout() {
 
       {showBootstrapScreen ? (
         <AppBootstrapScreen
-          isReady={startupHasResolved}
-          onFinished={finishBootstrap}
+          isReady={
+            startupHasResolved
+          }
+          onFinished={
+            finishBootstrap
+          }
         />
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    flex: 1,
-  },
+const styles =
+  StyleSheet.create({
+    root: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+      flex: 1,
+    },
 
-  bootstrapScreen: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 0,
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    zIndex: 100,
-  },
+    bootstrapScreen: {
+      position:
+        'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      top: 0,
+      alignItems:
+        'center',
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+      justifyContent:
+        'center',
+      paddingHorizontal:
+        24,
+      zIndex: 100,
+    },
 
-  logoStage: {
-    position: 'relative',
-  },
+    logoStage: {
+      position:
+        'relative',
+    },
 
-  wordmarkClip: {
-    left: 0,
-    overflow: 'hidden',
-    position: 'absolute',
-    top: 0,
-    zIndex: 1,
-  },
+    wordmarkClip: {
+      left: 0,
+      overflow:
+        'hidden',
+      position:
+        'absolute',
+      top: 0,
+      zIndex: 1,
+    },
 
-  dotLayer: {
-    left: 0,
-    position: 'absolute',
-    top: 0,
-    zIndex: 2,
-  },
+    dotLayer: {
+      left: 0,
+      position:
+        'absolute',
+      top: 0,
+      zIndex: 2,
+    },
 
-  errorBoundaryScreen: {
-    alignItems: 'center',
-    backgroundColor: NAVIENTY_NOW_COLORS.page,
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
+    errorBoundaryScreen: {
+      alignItems:
+        'center',
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.page,
+      flex: 1,
+      justifyContent:
+        'center',
+      paddingHorizontal:
+        28,
+    },
 
-  errorBoundaryTitle: {
-    color: NAVIENTY_NOW_COLORS.textPrimary,
-    fontSize: 22,
-    fontWeight: '800',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
+    errorBoundaryTitle: {
+      color:
+        NAVIENTY_NOW_COLORS.textPrimary,
+      fontSize: 22,
+      fontWeight:
+        '800',
+      marginBottom: 10,
+      textAlign:
+        'center',
+    },
 
-  errorBoundaryMessage: {
-    color: NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 14,
-    lineHeight: 22,
-    marginBottom: 22,
-    textAlign: 'center',
-  },
+    errorBoundaryMessage: {
+      color:
+        NAVIENTY_NOW_COLORS.textSecondary,
+      fontSize: 14,
+      lineHeight: 22,
+      marginBottom: 22,
+      textAlign:
+        'center',
+    },
 
-  errorBoundaryButton: {
-    alignItems: 'center',
-    backgroundColor: NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 14,
-    minWidth: 150,
-    paddingHorizontal: 22,
-    paddingVertical: 13,
-  },
+    errorBoundaryButton: {
+      alignItems:
+        'center',
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+      borderRadius: 14,
+      minWidth: 150,
+      paddingHorizontal:
+        22,
+      paddingVertical:
+        13,
+    },
 
-  errorBoundaryButtonPressed: {
-    opacity: 0.82,
-  },
+    errorBoundaryButtonPressed: {
+      opacity: 0.82,
+    },
 
-  errorBoundaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-});
+    errorBoundaryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight:
+        '800',
+    },
+  });

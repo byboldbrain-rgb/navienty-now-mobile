@@ -12,6 +12,7 @@ import {
   type ImageSourcePropType,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RestaurantsScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap, {
@@ -1508,6 +1510,42 @@ function CuisinesModal({
   const { height: windowHeight } =
     useWindowDimensions();
 
+  const insets =
+    useSafeAreaInsets();
+
+  /*
+   * iOS already has the footer in the correct visual position.
+   * On Android the Modal can sit much closer to the system
+   * navigation area, so lift only the Android footer by the
+   * device's real bottom safe-area + a small optical gap.
+   */
+  const sheetFooterBottomPadding =
+    Platform.OS === 'android'
+      ? Math.max(
+          48,
+          insets.bottom + 24,
+        )
+      : 30;
+
+  const cuisinesGridBottomPadding =
+    Platform.OS === 'android'
+      ? 130 +
+        Math.max(
+          18,
+          sheetFooterBottomPadding - 30,
+        )
+      : 130;
+
+  const viewResultsButtonHeight =
+    Platform.OS === 'android'
+      ? 54
+      : 62;
+
+  const viewResultsButtonFontSize =
+    Platform.OS === 'android'
+      ? 16
+      : 18;
+
   const sheetTranslateY =
     useRef(
       new Animated.Value(
@@ -1607,11 +1645,14 @@ function CuisinesModal({
     });
   }
 
-  const panResponder =
+  const sheetPanResponder =
     useMemo(
       () =>
         PanResponder.create({
           onStartShouldSetPanResponder:
+            () => false,
+
+          onStartShouldSetPanResponderCapture:
             () => false,
 
           onMoveShouldSetPanResponder:
@@ -1624,7 +1665,10 @@ function CuisinesModal({
                 1;
 
               const isMovingDown =
-                gestureState.dy > 4;
+                gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 2
+                  : 4);
 
               const isMostlyVertical =
                 Math.abs(
@@ -1651,7 +1695,10 @@ function CuisinesModal({
                 1;
 
               const isMovingDown =
-                gestureState.dy > 4;
+                gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 2
+                  : 4);
 
               const isMostlyVertical =
                 Math.abs(
@@ -1663,6 +1710,131 @@ function CuisinesModal({
 
               return (
                 isAtTop &&
+                isMovingDown &&
+                isMostlyVertical
+              );
+            },
+
+          onPanResponderGrant: () => {
+            sheetTranslateY.stopAnimation();
+          },
+
+          onPanResponderMove: (
+            _event,
+            gestureState,
+          ) => {
+            sheetTranslateY.setValue(
+              Math.min(
+                windowHeight,
+                Math.max(
+                  0,
+                  gestureState.dy,
+                ),
+              ),
+            );
+          },
+
+          onPanResponderRelease: (
+            _event,
+            gestureState,
+          ) => {
+            const shouldClose =
+              gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 82
+                  : 110) ||
+              (
+                gestureState.dy > 20 &&
+                gestureState.vy >
+                  (Platform.OS === 'android'
+                    ? 0.68
+                    : 0.9)
+              );
+
+            if (shouldClose) {
+              requestClose();
+              return;
+            }
+
+            animateSheetBack();
+          },
+
+          onPanResponderTerminate:
+            () => {
+              animateSheetBack();
+            },
+
+          onPanResponderTerminationRequest:
+            () => false,
+
+          onShouldBlockNativeResponder:
+            () => true,
+        }),
+      [
+        sheetTranslateY,
+        windowHeight,
+      ],
+    );
+
+  /*
+   * Android fix:
+   *
+   * The native ScrollView can claim the gesture before the parent sheet.
+   * The visible handle therefore owns the touch immediately on Android.
+   * This guarantees that dragging from the grey handle always moves the
+   * complete sheet down.
+   */
+  const handlePanResponder =
+    useMemo(
+      () =>
+        PanResponder.create({
+          onStartShouldSetPanResponder:
+            () =>
+              Platform.OS === 'android',
+
+          onStartShouldSetPanResponderCapture:
+            () =>
+              Platform.OS === 'android',
+
+          onMoveShouldSetPanResponder:
+            (
+              _event,
+              gestureState,
+            ) => {
+              const isMovingDown =
+                gestureState.dy > 1;
+
+              const isMostlyVertical =
+                Math.abs(
+                  gestureState.dy,
+                ) >
+                Math.abs(
+                  gestureState.dx,
+                );
+
+              return (
+                isMovingDown &&
+                isMostlyVertical
+              );
+            },
+
+          onMoveShouldSetPanResponderCapture:
+            (
+              _event,
+              gestureState,
+            ) => {
+              const isMovingDown =
+                gestureState.dy > 1;
+
+              const isMostlyVertical =
+                Math.abs(
+                  gestureState.dy,
+                ) >
+                Math.abs(
+                  gestureState.dx,
+                );
+
+              return (
                 isMovingDown &&
                 isMostlyVertical
               );
@@ -1694,17 +1866,20 @@ function CuisinesModal({
             _event,
             gestureState,
           ) => {
-            const draggedFarEnough =
-              gestureState.dy > 110;
+            const shouldClose =
+              gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 64
+                  : 100) ||
+              (
+                gestureState.dy > 16 &&
+                gestureState.vy >
+                  (Platform.OS === 'android'
+                    ? 0.55
+                    : 0.85)
+              );
 
-            const flickedDownFast =
-              gestureState.dy > 24 &&
-              gestureState.vy > 0.9;
-
-            if (
-              draggedFarEnough ||
-              flickedDownFast
-            ) {
+            if (shouldClose) {
               requestClose();
               return;
             }
@@ -1716,6 +1891,12 @@ function CuisinesModal({
             () => {
               animateSheetBack();
             },
+
+          onPanResponderTerminationRequest:
+            () => false,
+
+          onShouldBlockNativeResponder:
+            () => true,
         }),
       [
         sheetTranslateY,
@@ -1760,7 +1941,7 @@ function CuisinesModal({
               ],
             },
           ]}
-          {...panResponder.panHandlers}
+          {...sheetPanResponder.panHandlers}
         >
           <View
             style={
@@ -1768,9 +1949,11 @@ function CuisinesModal({
             }
           >
             <View
+              collapsable={false}
               style={
                 styles.sheetHandleTouchArea
               }
+              {...handlePanResponder.panHandlers}
             >
               <View
                 style={
@@ -1839,13 +2022,20 @@ function CuisinesModal({
           </View>
 
           <ScrollView
-            contentContainerStyle={
-              styles.cuisinesGrid
-            }
+            contentContainerStyle={[
+              styles.cuisinesGrid,
+              {
+                paddingBottom:
+                  cuisinesGridBottomPadding,
+              },
+            ]}
             showsVerticalScrollIndicator={
               false
             }
-            bounces
+            bounces={
+              Platform.OS === 'ios'
+            }
+            nestedScrollEnabled
             overScrollMode="never"
             scrollEventThrottle={16}
             onScroll={(event) => {
@@ -1923,9 +2113,13 @@ function CuisinesModal({
           </ScrollView>
 
           <View
-            style={
-              styles.sheetFooter
-            }
+            style={[
+              styles.sheetFooter,
+              {
+                paddingBottom:
+                  sheetFooterBottomPadding,
+              },
+            ]}
           >
             <Pressable
               accessibilityRole="button"
@@ -1933,6 +2127,10 @@ function CuisinesModal({
                 pressed,
               }) => [
                 styles.viewResultsButton,
+                {
+                  minHeight:
+                    viewResultsButtonHeight,
+                },
                 pressed &&
                   styles.pressed,
               ]}
@@ -1941,9 +2139,13 @@ function CuisinesModal({
               }
             >
               <Text
-                style={
-                  styles.viewResultsButtonText
-                }
+                style={[
+                  styles.viewResultsButtonText,
+                  {
+                    fontSize:
+                      viewResultsButtonFontSize,
+                  },
+                ]}
               >
                 عرض النتائج
               </Text>
@@ -2580,7 +2782,10 @@ const styles = StyleSheet.create({
   sheetHandleTouchArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 28,
+    minHeight:
+      Platform.OS === 'android'
+        ? 44
+        : 28,
     paddingTop: 7,
   },
 
@@ -2712,7 +2917,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    paddingBottom: 30,
     paddingHorizontal: 25,
     paddingTop: 20,
     position: 'absolute',
@@ -2725,12 +2929,10 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.primary,
     borderRadius: 999,
     justifyContent: 'center',
-    minHeight: 62,
   },
 
   viewResultsButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
     fontWeight: '900',
   },
 
