@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import {
   createJSONStorage,
   persist,
 } from 'zustand/middleware';
 
+import { secureAuthStorage } from '../lib/secure-auth-storage';
 import type {
   Order,
   OrderStatus,
@@ -15,6 +17,13 @@ export type {
   OrderItem,
   OrderStatus
 } from '../types/supabase-order';
+
+const MAX_PERSISTED_ORDERS = 20;
+
+const ordersPersistStorage =
+  Platform.OS === 'web'
+    ? AsyncStorage
+    : secureAuthStorage;
 
 type PersistedOrdersState = {
   /**
@@ -368,8 +377,15 @@ export const useOrdersStore =
         name:
           'navienty-now-orders',
 
+        /**
+         * Native order snapshots include customer/address details and an
+         * order access token, so keep them out of plaintext AsyncStorage.
+         * secureAuthStorage also performs a lazy one-time migration from the
+         * previous AsyncStorage value and removes the plaintext copy after a
+         * successful encrypted write. Web keeps its normal browser storage.
+         */
         storage: createJSONStorage(
-          () => AsyncStorage,
+          () => ordersPersistStorage,
         ),
 
         partialize: (
@@ -378,8 +394,16 @@ export const useOrdersStore =
           ownerUserId:
             state.ownerUserId,
 
+          /**
+           * The server remains authoritative and OrdersScreen refreshes from
+           * getMyOrders() on focus. Keep only a bounded encrypted cache for
+           * offline/fallback UX so SecureStore cannot grow without limit.
+           */
           orders:
-            state.orders,
+            state.orders.slice(
+              0,
+              MAX_PERSISTED_ORDERS,
+            ),
 
           pendingOrder:
             state.pendingOrder,
@@ -411,7 +435,10 @@ export const useOrdersStore =
               Array.isArray(
                 previous.orders,
               )
-                ? previous.orders
+                ? previous.orders.slice(
+                    0,
+                    MAX_PERSISTED_ORDERS,
+                  )
                 : [],
 
             pendingOrder:
@@ -427,7 +454,7 @@ export const useOrdersStore =
             );
           },
 
-        version: 3,
+        version: 4,
       },
     ),
   );

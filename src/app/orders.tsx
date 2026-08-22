@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import {
   useFocusEffect,
   useRouter,
@@ -10,6 +11,7 @@ import {
 } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,11 +22,21 @@ import {
 import AppBottomNavigation from '../category/app-bottom-navigation';
 import { OrdersScreenSkeleton } from '../components/ui/loading-skeleton';
 import { useAuthSession } from '../hooks/use-auth-session';
-import { getMyOrders } from '../services/order-service';
 import {
+  listStores,
+} from '../services/catalog-service';
+import {
+  getMyOrders,
+} from '../services/order-service';
+import {
+  getOrderRating,
+  submitOrderRating,
+  type OrderRating,
+} from '../services/rating-service';
+import {
+  useOrdersStore,
   type Order,
   type OrderStatus,
-  useOrdersStore,
 } from '../store/orders-store';
 import {
   NAVIENTY_NOW_LAYOUT,
@@ -34,54 +46,68 @@ type StatusPresentation = {
   title: string;
   backgroundColor: string;
   textColor: string;
-  dotColor: string;
 };
+
+type ExtendedOrder = Order & {
+  storeImageUrl?: string | null;
+  storeLogoUrl?: string | null;
+  storeImage?: string | null;
+  storeLogo?: string | null;
+  imageUrl?: string | null;
+  logoUrl?: string | null;
+  storeAvatarUrl?: string | null;
+  coverImageUrl?: string | null;
+};
+
+type StoreImageMap = Record<
+  string,
+  string | null
+>;
 
 const statusPresentation: Record<
   OrderStatus,
   StatusPresentation
 > = {
   'awaiting-whatsapp-send': {
-    title: 'في انتظار إرسال واتساب',
-    backgroundColor: '#fff3d6',
-    textColor: '#7a5a13',
-    dotColor: '#e5a328',
+    title: 'في انتظار الإرسال',
+    backgroundColor: '#FFF4D9',
+    textColor: '#7A5A13',
   },
+
   'waiting-confirmation': {
     title: 'في انتظار التأكيد',
-    backgroundColor: '#f1efff',
-    textColor: '#4f3db8',
-    dotColor: '#6d56df',
+    backgroundColor: '#F1EFFF',
+    textColor: '#5643B8',
   },
+
   confirmed: {
     title: 'تم التأكيد',
-    backgroundColor: '#e9f7ee',
-    textColor: '#246343',
-    dotColor: '#25a952',
+    backgroundColor: '#EAF7EF',
+    textColor: '#286446',
   },
+
   preparing: {
     title: 'جاري التجهيز',
-    backgroundColor: '#fff3d6',
-    textColor: '#7a5a13',
-    dotColor: '#e5a328',
+    backgroundColor: '#FFF4D9',
+    textColor: '#7A5A13',
   },
+
   'out-for-delivery': {
-    title: 'خرج للتوصيل',
-    backgroundColor: '#eaf4ff',
-    textColor: '#245f91',
-    dotColor: '#3d8fd1',
+    title: 'في الطريق إليك',
+    backgroundColor: '#EDF6FF',
+    textColor: '#2C6696',
   },
+
   delivered: {
-    title: 'تم التوصيل',
-    backgroundColor: '#e9f7ee',
-    textColor: '#246343',
-    dotColor: '#25a952',
+    title: 'تم الاستلام',
+    backgroundColor: '#F2F2F2',
+    textColor: '#626262',
   },
+
   cancelled: {
-    title: 'ملغي',
-    backgroundColor: '#fdecec',
-    textColor: '#9a3333',
-    dotColor: '#d64b4b',
+    title: 'تم الإلغاء',
+    backgroundColor: '#FDEEEE',
+    textColor: '#963D3D',
   },
 };
 
@@ -103,83 +129,587 @@ const arabicMonthNames = [
 function formatOrderDate(
   isoDate: string,
 ): string {
-  const date = new Date(isoDate);
+  const date =
+    new Date(isoDate);
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
     return 'تاريخ غير متاح';
   }
 
-  const day = date.getDate();
-  const month =
-    arabicMonthNames[date.getMonth()];
-  const year = date.getFullYear();
+  const day =
+    date.getDate();
 
-  let hours = date.getHours();
-  const minutes = String(
-    date.getMinutes(),
-  ).padStart(2, '0');
+  const month =
+    arabicMonthNames[
+      date.getMonth()
+    ];
+
+  let hours =
+    date.getHours();
+
+  const minutes =
+    String(
+      date.getMinutes(),
+    ).padStart(
+      2,
+      '0',
+    );
 
   const period =
-    hours >= 12 ? 'م' : 'ص';
+    hours >= 12
+      ? 'م'
+      : 'ص';
 
   hours %= 12;
 
-  if (hours === 0) {
+  if (
+    hours === 0
+  ) {
     hours = 12;
   }
 
-  return `${day} ${month} ${year} • ${hours}:${minutes} ${period}`;
+  return `${day} ${month} • ${hours}:${minutes} ${period}`;
+}
+
+function formatMoney(
+  value: number | string,
+  currencySymbol: string,
+): string {
+  const numericValue =
+    typeof value === 'number'
+      ? value
+      : Number(value);
+
+  if (
+    Number.isFinite(
+      numericValue,
+    )
+  ) {
+    return `${numericValue.toLocaleString(
+      'en-US',
+      {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      },
+    )} ${currencySymbol}`;
+  }
+
+  return `${value} ${currencySymbol}`;
+}
+
+function getItemCountText(
+  itemCount: number,
+): string {
+  if (
+    itemCount === 1
+  ) {
+    return '1 منتج';
+  }
+
+  return `${itemCount} منتجات`;
+}
+
+function isImageUrl(
+  value?: string | null,
+): value is string {
+  if (!value) {
+    return false;
+  }
+
+  return (
+    value.startsWith(
+      'https://',
+    ) ||
+    value.startsWith(
+      'http://',
+    )
+  );
+}
+
+function getStoreId(
+  order: Order,
+): string | null {
+  return (
+    order.storeId ??
+    null
+  );
+}
+
+function getOrderEmbeddedImageUrl(
+  order: Order,
+): string | null {
+  const extendedOrder =
+    order as ExtendedOrder;
+
+  const candidates = [
+    extendedOrder.storeImageUrl,
+    extendedOrder.storeLogoUrl,
+    extendedOrder.storeImage,
+    extendedOrder.storeLogo,
+    extendedOrder.storeAvatarUrl,
+    extendedOrder.logoUrl,
+    extendedOrder.imageUrl,
+    extendedOrder.coverImageUrl,
+    order.storeIcon,
+  ];
+
+  for (
+    const candidate
+    of candidates
+  ) {
+    if (
+      isImageUrl(
+        candidate,
+      )
+    ) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function StoreImage({
+  order,
+  storeImageUrl,
+}: {
+  order: Order;
+  storeImageUrl?: string | null;
+}) {
+  const embeddedImageUrl =
+    getOrderEmbeddedImageUrl(
+      order,
+    );
+
+  const imageUrl =
+    storeImageUrl ??
+    embeddedImageUrl;
+
+  const [
+    hasImageError,
+    setHasImageError,
+  ] = useState(false);
+
+  useEffect(() => {
+    setHasImageError(
+      false,
+    );
+  }, [imageUrl]);
+
+  const shouldShowImage =
+    Boolean(imageUrl) &&
+    !hasImageError;
+
+  return (
+    <View
+      style={
+        styles.storeImageContainer
+      }
+    >
+      {shouldShowImage ? (
+        <Image
+          source={{
+            uri: imageUrl!,
+          }}
+          resizeMode="cover"
+          style={
+            styles.storeImage
+          }
+          onError={() => {
+            setHasImageError(
+              true,
+            );
+          }}
+        />
+      ) : (
+        <View
+          style={
+            styles.storeImagePlaceholder
+          }
+        >
+          <Ionicons
+            name="image-outline"
+            size={21}
+            color="#B7B7B7"
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function OrderRatingFooter({
+  order,
+}: {
+  order: Order;
+}) {
+  const [
+    orderRating,
+    setOrderRating,
+  ] = useState<OrderRating>({
+    rated: false,
+    rating: null,
+    createdAt: null,
+  });
+
+  const [
+    selectedRating,
+    setSelectedRating,
+  ] = useState<number | null>(
+    null,
+  );
+
+  const [
+    isLoadingRating,
+    setIsLoadingRating,
+  ] = useState(true);
+
+  const [
+    isSubmittingRating,
+    setIsSubmittingRating,
+  ] = useState(false);
+
+  const [
+    ratingError,
+    setRatingError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const loadRating =
+    useCallback(async () => {
+      try {
+        setIsLoadingRating(
+          true,
+        );
+
+        setRatingError(
+          null,
+        );
+
+        const result =
+          await getOrderRating(
+            order.id,
+          );
+
+        setOrderRating(
+          result,
+        );
+
+        setSelectedRating(
+          result.rating,
+        );
+      } catch (
+        error
+      ) {
+        setRatingError(
+          error instanceof Error
+            ? error.message
+            : 'تعذر تحميل التقييم.',
+        );
+      } finally {
+        setIsLoadingRating(
+          false,
+        );
+      }
+    }, [
+      order.id,
+    ]);
+
+  useEffect(() => {
+    void loadRating();
+  }, [
+    loadRating,
+  ]);
+
+  async function handleRating(
+    rating: number,
+  ) {
+    if (
+      orderRating.rated ||
+      isSubmittingRating ||
+      isLoadingRating
+    ) {
+      return;
+    }
+
+    setSelectedRating(
+      rating,
+    );
+
+    setRatingError(
+      null,
+    );
+
+    try {
+      setIsSubmittingRating(
+        true,
+      );
+
+      const result =
+        await submitOrderRating(
+          order.id,
+          rating,
+        );
+
+      setOrderRating({
+        rated: true,
+        rating:
+          result.rating,
+        createdAt:
+          result.createdAt,
+      });
+
+      setSelectedRating(
+        result.rating,
+      );
+    } catch (
+      error
+    ) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'تعذر إرسال التقييم.';
+
+      setRatingError(
+        message,
+      );
+
+      if (
+        message.includes(
+          'تم تقييم هذا الطلب بالفعل',
+        )
+      ) {
+        await loadRating();
+      }
+    } finally {
+      setIsSubmittingRating(
+        false,
+      );
+    }
+  }
+
+  const activeRating =
+    orderRating.rating ??
+    selectedRating ??
+    0;
+
+  return (
+    <View
+      style={
+        styles.ratingFooter
+      }
+    >
+      <View
+        style={
+          styles.ratingLabelContainer
+        }
+      >
+        {isLoadingRating ? (
+          <ActivityIndicator
+            size="small"
+            color="#00B85C"
+          />
+        ) : (
+          <>
+            <Text
+              style={
+                styles.ratingLabel
+              }
+            >
+              {orderRating.rated
+                ? 'تم التقييم'
+                : 'قيّم'}
+            </Text>
+
+            {ratingError && (
+              <Text
+                numberOfLines={1}
+                style={
+                  styles.ratingErrorText
+                }
+              >
+                {
+                  ratingError
+                }
+              </Text>
+            )}
+          </>
+        )}
+      </View>
+
+      <View
+        accessibilityRole="radiogroup"
+        style={
+          styles.ratingStars
+        }
+      >
+        {[1, 2, 3, 4, 5].map(
+          (
+            star,
+          ) => {
+            const isFilled =
+              star <=
+              activeRating;
+
+            return (
+              <Pressable
+                key={
+                  star
+                }
+                accessibilityRole="radio"
+                accessibilityLabel={`${star} نجوم`}
+                accessibilityState={{
+                  checked:
+                    activeRating ===
+                    star,
+
+                  disabled:
+                    orderRating.rated ||
+                    isSubmittingRating ||
+                    isLoadingRating,
+                }}
+                disabled={
+                  orderRating.rated ||
+                  isSubmittingRating ||
+                  isLoadingRating
+                }
+                hitSlop={5}
+                style={( {
+                  pressed,
+                } ) => [
+                  styles.ratingStarButton,
+
+                  star > 1 &&
+                    styles.ratingStarSpacing,
+
+                  pressed &&
+                    !orderRating.rated &&
+                    styles.ratingStarButtonPressed,
+                ]}
+                onPress={() => {
+                  void handleRating(
+                    star,
+                  );
+                }}
+              >
+                {isSubmittingRating &&
+                selectedRating ===
+                  star ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#F4AF00"
+                  />
+                ) : (
+                  <Ionicons
+                    name={
+                      isFilled
+                        ? 'star'
+                        : 'star-outline'
+                    }
+                    size={25}
+                    color={
+                      isFilled
+                        ? '#F4AF00'
+                        : '#C7C7C7'
+                    }
+                  />
+                )}
+              </Pressable>
+            );
+          },
+        )}
+      </View>
+    </View>
+  );
 }
 
 function OrderCard({
   order,
+  storeImageUrl,
   onPress,
+  onReorder,
 }: {
   order: Order;
+  storeImageUrl?: string | null;
   onPress: () => void;
+  onReorder?: () => void;
 }) {
   const status =
-    statusPresentation[order.status];
+    statusPresentation[
+      order.status
+    ];
+
+  const canRate =
+    order.status ===
+    'delivered';
+
+  const canReorder =
+    order.status ===
+      'delivered' &&
+    Boolean(
+      onReorder,
+    );
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`فتح تفاصيل الطلب ${order.orderCode}`}
-      style={({ pressed }) => [
-        styles.orderCard,
-        pressed &&
-          styles.orderCardPressed,
-      ]}
-      onPress={onPress}
+    <View
+      style={
+        styles.orderCard
+      }
     >
-      <View
-        style={styles.orderCardHeader}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`فتح تفاصيل الطلب ${order.orderCode}`}
+        style={( {
+          pressed,
+        } ) => [
+          styles.orderCardMain,
+
+          pressed &&
+            styles.orderCardPressed,
+        ]}
+        onPress={
+          onPress
+        }
       >
         <View
           style={
-            styles.storeIconContainer
+            styles.orderHeader
           }
         >
-          <Text style={styles.storeIcon}>
-            {order.storeIcon || '🏪'}
-          </Text>
-        </View>
-
-        <View
-          style={
-            styles.orderHeaderContent
-          }
-        >
-          <Text
-            numberOfLines={1}
-            style={styles.storeName}
+          <View
+            style={[
+              styles.statusBadge,
+              {
+                backgroundColor:
+                  status.backgroundColor,
+              },
+            ]}
           >
-            {order.storeName}
-          </Text>
+            <Text
+              style={[
+                styles.statusText,
+                {
+                  color:
+                    status.textColor,
+                },
+              ]}
+            >
+              {
+                status.title
+              }
+            </Text>
+          </View>
 
           <Text
             numberOfLines={1}
-            style={styles.orderDate}
+            style={
+              styles.orderDate
+            }
           >
             {formatOrderDate(
               order.submittedAt ??
@@ -187,140 +717,164 @@ function OrderCard({
             )}
           </Text>
         </View>
-      </View>
-
-      <View
-        style={styles.orderNumberRow}
-      >
-        <Text
-          selectable
-          style={
-            styles.orderNumberValue
-          }
-        >
-          {order.orderCode}
-        </Text>
-
-        <Text
-          style={
-            styles.orderNumberLabel
-          }
-        >
-          رقم الطلب
-        </Text>
-      </View>
-
-      <View
-        style={styles.orderDivider}
-      />
-
-      <View
-        style={styles.orderMetaRow}
-      >
-        <View
-          style={styles.orderMetaItem}
-        >
-          <Text
-            style={styles.orderMetaValue}
-          >
-            {order.itemCount}
-          </Text>
-
-          <Text
-            style={styles.orderMetaLabel}
-          >
-            عدد المنتجات
-          </Text>
-        </View>
 
         <View
-          style={styles.orderMetaDivider}
+          style={
+            styles.cardDivider
+          }
         />
 
         <View
-          style={styles.orderMetaItem}
-        >
-          <Text
-            style={styles.orderMetaValue}
-          >
-            {order.total}{' '}
-            {order.currencySymbol}
-          </Text>
-
-          <Text
-            style={styles.orderMetaLabel}
-          >
-            الإجمالي
-          </Text>
-        </View>
-      </View>
-
-      <View
-        style={styles.orderFooter}
-      >
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor:
-                status.backgroundColor,
-            },
-          ]}
+          style={
+            styles.orderBody
+          }
         >
           <View
-            style={[
-              styles.statusDot,
-              {
-                backgroundColor:
-                  status.dotColor,
-              },
-            ]}
-          />
-
-          <Text
-            style={[
-              styles.statusText,
-              {
-                color:
-                  status.textColor,
-              },
-            ]}
-          >
-            {status.title}
-          </Text>
-        </View>
-
-        <View
-          style={styles.detailsLink}
-        >
-          <Text
             style={
-              styles.detailsLinkText
+              styles.storeRow
             }
           >
-            عرض التفاصيل
-          </Text>
+            <StoreImage
+              order={
+                order
+              }
+              storeImageUrl={
+                storeImageUrl
+              }
+            />
 
-          <Text
+            <View
+              style={
+                styles.storeInformation
+              }
+            >
+              <Text
+                numberOfLines={1}
+                style={
+                  styles.storeName
+                }
+              >
+                {
+                  order.storeName
+                }
+              </Text>
+
+              <Text
+                numberOfLines={1}
+                style={
+                  styles.orderCodeText
+                }
+              >
+                رمز الطلب:{' '}
+                {
+                  order.orderCode
+                }
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.itemCountContainer
+              }
+            >
+              <Ionicons
+                name="chevron-down"
+                size={19}
+                color="#272727"
+              />
+
+              <Text
+                numberOfLines={1}
+                style={
+                  styles.itemCountText
+                }
+              >
+                {getItemCountText(
+                  order.itemCount,
+                )}
+              </Text>
+            </View>
+          </View>
+
+          <View
             style={
-              styles.detailsLinkArrow
+              styles.orderBottomRow
             }
           >
-            ‹
-          </Text>
+            <Text
+              style={
+                styles.orderTotal
+              }
+            >
+              {formatMoney(
+                order.total,
+                order.currencySymbol,
+              )}
+            </Text>
+
+            {canReorder ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="اطلب مجددًا"
+                hitSlop={8}
+                style={( {
+                  pressed,
+                } ) => [
+                  styles.reorderButton,
+
+                  pressed &&
+                    styles.reorderButtonPressed,
+                ]}
+                onPress={(
+                  event,
+                ) => {
+                  event.stopPropagation();
+
+                  onReorder?.();
+                }}
+              >
+                <Text
+                  style={
+                    styles.reorderButtonText
+                  }
+                >
+                  اطلب مجددًا
+                </Text>
+              </Pressable>
+            ) : (
+              <View
+                style={
+                  styles.reorderButtonSpace
+                }
+              />
+            )}
+          </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+
+      {canRate && (
+        <OrderRatingFooter
+          order={
+            order
+          }
+        />
+      )}
+    </View>
   );
 }
 
 export default function OrdersScreen() {
-  const router = useRouter();
-  const authState = useAuthSession();
+  const router =
+    useRouter();
 
-  const orders = useOrdersStore(
-    (state) => state.orders,
-  );
+  const authState =
+    useAuthSession();
+
+  const orders =
+    useOrdersStore(
+      (state) =>
+        state.orders,
+    );
 
   const pendingOrder =
     useOrdersStore(
@@ -337,24 +891,43 @@ export default function OrdersScreen() {
   const [
     isRefreshing,
     setIsRefreshing,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     hasCompletedInitialSync,
     setHasCompletedInitialSync,
-  ] = useState(false);
+  ] =
+    useState(false);
 
   const [
     refreshMessage,
     setRefreshMessage,
-  ] = useState<string | null>(null);
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  /*
+   * صور المتاجر يتم جلبها
+   * من catalog-service
+   * ثم ربطها بالـ storeId.
+   */
+  const [
+    storeImages,
+    setStoreImages,
+  ] =
+    useState<StoreImageMap>(
+      {},
+    );
 
   const currentUserId =
     authState.status ===
       'anonymous' ||
     authState.status ===
       'signedIn'
-      ? authState.session.user.id
+      ? authState.session
+          .user.id
       : null;
 
   useEffect(() => {
@@ -371,7 +944,9 @@ export default function OrdersScreen() {
         currentUserId,
       );
 
-    setHasCompletedInitialSync(false);
+    setHasCompletedInitialSync(
+      false,
+    );
   }, [
     currentUserId,
     hasHydrated,
@@ -379,20 +954,29 @@ export default function OrdersScreen() {
 
   useEffect(() => {
     if (
-      authState.status === 'error'
+      authState.status ===
+      'error'
     ) {
-      setHasCompletedInitialSync(true);
+      setHasCompletedInitialSync(
+        true,
+      );
     }
-  }, [authState.status]);
+  }, [
+    authState.status,
+  ]);
 
   const refreshOrders =
     useCallback(
       async () => {
-        if (!hasHydrated) {
+        if (
+          !hasHydrated
+        ) {
           return;
         }
 
-        if (!currentUserId) {
+        if (
+          !currentUserId
+        ) {
           if (
             authState.status ===
             'error'
@@ -403,20 +987,29 @@ export default function OrdersScreen() {
             );
           }
 
-          setHasCompletedInitialSync(true);
+          setHasCompletedInitialSync(
+            true,
+          );
+
           return;
         }
 
         const store =
-          useOrdersStore.getState();
+          useOrdersStore
+            .getState();
 
         store.prepareForUser(
           currentUserId,
         );
 
         try {
-          setIsRefreshing(true);
-          setRefreshMessage(null);
+          setIsRefreshing(
+            true,
+          );
+
+          setRefreshMessage(
+            null,
+          );
 
           const serverOrders =
             await getMyOrders();
@@ -427,9 +1020,12 @@ export default function OrdersScreen() {
               currentUserId,
               serverOrders,
             );
-        } catch (error) {
+        } catch (
+          error
+        ) {
           const message =
-            error instanceof Error
+            error instanceof
+            Error
               ? error.message
               : 'تعذر تحميل سجل الطلبات من Supabase.';
 
@@ -437,15 +1033,70 @@ export default function OrdersScreen() {
             `${message} يتم عرض آخر نسخة محفوظة على الجهاز إن وجدت.`,
           );
         } finally {
-          setIsRefreshing(false);
-          setHasCompletedInitialSync(true);
+          setIsRefreshing(
+            false,
+          );
+
+          setHasCompletedInitialSync(
+            true,
+          );
         }
       },
       [
-        authState,
+        authState.errorMessage,
+        authState.status,
         currentUserId,
         hasHydrated,
       ],
+    );
+
+  /*
+   * الحل الأساسي لمشكلة الصور:
+   *
+   * Order لا يحتوي حاليًا على logoUrl،
+   * لذلك نجلب المتاجر من listStores
+   * ونكوّن Map:
+   *
+   * storeId -> logoUrl / coverImageUrl
+   */
+  const loadStoreImages =
+    useCallback(
+      async () => {
+        try {
+          const stores =
+            await listStores();
+
+          const nextStoreImages:
+            StoreImageMap =
+              {};
+
+          for (
+            const store
+            of stores
+          ) {
+            const imageUrl =
+              store.logoUrl ??
+              store.coverImageUrl ??
+              null;
+
+            nextStoreImages[
+              store.id
+            ] = imageUrl;
+          }
+
+          setStoreImages(
+            nextStoreImages,
+          );
+        } catch (
+          error
+        ) {
+          console.warn(
+            'Failed to load store images for orders:',
+            error,
+          );
+        }
+      },
+      [],
     );
 
   useFocusEffect(
@@ -457,10 +1108,14 @@ export default function OrdersScreen() {
         return;
       }
 
-      void refreshOrders();
+      void Promise.all([
+        refreshOrders(),
+        loadStoreImages(),
+      ]);
     }, [
       currentUserId,
       hasHydrated,
+      loadStoreImages,
       refreshOrders,
     ]),
   );
@@ -480,24 +1135,15 @@ export default function OrdersScreen() {
               firstOrder.createdAt,
             ).getTime(),
         ),
-      [orders],
-    );
-
-  const activeOrdersCount =
-    useMemo(
-      () =>
-        orders.filter(
-          (order) =>
-            order.status !==
-              'delivered' &&
-            order.status !==
-              'cancelled',
-        ).length,
-      [orders],
+      [
+        orders,
+      ],
     );
 
   function returnToHome() {
-    router.replace('/');
+    router.replace(
+      '/',
+    );
   }
 
   function continuePendingOrder() {
@@ -512,8 +1158,37 @@ export default function OrdersScreen() {
     router.push({
       pathname:
         '/order/[id]',
+
       params: {
         id: orderId,
+      },
+    });
+  }
+
+  function reorder(
+    order: Order,
+  ) {
+    const storeId =
+      getStoreId(
+        order,
+      );
+
+    if (
+      !storeId
+    ) {
+      openOrderDetails(
+        order.id,
+      );
+
+      return;
+    }
+
+    router.push({
+      pathname:
+        '/store/[id]',
+
+      params: {
+        id: storeId,
       },
     });
   }
@@ -524,16 +1199,25 @@ export default function OrdersScreen() {
       'loading' ||
     (
       !hasCompletedInitialSync &&
-      sortedOrders.length === 0 &&
+      sortedOrders.length ===
+        0 &&
       !pendingOrder
     );
 
-  if (shouldShowInitialSkeleton) {
-    return <OrdersScreenSkeleton />;
+  if (
+    shouldShowInitialSkeleton
+  ) {
+    return (
+      <OrdersScreenSkeleton />
+    );
   }
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={
+        styles.screen
+      }
+    >
       <ScrollView
         contentContainerStyle={
           styles.pageContent
@@ -542,247 +1226,213 @@ export default function OrdersScreen() {
           false
         }
       >
-        <View style={styles.container}>
-          <View style={styles.topBar}>
-            <Pressable
-              accessibilityLabel="العودة"
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-              onPress={() =>
-                router.back()
-              }
-            >
-              <Text style={styles.backIcon}>
-                ›
-              </Text>
-            </Pressable>
-
+        <View
+          style={
+            styles.container
+          }
+        >
+          <View
+            style={
+              styles.header
+            }
+          >
             <View
-              style={styles.titleContainer}
-            >
-              <Text style={styles.pageTitle}>
-                طلباتي
-              </Text>
-
-              <Text
-                style={styles.pageSubtitle}
-              >
-                محفوظة على Supabase
-                ومحدثة لهذا الحساب
-              </Text>
-            </View>
-
-            <Pressable
-              accessibilityLabel="تحديث الطلبات"
-              accessibilityRole="button"
-              disabled={
-                isRefreshing ||
-                !currentUserId
+              style={
+                styles.headerTitleRow
               }
-              style={({ pressed }) => [
-                styles.refreshButton,
-                pressed &&
-                  !isRefreshing &&
-                  currentUserId &&
-                  styles.buttonPressed,
-                !currentUserId &&
-                  styles.refreshButtonDisabled,
-              ]}
-              onPress={() => {
-                void refreshOrders();
-              }}
             >
-              {isRefreshing ? (
+              <Text
+                style={
+                  styles.pageTitle
+                }
+              >
+                طلباتك
+              </Text>
+
+              {isRefreshing && (
                 <ActivityIndicator
                   size="small"
-                  color="#5d47d2"
+                  color="#777777"
+                  style={
+                    styles.refreshIndicator
+                  }
                 />
-              ) : (
-                <Text
-                  style={styles.refreshIcon}
-                >
-                  ↻
-                </Text>
               )}
-            </Pressable>
+            </View>
           </View>
 
           {refreshMessage && (
             <View
-              style={styles.warningCard}
+              style={
+                styles.warningCard
+              }
             >
-              <Text
-                style={styles.warningText}
-              >
-                {refreshMessage}
-              </Text>
+              <Ionicons
+                name="warning-outline"
+                size={17}
+                color="#89681C"
+              />
 
               <Text
-                style={styles.warningIcon}
+                style={
+                  styles.warningText
+                }
               >
-                ⚠️
+                {
+                  refreshMessage
+                }
               </Text>
             </View>
           )}
 
           {pendingOrder && (
             <View
-              style={styles.pendingCard}
+              style={
+                styles.pendingCard
+              }
             >
               <View
                 style={
-                  styles.pendingCardHeader
+                  styles.pendingHeader
                 }
               >
                 <View
                   style={
-                    styles.pendingIconContainer
+                    styles.pendingStatusBadge
                   }
                 >
                   <Text
                     style={
-                      styles.pendingIcon
+                      styles.pendingStatusText
                     }
                   >
-                    💬
+                    في انتظار الإرسال
                   </Text>
                 </View>
 
-                <View
-                  style={
-                    styles.pendingCardContent
-                  }
-                >
-                  <Text
-                    style={
-                      styles.pendingTitle
-                    }
-                  >
-                    يوجد طلب قيد الإرسال
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.pendingDescription
-                    }
-                  >
-                    أكد هل أرسلت رسالة
-                    الطلب على واتساب قبل
-                    بدء طلب جديد.
-                  </Text>
-                </View>
-              </View>
-
-              <View
-                style={
-                  styles.pendingOrderRow
-                }
-              >
-                <Text
-                  selectable
-                  style={
-                    styles.pendingOrderValue
-                  }
-                >
-                  {pendingOrder.orderCode}
-                </Text>
-
                 <Text
                   style={
-                    styles.pendingOrderLabel
+                    styles.pendingDateLabel
                   }
                 >
-                  رقم الطلب
-                </Text>
-              </View>
-
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.pendingButton,
-                  pressed &&
-                    styles.buttonPressed,
-                ]}
-                onPress={
-                  continuePendingOrder
-                }
-              >
-                <Text
-                  style={
-                    styles.pendingButtonText
-                  }
-                >
-                  استكمال تأكيد الإرسال
-                </Text>
-              </Pressable>
-            </View>
-          )}
-
-          {sortedOrders.length >
-            0 && (
-            <View
-              style={styles.summaryCard}
-            >
-              <View
-                style={styles.summaryItem}
-              >
-                <Text
-                  style={styles.summaryValue}
-                >
-                  {orders.length}
-                </Text>
-
-                <Text
-                  style={styles.summaryLabel}
-                >
-                  إجمالي الطلبات
+                  طلب غير مكتمل
                 </Text>
               </View>
 
               <View
                 style={
-                  styles.summaryDivider
+                  styles.cardDivider
                 }
               />
 
               <View
-                style={styles.summaryItem}
+                style={
+                  styles.pendingContent
+                }
               >
-                <Text
-                  style={styles.summaryValue}
+                <View
+                  style={
+                    styles.pendingTitleRow
+                  }
                 >
-                  {activeOrdersCount}
-                </Text>
+                  <View
+                    style={
+                      styles.pendingLogo
+                    }
+                  >
+                    <Ionicons
+                      name="logo-whatsapp"
+                      size={23}
+                      color="#4B4B4B"
+                    />
+                  </View>
 
-                <Text
-                  style={styles.summaryLabel}
+                  <View
+                    style={
+                      styles.pendingInfo
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.pendingTitle
+                      }
+                    >
+                      يوجد طلب قيد الإرسال
+                    </Text>
+
+                    <Text
+                      numberOfLines={2}
+                      style={
+                        styles.pendingDescription
+                      }
+                    >
+                      أكد إرسال رسالة الطلب على واتساب لاستكمال الطلب.
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.pendingOrderCode
+                      }
+                    >
+                      رمز الطلب:{' '}
+                      {
+                        pendingOrder.orderCode
+                      }
+                    </Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  style={( {
+                    pressed,
+                  } ) => [
+                    styles.pendingButton,
+
+                    pressed &&
+                      styles.buttonPressed,
+                  ]}
+                  onPress={
+                    continuePendingOrder
+                  }
                 >
-                  طلبات نشطة
-                </Text>
+                  <Text
+                    style={
+                      styles.pendingButtonText
+                    }
+                  >
+                    استكمال الطلب
+                  </Text>
+                </Pressable>
               </View>
             </View>
           )}
 
-          {sortedOrders.length === 0 ? (
-            <View style={styles.emptyCard}>
+          {sortedOrders.length ===
+          0 ? (
+            <View
+              style={
+                styles.emptyState
+              }
+            >
               <View
                 style={
                   styles.emptyIconContainer
                 }
               >
-                <Text
-                  style={styles.emptyIcon}
-                >
-                  🧾
-                </Text>
+                <Ionicons
+                  name="receipt-outline"
+                  size={30}
+                  color="#555555"
+                />
               </View>
 
-              <Text style={styles.emptyTitle}>
-                لا توجد طلبات
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
+                لا توجد طلبات حتى الآن
               </Text>
 
               <Text
@@ -790,57 +1440,83 @@ export default function OrdersScreen() {
                   styles.emptyDescription
                 }
               >
-                بعد إنشاء أول طلب
-                سيظهر هنا تلقائيًا،
-                وسيتم حفظه على
-                Supabase لهذا الحساب.
+                ستظهر جميع طلباتك هنا بعد إنشاء أول طلب.
               </Text>
 
               <Pressable
                 accessibilityRole="button"
-                style={({ pressed }) => [
+                style={( {
+                  pressed,
+                } ) => [
                   styles.shopButton,
+
                   pressed &&
                     styles.buttonPressed,
                 ]}
-                onPress={returnToHome}
+                onPress={
+                  returnToHome
+                }
               >
                 <Text
                   style={
                     styles.shopButtonText
                   }
                 >
-                  العودة للتسوق
+                  ابدأ التسوق
                 </Text>
               </Pressable>
             </View>
           ) : (
             <View
-              style={styles.ordersSection}
+              style={
+                styles.ordersList
+              }
             >
-              <Text
-                style={styles.sectionTitle}
-              >
-                سجل الطلبات
-              </Text>
+              {sortedOrders.map(
+                (
+                  order,
+                ) => {
+                  const storeId =
+                    getStoreId(
+                      order,
+                    );
 
-              <View
-                style={styles.ordersList}
-              >
-                {sortedOrders.map(
-                  (order) => (
+                  const storeImageUrl =
+                    storeId
+                      ? storeImages[
+                          storeId
+                        ] ??
+                        null
+                      : null;
+
+                  return (
                     <OrderCard
-                      key={order.id}
-                      order={order}
+                      key={
+                        order.id
+                      }
+                      order={
+                        order
+                      }
+                      storeImageUrl={
+                        storeImageUrl
+                      }
                       onPress={() =>
                         openOrderDetails(
                           order.id,
                         )
                       }
+                      onReorder={
+                        storeId
+                          ? () =>
+                              reorder(
+                                order,
+                              )
+                          : undefined
+                      }
                     />
-                  ),
-                )}
-              </View>
+                  );
+                },
+              )}
             </View>
           )}
         </View>
@@ -856,479 +1532,880 @@ export default function OrdersScreen() {
 const styles =
   StyleSheet.create({
     screen: {
-      backgroundColor:
-        '#f7f7fa',
       flex: 1,
+      backgroundColor:
+        '#FFFFFF',
     },
 
     pageContent: {
       flexGrow: 1,
+
+      paddingTop: 36,
+
       paddingBottom:
         NAVIENTY_NOW_LAYOUT
           .bottomNavigationHeight +
-        58,
-      paddingHorizontal: 18,
-      paddingTop: 42,
+        44,
     },
 
     container: {
-      alignSelf: 'center',
-      maxWidth: 520,
+      alignSelf:
+        'center',
+
+      maxWidth: 560,
+
       width: '100%',
     },
 
-    topBar: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
+    /*
+     * HEADER
+     */
+
+    header: {
+      paddingHorizontal: 18,
+      paddingBottom: 21,
     },
 
-    backButton: {
-      alignItems: 'center',
-      backgroundColor:
-        '#eeeafd',
-      borderRadius: 14,
-      height: 44,
-      justifyContent: 'center',
-      width: 44,
-    },
+    headerTitleRow: {
+      minHeight: 40,
 
-    backIcon: {
-      color: '#5d47d2',
-      fontSize: 33,
-      lineHeight: 35,
-    },
+      flexDirection:
+        'row-reverse',
 
-    titleContainer: {
-      alignItems: 'center',
-      flex: 1,
-      marginHorizontal: 12,
+      alignItems:
+        'center',
     },
 
     pageTitle: {
-      color: '#202025',
-      fontSize: 23,
-      fontWeight: '900',
-      textAlign: 'center',
-    },
+      color:
+        '#222222',
 
-    pageSubtitle: {
-      color: '#898992',
-      fontSize: 10,
-      marginTop: 4,
-      textAlign: 'center',
-    },
-
-    pendingCard: {
-      backgroundColor:
-        '#fff3d6',
-      borderColor: '#f1d58f',
-      borderRadius: 22,
-      borderWidth: 1,
-      marginTop: 25,
-      padding: 17,
-    },
-
-    pendingCardHeader: {
-      alignItems: 'center',
-      flexDirection: 'row',
-    },
-
-    pendingIconContainer: {
-      alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
-      borderRadius: 15,
-      height: 52,
-      justifyContent: 'center',
-      width: 52,
-    },
-
-    pendingIcon: {
-      fontSize: 25,
-    },
-
-    pendingCardContent: {
-      flex: 1,
-      marginLeft: 13,
-    },
-
-    pendingTitle: {
-      color: '#7a5a13',
-      fontSize: 15,
-      fontWeight: '900',
-      textAlign: 'right',
-    },
-
-    pendingDescription: {
-      color: '#977329',
-      fontSize: 10,
-      lineHeight: 17,
-      marginTop: 4,
-      textAlign: 'right',
-    },
-
-    pendingOrderRow: {
-      alignItems: 'center',
-      backgroundColor:
-        '#fff9ec',
-      borderRadius: 13,
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
-      marginTop: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-
-    pendingOrderValue: {
-      color: '#7a5a13',
-      fontSize: 11,
-      fontWeight: '900',
-    },
-
-    pendingOrderLabel: {
-      color: '#977329',
-      fontSize: 10,
-    },
-
-    pendingButton: {
-      alignItems: 'center',
-      backgroundColor:
-        '#e5a328',
-      borderRadius: 14,
-      marginTop: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-    },
-
-    pendingButtonText: {
-      color: '#ffffff',
-      fontSize: 13,
-      fontWeight: '900',
-    },
-
-    summaryCard: {
-      alignItems: 'center',
-      backgroundColor:
-        '#6d56df',
-      borderRadius: 22,
-      flexDirection: 'row',
-      marginTop: 20,
-      paddingVertical: 18,
-    },
-
-    summaryItem: {
-      alignItems: 'center',
-      flex: 1,
-    },
-
-    summaryValue: {
-      color: '#ffffff',
       fontSize: 21,
-      fontWeight: '900',
+
+      lineHeight: 29,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
     },
 
-    summaryLabel: {
-      color: '#e6e2ff',
-      fontSize: 10,
-      marginTop: 4,
-    },
+    refreshIndicator: {
+      marginRight: 9,
 
-    summaryDivider: {
-      backgroundColor:
-        '#8e7ae8',
-      height: 38,
-      width: 1,
-    },
-
-    ordersSection: {
-      marginTop: 27,
-    },
-
-    sectionTitle: {
-      color: '#202025',
-      fontSize: 20,
-      fontWeight: '900',
-      marginBottom: 14,
-      textAlign: 'right',
-    },
-
-    ordersList: {
-      gap: 14,
-    },
-
-    orderCard: {
-      backgroundColor:
-        '#ffffff',
-      borderColor: '#ececf1',
-      borderRadius: 22,
-      borderWidth: 1,
-      padding: 17,
-    },
-
-    orderCardPressed: {
-      opacity: 0.78,
       transform: [
         {
-          scale: 0.99,
+          scale: 0.8,
         },
       ],
     },
 
-    orderCardHeader: {
-      alignItems: 'center',
-      flexDirection: 'row',
+    /*
+     * ORDERS
+     */
+
+    ordersList: {
+      gap: 15,
+
+      paddingHorizontal:
+        16,
     },
 
-    storeIconContainer: {
-      alignItems: 'center',
+    /*
+     * CARD
+     */
+
+    orderCard: {
       backgroundColor:
-        '#f1efff',
-      borderRadius: 16,
-      height: 58,
-      justifyContent: 'center',
-      width: 58,
+        '#FFFFFF',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#DEDEDE',
+
+      borderRadius: 21,
+
+      overflow:
+        'hidden',
     },
 
-    storeIcon: {
-      fontSize: 28,
-    },
-
-    orderHeaderContent: {
-      flex: 1,
-      marginLeft: 13,
-    },
-
-    storeName: {
-      color: '#24242a',
-      fontSize: 16,
-      fontWeight: '900',
-      textAlign: 'right',
-    },
-
-    orderDate: {
-      color: '#898992',
-      fontSize: 9,
-      marginTop: 5,
-      textAlign: 'right',
-    },
-
-    orderNumberRow: {
-      alignItems: 'center',
+    orderCardMain: {
       backgroundColor:
-        '#f7f7fa',
-      borderRadius: 13,
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
-      marginTop: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+        '#FFFFFF',
     },
 
-    orderNumberValue: {
-      color: '#5d47d2',
-      fontSize: 11,
-      fontWeight: '900',
+    orderCardPressed: {
+      opacity: 0.8,
     },
 
-    orderNumberLabel: {
-      color: '#898992',
-      fontSize: 10,
-    },
+    /*
+     * CARD HEADER
+     */
 
-    orderDivider: {
-      backgroundColor:
-        '#eeeeF2',
-      height: 1,
-      marginVertical: 15,
-    },
+    orderHeader: {
+      minHeight: 54,
 
-    orderMetaRow: {
-      alignItems: 'center',
-      flexDirection: 'row',
-    },
+      paddingHorizontal: 16,
 
-    orderMetaItem: {
-      alignItems: 'center',
-      flex: 1,
-    },
+      flexDirection:
+        'row-reverse',
 
-    orderMetaValue: {
-      color: '#303036',
-      fontSize: 15,
-      fontWeight: '900',
-    },
-
-    orderMetaLabel: {
-      color: '#898992',
-      fontSize: 9,
-      marginTop: 4,
-    },
-
-    orderMetaDivider: {
-      backgroundColor:
-        '#e5e5eb',
-      height: 32,
-      width: 1,
-    },
-
-    orderFooter: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
-      marginTop: 15,
+      alignItems:
+        'center',
     },
 
     statusBadge: {
-      alignItems: 'center',
-      borderRadius: 13,
-      flexDirection: 'row',
-      paddingHorizontal: 11,
-      paddingVertical: 8,
-    },
+      borderRadius: 5,
 
-    statusDot: {
-      borderRadius: 4,
-      height: 8,
-      marginRight: 7,
-      width: 8,
+      paddingHorizontal: 7,
+
+      paddingVertical: 4,
     },
 
     statusText: {
-      fontSize: 10,
-      fontWeight: '900',
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      fontWeight:
+        '600',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
     },
 
-    detailsLink: {
-      alignItems: 'center',
-      flexDirection: 'row',
+    orderDate: {
+      flex: 1,
+
+      marginRight: 9,
+
+      color:
+        '#686868',
+
+      fontSize: 12.5,
+
+      lineHeight: 18,
+
+      fontWeight:
+        '500',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
     },
 
-    detailsLinkText: {
-      color: '#6d56df',
-      fontSize: 10,
-      fontWeight: '900',
+    cardDivider: {
+      width: '100%',
+
+      height: 1,
+
+      backgroundColor:
+        '#E3E3E3',
     },
 
-    detailsLinkArrow: {
-      color: '#6d56df',
-      fontSize: 22,
+    /*
+     * BODY
+     */
+
+    orderBody: {
+      paddingTop: 20,
+
+      paddingHorizontal: 16,
+
+      paddingBottom: 18,
+    },
+
+    storeRow: {
+      minHeight: 62,
+
+      flexDirection:
+        'row-reverse',
+
+      alignItems:
+        'center',
+    },
+
+    /*
+     * STORE IMAGE
+     */
+
+    storeImageContainer: {
+      width: 60,
+
+      height: 60,
+
+      borderRadius: 13,
+
+      overflow:
+        'hidden',
+
+      backgroundColor:
+        '#F7F7F7',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#EEEEEE',
+    },
+
+    storeImage: {
+      width: '100%',
+
+      height: '100%',
+    },
+
+    storeImagePlaceholder: {
+      flex: 1,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      backgroundColor:
+        '#F5F5F5',
+    },
+
+    /*
+     * STORE INFO
+     */
+
+    storeInformation: {
+      flex: 1,
+
+      marginRight: 11,
+
+      marginLeft: 8,
+
+      justifyContent:
+        'center',
+    },
+
+    storeName: {
+      color:
+        '#1E1E1E',
+
+      fontSize: 17,
+
       lineHeight: 24,
-      marginLeft: 5,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
     },
 
-    emptyCard: {
-      alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
-      borderRadius: 26,
-      justifyContent: 'center',
-      marginTop: 30,
-      minHeight: 230,
-      padding: 25,
-    },
+    orderCodeText: {
+      color:
+        '#777777',
 
-    emptyIconContainer: {
-      alignItems: 'center',
-      backgroundColor:
-        '#eeeafd',
-      borderRadius: 42,
-      height: 84,
-      justifyContent: 'center',
-      width: 84,
-    },
-
-    emptyIcon: {
-      fontSize: 39,
-    },
-
-    emptyTitle: {
-      color: '#222228',
-      fontSize: 22,
-      fontWeight: '900',
-      marginTop: 19,
-      textAlign: 'center',
-    },
-
-    emptyDescription: {
-      color: '#777781',
       fontSize: 12,
-      lineHeight: 20,
-      marginTop: 8,
-      maxWidth: 340,
-      textAlign: 'center',
+
+      lineHeight: 18,
+
+      fontWeight:
+        '400',
+
+      marginTop: 2,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
     },
 
-    shopButton: {
-      alignItems: 'center',
-      alignSelf: 'stretch',
+    /*
+     * ITEMS
+     */
+
+    itemCountContainer: {
+      minWidth: 75,
+
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'flex-start',
+    },
+
+    itemCountText: {
+      marginLeft: 6,
+
+      color:
+        '#737373',
+
+      fontSize: 12,
+
+      lineHeight: 18,
+
+      fontWeight:
+        '400',
+
+      writingDirection:
+        'rtl',
+    },
+
+    /*
+     * TOTAL
+     */
+
+    orderBottomRow: {
+      minHeight: 42,
+
+      marginTop: 17,
+
+      flexDirection:
+        'row-reverse',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+    },
+
+    orderTotal: {
+      color:
+        '#242424',
+
+      fontSize: 15.5,
+
+      lineHeight: 22,
+
+      fontWeight:
+        '700',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    /*
+     * REORDER
+     */
+
+    reorderButton: {
+      minHeight: 40,
+
+      paddingHorizontal: 17,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
       backgroundColor:
-        '#6d56df',
-      borderRadius: 16,
-      marginTop: 21,
+        '#FFFFFF',
+
+      borderWidth: 1.25,
+
+      borderColor:
+        '#292929',
+
+      borderRadius: 999,
+    },
+
+    reorderButtonPressed: {
+      backgroundColor:
+        '#F5F5F5',
+    },
+
+    reorderButtonText: {
+      color:
+        '#242424',
+
+      fontSize: 13,
+
+      lineHeight: 18,
+
+      fontWeight:
+        '700',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    reorderButtonSpace: {
+      width: 1,
+
+      height: 40,
+    },
+
+    /*
+     * RATING
+     */
+
+    ratingFooter: {
+      minHeight: 56,
+
+      paddingHorizontal: 17,
+
+      flexDirection:
+        'row-reverse',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'space-between',
+
+      backgroundColor:
+        '#F7F7F7',
+    },
+
+    ratingLabelContainer: {
+      alignItems:
+        'flex-end',
+
+      flex: 1,
+    },
+
+    ratingLabel: {
+      color:
+        '#333333',
+
+      fontSize: 13.5,
+
+      lineHeight: 19,
+
+      fontWeight:
+        '700',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    ratingErrorText: {
+      color:
+        '#A34444',
+
+      fontSize: 8.5,
+
+      lineHeight: 12,
+
+      marginTop: 2,
+
+      maxWidth: 170,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    ratingStars: {
+      flexDirection:
+        'row',
+
+      alignItems:
+        'center',
+    },
+
+    ratingStarButton: {
+      width: 31,
+
+      height: 38,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    ratingStarButtonPressed: {
+      opacity: 0.65,
+
+      transform: [
+        {
+          scale: 0.9,
+        },
+      ],
+    },
+
+    ratingStarSpacing: {
+      marginLeft: 6,
+    },
+
+    /*
+     * PENDING ORDER
+     */
+
+    pendingCard: {
+      marginHorizontal: 16,
+
+      marginBottom: 15,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#DEDEDE',
+
+      borderRadius: 21,
+
+      overflow:
+        'hidden',
+    },
+
+    pendingHeader: {
+      minHeight: 52,
+
+      paddingHorizontal: 16,
+
+      flexDirection:
+        'row-reverse',
+
+      alignItems:
+        'center',
+    },
+
+    pendingStatusBadge: {
+      backgroundColor:
+        '#FFF4D9',
+
+      borderRadius: 5,
+
+      paddingHorizontal: 7,
+
+      paddingVertical: 4,
+    },
+
+    pendingStatusText: {
+      color:
+        '#7A5A13',
+
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      fontWeight:
+        '600',
+
+      writingDirection:
+        'rtl',
+    },
+
+    pendingDateLabel: {
+      flex: 1,
+
+      marginRight: 9,
+
+      color:
+        '#777777',
+
+      fontSize: 12,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    pendingContent: {
+      padding: 16,
+    },
+
+    pendingTitleRow: {
+      flexDirection:
+        'row-reverse',
+
+      alignItems:
+        'center',
+    },
+
+    pendingLogo: {
+      width: 56,
+
+      height: 56,
+
+      borderRadius: 13,
+
+      backgroundColor:
+        '#F6F6F6',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    pendingInfo: {
+      flex: 1,
+
+      marginRight: 11,
+    },
+
+    pendingTitle: {
+      color:
+        '#202020',
+
+      fontSize: 15,
+
+      lineHeight: 21,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    pendingDescription: {
+      color:
+        '#747474',
+
+      fontSize: 11.5,
+
+      lineHeight: 18,
+
+      marginTop: 3,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    pendingOrderCode: {
+      color:
+        '#808080',
+
+      fontSize: 11,
+
+      lineHeight: 17,
+
+      marginTop: 3,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    pendingButton: {
+      alignSelf:
+        'flex-start',
+
+      minHeight: 39,
+
+      marginTop: 15,
+
       paddingHorizontal: 18,
-      paddingVertical: 14,
-    },
 
-    shopButtonText: {
-      color: '#ffffff',
-      fontSize: 14,
-      fontWeight: '900',
-    },
-
-    buttonPressed: {
-      opacity: 0.75,
-    },
-
-    refreshButton: {
-      alignItems: 'center',
       backgroundColor:
-        '#eeeafd',
-      borderRadius: 14,
-      height: 44,
-      justifyContent: 'center',
-      width: 44,
+        '#292929',
+
+      borderRadius: 999,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
     },
 
-    refreshButtonDisabled: {
-      opacity: 0.45,
+    pendingButtonText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 12.5,
+
+      fontWeight:
+        '700',
+
+      writingDirection:
+        'rtl',
     },
 
-    refreshIcon: {
-      color: '#5d47d2',
-      fontSize: 24,
-      fontWeight: '900',
-      lineHeight: 27,
-    },
+    /*
+     * WARNING
+     */
 
     warningCard: {
-      alignItems: 'center',
+      marginHorizontal: 16,
+
+      marginBottom: 15,
+
+      paddingHorizontal: 13,
+
+      paddingVertical: 11,
+
+      flexDirection:
+        'row-reverse',
+
+      alignItems:
+        'center',
+
+      gap: 8,
+
+      borderRadius: 12,
+
       backgroundColor:
-        '#fff3d6',
-      borderRadius: 15,
-      flexDirection: 'row',
-      justifyContent:
-        'flex-end',
-      marginTop: 18,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+        '#FFF7E5',
     },
 
     warningText: {
-      color: '#7a5a13',
       flex: 1,
-      fontSize: 10,
-      fontWeight: '600',
+
+      color:
+        '#795E20',
+
+      fontSize: 10.5,
+
       lineHeight: 17,
-      textAlign: 'right',
+
+      fontWeight:
+        '500',
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
     },
 
-    warningIcon: {
-      fontSize: 18,
-      marginLeft: 9,
+    /*
+     * EMPTY
+     */
+
+    emptyState: {
+      minHeight: 380,
+
+      paddingHorizontal: 30,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    emptyIconContainer: {
+      width: 68,
+
+      height: 68,
+
+      borderRadius: 34,
+
+      backgroundColor:
+        '#F4F4F4',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    emptyTitle: {
+      marginTop: 16,
+
+      color:
+        '#202020',
+
+      fontSize: 16,
+
+      lineHeight: 22,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    emptyDescription: {
+      marginTop: 6,
+
+      color:
+        '#777777',
+
+      fontSize: 11.5,
+
+      lineHeight: 18,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    shopButton: {
+      minHeight: 41,
+
+      marginTop: 19,
+
+      paddingHorizontal: 22,
+
+      backgroundColor:
+        '#292929',
+
+      borderRadius: 999,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    shopButtonText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 12.5,
+
+      fontWeight:
+        '700',
+
+      writingDirection:
+        'rtl',
+    },
+
+    buttonPressed: {
+      opacity: 0.72,
     },
   });

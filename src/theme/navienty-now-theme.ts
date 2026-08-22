@@ -5,6 +5,7 @@ export const NAVIENTY_NOW_COLORS = {
   primaryPale: '#EAF8F0',
   primaryUltraPale: '#F4FCF7',
   text: '#141414',
+  textPrimary: '#141414',
   textSecondary: '#6F6F74',
   textMuted: '#96969D',
   page: '#FFFFFF',

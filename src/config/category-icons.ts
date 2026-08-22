@@ -4,7 +4,7 @@ import type {
 
 const DEFAULT_CATEGORY_ICON =
   require(
-    '../assets/icons/categories/default.png',
+    '../assets/icons/categories/default.webp',
   );
 
 const CATEGORY_ICONS: Record<
@@ -13,34 +13,34 @@ const CATEGORY_ICONS: Record<
 > = {
   // المطاعم
   restaurant: require(
-    '../assets/icons/categories/restaurant.png',
+    '../assets/icons/categories/restaurant.webp',
   ),
   restaurants: require(
-    '../assets/icons/categories/restaurant.png',
+    '../assets/icons/categories/restaurant.webp',
   ),
 
   // السوبرماركت
   supermarket: require(
-    '../assets/icons/categories/supermarket.png',
+    '../assets/icons/categories/supermarket.webp',
   ),
   supermarkets: require(
-    '../assets/icons/categories/supermarket.png',
+    '../assets/icons/categories/supermarket.webp',
   ),
 
   // الصيدليات
   pharmacy: require(
-    '../assets/icons/categories/pharmacy.png',
+    '../assets/icons/categories/pharmacy.webp',
   ),
   pharmacies: require(
-    '../assets/icons/categories/pharmacy.png',
+    '../assets/icons/categories/pharmacy.webp',
   ),
 
   // المكتبات
   bookstore: require(
-    '../assets/icons/categories/bookstore.png',
+    '../assets/icons/categories/bookstore.webp',
   ),
   bookstores: require(
-    '../assets/icons/categories/bookstore.png',
+    '../assets/icons/categories/bookstore.webp',
   ),
 };
 

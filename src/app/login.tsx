@@ -1285,9 +1285,6 @@ export default function LoginScreen() {
         }
       >
         <StatusBar
-          backgroundColor={
-            AUTH_HERO_BACKGROUND
-          }
           style="dark"
         />
 

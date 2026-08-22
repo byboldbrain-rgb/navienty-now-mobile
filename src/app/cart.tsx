@@ -11,14 +11,18 @@ import {
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Image,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -29,10 +33,25 @@ import {
 } from '../services/catalog-service';
 
 import {
-  useCartStore,
-} from '../store/cart-store';
+  ensureAppSession,
+} from '../services/anonymous-auth-service';
+import {
+  validateVoucher,
+} from '../services/voucher-service';
 
 import ServicePackageCart from '../components/service/service-package-cart';
+import {
+  useCartStore,
+} from '../store/cart-store';
+import {
+  useCustomerStore,
+} from '../store/customer-store';
+import {
+  useOrderNotesStore,
+} from '../store/order-notes-store';
+import {
+  useVoucherStore,
+} from '../store/voucher-store';
 
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_SOFT = '#EAF8F0';
@@ -489,6 +508,83 @@ function StoreCartScreen() {
   const storeId =
     currentCart?.storeId ?? null;
 
+  const phoneNumber =
+    useCustomerStore(
+      (state) => state.phoneNumber,
+    );
+
+  const normalizedPhone =
+    phoneNumber.replace(
+      /\D/g,
+      '',
+    );
+
+  const appliedVoucher =
+    useVoucherStore(
+      (state) =>
+        storeId
+          ? state.vouchers[storeId] ??
+            null
+          : null,
+    );
+
+  const setStoreVoucher =
+    useVoucherStore(
+      (state) => state.setVoucher,
+    );
+
+  const clearVoucher =
+    useVoucherStore(
+      (state) => state.clearVoucher,
+    );
+
+  const orderNotes =
+    useOrderNotesStore(
+      (state) =>
+        storeId
+          ? state.notes[storeId] ??
+            ''
+          : '',
+    );
+
+  const setOrderNote =
+    useOrderNotesStore(
+      (state) => state.setNote,
+    );
+
+  const clearOrderNotes =
+    useOrderNotesStore(
+      (state) => state.clearNote,
+    );
+
+  const [
+    noteEditorVisible,
+    setNoteEditorVisible,
+  ] = useState(false);
+
+  const [
+    draftOrderNote,
+    setDraftOrderNote,
+  ] = useState('');
+
+  const noteInputRef =
+    useRef<TextInput>(null);
+
+  const [
+    voucherCode,
+    setVoucherCode,
+  ] = useState('');
+
+  const [
+    voucherError,
+    setVoucherError,
+  ] = useState<string | null>(null);
+
+  const [
+    isApplyingVoucher,
+    setIsApplyingVoucher,
+  ] = useState(false);
+
   const storeName =
     currentCart?.storeName ?? null;
 
@@ -509,10 +605,124 @@ function StoreCartScreen() {
   const deliveryFee =
     Number(currentCart?.deliveryFee ?? 0);
 
+  const voucherDiscountTarget =
+    appliedVoucher?.discountTarget ??
+    'order_subtotal';
+
+  const voucherDiscountBase =
+    voucherDiscountTarget ===
+      'delivery_fee'
+      ? deliveryFee
+      : Number(subtotal ?? 0);
+
+  const voucherDiscount =
+    Math.min(
+      Math.max(
+        appliedVoucher
+          ?.discountAmount ?? 0,
+        0,
+      ),
+      Math.max(
+        Number(
+          voucherDiscountBase ?? 0,
+        ),
+        0,
+      ),
+    );
+
+  const discountedSubtotal =
+    Math.max(
+      Number(subtotal ?? 0) -
+        (
+          voucherDiscountTarget ===
+            'order_subtotal'
+            ? voucherDiscount
+            : 0
+        ),
+      0,
+    );
+
+  const discountedDeliveryFee =
+    Math.max(
+      deliveryFee -
+        (
+          voucherDiscountTarget ===
+            'delivery_fee'
+            ? voucherDiscount
+            : 0
+        ),
+      0,
+    );
+
   const grandTotal =
-    Number(subtotal ?? 0) +
-    deliveryFee +
+    discountedSubtotal +
+    discountedDeliveryFee +
     paymentProcessingFee;
+
+  useEffect(() => {
+    setVoucherCode(
+      appliedVoucher?.code ?? '',
+    );
+    setVoucherError(null);
+  }, [storeId]);
+
+  useEffect(() => {
+    if (appliedVoucher?.code) {
+      setVoucherCode(
+        appliedVoucher.code,
+      );
+    }
+  }, [appliedVoucher?.code]);
+
+  useEffect(() => {
+    if (
+      !appliedVoucher ||
+      !storeId
+    ) {
+      return;
+    }
+
+    const subtotalChanged =
+      Math.abs(
+        appliedVoucher
+          .subtotalBeforeDiscount -
+          subtotal,
+      ) > 0.009;
+
+    const deliverySnapshot =
+      appliedVoucher
+        .deliveryFeeBeforeDiscount;
+
+    const deliveryChanged =
+      deliverySnapshot !== null &&
+      deliverySnapshot !== undefined &&
+      Math.abs(
+        deliverySnapshot -
+          deliveryFee,
+      ) > 0.009;
+
+    if (
+      !subtotalChanged &&
+      !deliveryChanged
+    ) {
+      return;
+    }
+
+    setStoreVoucher(
+      storeId,
+      null,
+    );
+
+    setVoucherError(
+      'تغيّرت السلة. أرسل رمز القسيمة مرة أخرى.',
+    );
+  }, [
+    appliedVoucher,
+    deliveryFee,
+    setStoreVoucher,
+    storeId,
+    subtotal,
+  ]);
 
   /* ============================================================
    * LOAD STORE LOGOS FOR MULTI-CART CHOOSER
@@ -716,6 +926,158 @@ function StoreCartScreen() {
     )} ج.م`;
   }
 
+  function formatSummaryAmount(
+    value:
+      | number
+      | string
+      | null
+      | undefined,
+  ) {
+    const numericValue =
+      Number(value ?? 0);
+
+    return numericValue.toFixed(2);
+  }
+
+  function openOrderNoteEditor() {
+    setDraftOrderNote(
+      orderNotes,
+    );
+    setNoteEditorVisible(true);
+  }
+
+  function closeOrderNoteEditor() {
+    setNoteEditorVisible(false);
+  }
+
+  function handleDraftOrderNoteChange(
+    value: string,
+  ) {
+    const nextValue =
+      value.slice(0, 200);
+
+    setDraftOrderNote(
+      nextValue,
+    );
+
+    if (!storeId) {
+      return;
+    }
+
+    setOrderNote(
+      storeId,
+      nextValue,
+    );
+  }
+
+  function handleVoucherCodeChange(
+    nextCode: string,
+  ) {
+    const normalizedCode =
+      nextCode
+        .replace(/\s+/g, '')
+        .toUpperCase()
+        .slice(0, 32);
+
+    setVoucherCode(
+      normalizedCode,
+    );
+    setVoucherError(null);
+
+    if (
+      storeId &&
+      appliedVoucher &&
+      normalizedCode !==
+        appliedVoucher.code
+    ) {
+      setStoreVoucher(
+        storeId,
+        null,
+      );
+    }
+  }
+
+  function removeAppliedVoucher() {
+    if (!storeId) {
+      return;
+    }
+
+    setStoreVoucher(
+      storeId,
+      null,
+    );
+    setVoucherCode('');
+    setVoucherError(null);
+  }
+
+  async function applyCartVoucher() {
+    if (
+      isApplyingVoucher ||
+      !storeId
+    ) {
+      return;
+    }
+
+    const normalizedCode =
+      voucherCode
+        .trim()
+        .toUpperCase();
+
+    if (
+      normalizedCode.length < 3
+    ) {
+      setVoucherError(
+        'اكتب رمز القسيمة أولًا.',
+      );
+      setStoreVoucher(
+        storeId,
+        null,
+      );
+      return;
+    }
+
+    try {
+      setIsApplyingVoucher(true);
+      setVoucherError(null);
+
+      await ensureAppSession();
+
+      const quote =
+        await validateVoucher({
+          code:
+            normalizedCode,
+          storeId,
+          subtotal,
+          deliveryFee,
+          customerPhone:
+            normalizedPhone ||
+            null,
+        });
+
+      setVoucherCode(
+        quote.code,
+      );
+
+      setStoreVoucher(
+        storeId,
+        quote,
+      );
+    } catch (error) {
+      setStoreVoucher(
+        storeId,
+        null,
+      );
+
+      setVoucherError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر تطبيق رمز القسيمة.',
+      );
+    } finally {
+      setIsApplyingVoucher(false);
+    }
+  }
+
   function markImageAsFailed(
     imageUrl: string,
   ) {
@@ -777,6 +1139,8 @@ function StoreCartScreen() {
       return;
     }
 
+    clearVoucher(storeId);
+    clearOrderNotes(storeId);
     clearStoreCart(storeId);
 
     setClearModalVisible(false);
@@ -1212,76 +1576,80 @@ function StoreCartScreen() {
     <View style={styles.screen}>
       <Stack.Screen options={CART_SCREEN_OPTIONS} />
 
+      {/* STICKY HEADER */}
+
+      <View style={styles.header}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.backButton,
+
+            pressed &&
+              styles.buttonPressed,
+          ]}
+          onPress={handleBack}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={23}
+            color="#262626"
+          />
+        </Pressable>
+
+        <View
+          style={styles.headerContent}
+        >
+          <Text
+            style={styles.pageTitle}
+          >
+            سلة المشتريات
+          </Text>
+
+          {hasMultipleCarts ? (
+            <Text
+              style={
+                styles.headerStoreName
+              }
+              numberOfLines={1}
+            >
+              {storeName}
+            </Text>
+          ) : null}
+        </View>
+
+        <Pressable
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.clearCartButton,
+
+            pressed &&
+              styles.buttonPressed,
+          ]}
+          onPress={() =>
+            setClearModalVisible(true)
+          }
+        >
+          <Text
+            style={
+              styles.clearCartButtonText
+            }
+          >
+            إفراغ السلة
+          </Text>
+        </Pressable>
+      </View>
+
       <ScrollView
+        style={
+          styles.mainScrollView
+        }
         contentContainerStyle={
           styles.pageContent
         }
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={
           false
         }
       >
-        {/* HEADER */}
-
-        <View style={styles.header}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.backButton,
-
-              pressed &&
-                styles.buttonPressed,
-            ]}
-            onPress={handleBack}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={23}
-              color="#262626"
-            />
-          </Pressable>
-
-          <View
-            style={styles.headerContent}
-          >
-            <Text
-              style={styles.pageTitle}
-            >
-              السلة
-            </Text>
-
-            {hasMultipleCarts ? (
-              <Text
-                style={
-                  styles.headerStoreName
-                }
-                numberOfLines={1}
-              >
-                {storeName}
-              </Text>
-            ) : null}
-          </View>
-
-          <Pressable
-            hitSlop={10}
-            style={({ pressed }) => [
-              styles.clearCartButton,
-
-              pressed &&
-                styles.buttonPressed,
-            ]}
-            onPress={() =>
-              setClearModalVisible(true)
-            }
-          >
-            <Text
-              style={
-                styles.clearCartButtonText
-              }
-            >
-              إفراغ السلة
-            </Text>
-          </Pressable>
-        </View>
-
         {/* ITEMS */}
 
         <View style={styles.itemsSection}>
@@ -1453,6 +1821,14 @@ function StoreCartScreen() {
                           if (
                             item.quantity <= 1
                           ) {
+                            if (
+                              items.length === 1
+                            ) {
+                              clearOrderNotes(
+                                storeId,
+                              );
+                            }
+
                             removeStoreItem(
                               storeId,
                               item.id,
@@ -1681,110 +2057,432 @@ function StoreCartScreen() {
           </View>
         )}
 
-        {/* ORDER DETAILS */}
+
+        {/* ORDER NOTES — REFERENCE STYLE */}
 
         <View
           style={
-            styles.orderSummarySection
+            styles.referenceNotesSection
           }
         >
           <Text
             style={
-              styles.orderSummaryTitle
+              styles.referenceSectionTitle
             }
           >
-            تفاصيل الطلب
+            ملاحظات إضافية
           </Text>
 
-          <View
-            style={styles.summaryRow}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="دوّن ملاحظة على الطلب"
+            style={({ pressed }) => [
+              styles.referenceNotesRow,
+              pressed &&
+                styles.referenceNotesRowPressed,
+            ]}
+            onPress={
+              openOrderNoteEditor
+            }
           >
-            <Text
-              style={styles.summaryLabel}
-            >
-              المنتجات
-            </Text>
+            <Ionicons
+              name="chatbox-outline"
+              size={25}
+              color="#242424"
+              style={
+                styles.referenceNotesIcon
+              }
+            />
 
-            <Text
-              style={styles.summaryValue}
-            >
-              {formatPrice(subtotal)}
-            </Text>
-          </View>
-
-          <View
-            style={styles.summaryRow}
-          >
-            <Text
-              style={styles.summaryLabel}
-            >
-              التوصيل
-            </Text>
-
-            <Text
-              style={styles.summaryValue}
-            >
-              {formatPrice(deliveryFee)}
-            </Text>
-          </View>
-
-          <View
-            style={styles.summaryRow}
-          >
             <View
               style={
-                styles.paymentFeeLabelContainer
+                styles.referenceNotesCopy
               }
             >
               <Text
                 style={
-                  styles.summaryLabel
+                  styles.referenceNotesLabel
                 }
               >
-                رسوم الدفع الإلكتروني
+                دوّن ملاحظة
+              </Text>
+
+              <Text
+                style={[
+                  styles.referenceNotesPreview,
+                  !orderNotes.trim() &&
+                    styles.referenceNotesPreviewPlaceholder,
+                ]}
+                numberOfLines={2}
+              >
+                {orderNotes.trim()
+                  ? orderNotes
+                  : 'هل تود أن تخبرنا أي شيء آخر؟'}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+
+        {/* VOUCHER — REFERENCE STYLE */}
+
+        <View
+          style={
+            styles.referenceVoucherSection
+          }
+        >
+          <Text
+            style={
+              styles.referenceSectionTitle
+            }
+          >
+            وفّر على طلبك
+          </Text>
+
+          <View
+            style={[
+              styles.referenceVoucherField,
+              appliedVoucher &&
+                styles.referenceVoucherFieldApplied,
+            ]}
+          >
+            <Ionicons
+              name={
+                appliedVoucher
+                  ? 'ticket'
+                  : 'ticket-outline'
+              }
+              size={24}
+              color={
+                appliedVoucher
+                  ? BRAND_GREEN
+                  : '#A0A0A0'
+              }
+            />
+
+            {appliedVoucher ? (
+              <View
+                style={
+                  styles.referenceVoucherAppliedCopy
+                }
+              >
+                <Text
+                  style={
+                    styles.referenceVoucherAppliedCode
+                  }
+                  numberOfLines={1}
+                >
+                  {appliedVoucher.code}
+                </Text>
+
+                <Text
+                  style={
+                    styles.referenceVoucherAppliedSaving
+                  }
+                  numberOfLines={1}
+                >
+                  وفّرت{' '}
+                  {formatSummaryAmount(
+                    voucherDiscount,
+                  )}{' '}
+                  ج.م
+                </Text>
+              </View>
+            ) : (
+              <TextInput
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={
+                  !isApplyingVoucher
+                }
+                maxLength={32}
+                placeholder="قم بإدخال رمز القسيمة هنا"
+                placeholderTextColor="#777777"
+                returnKeyType="done"
+                style={
+                  styles.referenceVoucherInput
+                }
+                value={
+                  voucherCode
+                }
+                onChangeText={
+                  handleVoucherCodeChange
+                }
+                onSubmitEditing={() => {
+                  void applyCartVoucher();
+                }}
+              />
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                appliedVoucher
+                  ? 'إزالة القسيمة'
+                  : 'إرسال رمز القسيمة'
+              }
+              disabled={
+                !appliedVoucher &&
+                (
+                  isApplyingVoucher ||
+                  voucherCode
+                    .trim()
+                    .length < 3
+                )
+              }
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.referenceVoucherAction,
+                pressed &&
+                  styles.referenceVoucherActionPressed,
+              ]}
+              onPress={() => {
+                if (appliedVoucher) {
+                  removeAppliedVoucher();
+                  return;
+                }
+
+                void applyCartVoucher();
+              }}
+            >
+              {isApplyingVoucher &&
+              !appliedVoucher ? (
+                <ActivityIndicator
+                  size="small"
+                  color={
+                    BRAND_GREEN
+                  }
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.referenceVoucherActionText,
+                    !appliedVoucher &&
+                      voucherCode
+                        .trim()
+                        .length < 3 &&
+                      styles.referenceVoucherActionTextDisabled,
+                  ]}
+                >
+                  {appliedVoucher
+                    ? 'إزالة'
+                    : 'إرسال'}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+
+          {voucherError ? (
+            <View
+              style={
+                styles.referenceVoucherErrorRow
+              }
+            >
+              <Ionicons
+                name="alert-circle-outline"
+                size={15}
+                color="#D64B4B"
+              />
+
+              <Text
+                style={
+                  styles.referenceVoucherErrorText
+                }
+              >
+                {voucherError}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* PAYMENT SUMMARY — REFERENCE STYLE */}
+
+        <View
+          style={
+            styles.referencePaymentSummary
+          }
+        >
+          <Text
+            style={
+              styles.referencePaymentTitle
+            }
+          >
+            ملخص الدفع
+          </Text>
+
+          <View
+            style={
+              styles.referenceSummaryRow
+            }
+          >
+            <Text
+              style={
+                styles.referenceSummaryLabel
+              }
+            >
+              المجموع الفرعي
+            </Text>
+
+            <Text
+              style={
+                styles.referenceSummaryValue
+              }
+            >
+              {formatSummaryAmount(
+                subtotal,
+              )}
+            </Text>
+          </View>
+
+          {voucherDiscount > 0 &&
+            voucherDiscountTarget ===
+              'order_subtotal' && (
+              <View
+                style={
+                  styles.referenceSummaryRow
+                }
+              >
+                <Text
+                  style={
+                    styles.referenceDiscountLabel
+                  }
+                >
+                  خصم القسيمة
+                </Text>
+
+                <Text
+                  style={
+                    styles.referenceDiscountValue
+                  }
+                >
+                  -{formatSummaryAmount(
+                    voucherDiscount,
+                  )}
+                </Text>
+              </View>
+            )}
+
+          <View
+            style={
+              styles.referenceSummaryRow
+            }
+          >
+            <View
+              style={
+                styles.referenceSummaryLabelWithInfo
+              }
+            >
+              <Text
+                style={
+                  styles.referenceSummaryLabel
+                }
+              >
+                رسوم التوصيل
               </Text>
 
               <Ionicons
                 name="information-circle-outline"
-                size={14}
-                color="#8a8a8a"
+                size={16}
+                color="#8C8C8C"
               />
             </View>
 
             <Text
-              style={styles.summaryValue}
+              style={
+                styles.referenceSummaryValue
+              }
             >
-              {formatPrice(
+              {formatSummaryAmount(
+                deliveryFee,
+              )}
+            </Text>
+          </View>
+
+          {voucherDiscount > 0 &&
+            voucherDiscountTarget ===
+              'delivery_fee' && (
+              <View
+                style={
+                  styles.referenceSummaryRow
+                }
+              >
+                <Text
+                  style={
+                    styles.referenceDiscountLabel
+                  }
+                >
+                  خصم التوصيل
+                </Text>
+
+                <Text
+                  style={
+                    styles.referenceDiscountValue
+                  }
+                >
+                  -{formatSummaryAmount(
+                    voucherDiscount,
+                  )}
+                </Text>
+              </View>
+            )}
+
+          <View
+            style={
+              styles.referenceSummaryRow
+            }
+          >
+            <View
+              style={
+                styles.referenceSummaryLabelWithInfo
+              }
+            >
+              <Text
+                style={
+                  styles.referenceSummaryLabel
+                }
+              >
+                رسوم الخدمة
+              </Text>
+
+              <Ionicons
+                name="information-circle-outline"
+                size={16}
+                color="#8C8C8C"
+              />
+            </View>
+
+            <Text
+              style={
+                styles.referenceSummaryValue
+              }
+            >
+              {formatSummaryAmount(
                 paymentProcessingFee,
               )}
             </Text>
           </View>
 
-          <Text
-            style={
-              styles.paymentFeeDescription
-            }
-          >
-            رسوم دفع إلكتروني ثابتة بقيمة EGP 10 لكل طلب.
-          </Text>
-
           <View
-            style={styles.summaryDivider}
-          />
-
-          <View
-            style={styles.summaryRow}
+            style={[
+              styles.referenceSummaryRow,
+              styles.referenceTotalRow,
+            ]}
           >
             <Text
-              style={styles.totalLabel}
+              style={
+                styles.referenceTotalLabel
+              }
             >
-              الإجمالي
+              المبلغ الإجمالي (ج.م)
             </Text>
 
             <Text
-              style={styles.totalValue}
+              style={
+                styles.referenceTotalValue
+              }
             >
-              {formatPrice(grandTotal)}
+              {formatSummaryAmount(
+                grandTotal,
+              )}
             </Text>
           </View>
         </View>
@@ -1836,7 +2534,7 @@ function StoreCartScreen() {
                 styles.addItemsButtonText
               }
             >
-              إضافة منتجات
+              أضف المزيد
             </Text>
           </Pressable>
 
@@ -1863,7 +2561,7 @@ function StoreCartScreen() {
               ]}
             >
               {minimumReached
-                ? 'إتمام الطلب'
+                ? 'تابع للدفع'
                 : `متبقي ${Math.ceil(
                     remainingForMinimum,
                   )}`}
@@ -1871,6 +2569,94 @@ function StoreCartScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* ORDER NOTE EDITOR */}
+
+      <Modal
+        visible={
+          noteEditorVisible
+        }
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={
+          closeOrderNoteEditor
+        }
+        onShow={() => {
+          requestAnimationFrame(
+            () => {
+              noteInputRef.current?.focus();
+            },
+          );
+        }}
+      >
+        <KeyboardAvoidingView
+          style={
+            styles.noteEditorModalRoot
+          }
+          behavior={
+            Platform.OS === 'ios'
+              ? 'padding'
+              : 'height'
+          }
+        >
+          <Pressable
+            style={
+              styles.noteEditorBackdrop
+            }
+            onPress={
+              closeOrderNoteEditor
+            }
+          />
+
+          <View
+            style={
+              styles.noteEditorSheet
+            }
+          >
+            <View
+              style={
+                styles.noteEditorInputFrame
+              }
+            >
+              <TextInput
+                ref={
+                  noteInputRef
+                }
+                autoFocus
+                multiline
+                maxLength={200}
+                returnKeyType="done"
+                submitBehavior="blurAndSubmit"
+                style={
+                  styles.noteEditorInput
+                }
+                value={
+                  draftOrderNote
+                }
+                onChangeText={
+                  handleDraftOrderNoteChange
+                }
+                onSubmitEditing={
+                  closeOrderNoteEditor
+                }
+                placeholder="دوّن ملاحظة"
+                placeholderTextColor="#A0A0A0"
+                textAlign="right"
+                textAlignVertical="top"
+              />
+            </View>
+
+            <Text
+              style={
+                styles.noteEditorCounter
+              }
+            >
+              {draftOrderNote.length}/200
+            </Text>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* CLEAR CART MODAL */}
 
@@ -1970,7 +2756,11 @@ const styles = StyleSheet.create({
   },
 
   cartPickerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
   },
 
   cartPickerSheet: {
@@ -2157,20 +2947,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
 
+  mainScrollView: {
+    flex: 1,
+  },
+
   pageContent: {
     paddingBottom: 126,
   },
 
   /* ---------------------------------- */
-  /* HEADER                             */
+  /* STICKY HEADER                      */
   /* ---------------------------------- */
 
   header: {
     alignItems: 'center',
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
+    flexShrink: 0,
     paddingHorizontal: 20,
     paddingTop: 48,
     paddingBottom: 20,
+    position: 'relative',
+    zIndex: 100,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.025,
+    shadowRadius: 4,
+
+    elevation: 2,
   },
 
   backButton: {
@@ -2456,73 +3264,263 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
+
   /* ---------------------------------- */
-  /* SUMMARY                            */
+  /* ORDER NOTES                        */
   /* ---------------------------------- */
 
-  orderSummarySection: {
-    borderTopColor: '#f1f1f1',
-    borderTopWidth: 1,
-    marginTop: 20,
-    paddingHorizontal: 20,
-    paddingTop: 22,
+  /* ---------------------------------- */
+  /* REFERENCE — NOTES                  */
+  /* ---------------------------------- */
+
+  referenceNotesSection: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 28,
+    paddingTop: 30,
   },
 
-  orderSummaryTitle: {
+  referenceSectionTitle: {
     color: '#242424',
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 16,
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    lineHeight: 33,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
-  summaryRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+  referenceNotesRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+    marginTop: 20,
+    paddingVertical: 2,
   },
 
-  summaryLabel: {
-    color: '#696969',
-    fontSize: 13,
+  referenceNotesRowPressed: {
+    opacity: 0.58,
   },
 
-  summaryValue: {
-    color: '#303030',
-    fontSize: 13,
-    fontWeight: '600',
+  referenceNotesIcon: {
+    marginLeft: 14,
+    marginTop: 4,
   },
 
-  paymentFeeLabelContainer: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 5,
+  referenceNotesCopy: {
+    flex: 1,
   },
 
-  paymentFeeDescription: {
-    color: '#8a8a8a',
-    fontSize: 10,
-    lineHeight: 15,
-    marginBottom: 13,
-    marginTop: -6,
-  },
-
-  summaryDivider: {
-    backgroundColor: '#eeeeee',
-    height: 1,
-    marginBottom: 17,
-  },
-
-  totalLabel: {
-    color: '#202020',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-
-  totalValue: {
-    color: '#202020',
+  referenceNotesLabel: {
+    color: '#242424',
     fontSize: 17,
     fontWeight: '800',
+    lineHeight: 23,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceNotesPreview: {
+    color: '#4A4A4A',
+    fontSize: 14.5,
+    fontWeight: '400',
+    lineHeight: 22,
+    marginTop: 3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceNotesPreviewPlaceholder: {
+    color: '#8A8A8A',
+  },
+
+  /* ---------------------------------- */
+  /* REFERENCE — VOUCHER                */
+  /* ---------------------------------- */
+
+  referenceVoucherSection: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 28,
+    paddingTop: 34,
+  },
+
+  referenceVoucherField: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCDCDC',
+    borderRadius: 18,
+    borderWidth: 1.2,
+    flexDirection: 'row-reverse',
+    marginTop: 18,
+    minHeight: 62,
+    paddingHorizontal: 17,
+  },
+
+  referenceVoucherFieldApplied: {
+    borderColor: '#CBEBD8',
+  },
+
+  referenceVoucherInput: {
+    color: '#242424',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    minHeight: 58,
+    paddingHorizontal: 14,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceVoucherAppliedCopy: {
+    flex: 1,
+    marginHorizontal: 14,
+  },
+
+  referenceVoucherAppliedCode: {
+    color: '#242424',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'right',
+    writingDirection: 'ltr',
+  },
+
+  referenceVoucherAppliedSaving: {
+    color: BRAND_GREEN,
+    fontSize: 11.5,
+    fontWeight: '700',
+    marginTop: 3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceVoucherAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+    minWidth: 52,
+    paddingHorizontal: 4,
+  },
+
+  referenceVoucherActionPressed: {
+    opacity: 0.55,
+  },
+
+  referenceVoucherActionText: {
+    color: '#242424',
+    fontSize: 13.5,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+
+  referenceVoucherActionTextDisabled: {
+    color: '#A0A0A0',
+  },
+
+  referenceVoucherErrorRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+    gap: 6,
+    marginTop: 9,
+  },
+
+  referenceVoucherErrorText: {
+    color: '#D64B4B',
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 17,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  /* ---------------------------------- */
+  /* REFERENCE — PAYMENT SUMMARY        */
+  /* ---------------------------------- */
+
+  referencePaymentSummary: {
+    backgroundColor: '#ffffff',
+    paddingBottom: 28,
+    paddingHorizontal: 28,
+    paddingTop: 38,
+  },
+
+  referencePaymentTitle: {
+    color: '#242424',
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: -0.45,
+    lineHeight: 34,
+    marginBottom: 28,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceSummaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    minHeight: 36,
+  },
+
+  referenceSummaryLabel: {
+    color: '#313131',
+    fontSize: 14.5,
+    fontWeight: '500',
+    lineHeight: 21,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceSummaryLabelWithInfo: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 8,
+  },
+
+  referenceSummaryValue: {
+    color: '#303030',
+    fontSize: 14.5,
+    fontWeight: '500',
+    minWidth: 96,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+
+  referenceDiscountLabel: {
+    color: BRAND_GREEN,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceDiscountValue: {
+    color: BRAND_GREEN,
+    fontSize: 14,
+    fontWeight: '800',
+    minWidth: 96,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+
+  referenceTotalRow: {
+    marginTop: 17,
+    minHeight: 48,
+  },
+
+  referenceTotalLabel: {
+    color: '#202020',
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 25,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  referenceTotalValue: {
+    color: BRAND_GREEN,
+    fontSize: 20,
+    fontWeight: '900',
+    minWidth: 106,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
 
   minimumNotice: {
@@ -2571,7 +3569,7 @@ const styles = StyleSheet.create({
   },
 
   checkoutBar: {
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 12,
   },
 
@@ -2582,13 +3580,13 @@ const styles = StyleSheet.create({
     borderRadius: 27,
     borderWidth: 1.5,
     flex: 1,
-    height: 54,
+    height: 58,
     justifyContent: 'center',
   },
 
   addItemsButtonText: {
     color: '#242424',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
   },
 
@@ -2597,7 +3595,7 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND_GREEN,
     borderRadius: 27,
     flex: 1,
-    height: 54,
+    height: 58,
     justifyContent: 'center',
   },
 
@@ -2607,7 +3605,7 @@ const styles = StyleSheet.create({
 
   checkoutButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
   },
 
@@ -2622,6 +3620,62 @@ const styles = StyleSheet.create({
         scale: 0.98,
       },
     ],
+  },
+
+  /* ---------------------------------- */
+  /* ORDER NOTE EDITOR                  */
+  /* ---------------------------------- */
+
+  noteEditorModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+
+  noteEditorBackdrop: {
+    backgroundColor:
+      'rgba(0, 0, 0, 0.50)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+
+  noteEditorSheet: {
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 18,
+    paddingHorizontal: 24,
+    paddingTop: 18,
+  },
+
+  noteEditorInputFrame: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#242424',
+    borderRadius: 22,
+    borderWidth: 1.5,
+    minHeight: 182,
+    overflow: 'hidden',
+  },
+
+  noteEditorInput: {
+    color: '#242424',
+    fontSize: 16,
+    lineHeight: 24,
+    minHeight: 178,
+    paddingHorizontal: 18,
+    paddingTop: 15,
+    paddingBottom: 15,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  noteEditorCounter: {
+    color: '#8A8A8A',
+    fontSize: 13,
+    marginTop: 10,
+    paddingHorizontal: 20,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
 
   /* ---------------------------------- */

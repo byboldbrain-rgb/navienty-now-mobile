@@ -1,0 +1,55 @@
+name: Optimize bundled images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  optimize-images:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: cto/launch-readiness-hardening
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Install Sharp for optimization
+        run: npm install --no-save --package-lock=false sharp
+
+      - name: Audit images before optimization
+        run: node scripts/audit-images.mjs
+
+      - name: Generate optimized WebP assets
+        run: node scripts/optimize-local-images.mjs
+
+      - name: Audit images after optimization
+        run: node scripts/audit-images.mjs
+
+      - name: Commit optimized assets and source references
+        shell: bash
+        run: |
+          rm -f .image-audit.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets src
+
+          if git diff --cached --quiet; then
+            echo "No image changes were generated."
+            exit 0
+          fi
+
+          git commit -m "Optimize bundled image assets"
+          git push origin HEAD:cto/launch-readiness-hardening

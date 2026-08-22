@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import {
   useFocusEffect,
   useLocalSearchParams,
@@ -5,126 +6,103 @@ import {
 } from 'expo-router';
 import {
   useCallback,
+  useEffect,
   useState,
 } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OrderDetailsScreenSkeleton } from '../../components/ui/loading-skeleton';
+import { getStoreCatalog } from '../../services/catalog-service';
 import { getOrderByToken } from '../../services/order-service';
 import {
-  type OrderStatus,
+  type Order,
   useOrdersStore,
 } from '../../store/orders-store';
-import { openOrderInWhatsApp } from '../../utils/order-whatsapp';
 
-type StatusPresentation = {
-  title: string;
-  description: string;
-  backgroundColor: string;
-  textColor: string;
-  dotColor: string;
-  icon: string;
+type ExtendedOrder = Order & {
+  serviceFee?: number | string | null;
+  processingFee?: number | string | null;
+  paymentFee?: number | string | null;
+  electronicPaymentFee?: number | string | null;
 };
 
-const statusPresentation: Record<
-  OrderStatus,
-  StatusPresentation
-> = {
-  'awaiting-whatsapp-send': {
-    title: 'في انتظار إرسال واتساب',
-    description:
-      'لم يتم تأكيد إرسال رسالة الطلب على واتساب حتى الآن.',
-    backgroundColor: '#fff3d6',
-    textColor: '#7a5a13',
-    dotColor: '#e5a328',
-    icon: '💬',
-  },
+function toNumber(
+  value:
+    | number
+    | string
+    | null
+    | undefined,
+): number {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return 0;
+  }
 
-  'waiting-confirmation': {
-    title: 'في انتظار التأكيد',
-    description:
-      'يتم الآن مراجعة توافر المنتجات والمبلغ النهائي.',
-    backgroundColor: '#f1efff',
-    textColor: '#4f3db8',
-    dotColor: '#6d56df',
-    icon: '⏳',
-  },
+  if (typeof value === 'number') {
+    return Number.isFinite(value)
+      ? value
+      : 0;
+  }
 
-  confirmed: {
-    title: 'تم التأكيد',
-    description:
-      'تم تأكيد الطلب وأصبح جاهزًا للانتقال إلى مرحلة التجهيز.',
-    backgroundColor: '#e9f7ee',
-    textColor: '#246343',
-    dotColor: '#25a952',
-    icon: '✓',
-  },
+  const normalized = value
+    .replace(/,/g, '')
+    .trim();
 
-  preparing: {
-    title: 'جاري التجهيز',
-    description:
-      'المتجر يقوم الآن بتجهيز المنتجات الموجودة في الطلب.',
-    backgroundColor: '#fff3d6',
-    textColor: '#7a5a13',
-    dotColor: '#e5a328',
-    icon: '🛍️',
-  },
+  const parsed = Number(normalized);
 
-  'out-for-delivery': {
-    title: 'خرج للتوصيل',
-    description:
-      'تم استلام الطلب من المتجر وهو الآن في طريقه إليك.',
-    backgroundColor: '#eaf4ff',
-    textColor: '#245f91',
-    dotColor: '#3d8fd1',
-    icon: '🛵',
-  },
+  return Number.isFinite(parsed)
+    ? parsed
+    : 0;
+}
 
-  delivered: {
-    title: 'تم التوصيل',
-    description:
-      'تم توصيل الطلب بنجاح. نتمنى أن تكون تجربتك ممتازة.',
-    backgroundColor: '#e9f7ee',
-    textColor: '#246343',
-    dotColor: '#25a952',
-    icon: '✓',
-  },
+function getCurrencyLabel(
+  currencySymbol?: string | null,
+): string {
+  const symbol =
+    currencySymbol?.trim() ?? '';
 
-  cancelled: {
-    title: 'تم إلغاء الطلب',
-    description:
-      'تم إلغاء هذا الطلب ولن يتم استكمال تنفيذه.',
-    backgroundColor: '#fdecec',
-    textColor: '#9a3333',
-    dotColor: '#d64b4b',
-    icon: '×',
-  },
-};
+  const normalized =
+    symbol.toUpperCase();
 
-const arabicMonthNames = [
-  'يناير',
-  'فبراير',
-  'مارس',
-  'أبريل',
-  'مايو',
-  'يونيو',
-  'يوليو',
-  'أغسطس',
-  'سبتمبر',
-  'أكتوبر',
-  'نوفمبر',
-  'ديسمبر',
-];
+  if (
+    !symbol ||
+    normalized === 'EGP' ||
+    normalized === 'LE' ||
+    symbol.includes('ج.م')
+  ) {
+    return 'ج.م';
+  }
 
-function formatOrderDate(
+  return symbol;
+}
+
+function formatMoney(
+  value:
+    | number
+    | string
+    | null
+    | undefined,
+  currencySymbol?: string | null,
+): string {
+  const amount = toNumber(value);
+
+  return `${amount.toFixed(2)} ${getCurrencyLabel(
+    currencySymbol,
+  )}`;
+}
+
+function formatOrderDateCompact(
   isoDate: string | null,
 ): string {
   if (!isoDate) {
@@ -137,64 +115,113 @@ function formatOrderDate(
     return 'غير متاح';
   }
 
-  const day = date.getDate();
-  const month =
-    arabicMonthNames[date.getMonth()];
+  const day = String(
+    date.getDate(),
+  ).padStart(2, '0');
+
+  const month = String(
+    date.getMonth() + 1,
+  ).padStart(2, '0');
+
   const year = date.getFullYear();
 
-  let hours = date.getHours();
+  const hours = String(
+    date.getHours(),
+  ).padStart(2, '0');
+
   const minutes = String(
     date.getMinutes(),
   ).padStart(2, '0');
 
-  const period = hours >= 12 ? 'م' : 'ص';
-
-  hours %= 12;
-
-  if (hours === 0) {
-    hours = 12;
-  }
-
-  return `${day} ${month} ${year} • ${hours}:${minutes} ${period}`;
+  return `${hours}:${minutes} ${day}/${month}/${year}`;
 }
 
-function DetailRow({
-  label,
-  value,
-  last = false,
-}: {
-  label: string;
-  value: string;
-  last?: boolean;
-}) {
-  return (
-    <View
-      style={[
-        styles.detailRow,
-        !last && styles.detailRowBorder,
-      ]}
-    >
-      <Text
-        style={styles.detailValue}
-        selectable
-      >
-        {value}
-      </Text>
+function getServiceFee(
+  order: ExtendedOrder,
+): number {
+  const candidates = [
+    order.serviceFee,
+    order.processingFee,
+    order.paymentFee,
+    order.electronicPaymentFee,
+  ];
 
-      <Text style={styles.detailLabel}>
-        {label}
-      </Text>
-    </View>
+  for (const candidate of candidates) {
+    if (
+      candidate !== null &&
+      candidate !== undefined
+    ) {
+      const value = toNumber(candidate);
+
+      if (value >= 0) {
+        return value;
+      }
+    }
+  }
+
+  const total = toNumber(
+    order.total,
+  );
+
+  const subtotal = toNumber(
+    order.subtotal,
+  );
+
+  const deliveryFee = toNumber(
+    order.deliveryFee,
+  );
+
+  const calculated =
+    total -
+    subtotal -
+    deliveryFee;
+
+  if (
+    !Number.isFinite(calculated) ||
+    calculated <= 0
+  ) {
+    return 0;
+  }
+
+  return calculated;
+}
+
+function cleanText(
+  value?: string | null,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed =
+    value.trim();
+
+  return trimmed.length > 0
+    ? trimmed
+    : null;
+}
+
+function getBestStoreImageUrl(
+  logoUrl?: string | null,
+  coverImageUrl?: string | null,
+): string | null {
+  const normalizedLogo =
+    cleanText(logoUrl);
+
+  if (normalizedLogo) {
+    return normalizedLogo;
+  }
+
+  return cleanText(
+    coverImageUrl,
   );
 }
 
 export default function OrderDetailsScreen() {
   const router = useRouter();
 
-  const [
-    isOpeningWhatsApp,
-    setIsOpeningWhatsApp,
-  ] = useState(false);
+  const insets =
+    useSafeAreaInsets();
 
   const [
     isRefreshing,
@@ -204,13 +231,35 @@ export default function OrderDetailsScreen() {
   const [
     refreshError,
     setRefreshError,
-  ] = useState<string | null>(null);
+  ] = useState<string | null>(
+    null,
+  );
 
-  const params = useLocalSearchParams<{
-    id?: string | string[];
-  }>();
+  const [
+    storeImageUrl,
+    setStoreImageUrl,
+  ] = useState<string | null>(
+    null,
+  );
 
-  const orderId = Array.isArray(params.id)
+  const [
+    isLoadingStoreImage,
+    setIsLoadingStoreImage,
+  ] = useState(false);
+
+  const [
+    storeImageFailed,
+    setStoreImageFailed,
+  ] = useState(false);
+
+  const params =
+    useLocalSearchParams<{
+      id?: string | string[];
+    }>();
+
+  const orderId = Array.isArray(
+    params.id,
+  )
     ? params.id[0]
     : params.id;
 
@@ -220,25 +269,26 @@ export default function OrderDetailsScreen() {
         state.hasHydrated,
     );
 
-  const order = useOrdersStore(
-    (state) => {
-      if (!orderId) {
-        return null;
-      }
+  const order =
+    useOrdersStore(
+      (state) => {
+        if (!orderId) {
+          return null;
+        }
 
-      return (
-        state.orders.find(
-          (currentOrder) =>
-            currentOrder.id ===
-            orderId,
-        ) ??
-        (state.pendingOrder?.id ===
-        orderId
-          ? state.pendingOrder
-          : null)
-      );
-    },
-  );
+        return (
+          state.orders.find(
+            (currentOrder) =>
+              currentOrder.id ===
+              orderId,
+          ) ??
+          (state.pendingOrder?.id ===
+          orderId
+            ? state.pendingOrder
+            : null)
+        );
+      },
+    );
 
   const refreshOrder =
     useCallback(async () => {
@@ -285,8 +335,8 @@ export default function OrderDetailsScreen() {
           useOrdersStore.getState();
 
         if (
-          latestState.pendingOrder?.id ===
-          latestOrder.id
+          latestState.pendingOrder
+            ?.id === latestOrder.id
         ) {
           if (
             latestOrder.status ===
@@ -296,10 +346,9 @@ export default function OrderDetailsScreen() {
               latestOrder,
             );
           } else {
-            latestState
-              .confirmPendingOrder(
-                latestOrder,
-              );
+            latestState.confirmPendingOrder(
+              latestOrder,
+            );
           }
         } else {
           latestState.upsertOrder(
@@ -310,13 +359,85 @@ export default function OrderDetailsScreen() {
         const message =
           error instanceof Error
             ? error.message
-            : 'تعذر تحديث الطلب من Supabase.';
+            : 'تعذر تحديث بيانات الطلب.';
 
-        setRefreshError(message);
+        setRefreshError(
+          message,
+        );
       } finally {
         setIsRefreshing(false);
       }
     }, [orderId]);
+
+  /*
+   * تحميل صورة المتجر الحقيقية.
+   *
+   * Order نفسه لا يحتوي على logoUrl،
+   * لذلك نستخدم storeId لجلب بيانات
+   * المتجر من catalog-service.
+   */
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadStoreImage() {
+      if (
+        !order?.storeId
+      ) {
+        setStoreImageUrl(null);
+        return;
+      }
+
+      try {
+        setIsLoadingStoreImage(true);
+        setStoreImageFailed(false);
+
+        const catalog =
+          await getStoreCatalog(
+            order.storeId,
+            order.serviceAreaId ||
+              undefined,
+          );
+
+        if (isCancelled) {
+          return;
+        }
+
+        const imageUrl =
+          getBestStoreImageUrl(
+            catalog.store.logoUrl,
+            catalog.store
+              .coverImageUrl,
+          );
+
+        setStoreImageUrl(
+          imageUrl,
+        );
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+
+        setStoreImageUrl(
+          null,
+        );
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingStoreImage(
+            false,
+          );
+        }
+      }
+    }
+
+    void loadStoreImage();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    order?.storeId,
+    order?.serviceAreaId,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -344,65 +465,51 @@ export default function OrderDetailsScreen() {
     router.replace('/orders');
   }
 
-  function goToHome() {
-    router.replace('/');
-  }
-
-  async function reopenOrderInWhatsApp() {
-    if (
-      isOpeningWhatsApp ||
-      !order
-    ) {
-      return;
-    }
-
-    try {
-      setIsOpeningWhatsApp(true);
-
-      await openOrderInWhatsApp(
-        order,
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'تأكد من وجود اتصال بالإنترنت ثم حاول مرة أخرى.';
-
-      Alert.alert(
-        'تعذر فتح واتساب',
-        message,
-      );
-    } finally {
-      setIsOpeningWhatsApp(false);
-    }
-  }
-
   if (
     !hasHydrated ||
     (isRefreshing && !order)
   ) {
-    return <OrderDetailsScreenSkeleton />;
+    return (
+      <OrderDetailsScreenSkeleton />
+    );
   }
 
   if (!order) {
     return (
-      <View style={styles.emptyScreen}>
+      <View
+        style={[
+          styles.emptyScreen,
+          {
+            paddingTop:
+              insets.top + 20,
+
+            paddingBottom:
+              insets.bottom + 20,
+          },
+        ]}
+      >
         <View
           style={
             styles.emptyIconContainer
           }
         >
-          <Text style={styles.emptyIcon}>
-            🧾
-          </Text>
+          <Ionicons
+            name="receipt-outline"
+            size={25}
+            color="#222222"
+          />
         </View>
 
-        <Text style={styles.emptyTitle}>
+        <Text
+          style={styles.emptyTitle}
+        >
           لم يتم العثور على الطلب
         </Text>
 
         <Text
-          style={styles.emptyDescription}
+          style={
+            styles.emptyDescription
+          }
         >
           {refreshError ??
             'قد يكون الطلب غير موجود أو تمت إزالته من سجل الطلبات على هذا الجهاز.'}
@@ -410,26 +517,39 @@ export default function OrderDetailsScreen() {
 
         <Pressable
           style={({ pressed }) => [
-            styles.primaryButton,
+            styles.retryButton,
+
             pressed &&
               styles.buttonPressed,
+
+            isRefreshing &&
+              styles.buttonDisabled,
           ]}
+          disabled={isRefreshing}
           onPress={() => {
             void refreshOrder();
           }}
         >
-          <Text
-            style={
-              styles.primaryButtonText
-            }
-          >
-            إعادة المحاولة
-          </Text>
+          {isRefreshing ? (
+            <ActivityIndicator
+              color="#ffffff"
+              size="small"
+            />
+          ) : (
+            <Text
+              style={
+                styles.retryButtonText
+              }
+            >
+              إعادة المحاولة
+            </Text>
+          )}
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [
-            styles.secondaryButton,
+            styles.ordersButton,
+
             pressed &&
               styles.buttonPressed,
           ]}
@@ -437,1120 +557,996 @@ export default function OrderDetailsScreen() {
         >
           <Text
             style={
-              styles.secondaryButtonText
+              styles.ordersButtonText
             }
           >
             العودة إلى طلباتي
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            pressed &&
-              styles.buttonPressed,
-          ]}
-          onPress={goToHome}
-        >
-          <Text
-            style={
-              styles.secondaryButtonText
-            }
-          >
-            العودة للرئيسية
           </Text>
         </Pressable>
       </View>
     );
   }
 
-  const status =
-    statusPresentation[order.status];
+  const extendedOrder =
+    order as ExtendedOrder;
+
+  const serviceFee =
+    getServiceFee(
+      extendedOrder,
+    );
+
+  const orderDate =
+    formatOrderDateCompact(
+      order.submittedAt ??
+        order.createdAt,
+    );
+
+  const customerName =
+    cleanText(
+      order.customerName,
+    ) ?? 'غير محدد';
+
+  const phoneNumber =
+    cleanText(
+      order.phoneNumber,
+    ) ?? 'غير محدد';
+
+  const deliveryArea =
+    cleanText(
+      order.area,
+    );
+
+  const deliveryAddress =
+    cleanText(
+      order.address,
+    );
+
+  const deliveryLandmark =
+    cleanText(
+      order.landmark,
+    );
+
+  const addressLines = [
+    deliveryArea,
+    deliveryAddress,
+    deliveryLandmark,
+  ].filter(
+    (
+      value,
+    ): value is string =>
+      Boolean(value),
+  );
+
+  const shouldShowStoreImage =
+    Boolean(storeImageUrl) &&
+    !storeImageFailed;
 
   return (
-    <ScrollView
+    <View
       style={styles.screen}
-      contentContainerStyle={
-        styles.pageContent
-      }
-      showsVerticalScrollIndicator={false}
     >
-      <View style={styles.container}>
-        <View style={styles.topBar}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.backButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={goBack}
-          >
-            <Text style={styles.backIcon}>
-              ›
-            </Text>
-          </Pressable>
+      <ScrollView
+        style={
+          styles.scrollView
+        }
+        contentContainerStyle={[
+          styles.pageContent,
+          {
+            paddingTop:
+              insets.top + 10,
 
-          <View style={styles.titleContainer}>
-            <Text style={styles.pageTitle}>
+            paddingBottom:
+              Math.max(
+                insets.bottom,
+                16,
+              ) + 20,
+          },
+        ]}
+        showsVerticalScrollIndicator={
+          false
+        }
+      >
+        <View
+          style={styles.container}
+        >
+          {/* Header */}
+          <View
+            style={styles.header}
+          >
+            <View
+              style={
+                styles.headerPlaceholder
+              }
+            />
+
+            <Text
+              style={styles.pageTitle}
+            >
               تفاصيل الطلب
             </Text>
 
-            <Text style={styles.pageSubtitle}>
-              الحالة والتفاصيل من Supabase
-            </Text>
-          </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="العودة"
+              style={({ pressed }) => [
+                styles.backButton,
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.refreshButton,
-              pressed &&
-                !isRefreshing &&
-                styles.buttonPressed,
-            ]}
-            disabled={isRefreshing}
-            onPress={() => {
-              void refreshOrder();
-            }}
-          >
-            {isRefreshing ? (
-              <ActivityIndicator
-                size="small"
-                color="#5d47d2"
-              />
-            ) : (
-              <Text
-                style={styles.refreshIcon}
-              >
-                ↻
-              </Text>
-            )}
-          </Pressable>
-        </View>
-
-        {refreshError && (
-          <View style={styles.warningCard}>
-            <Text
-              style={styles.warningText}
-            >
-              {refreshError}
-            </Text>
-
-            <Text
-              style={styles.warningIcon}
-            >
-              ⚠️
-            </Text>
-          </View>
-        )}
-
-        <View
-          style={[
-            styles.statusCard,
-            {
-              backgroundColor:
-                status.backgroundColor,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.statusIconContainer,
-              {
-                backgroundColor:
-                  status.dotColor,
-              },
-            ]}
-          >
-            <Text style={styles.statusIcon}>
-              {status.icon}
-            </Text>
-          </View>
-
-          <View style={styles.statusContent}>
-            <View
-              style={styles.statusTitleRow}
-            >
-              <View
-                style={[
-                  styles.statusDot,
-                  {
-                    backgroundColor:
-                      status.dotColor,
-                  },
-                ]}
-              />
-
-              <Text
-                style={[
-                  styles.statusTitle,
-                  {
-                    color: status.textColor,
-                  },
-                ]}
-              >
-                {status.title}
-              </Text>
-            </View>
-
-            <Text
-              style={[
-                styles.statusDescription,
-                {
-                  color: status.textColor,
-                },
+                pressed &&
+                  styles.buttonPressed,
               ]}
+              hitSlop={10}
+              onPress={goBack}
             >
-              {status.description}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.orderIdentityCard}>
-          <Text
-            style={styles.orderIdentityLabel}
-          >
-            رقم الطلب
-          </Text>
-
-          <Text
-            style={styles.orderIdentityValue}
-            selectable
-          >
-            {order.orderCode}
-          </Text>
-
-          <Text style={styles.orderDate}>
-            {formatOrderDate(
-              order.submittedAt ??
-                order.createdAt,
-            )}
-          </Text>
-        </View>
-
-        <View style={styles.storeCard}>
-          <View style={styles.storeIconContainer}>
-            <Text style={styles.storeIcon}>
-              {order.storeIcon || '🏪'}
-            </Text>
+              <Ionicons
+                name="arrow-forward"
+                size={21}
+                color="#171717"
+              />
+            </Pressable>
           </View>
 
-          <View style={styles.storeContent}>
-            <Text style={styles.storeLabel}>
-              الطلب من
-            </Text>
-
-            <Text
-              style={styles.storeName}
-              numberOfLines={1}
-            >
-              {order.storeName}
-            </Text>
-
-            <Text style={styles.storeMeta}>
-              {order.itemCount} منتجات •{' '}
-              {order.total}{' '}
-              {order.currencySymbol}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            المنتجات
-          </Text>
-
-          <View style={styles.itemsCard}>
-            {order.items.map(
-              (item, index) => (
-                <View
-                  key={item.id}
-                  style={[
-                    styles.itemRow,
-                    index <
-                      order.items.length - 1 &&
-                      styles.itemRowBorder,
-                  ]}
-                >
-                  <View
-                    style={
-                      styles.itemIconContainer
-                    }
-                  >
-                    <Text style={styles.itemIcon}>
-                      {item.icon || '🛍️'}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={styles.itemContent}
-                  >
-                    <Text
-                      style={styles.itemName}
-                    >
-                      {item.name}
-                    </Text>
-
-                    {item.description.trim()
-                      .length > 0 && (
-                      <Text
-                        style={
-                          styles.itemDescription
-                        }
-                        numberOfLines={2}
-                      >
-                        {item.description}
-                      </Text>
-                    )}
-
-                    <Text
-                      style={
-                        styles.itemQuantity
-                      }
-                    >
-                      الكمية: {item.quantity}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.itemPriceContent
-                    }
-                  >
-                    <Text
-                      style={styles.itemTotal}
-                    >
-                      {item.lineTotal}{' '}
-                      {order.currencySymbol}
-                    </Text>
-
-                    <Text
-                      style={styles.itemUnitPrice}
-                    >
-                      {item.price}{' '}
-                      {order.currencySymbol}{' '}
-                      للوحدة
-                    </Text>
-                  </View>
-                </View>
-              ),
-            )}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            ملخص الحساب
-          </Text>
-
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryValue}>
-                {order.subtotal}{' '}
-                {order.currencySymbol}
-              </Text>
-
-              <Text style={styles.summaryLabel}>
-                إجمالي المنتجات
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryValue}>
-                {order.deliveryFee}{' '}
-                {order.currencySymbol}
-              </Text>
-
-              <Text style={styles.summaryLabel}>
-                رسوم التوصيل
-              </Text>
-            </View>
-
-            <View
-              style={styles.summaryDivider}
-            />
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalValue}>
-                {order.total}{' '}
-                {order.currencySymbol}
-              </Text>
-
-              <Text style={styles.totalLabel}>
-                الإجمالي النهائي
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            بيانات العميل
-          </Text>
-
-          <View style={styles.detailsCard}>
-            <DetailRow
-              label="الاسم"
-              value={order.customerName}
-            />
-
-            <DetailRow
-              label="رقم الموبايل"
-              value={order.phoneNumber}
-              last
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            عنوان التوصيل
-          </Text>
-
-          <View style={styles.detailsCard}>
-            <DetailRow
-              label="المنطقة"
-              value={
-                order.area || 'غير محدد'
-              }
-            />
-
-            <DetailRow
-              label="العنوان"
-              value={order.address}
-            />
-
-            <DetailRow
-              label="علامة مميزة"
-              value={
-                order.landmark ||
-                'لا يوجد'
-              }
-            />
-
-            <DetailRow
-              label="ملاحظات الطلب"
-              value={
-                order.notes || 'لا يوجد'
-              }
-              last
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            الدفع
-          </Text>
-
-          <View style={styles.paymentCard}>
+          {refreshError && (
             <View
               style={
-                styles.paymentIconContainer
+                styles.warningContainer
               }
             >
-              <Text style={styles.paymentIcon}>
-                💳
+              <Ionicons
+                name="warning-outline"
+                size={14}
+                color="#9a6214"
+              />
+
+              <Text
+                style={
+                  styles.warningText
+                }
+              >
+                {refreshError}
+              </Text>
+            </View>
+          )}
+
+          {/* Store */}
+          <View
+            style={
+              styles.storeSection
+            }
+          >
+            <View
+              style={
+                styles.storeImageWrapper
+              }
+            >
+              {shouldShowStoreImage ? (
+                <Image
+                  source={{
+                    uri:
+                      storeImageUrl ??
+                      undefined,
+                  }}
+                  style={
+                    styles.storeImage
+                  }
+                  resizeMode="cover"
+                  fadeDuration={150}
+                  onError={() => {
+                    setStoreImageFailed(
+                      true,
+                    );
+                  }}
+                />
+              ) : (
+                <View
+                  style={
+                    styles.storeImageFallback
+                  }
+                >
+                  {isLoadingStoreImage ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#a4a4a4"
+                    />
+                  ) : (
+                    <Text
+                      style={
+                        styles.storeFallbackIcon
+                      }
+                    >
+                      {order.storeIcon ||
+                        '🏪'}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+
+            <View
+              style={
+                styles.storeInfo
+              }
+            >
+              <Text
+                style={
+                  styles.storeName
+                }
+                numberOfLines={2}
+              >
+                {order.storeName}
+              </Text>
+
+              <Text
+                style={
+                  styles.orderDate
+                }
+              >
+                {orderDate}
+              </Text>
+
+              <Text
+                style={
+                  styles.orderNumber
+                }
+                selectable
+              >
+                رقم الطلب:{' '}
+                {order.orderCode}
+              </Text>
+            </View>
+          </View>
+
+          <View
+            style={styles.divider}
+          />
+
+          {/* Delivery Address */}
+          <View
+            style={
+              styles.deliverySection
+            }
+          >
+            <View
+              style={
+                styles.deliveryTitleRow
+              }
+            >
+              <Ionicons
+                name="location-outline"
+                size={22}
+                color="#171717"
+              />
+
+              <Text
+                style={
+                  styles.sectionTitle
+                }
+              >
+                عنوان التوصيل
               </Text>
             </View>
 
             <View
-              style={styles.paymentContent}
+              style={
+                styles.deliveryContent
+              }
             >
               <Text
-                style={styles.paymentLabel}
+                style={
+                  styles.customerName
+                }
+                selectable
               >
-                طريقة الدفع المختارة
+                {customerName}
               </Text>
 
-              <Text
-                style={styles.paymentValue}
-              >
-                {order.paymentMethodTitle}
-              </Text>
+              {addressLines.length >
+              0 ? (
+                addressLines.map(
+                  (
+                    line,
+                    index,
+                  ) => (
+                    <Text
+                      key={`${line}-${index}`}
+                      style={
+                        styles.addressLine
+                      }
+                      selectable
+                    >
+                      {line}
+                    </Text>
+                  ),
+                )
+              ) : (
+                <Text
+                  style={
+                    styles.addressLine
+                  }
+                >
+                  العنوان غير محدد
+                </Text>
+              )}
 
               <Text
                 style={
-                  styles.paymentDescription
+                  styles.phoneLine
                 }
+                selectable
               >
-                يتم الدفع بعد تأكيد المنتجات
-                والمبلغ النهائي عبر واتساب.
+                رقم الهاتف المتنقل:{' '}
+                {phoneNumber}
               </Text>
             </View>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            معلومات التسجيل
-          </Text>
+          <View
+            style={styles.divider}
+          />
 
-          <View style={styles.detailsCard}>
-            <DetailRow
-              label="وقت إنشاء الطلب"
-              value={formatOrderDate(
-                order.createdAt,
-              )}
-            />
-
-            <DetailRow
-              label="وقت تأكيد الإرسال"
-              value={formatOrderDate(
-                order.submittedAt,
-              )}
-            />
-
-            <DetailRow
-              label="آخر تحديث"
-              value={formatOrderDate(
-                order.updatedAt,
-              )}
-              last
-            />
-          </View>
-        </View>
-
-        {order.whatsappNumber &&
-          order.whatsappMessage && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.whatsAppButton,
-                isOpeningWhatsApp &&
-                  styles.whatsAppButtonDisabled,
-                pressed &&
-                  !isOpeningWhatsApp &&
-                  styles.whatsAppButtonPressed,
-              ]}
-              disabled={
-                isOpeningWhatsApp
+          {/* Order Details */}
+          <View
+            style={
+              styles.orderDetailsSection
+            }
+          >
+            <Text
+              style={
+                styles.orderDetailsTitle
               }
-              onPress={() => {
-                void reopenOrderInWhatsApp();
-              }}
+            >
+              تفاصيل الطلب
+            </Text>
+
+            <View
+              style={
+                styles.itemsContainer
+              }
+            >
+              {order.items.map(
+                (item) => (
+                  <View
+                    key={item.id}
+                    style={
+                      styles.itemRow
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.itemPrice
+                      }
+                    >
+                      {formatMoney(
+                        item.lineTotal,
+                        order.currencySymbol,
+                      )}
+                    </Text>
+
+                    <View
+                      style={
+                        styles.itemNameGroup
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.itemQuantity
+                        }
+                      >
+                        x {item.quantity}
+                      </Text>
+
+                      <Text
+                        style={
+                          styles.itemName
+                        }
+                      >
+                        {item.name}
+                      </Text>
+                    </View>
+                  </View>
+                ),
+              )}
+            </View>
+
+            {/* Summary */}
+            <View
+              style={
+                styles.summaryContainer
+              }
             >
               <View
                 style={
-                  styles.whatsAppButtonIconContainer
+                  styles.summaryRow
                 }
               >
-                {isOpeningWhatsApp ? (
-                  <ActivityIndicator
-                    color="#25a952"
-                    size="small"
-                  />
-                ) : (
-                  <Text
-                    style={
-                      styles.whatsAppButtonIcon
-                    }
-                  >
-                    💬
-                  </Text>
-                )}
+                <Text
+                  style={
+                    styles.summaryValue
+                  }
+                >
+                  {formatMoney(
+                    order.subtotal,
+                    order.currencySymbol,
+                  )}
+                </Text>
+
+                <Text
+                  style={
+                    styles.summaryLabel
+                  }
+                >
+                  المجموع
+                </Text>
               </View>
 
-              <Text
+              <View
                 style={
-                  styles.whatsAppButtonText
+                  styles.summaryRow
                 }
               >
-                إعادة فتح الطلب على واتساب
-              </Text>
-            </Pressable>
-          )}
+                <Text
+                  style={
+                    styles.summaryValue
+                  }
+                >
+                  {formatMoney(
+                    order.deliveryFee,
+                    order.currencySymbol,
+                  )}
+                </Text>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.primaryButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={goToOrders}
-        >
-          <Text style={styles.primaryButtonText}>
-            العودة إلى طلباتي
-          </Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+                <Text
+                  style={
+                    styles.summaryLabel
+                  }
+                >
+                  رسوم التوصيل
+                </Text>
+              </View>
+
+              <View
+                style={
+                  styles.summaryRow
+                }
+              >
+                <Text
+                  style={
+                    styles.summaryValue
+                  }
+                >
+                  {formatMoney(
+                    serviceFee,
+                    order.currencySymbol,
+                  )}
+                </Text>
+
+                <Text
+                  style={
+                    styles.summaryLabel
+                  }
+                >
+                  رسوم الخدمة
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.summaryRow,
+                  styles.totalSummaryRow,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.totalValue
+                  }
+                >
+                  {formatMoney(
+                    order.total,
+                    order.currencySymbol,
+                  )}
+                </Text>
+
+                <Text
+                  style={
+                    styles.totalLabel
+                  }
+                >
+                  قيمة الطلب
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.summaryRow,
+                  styles.paymentRow,
+                ]}
+              >
+                <Text
+                  style={
+                    styles.paymentValue
+                  }
+                >
+                  {order.paymentMethodTitle ||
+                    'غير محدد'}
+                </Text>
+
+                <Text
+                  style={
+                    styles.paymentLabel
+                  }
+                >
+                  طريقة الدفع
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: '#f7f7fa',
-    flex: 1,
-  },
-
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 40,
-    paddingHorizontal: 18,
-    paddingTop: 42,
-  },
-
-  container: {
-    alignSelf: 'center',
-    maxWidth: 520,
-    width: '100%',
-  },
-
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 14,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-
-  backIcon: {
-    color: '#5d47d2',
-    fontSize: 33,
-    lineHeight: 35,
-  },
-
-  titleContainer: {
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: 12,
-  },
-
-  pageTitle: {
-    color: '#202025',
-    fontSize: 22,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-
-  pageSubtitle: {
-    color: '#898992',
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-
-  topBarPlaceholder: {
-    height: 44,
-    width: 44,
-  },
-
-  statusCard: {
-    alignItems: 'center',
-    borderRadius: 22,
-    flexDirection: 'row',
-    marginTop: 25,
-    padding: 17,
-  },
-
-  statusIconContainer: {
-    alignItems: 'center',
-    borderRadius: 17,
-    height: 58,
-    justifyContent: 'center',
-    width: 58,
-  },
-
-  statusIcon: {
-    color: '#ffffff',
-    fontSize: 26,
-    fontWeight: '900',
-  },
-
-  statusContent: {
-    flex: 1,
-    marginLeft: 14,
-  },
-
-  statusTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-
-  statusDot: {
-    borderRadius: 5,
-    height: 9,
-    marginRight: 7,
-    width: 9,
-  },
-
-  statusTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-
-  statusDescription: {
-    fontSize: 10,
-    lineHeight: 17,
-    marginTop: 5,
-    opacity: 0.84,
-    textAlign: 'right',
-  },
-
-  orderIdentityCard: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf1',
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 16,
-    padding: 18,
-  },
-
-  orderIdentityLabel: {
-    color: '#898992',
-    fontSize: 10,
-  },
-
-  orderIdentityValue: {
-    color: '#5d47d2',
-    fontSize: 20,
-    fontWeight: '900',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-
-  orderDate: {
-    color: '#898992',
-    fontSize: 10,
-    marginTop: 7,
-    textAlign: 'center',
-  },
-
-  storeCard: {
-    alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 22,
-    flexDirection: 'row',
-    marginTop: 16,
-    padding: 17,
-  },
-
-  storeIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 17,
-    height: 60,
-    justifyContent: 'center',
-    width: 60,
-  },
-
-  storeIcon: {
-    fontSize: 29,
-  },
-
-  storeContent: {
-    flex: 1,
-    marginLeft: 14,
-  },
-
-  storeLabel: {
-    color: '#dcd7ff',
-    fontSize: 10,
-    textAlign: 'right',
-  },
-
-  storeName: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '900',
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  storeMeta: {
-    color: '#e9e6ff',
-    fontSize: 10,
-    marginTop: 6,
-    textAlign: 'right',
-  },
-
-  section: {
-    marginTop: 27,
-  },
-
-  sectionTitle: {
-    color: '#202025',
-    fontSize: 19,
-    fontWeight: '900',
-    marginBottom: 13,
-    textAlign: 'right',
-  },
-
-  itemsCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf1',
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 16,
-  },
-
-  itemRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    paddingVertical: 16,
-  },
-
-  itemRowBorder: {
-    borderBottomColor: '#eeeeF2',
-    borderBottomWidth: 1,
-  },
-
-  itemIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#f1efff',
-    borderRadius: 14,
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
-  },
-
-  itemIcon: {
-    fontSize: 24,
-  },
-
-  itemContent: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-
-  itemName: {
-    color: '#25252b',
-    fontSize: 13,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-
-  itemDescription: {
-    color: '#898992',
-    fontSize: 9,
-    lineHeight: 15,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  itemQuantity: {
-    color: '#6d56df',
-    fontSize: 9,
-    fontWeight: '800',
-    marginTop: 5,
-    textAlign: 'right',
-  },
-
-  itemPriceContent: {
-    alignItems: 'flex-start',
-  },
-
-  itemTotal: {
-    color: '#303036',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-
-  itemUnitPrice: {
-    color: '#9898a1',
-    fontSize: 8,
-    marginTop: 4,
-  },
-
-  summaryCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf1',
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 18,
-  },
-
-  summaryRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-
-  summaryLabel: {
-    color: '#777781',
-    fontSize: 12,
-  },
-
-  summaryValue: {
-    color: '#303036',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-
-  summaryDivider: {
-    backgroundColor: '#eeeeF2',
-    height: 1,
-    marginBottom: 15,
-  },
-
-  totalRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  totalLabel: {
-    color: '#202025',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-
-  totalValue: {
-    color: '#5d47d2',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-
-  detailsCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf1',
-    borderRadius: 22,
-    borderWidth: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 17,
-  },
-
-  detailRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 15,
-  },
-
-  detailRowBorder: {
-    borderBottomColor: '#eeeeF2',
-    borderBottomWidth: 1,
-  },
-
-  detailLabel: {
-    color: '#898992',
-    fontSize: 10,
-    marginLeft: 18,
-    textAlign: 'right',
-  },
-
-  detailValue: {
-    color: '#303036',
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 18,
-    textAlign: 'left',
-  },
-
-  paymentCard: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ececf1',
-    borderRadius: 22,
-    borderWidth: 1,
-    flexDirection: 'row',
-    padding: 17,
-  },
-
-  paymentIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#f1efff',
-    borderRadius: 16,
-    height: 56,
-    justifyContent: 'center',
-    width: 56,
-  },
-
-  paymentIcon: {
-    fontSize: 27,
-  },
-
-  paymentContent: {
-    flex: 1,
-    marginLeft: 14,
-  },
-
-  paymentLabel: {
-    color: '#898992',
-    fontSize: 9,
-    textAlign: 'right',
-  },
-
-  paymentValue: {
-    color: '#25252b',
-    fontSize: 14,
-    fontWeight: '900',
-    marginTop: 4,
-    textAlign: 'right',
-  },
-
-  paymentDescription: {
-    color: '#898992',
-    fontSize: 9,
-    lineHeight: 15,
-    marginTop: 5,
-    textAlign: 'right',
-  },
-
-  whatsAppButton: {
-    alignItems: 'center',
-    backgroundColor: '#25d366',
-    borderRadius: 17,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 28,
-    minHeight: 58,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-
-  whatsAppButtonDisabled: {
-    opacity: 0.65,
-  },
-
-  whatsAppButtonPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
-  },
-
-  whatsAppButtonIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 11,
-    height: 36,
-    justifyContent: 'center',
-    marginRight: 10,
-    width: 36,
-  },
-
-  whatsAppButtonIcon: {
-    fontSize: 18,
-  },
-
-  whatsAppButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#6d56df',
-    borderRadius: 17,
-    marginTop: 11,
-    paddingHorizontal: 18,
-    paddingVertical: 15,
-  },
-
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#e8e8ed',
-    borderRadius: 17,
-    borderWidth: 1,
-    marginTop: 11,
-    minWidth: 220,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-
-  secondaryButtonText: {
-    color: '#5d47d2',
-    fontSize: 13,
-    fontWeight: '900',
-  },
-
-  buttonPressed: {
-    opacity: 0.75,
-  },
-
-  emptyScreen: {
-    alignItems: 'center',
-    backgroundColor: '#f7f7fa',
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-
-  emptyIconContainer: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 42,
-    height: 84,
-    justifyContent: 'center',
-    width: 84,
-  },
-
-  emptyIcon: {
-    fontSize: 39,
-  },
-
-  emptyTitle: {
-    color: '#222228',
-    fontSize: 24,
-    fontWeight: '900',
-    marginTop: 20,
-    textAlign: 'center',
-  },
-
-  emptyDescription: {
-    color: '#777781',
-    fontSize: 13,
-    lineHeight: 21,
-    marginTop: 8,
-    maxWidth: 350,
-    textAlign: 'center',
-  },
-
-  refreshButton: {
-    alignItems: 'center',
-    backgroundColor: '#eeeafd',
-    borderRadius: 14,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-
-  refreshIcon: {
-    color: '#5d47d2',
-    fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 27,
-  },
-
-  warningCard: {
-    alignItems: 'center',
-    backgroundColor: '#fff3d6',
-    borderRadius: 15,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-
-  warningText: {
-    color: '#7a5a13',
-    flex: 1,
-    fontSize: 10,
-    fontWeight: '600',
-    lineHeight: 17,
-    textAlign: 'right',
-  },
-
-  warningIcon: {
-    fontSize: 18,
-    marginLeft: 9,
-  },
-});
+const styles =
+  StyleSheet.create({
+    screen: {
+      backgroundColor: '#ffffff',
+      flex: 1,
+    },
+
+    scrollView: {
+      backgroundColor: '#ffffff',
+      flex: 1,
+    },
+
+    pageContent: {
+      flexGrow: 1,
+      paddingHorizontal: 20,
+    },
+
+    container: {
+      alignSelf: 'center',
+      maxWidth: 580,
+      width: '100%',
+    },
+
+    /*
+     * Header
+     */
+    header: {
+      alignItems: 'center',
+      direction: 'ltr',
+      flexDirection: 'row',
+      minHeight: 50,
+      width: '100%',
+    },
+
+    headerPlaceholder: {
+      height: 44,
+      width: 44,
+    },
+
+    pageTitle: {
+      color: '#171717',
+      flex: 1,
+      fontSize: 18,
+      fontWeight: '700',
+      lineHeight: 24,
+      textAlign: 'center',
+      writingDirection: 'rtl',
+    },
+
+    backButton: {
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+      borderColor: '#e2e2e2',
+      borderRadius: 22,
+      borderWidth: 1,
+      height: 44,
+      justifyContent: 'center',
+      width: 44,
+    },
+
+    /*
+     * Warning
+     */
+    warningContainer: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      backgroundColor: '#fff8e9',
+      borderRadius: 9,
+      flexDirection: 'row-reverse',
+      gap: 6,
+      marginTop: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+
+    warningText: {
+      color: '#8a5b18',
+      flex: 1,
+      fontSize: 9.5,
+      lineHeight: 15,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    /*
+     * Store
+     */
+    storeSection: {
+      alignItems: 'flex-start',
+      direction: 'ltr',
+      flexDirection: 'row-reverse',
+      marginTop: 22,
+      width: '100%',
+    },
+
+    storeImageWrapper: {
+      borderRadius: 11,
+      height: 58,
+      overflow: 'hidden',
+      width: 58,
+    },
+
+    storeImage: {
+      backgroundColor: '#f5f5f5',
+      height: '100%',
+      width: '100%',
+    },
+
+    storeImageFallback: {
+      alignItems: 'center',
+      backgroundColor: '#f3f3f3',
+      height: '100%',
+      justifyContent: 'center',
+      width: '100%',
+    },
+
+    storeFallbackIcon: {
+      fontSize: 23,
+    },
+
+    storeInfo: {
+      flex: 1,
+      marginRight: 13,
+      paddingTop: 0,
+    },
+
+    storeName: {
+      color: '#191919',
+      fontSize: 17,
+      fontWeight: '700',
+      lineHeight: 22,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    orderDate: {
+      color: '#454545',
+      fontSize: 12,
+      fontWeight: '400',
+      lineHeight: 18,
+      marginTop: 1,
+      textAlign: 'right',
+      writingDirection: 'ltr',
+    },
+
+    orderNumber: {
+      color: '#454545',
+      fontSize: 12,
+      fontWeight: '400',
+      lineHeight: 18,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    divider: {
+      backgroundColor: '#e9e9e9',
+      height:
+        StyleSheet.hairlineWidth,
+      marginVertical: 19,
+      width: '100%',
+    },
+
+    /*
+     * Delivery
+     */
+    deliverySection: {
+      width: '100%',
+    },
+
+    deliveryTitleRow: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      direction: 'ltr',
+      flexDirection: 'row-reverse',
+    },
+
+    sectionTitle: {
+      color: '#171717',
+      flex: 1,
+      fontSize: 19,
+      fontWeight: '700',
+      lineHeight: 26,
+      marginRight: 9,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    deliveryContent: {
+      alignItems: 'flex-end',
+      marginTop: 3,
+      paddingRight: 31,
+      width: '100%',
+    },
+
+    customerName: {
+      color: '#272727',
+      fontSize: 14,
+      fontWeight: '500',
+      lineHeight: 21,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    addressLine: {
+      color: '#343434',
+      fontSize: 13,
+      fontWeight: '400',
+      lineHeight: 20,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    phoneLine: {
+      color: '#343434',
+      fontSize: 13,
+      fontWeight: '400',
+      lineHeight: 20,
+      marginTop: 1,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    /*
+     * Order details
+     */
+    orderDetailsSection: {
+      width: '100%',
+    },
+
+    orderDetailsTitle: {
+      color: '#171717',
+      fontSize: 20,
+      fontWeight: '700',
+      lineHeight: 27,
+      marginBottom: 18,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    itemsContainer: {
+      width: '100%',
+    },
+
+    itemRow: {
+      alignItems: 'flex-start',
+      direction: 'ltr',
+      flexDirection: 'row',
+      justifyContent:
+        'space-between',
+      minHeight: 41,
+      width: '100%',
+    },
+
+    itemPrice: {
+      color: '#303030',
+      fontSize: 12.5,
+      fontWeight: '400',
+      lineHeight: 19,
+      minWidth: 78,
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
+
+    itemNameGroup: {
+      alignItems: 'flex-start',
+      direction: 'ltr',
+      flex: 1,
+      flexDirection: 'row-reverse',
+      justifyContent: 'flex-start',
+      marginLeft: 14,
+    },
+
+    itemQuantity: {
+      color: '#303030',
+      fontSize: 12.5,
+      fontWeight: '400',
+      lineHeight: 19,
+      marginLeft: 6,
+      writingDirection: 'ltr',
+    },
+
+    itemName: {
+      color: '#303030',
+      flexShrink: 1,
+      fontSize: 12.5,
+      fontWeight: '400',
+      lineHeight: 19,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    /*
+     * Summary
+     */
+    summaryContainer: {
+      marginTop: 2,
+      width: '100%',
+    },
+
+    summaryRow: {
+      alignItems: 'center',
+      direction: 'ltr',
+      flexDirection: 'row',
+      justifyContent:
+        'space-between',
+      minHeight: 39,
+      width: '100%',
+    },
+
+    summaryLabel: {
+      color: '#333333',
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '400',
+      lineHeight: 20,
+      marginLeft: 16,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    summaryValue: {
+      color: '#333333',
+      fontSize: 12.5,
+      fontWeight: '400',
+      lineHeight: 19,
+      minWidth: 85,
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
+
+    totalSummaryRow: {
+      marginTop: 1,
+    },
+
+    totalLabel: {
+      color: '#1e1e1e',
+      flex: 1,
+      fontSize: 13.5,
+      fontWeight: '500',
+      lineHeight: 21,
+      marginLeft: 16,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    totalValue: {
+      color: '#1e1e1e',
+      fontSize: 13,
+      fontWeight: '500',
+      lineHeight: 20,
+      minWidth: 85,
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
+
+    paymentRow: {
+      alignItems: 'flex-start',
+      marginTop: 1,
+    },
+
+    paymentLabel: {
+      color: '#222222',
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '400',
+      lineHeight: 20,
+      marginLeft: 16,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    paymentValue: {
+      color: '#333333',
+      fontSize: 12.5,
+      fontWeight: '400',
+      lineHeight: 20,
+      maxWidth: '48%',
+      minWidth: 85,
+      textAlign: 'left',
+      writingDirection: 'rtl',
+    },
+
+    /*
+     * Empty state
+     */
+    emptyScreen: {
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 24,
+    },
+
+    emptyIconContainer: {
+      alignItems: 'center',
+      backgroundColor: '#f4f4f4',
+      borderRadius: 34,
+      height: 68,
+      justifyContent: 'center',
+      width: 68,
+    },
+
+    emptyTitle: {
+      color: '#1d1d1d',
+      fontSize: 18,
+      fontWeight: '700',
+      marginTop: 16,
+      textAlign: 'center',
+      writingDirection: 'rtl',
+    },
+
+    emptyDescription: {
+      color: '#777777',
+      fontSize: 11,
+      lineHeight: 18,
+      marginTop: 7,
+      maxWidth: 330,
+      textAlign: 'center',
+      writingDirection: 'rtl',
+    },
+
+    retryButton: {
+      alignItems: 'center',
+      backgroundColor: '#171717',
+      borderRadius: 10,
+      justifyContent: 'center',
+      marginTop: 18,
+      minHeight: 43,
+      minWidth: 200,
+      paddingHorizontal: 18,
+    },
+
+    retryButtonText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    ordersButton: {
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+      borderColor: '#dddddd',
+      borderRadius: 10,
+      borderWidth: 1,
+      justifyContent: 'center',
+      marginTop: 9,
+      minHeight: 43,
+      minWidth: 200,
+      paddingHorizontal: 18,
+    },
+
+    ordersButtonText: {
+      color: '#222222',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    buttonPressed: {
+      opacity: 0.6,
+    },
+
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+  });

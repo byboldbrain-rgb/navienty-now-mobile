@@ -21,9 +21,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
-  getBookstoreCategoryImage,
-} from '../../config/bookstore-category-images';
-import {
   type BookstorePromotionBanner,
   listBookstorePromotionBanners,
 } from '../../services/bookstore-banner-service';
@@ -34,14 +31,62 @@ import {
   getCatalogSectionProducts,
   getStoreCatalog,
   listStores,
+  type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
+import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
 const CATEGORY_ROWS = 3;
+const CATEGORY_COLUMNS_PER_VIEW = 3;
+const CATEGORY_HORIZONTAL_PADDING = 16;
+const CATEGORY_COLUMN_GAP = 7;
+const CATEGORY_MIN_COLUMN_WIDTH = 85;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
 const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
+
+/**
+ * Local bookstore category artwork.
+ *
+ * Put your PNG images inside:
+ * assets/images/bookstore-categories/
+ *
+ * Keep each filename exactly the same as its category slug below.
+ * Metro requires static require(...) paths, so do not convert these
+ * paths to a dynamic template string.
+ */
+const BOOKSTORE_CATEGORY_IMAGES: Partial<
+  Record<string, ImageSourcePropType>
+> = {
+  'writing-tools': require(
+    '../../../assets/images/bookstore-categories/writing-tools.webp',
+  ),
+  notebooks: require(
+    '../../../assets/images/bookstore-categories/notebooks.webp',
+  ),
+  'printing-paper': require(
+    '../../../assets/images/bookstore-categories/printing-paper.webp',
+  ),
+  'files-organization': require(
+    '../../../assets/images/bookstore-categories/files-organization.webp',
+  ),
+  'study-supplies': require(
+    '../../../assets/images/bookstore-categories/study-supplies.webp',
+  ),
+  'geometry-tools': require(
+    '../../../assets/images/bookstore-categories/geometry-tools.webp',
+  ),
+  'art-supplies': require(
+    '../../../assets/images/bookstore-categories/art-supplies.webp',
+  ),
+  calculators: require(
+    '../../../assets/images/bookstore-categories/calculators.webp',
+  ),
+  'pencil-cases-bags': require(
+    '../../../assets/images/bookstore-categories/pencil-cases-bags.webp',
+  ),
+};
 
 type CategoryDisplayItem = {
   key: string;
@@ -108,7 +153,9 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${currencyCode} ${amount.toFixed(2)}`;
+  return `${getArabicCurrencyLabel(
+    currencyCode,
+  )} ${amount.toFixed(2)}`;
 }
 
 function getArabicCurrencyLabel(
@@ -310,42 +357,795 @@ function BackArrowIcon() {
   );
 }
 
+const ARABIC_WEEK_DAYS = [
+  'الأحد',
+  'الاثنين',
+  'الثلاثاء',
+  'الأربعاء',
+  'الخميس',
+  'الجمعة',
+  'السبت',
+];
+
+function parseBusinessTime(
+  value: string | null,
+): {
+  hours: number;
+  minutes: number;
+} | null {
+  if (!value) {
+    return null;
+  }
+
+  const parts = value.split(':');
+
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1] ?? 0);
+
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return {
+    hours,
+    minutes,
+  };
+}
+
+function getBusinessMinutes(
+  value: string | null,
+): number | null {
+  const parsed = parseBusinessTime(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  return parsed.hours * 60 + parsed.minutes;
+}
+
+function formatBusinessTime(
+  value: string | null,
+): string | null {
+  const parsed = parseBusinessTime(value);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const period =
+    parsed.hours >= 12 ? 'م' : 'ص';
+
+  let displayHours = parsed.hours % 12;
+
+  if (displayHours === 0) {
+    displayHours = 12;
+  }
+
+  return `${displayHours}:${String(
+    parsed.minutes,
+  ).padStart(2, '0')} ${period}`;
+}
+
+function isStoreOpenByBusinessHours(
+  businessHours: StoreBusinessHour[],
+  now = new Date(),
+): boolean {
+  /*
+   * لو مفيش مواعيد مسجلة، نحافظ
+   * على السلوك الحالي ولا نقفل
+   * المكتبة تلقائيًا.
+   */
+  if (businessHours.length === 0) {
+    return true;
+  }
+
+  const currentDay = now.getDay();
+  const previousDay = (currentDay + 6) % 7;
+
+  const currentMinutes =
+    now.getHours() * 60 +
+    now.getMinutes();
+
+  const todayHours = businessHours.find(
+    (item) =>
+      item.dayOfWeek === currentDay,
+  );
+
+  if (todayHours?.isOpen) {
+    const openMinutes =
+      getBusinessMinutes(
+        todayHours.openTime,
+      );
+
+    const closeMinutes =
+      getBusinessMinutes(
+        todayHours.closeTime,
+      );
+
+    if (
+      openMinutes !== null &&
+      closeMinutes !== null
+    ) {
+      if (closeMinutes > openMinutes) {
+        if (
+          currentMinutes >= openMinutes &&
+          currentMinutes < closeMinutes
+        ) {
+          return true;
+        }
+      } else if (
+        closeMinutes < openMinutes
+      ) {
+        /*
+         * مثال:
+         * 20:00 → 02:00
+         */
+        if (
+          currentMinutes >= openMinutes
+        ) {
+          return true;
+        }
+      } else {
+        /*
+         * نفس وقت الفتح والإغلاق
+         * نعتبره 24 ساعة.
+         */
+        return true;
+      }
+    }
+  }
+
+  /*
+   * دعم المواعيد الممتدة
+   * بعد منتصف الليل.
+   */
+  const previousHours =
+    businessHours.find(
+      (item) =>
+        item.dayOfWeek === previousDay,
+    );
+
+  if (previousHours?.isOpen) {
+    const previousOpenMinutes =
+      getBusinessMinutes(
+        previousHours.openTime,
+      );
+
+    const previousCloseMinutes =
+      getBusinessMinutes(
+        previousHours.closeTime,
+      );
+
+    if (
+      previousOpenMinutes !== null &&
+      previousCloseMinutes !== null &&
+      previousCloseMinutes <
+        previousOpenMinutes &&
+      currentMinutes <
+        previousCloseMinutes
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getNextOpeningLabel(
+  businessHours: StoreBusinessHour[],
+  now = new Date(),
+): string | null {
+  if (businessHours.length === 0) {
+    return null;
+  }
+
+  const currentDay = now.getDay();
+
+  for (
+    let dayOffset = 0;
+    dayOffset <= 7;
+    dayOffset += 1
+  ) {
+    const targetDay =
+      (currentDay + dayOffset) % 7;
+
+    const schedule =
+      businessHours.find(
+        (item) =>
+          item.dayOfWeek === targetDay &&
+          item.isOpen,
+      );
+
+    if (
+      !schedule ||
+      !schedule.openTime
+    ) {
+      continue;
+    }
+
+    const parsedOpenTime =
+      parseBusinessTime(
+        schedule.openTime,
+      );
+
+    const displayTime =
+      formatBusinessTime(
+        schedule.openTime,
+      );
+
+    if (
+      !parsedOpenTime ||
+      !displayTime
+    ) {
+      continue;
+    }
+
+    const openingDate = new Date(now);
+
+    openingDate.setDate(
+      now.getDate() + dayOffset,
+    );
+
+    openingDate.setHours(
+      parsedOpenTime.hours,
+      parsedOpenTime.minutes,
+      0,
+      0,
+    );
+
+    if (
+      openingDate.getTime() <=
+      now.getTime()
+    ) {
+      continue;
+    }
+
+    if (dayOffset === 0) {
+      return `تفتح اليوم الساعة ${displayTime}`;
+    }
+
+    if (dayOffset === 1) {
+      return `تفتح بكرة الساعة ${displayTime}`;
+    }
+
+    return `تفتح يوم ${ARABIC_WEEK_DAYS[targetDay]} الساعة ${displayTime}`;
+  }
+
+  return null;
+}
+
+function ClosedBookstoreBackArrowIcon() {
+  return (
+    <View
+      style={
+        styles.closedBookstoreBackArrowCanvas
+      }
+    >
+      <View
+        style={
+          styles.closedBookstoreBackArrowStem
+        }
+      />
+
+      <View
+        style={[
+          styles.closedBookstoreBackArrowDiagonal,
+          styles.closedBookstoreBackArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.closedBookstoreBackArrowDiagonal,
+          styles.closedBookstoreBackArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
+function ClosedBookstoreExperience({
+  nextOpeningLabel,
+}: {
+  nextOpeningLabel: string | null;
+}) {
+  const floatY = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const pulse = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  const pencilX = useRef(
+    new Animated.Value(0),
+  ).current;
+
+  useEffect(() => {
+    const floatAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            floatY,
+            {
+              toValue: -5,
+              duration: 1600,
+              useNativeDriver: true,
+            },
+          ),
+          Animated.timing(
+            floatY,
+            {
+              toValue: 0,
+              duration: 1600,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    const pulseAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            pulse,
+            {
+              toValue: 1,
+              duration: 1800,
+              useNativeDriver: true,
+            },
+          ),
+          Animated.timing(
+            pulse,
+            {
+              toValue: 0,
+              duration: 1800,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    const pencilAnimation =
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(
+            pencilX,
+            {
+              toValue: 9,
+              duration: 1750,
+              useNativeDriver: true,
+            },
+          ),
+          Animated.timing(
+            pencilX,
+            {
+              toValue: 0,
+              duration: 1750,
+              useNativeDriver: true,
+            },
+          ),
+        ]),
+      );
+
+    floatAnimation.start();
+    pulseAnimation.start();
+    pencilAnimation.start();
+
+    return () => {
+      floatAnimation.stop();
+      pulseAnimation.stop();
+      pencilAnimation.stop();
+    };
+  }, [
+    floatY,
+    pencilX,
+    pulse,
+  ]);
+
+  const glowOpacity =
+    pulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [
+        0.13,
+        0.28,
+      ],
+    });
+
+  const starOpacity =
+    pulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [
+        0.42,
+        0.94,
+      ],
+    });
+
+  return (
+    <View
+      style={
+        styles.closedBookstoreExperience
+      }
+    >
+      <Animated.View
+        style={[
+          styles.closedBookstoreGlow,
+          {
+            opacity:
+              glowOpacity,
+          },
+        ]}
+      />
+
+      <View
+        style={
+          styles.closedBookstoreMoon
+        }
+      >
+        <View
+          style={
+            styles.closedBookstoreMoonCutout
+          }
+        />
+      </View>
+
+      <Animated.View
+        style={[
+          styles.closedBookstoreStar,
+          styles.closedBookstoreStarOne,
+          {
+            opacity:
+              starOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedBookstoreStar,
+          styles.closedBookstoreStarTwo,
+          {
+            opacity:
+              starOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedBookstoreStar,
+          styles.closedBookstoreStarThree,
+          {
+            opacity:
+              starOpacity,
+          },
+        ]}
+      />
+
+      <Animated.View
+        style={[
+          styles.closedBookstoreStore,
+          {
+            transform: [
+              {
+                translateY:
+                  floatY,
+              },
+            ],
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.closedBookstoreRoof
+          }
+        />
+
+        <View
+          style={
+            styles.closedBookstoreAwning
+          }
+        >
+          {[
+            '#263B75',
+            '#F5E7B7',
+            '#263B75',
+            '#F5E7B7',
+            '#263B75',
+          ].map(
+            (
+              color,
+              index,
+            ) => (
+              <View
+                key={`closed-bookstore-awning-${index}`}
+                style={[
+                  styles.closedBookstoreAwningStripe,
+                  {
+                    backgroundColor:
+                      color,
+                  },
+                ]}
+              />
+            ),
+          )}
+        </View>
+
+        <View
+          style={
+            styles.closedBookstoreBuilding
+          }
+        >
+          <View
+            style={
+              styles.closedBookstoreWindow
+            }
+          >
+            <View
+              style={
+                styles.closedBookstoreShelfTop
+              }
+            >
+              <View
+                style={[
+                  styles.closedBookstoreBookTall,
+                  styles.closedBookstoreBookBlue,
+                ]}
+              />
+              <View
+                style={[
+                  styles.closedBookstoreBookShort,
+                  styles.closedBookstoreBookYellow,
+                ]}
+              />
+              <View
+                style={[
+                  styles.closedBookstoreBookTall,
+                  styles.closedBookstoreBookGreen,
+                ]}
+              />
+              <View
+                style={[
+                  styles.closedBookstoreBookMedium,
+                  styles.closedBookstoreBookCream,
+                ]}
+              />
+            </View>
+
+            <View
+              style={
+                styles.closedBookstoreShelfBottom
+              }
+            >
+              <View
+                style={[
+                  styles.closedBookstoreBookMedium,
+                  styles.closedBookstoreBookCream,
+                ]}
+              />
+              <View
+                style={[
+                  styles.closedBookstoreBookTall,
+                  styles.closedBookstoreBookYellow,
+                ]}
+              />
+              <View
+                style={[
+                  styles.closedBookstoreBookShort,
+                  styles.closedBookstoreBookBlue,
+                ]}
+              />
+              <View
+                style={[
+                  styles.closedBookstoreBookMedium,
+                  styles.closedBookstoreBookGreen,
+                ]}
+              />
+            </View>
+
+            <View
+              style={
+                styles.closedBookstoreShutter
+              }
+            >
+              {Array.from({
+                length: 8,
+              }).map(
+                (
+                  _,
+                  index,
+                ) => (
+                  <View
+                    key={`closed-bookstore-shutter-${index}`}
+                    style={
+                      styles.closedBookstoreShutterLine
+                    }
+                  />
+                ),
+              )}
+            </View>
+          </View>
+
+          <View
+            style={
+              styles.closedBookstoreDoorBase
+            }
+          >
+            <View
+              style={
+                styles.closedBookstoreLock
+              }
+            >
+              <View
+                style={
+                  styles.closedBookstoreLockDot
+                }
+              />
+            </View>
+          </View>
+        </View>
+
+        <View
+          style={
+            styles.closedBookstoreGroundShadow
+          }
+        />
+      </Animated.View>
+
+      <View
+        style={
+          styles.closedBookstoreOpenBook
+        }
+      >
+        <View
+          style={
+            styles.closedBookstoreBookLeftPage
+          }
+        >
+          <View
+            style={
+              styles.closedBookstorePageLineOne
+            }
+          />
+          <View
+            style={
+              styles.closedBookstorePageLineTwo
+            }
+          />
+        </View>
+
+        <View
+          style={
+            styles.closedBookstoreBookRightPage
+          }
+        >
+          <View
+            style={
+              styles.closedBookstorePageLineOne
+            }
+          />
+          <View
+            style={
+              styles.closedBookstorePageLineTwo
+            }
+          />
+        </View>
+
+        <View
+          style={
+            styles.closedBookstoreBookSpine
+          }
+        />
+      </View>
+
+      <Animated.View
+        style={[
+          styles.closedBookstorePencil,
+          {
+            transform: [
+              {
+                translateX:
+                  pencilX,
+              },
+              {
+                rotate:
+                  '-28deg',
+              },
+            ],
+          },
+        ]}
+      >
+        <View
+          style={
+            styles.closedBookstorePencilBody
+          }
+        />
+        <View
+          style={
+            styles.closedBookstorePencilBand
+          }
+        />
+        <View
+          style={
+            styles.closedBookstorePencilEraser
+          }
+        />
+        <View
+          style={
+            styles.closedBookstorePencilTip
+          }
+        />
+      </Animated.View>
+
+      <View
+        style={
+          styles.closedBookstoreCopy
+        }
+      >
+        <Text
+          style={
+            styles.closedBookstoreTitle
+          }
+        >
+          المكتبة مغلقة
+        </Text>
+
+        {nextOpeningLabel ? (
+          <View
+            style={
+              styles.closedBookstoreOpeningPill
+            }
+          >
+            <Text
+              style={
+                styles.closedBookstoreOpeningText
+              }
+            >
+              {nextOpeningLabel}
+            </Text>
+          </View>
+        ) : (
+          <Text
+            style={
+              styles.closedBookstoreOpeningFallback
+            }
+          >
+            هنرجع نستقبل طلباتك قريب
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
 function CategoryVisual({
   item,
 }: {
   item: CategoryDisplayItem;
 }) {
-  if (item.imageSource) {
-    return (
-      <View style={styles.categoryImageBox}>
+  return (
+    <View style={styles.categoryImageBox}>
+      {item.imageSource ? (
         <Image
           source={item.imageSource}
           style={styles.categoryImage}
-          resizeMode="contain"
+          resizeMode="cover"
         />
-      </View>
-    );
-  }
-
-  if (item.section.imageUrl) {
-    return (
-      <View style={styles.categoryImageBox}>
-        <Image
-          source={{ uri: item.section.imageUrl }}
-          style={styles.categoryImage}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.categoryImageBox}>
-      <Text style={styles.categoryFallbackIcon}>
-        {getBookstoreCategoryFallbackIcon(
-          item.section,
-        )}
-      </Text>
+      ) : (
+        <Text style={styles.categoryFallbackIcon}>
+          {getBookstoreCategoryFallbackIcon(
+            item.section,
+          )}
+        </Text>
+      )}
     </View>
   );
 }
@@ -383,7 +1183,7 @@ function FeaturedProductCard({
           <Image
             source={{ uri: imageUrl }}
             style={styles.featuredProductImage}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         ) : (
           <Text style={styles.featuredProductFallback}>
@@ -397,7 +1197,7 @@ function FeaturedProductCard({
               style={styles.featuredDiscountText}
               numberOfLines={1}
             >
-              Save {discount}%
+              وفر {discount}%
             </Text>
           </View>
         )}
@@ -648,6 +1448,13 @@ export default function BookstoreScreen() {
           );
 
     return [...rootSections]
+      .filter((section) =>
+        Boolean(
+          BOOKSTORE_CATEGORY_IMAGES[
+            section.slug
+          ],
+        ),
+      )
       .sort((first, second) => {
         if (
           first.sortOrder !== second.sortOrder
@@ -664,9 +1471,9 @@ export default function BookstoreScreen() {
         key: section.id,
         label: section.name,
         imageSource:
-          getBookstoreCategoryImage(
-            section.slug,
-          ),
+          BOOKSTORE_CATEGORY_IMAGES[
+            section.slug
+          ] ?? null,
         section,
       }));
   }, [catalog]);
@@ -749,13 +1556,41 @@ export default function BookstoreScreen() {
     560,
   );
 
+  /*
+   * Spread the visible category columns across the full page width.
+   * With the current 9 categories we have 3 columns × 3 rows,
+   * so the three columns fill the viewport instead of collecting
+   * on one side and leaving a large empty area.
+   *
+   * If more categories are added later, every viewport still shows
+   * three evenly spaced columns and horizontal scrolling keeps working.
+   */
+  const categoryColumnsPerViewport = Math.min(
+    CATEGORY_COLUMNS_PER_VIEW,
+    Math.max(categoryColumns.length, 1),
+  );
+
+  const categoryColumnWidth = Math.max(
+    CATEGORY_MIN_COLUMN_WIDTH,
+    (
+      pageWidth -
+      CATEGORY_HORIZONTAL_PADDING * 2 -
+      CATEGORY_COLUMN_GAP *
+        (categoryColumnsPerViewport - 1)
+    ) / categoryColumnsPerViewport,
+  );
+
+  const hasCategoryHorizontalScroll =
+    categoryContentWidth >
+    categoryViewportWidth + 1;
+
   const featuredCardWidth = Math.min(
     116,
     Math.max(92, pageWidth * 0.3),
   );
 
   const promotionBannerWidth = Math.max(
-    pageWidth - 18,
+    pageWidth,
     1,
   );
 
@@ -827,7 +1662,15 @@ export default function BookstoreScreen() {
   const cartItems = currentCart?.items ?? [];
 
   const isStoreClosed =
-    currentStore.isManuallyClosed;
+    currentStore.isManuallyClosed ||
+    !isStoreOpenByBusinessHours(
+      catalog.businessHours,
+    );
+
+  const nextOpeningLabel =
+    getNextOpeningLabel(
+      catalog.businessHours,
+    );
 
   const currentStoreItemCount =
     cartItems.reduce(
@@ -954,6 +1797,49 @@ export default function BookstoreScreen() {
     });
   }
 
+  if (isStoreClosed) {
+    return (
+      <SafeAreaView
+        style={
+          styles.closedBookstoreStateScreen
+        }
+        edges={[
+          'top',
+          'bottom',
+        ]}
+      >
+        <StatusBar style="light" />
+
+        <View
+          style={
+            styles.closedBookstoreStateHeader
+          }
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="رجوع"
+            style={({ pressed }) => [
+              styles.closedBookstoreBackButton,
+              pressed &&
+                styles.closedBookstoreBackButtonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <ClosedBookstoreBackArrowIcon />
+          </Pressable>
+        </View>
+
+        <ClosedBookstoreExperience
+          nextOpeningLabel={
+            nextOpeningLabel
+          }
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView
       style={styles.screen}
@@ -1023,7 +1909,13 @@ export default function BookstoreScreen() {
                     (column, columnIndex) => (
                       <View
                         key={`bookstore-category-column-${columnIndex}`}
-                        style={styles.categoryColumn}
+                        style={[
+                          styles.categoryColumn,
+                          {
+                            width:
+                              categoryColumnWidth,
+                          },
+                        ]}
                       >
                         {column.map((item) => (
                           <Pressable
@@ -1055,21 +1947,29 @@ export default function BookstoreScreen() {
                   )}
                 </Animated.ScrollView>
 
-                <View style={styles.categoryPagination}>
-                  <Animated.View
-                    style={[
-                      styles.categoryPaginationActive,
-                      {
-                        transform: [
-                          {
-                            translateX:
-                              categoryIndicatorTranslateX,
-                          },
-                        ],
-                      },
-                    ]}
+                {hasCategoryHorizontalScroll ? (
+                  <View
+                    style={styles.categoryPagination}
+                  >
+                    <Animated.View
+                      style={[
+                        styles.categoryPaginationActive,
+                        {
+                          transform: [
+                            {
+                              translateX:
+                                categoryIndicatorTranslateX,
+                            },
+                          ],
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={styles.categoryPaginationSpacer}
                   />
-                </View>
+                )}
               </>
             ) : (
               <View style={styles.emptyCategories}>
@@ -1174,15 +2074,6 @@ export default function BookstoreScreen() {
             ),
           )}
         </ScrollView>
-
-        {isStoreClosed && (
-          <View style={styles.closedOverlay}>
-            <Text style={styles.closedOverlayText}>
-              {currentStore.manualClosedNote ??
-                'المكتبة مغلقة حاليًا.'}
-            </Text>
-          </View>
-        )}
 
         {shouldShowCartBar && (
           <View
@@ -1316,12 +2207,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   categoriesRail: {
-    gap: 7,
-    paddingHorizontal: 16,
+    gap: CATEGORY_COLUMN_GAP,
+    paddingHorizontal:
+      CATEGORY_HORIZONTAL_PADDING,
   },
   categoryColumn: {
+    alignItems: 'center',
     gap: 15,
-    width: 85,
   },
   categoryItem: {
     alignItems: 'center',
@@ -1341,8 +2233,8 @@ const styles = StyleSheet.create({
     width: 80,
   },
   categoryImage: {
-    height: '92%',
-    width: '92%',
+    height: '100%',
+    width: '100%',
   },
   categoryFallbackIcon: {
     fontSize: 39,
@@ -1379,6 +2271,11 @@ const styles = StyleSheet.create({
     top: 0,
     width: CATEGORY_INDICATOR_THUMB_WIDTH,
   },
+  categoryPaginationSpacer: {
+    height: 5,
+    marginBottom: 22,
+    marginTop: 18,
+  },
   emptyCategories: {
     alignItems: 'center',
     paddingHorizontal: 28,
@@ -1404,8 +2301,9 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   promotionBannerFrame: {
-    marginHorizontal: 9,
+    marginHorizontal: 0,
     overflow: 'hidden',
+    width: '100%',
   },
   promotionBanner: {
     backgroundColor: '#F4F4F4',
@@ -1427,17 +2325,17 @@ const styles = StyleSheet.create({
   },
   featuredProductImageBox: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F4F4F4',
     borderColor: '#E8E8E8',
     borderRadius: 12,
     borderWidth: 1,
     justifyContent: 'center',
-    overflow: 'visible',
+    overflow: 'hidden',
     position: 'relative',
   },
   featuredProductImage: {
-    height: '68%',
-    width: '68%',
+    height: '100%',
+    width: '100%',
   },
   featuredProductFallback: {
     fontSize: 34,
@@ -1488,7 +2386,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   featuredAddButtonText: {
-    color: '#F04A00',
+    color: NAVIENTY_NOW_COLORS.primary,
     fontSize: 25,
     fontWeight: '300',
     lineHeight: 27,
@@ -1519,7 +2417,7 @@ const styles = StyleSheet.create({
     width: 25,
   },
   featuredQuantityButtonText: {
-    color: '#F04A00',
+    color: NAVIENTY_NOW_COLORS.primary,
     fontSize: 18,
     fontWeight: '500',
     lineHeight: 20,
@@ -1619,23 +2517,774 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-  closedOverlay: {
-    backgroundColor: '#252525',
-    left: 16,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    position: 'absolute',
-    right: 16,
-    top: 68,
-    zIndex: 50,
+
+  /* ========================================================
+   * CLOSED BOOKSTORE — FULL SCREEN EXPERIENCE
+   * ========================================================
+   */
+
+  closedBookstoreStateScreen: {
+    backgroundColor:
+      '#101827',
+    flex: 1,
   },
-  closedOverlayText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-    textAlign: 'center',
-    writingDirection: 'rtl',
+
+  closedBookstoreStateHeader: {
+    alignItems:
+      'flex-start',
+    height: 62,
+    justifyContent:
+      'center',
+    paddingHorizontal:
+      16,
+    zIndex: 20,
   },
+
+  closedBookstoreBackButton: {
+    alignItems:
+      'center',
+    backgroundColor:
+      'rgba(255, 255, 255, 0.09)',
+    borderColor:
+      'rgba(255, 255, 255, 0.16)',
+    borderRadius:
+      24,
+    borderWidth:
+      1,
+    height:
+      46,
+    justifyContent:
+      'center',
+    width:
+      46,
+  },
+
+  closedBookstoreBackButtonPressed: {
+    backgroundColor:
+      'rgba(255, 255, 255, 0.15)',
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
+  closedBookstoreBackArrowCanvas: {
+    height:
+      23,
+    position:
+      'relative',
+    width:
+      24,
+  },
+
+  closedBookstoreBackArrowStem: {
+    backgroundColor:
+      '#FFFFFF',
+    borderRadius:
+      2,
+    height:
+      2.2,
+    left:
+      3,
+    position:
+      'absolute',
+    top:
+      10.3,
+    width:
+      19,
+  },
+
+  closedBookstoreBackArrowDiagonal: {
+    backgroundColor:
+      '#FFFFFF',
+    borderRadius:
+      2,
+    height:
+      2.2,
+    left:
+      2,
+    position:
+      'absolute',
+    width:
+      10,
+  },
+
+  closedBookstoreBackArrowTop: {
+    top:
+      7,
+    transform: [
+      {
+        rotate:
+          '-42deg',
+      },
+    ],
+  },
+
+  closedBookstoreBackArrowBottom: {
+    top:
+      14,
+    transform: [
+      {
+        rotate:
+          '42deg',
+      },
+    ],
+  },
+
+  closedBookstoreExperience: {
+    alignItems:
+      'center',
+    flex:
+      1,
+    justifyContent:
+      'center',
+    overflow:
+      'hidden',
+    paddingBottom:
+      44,
+    position:
+      'relative',
+    width:
+      '100%',
+  },
+
+  closedBookstoreGlow: {
+    backgroundColor:
+      '#F4C95D',
+    borderRadius:
+      999,
+    height:
+      430,
+    position:
+      'absolute',
+    top:
+      24,
+    width:
+      430,
+  },
+
+  closedBookstoreMoon: {
+    backgroundColor:
+      '#FFF5C9',
+    borderRadius:
+      999,
+    height:
+      52,
+    position:
+      'absolute',
+    right:
+      34,
+    top:
+      36,
+    width:
+      52,
+  },
+
+  closedBookstoreMoonCutout: {
+    backgroundColor:
+      '#101827',
+    borderRadius:
+      999,
+    height:
+      48,
+    left:
+      18,
+    position:
+      'absolute',
+    top:
+      -3,
+    width:
+      48,
+  },
+
+  closedBookstoreStar: {
+    backgroundColor:
+      '#FFF5C9',
+    borderRadius:
+      999,
+    height:
+      4,
+    position:
+      'absolute',
+    width:
+      4,
+  },
+
+  closedBookstoreStarOne: {
+    right:
+      104,
+    top:
+      67,
+  },
+
+  closedBookstoreStarTwo: {
+    height:
+      3,
+    right:
+      76,
+    top:
+      113,
+    width:
+      3,
+  },
+
+  closedBookstoreStarThree: {
+    height:
+      3,
+    left:
+      47,
+    top:
+      119,
+    width:
+      3,
+  },
+
+  closedBookstoreStore: {
+    height:
+      260,
+    marginTop:
+      -60,
+    position:
+      'relative',
+    width:
+      270,
+  },
+
+  closedBookstoreRoof: {
+    backgroundColor:
+      '#F7F1E2',
+    borderRadius:
+      18,
+    height:
+      34,
+    left:
+      22,
+    position:
+      'absolute',
+    right:
+      22,
+    top:
+      7,
+  },
+
+  closedBookstoreAwning: {
+    borderBottomLeftRadius:
+      18,
+    borderBottomRightRadius:
+      18,
+    flexDirection:
+      'row',
+    height:
+      54,
+    left:
+      8,
+    overflow:
+      'hidden',
+    position:
+      'absolute',
+    right:
+      8,
+    top:
+      31,
+  },
+
+  closedBookstoreAwningStripe: {
+    flex:
+      1,
+  },
+
+  closedBookstoreBuilding: {
+    backgroundColor:
+      '#F7F1E2',
+    borderBottomLeftRadius:
+      28,
+    borderBottomRightRadius:
+      28,
+    bottom:
+      24,
+    left:
+      19,
+    overflow:
+      'hidden',
+    position:
+      'absolute',
+    right:
+      19,
+    top:
+      75,
+  },
+
+  closedBookstoreWindow: {
+    backgroundColor:
+      '#17213D',
+    borderRadius:
+      16,
+    height:
+      102,
+    left:
+      23,
+    overflow:
+      'hidden',
+    position:
+      'absolute',
+    right:
+      23,
+    top:
+      22,
+  },
+
+  closedBookstoreShelfTop: {
+    alignItems:
+      'flex-end',
+    bottom:
+      54,
+    flexDirection:
+      'row',
+    gap:
+      7,
+    left:
+      14,
+    position:
+      'absolute',
+    right:
+      14,
+  },
+
+  closedBookstoreShelfBottom: {
+    alignItems:
+      'flex-end',
+    bottom:
+      15,
+    flexDirection:
+      'row',
+    gap:
+      7,
+    left:
+      14,
+    position:
+      'absolute',
+    right:
+      14,
+  },
+
+  closedBookstoreBookTall: {
+    borderRadius:
+      3,
+    height:
+      29,
+    width:
+      16,
+  },
+
+  closedBookstoreBookMedium: {
+    borderRadius:
+      3,
+    height:
+      23,
+    width:
+      19,
+  },
+
+  closedBookstoreBookShort: {
+    borderRadius:
+      3,
+    height:
+      18,
+    width:
+      20,
+  },
+
+  closedBookstoreBookBlue: {
+    backgroundColor:
+      '#5770B9',
+  },
+
+  closedBookstoreBookYellow: {
+    backgroundColor:
+      '#F4C95D',
+  },
+
+  closedBookstoreBookGreen: {
+    backgroundColor:
+      '#69C78F',
+  },
+
+  closedBookstoreBookCream: {
+    backgroundColor:
+      '#F2E7C9',
+  },
+
+  closedBookstoreShutter: {
+    backgroundColor:
+      '#AEB5B2',
+    bottom:
+      0,
+    left:
+      0,
+    position:
+      'absolute',
+    right:
+      0,
+    top:
+      17,
+    zIndex:
+      5,
+  },
+
+  closedBookstoreShutterLine: {
+    backgroundColor:
+      'rgba(255, 255, 255, 0.42)',
+    height:
+      2,
+    marginTop:
+      10,
+  },
+
+  closedBookstoreDoorBase: {
+    alignItems:
+      'center',
+    bottom:
+      7,
+    height:
+      28,
+    justifyContent:
+      'center',
+    left:
+      0,
+    position:
+      'absolute',
+    right:
+      0,
+  },
+
+  closedBookstoreLock: {
+    alignItems:
+      'center',
+    backgroundColor:
+      '#263B75',
+    borderRadius:
+      12,
+    height:
+      25,
+    justifyContent:
+      'center',
+    width:
+      25,
+  },
+
+  closedBookstoreLockDot: {
+    backgroundColor:
+      '#FFFFFF',
+    borderRadius:
+      999,
+    height:
+      5,
+    width:
+      5,
+  },
+
+  closedBookstoreGroundShadow: {
+    backgroundColor:
+      'rgba(0, 0, 0, 0.22)',
+    borderRadius:
+      999,
+    bottom:
+      3,
+    height:
+      18,
+    left:
+      34,
+    position:
+      'absolute',
+    right:
+      34,
+    transform: [
+      {
+        scaleX:
+          0.88,
+      },
+    ],
+  },
+
+  closedBookstoreOpenBook: {
+    bottom:
+      '29%',
+    height:
+      68,
+    left:
+      23,
+    position:
+      'absolute',
+    transform: [
+      {
+        rotate:
+          '-8deg',
+      },
+    ],
+    width:
+      104,
+  },
+
+  closedBookstoreBookLeftPage: {
+    backgroundColor:
+      '#FFF8E6',
+    borderBottomLeftRadius:
+      12,
+    borderTopLeftRadius:
+      12,
+    height:
+      64,
+    left:
+      0,
+    position:
+      'absolute',
+    top:
+      2,
+    transform: [
+      {
+        rotate:
+          '4deg',
+      },
+    ],
+    width:
+      53,
+  },
+
+  closedBookstoreBookRightPage: {
+    backgroundColor:
+      '#FFF4D6',
+    borderBottomRightRadius:
+      12,
+    borderTopRightRadius:
+      12,
+    height:
+      64,
+    position:
+      'absolute',
+    right:
+      0,
+    top:
+      2,
+    transform: [
+      {
+        rotate:
+          '-4deg',
+      },
+    ],
+    width:
+      53,
+  },
+
+  closedBookstoreBookSpine: {
+    backgroundColor:
+      '#263B75',
+    borderRadius:
+      999,
+    height:
+      58,
+    left:
+      50,
+    position:
+      'absolute',
+    top:
+      5,
+    width:
+      4,
+  },
+
+  closedBookstorePageLineOne: {
+    backgroundColor:
+      'rgba(38, 59, 117, 0.22)',
+    borderRadius:
+      2,
+    height:
+      3,
+    left:
+      10,
+    position:
+      'absolute',
+    right:
+      10,
+    top:
+      23,
+  },
+
+  closedBookstorePageLineTwo: {
+    backgroundColor:
+      'rgba(38, 59, 117, 0.18)',
+    borderRadius:
+      2,
+    height:
+      3,
+    left:
+      12,
+    position:
+      'absolute',
+    right:
+      12,
+    top:
+      34,
+  },
+
+  closedBookstorePencil: {
+    bottom:
+      '31%',
+    height:
+      24,
+    position:
+      'absolute',
+    right:
+      25,
+    width:
+      92,
+  },
+
+  closedBookstorePencilBody: {
+    backgroundColor:
+      '#F4C95D',
+    height:
+      18,
+    left:
+      16,
+    position:
+      'absolute',
+    top:
+      3,
+    width:
+      57,
+  },
+
+  closedBookstorePencilBand: {
+    backgroundColor:
+      '#D49F42',
+    height:
+      18,
+    left:
+      11,
+    position:
+      'absolute',
+    top:
+      3,
+    width:
+      8,
+  },
+
+  closedBookstorePencilEraser: {
+    backgroundColor:
+      '#F1A6A6',
+    borderBottomLeftRadius:
+      8,
+    borderTopLeftRadius:
+      8,
+    height:
+      18,
+    left:
+      0,
+    position:
+      'absolute',
+    top:
+      3,
+    width:
+      13,
+  },
+
+  closedBookstorePencilTip: {
+    borderBottomWidth:
+      9,
+    borderColor:
+      'transparent',
+    borderLeftColor:
+      '#E8D1A5',
+    borderTopWidth:
+      9,
+    height:
+      0,
+    position:
+      'absolute',
+    right:
+      0,
+    top:
+      3,
+    width:
+      0,
+  },
+
+  closedBookstoreCopy: {
+    alignItems:
+      'center',
+    marginTop:
+      18,
+    paddingHorizontal:
+      28,
+    width:
+      '100%',
+  },
+
+  closedBookstoreTitle: {
+    color:
+      '#FFFFFF',
+    fontSize:
+      28,
+    fontWeight:
+      '900',
+    lineHeight:
+      38,
+    textAlign:
+      'center',
+    writingDirection:
+      'rtl',
+  },
+
+  closedBookstoreOpeningPill: {
+    alignItems:
+      'center',
+    backgroundColor:
+      'rgba(255, 255, 255, 0.10)',
+    borderColor:
+      'rgba(255, 255, 255, 0.15)',
+    borderRadius:
+      999,
+    borderWidth:
+      1,
+    marginTop:
+      18,
+    minHeight:
+      46,
+    paddingHorizontal:
+      18,
+    paddingVertical:
+      10,
+  },
+
+  closedBookstoreOpeningText: {
+    color:
+      '#FFFFFF',
+    fontSize:
+      14,
+    fontWeight:
+      '800',
+    textAlign:
+      'center',
+    writingDirection:
+      'rtl',
+  },
+
+  closedBookstoreOpeningFallback: {
+    color:
+      '#FFF0B5',
+    fontSize:
+      13,
+    fontWeight:
+      '700',
+    marginTop:
+      17,
+    textAlign:
+      'center',
+    writingDirection:
+      'rtl',
+  },
+
   stateScreen: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
