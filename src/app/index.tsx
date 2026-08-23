@@ -2595,10 +2595,7 @@ export default function HomeScreen() {
     });
   }
 
-  if (
-    isBootstrapLoading ||
-    authState.status === 'loading'
-  ) {
+  if (isBootstrapLoading) {
     return <HomeLoadingSkeleton />;
   }
 
@@ -4041,5 +4038,4 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 });
-
 

@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase } from '../lib/supabase';
 import {
   type PromoActionPayload,
   type PromoActionType,
@@ -599,7 +599,7 @@ function mapHomeBanner(
 async function listHomeBannerImages(
   bannerId: string,
 ): Promise<HomeBannerImage[]> {
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('home_banner_images')
     .select(
       [
@@ -653,7 +653,7 @@ async function listHomeBanners(
       ? ['all']
       : ['all', audience];
 
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('home_banners')
     .select(HOME_BANNER_SELECT)
     .eq('is_active', true)
@@ -706,7 +706,7 @@ async function getHomeBannerById(
       ? ['all']
       : ['all', audience];
 
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('home_banners')
     .select(HOME_BANNER_SELECT)
     .eq('id', normalizedBannerId)

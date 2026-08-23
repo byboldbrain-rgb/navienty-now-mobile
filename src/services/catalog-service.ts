@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase } from '../lib/supabase';
 
 export type StoreCategorySlug =
   | 'restaurants'
@@ -1723,10 +1723,10 @@ export async function listStores(
     Object.keys(
       rpcArguments,
     ).length === 0
-      ? await supabase.rpc(
+      ? await publicSupabase.rpc(
           'list_stores',
         )
-      : await supabase.rpc(
+      : await publicSupabase.rpc(
           'list_stores',
           rpcArguments,
         );
@@ -1787,10 +1787,10 @@ export async function listStores(
     Object.keys(
       fallbackArguments,
     ).length === 0
-      ? await supabase.rpc(
+      ? await publicSupabase.rpc(
           'list_stores',
         )
-      : await supabase.rpc(
+      : await publicSupabase.rpc(
           'list_stores',
           fallbackArguments,
         );
@@ -1854,7 +1854,7 @@ async function loadCatalogCategoryMeta(
    * now.catalog_categories
    */
   const nowClient =
-    (supabase as any).schema(
+    (publicSupabase as any).schema(
       'now',
     );
 
@@ -1960,7 +1960,7 @@ export async function getStoreCatalog(
     catalogResult,
     categoryMeta,
   ] = await Promise.all([
-    supabase.rpc(
+    publicSupabase.rpc(
       'get_store_catalog',
       rpcArguments,
     ),

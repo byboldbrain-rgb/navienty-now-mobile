@@ -1,7 +1,4 @@
-import {
-    createClient,
-    processLock,
-} from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import {
     AppState,
     Platform,
@@ -57,8 +54,27 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      lock: processLock,
     },
+  },
+);
+
+/**
+ * Public storefront data must not wait for persisted Auth state to hydrate.
+ *
+ * These reads use database functions/tables that are explicitly available to
+ * the anon role and remain protected by their grants and RLS policies. Passing
+ * a null access token keeps this client independent from the native Auth
+ * storage/refresh lifecycle while the main client continues to own sessions.
+ */
+export const publicSupabase = createClient(
+  supabaseUrl,
+  supabasePublishableKey,
+  {
+    db: {
+      schema: 'now',
+      timeout: 12_000,
+    },
+    accessToken: async () => null,
   },
 );
 

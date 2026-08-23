@@ -72,13 +72,20 @@ export function useAuthSession(): AuthSessionState {
 
   useEffect(() => {
     let isMounted = true;
-    let authEventRevision = 0;
+    let hasResolvedInitialState = false;
+    let initializationTimeout:
+      ReturnType<typeof setTimeout> | null = null;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        authEventRevision += 1;
+        hasResolvedInitialState = true;
+
+        if (initializationTimeout !== null) {
+          clearTimeout(initializationTimeout);
+          initializationTimeout = null;
+        }
 
         if (!isMounted) {
           return;
@@ -90,43 +97,11 @@ export function useAuthSession(): AuthSessionState {
       },
     );
 
-    const initialRevision =
-      authEventRevision;
+    if (!hasResolvedInitialState) {
+      initializationTimeout = setTimeout(() => {
+        initializationTimeout = null;
 
-    void supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
-        if (
-          !isMounted ||
-          authEventRevision !==
-            initialRevision
-        ) {
-          return;
-        }
-
-        if (error) {
-          setState({
-            status: 'error',
-            session: null,
-            errorMessage:
-              'تعذر التحقق من حالة الحساب.',
-          });
-
-          return;
-        }
-
-        setState(
-          stateFromSession(
-            data.session,
-          ),
-        );
-      })
-      .catch(() => {
-        if (
-          !isMounted ||
-          authEventRevision !==
-            initialRevision
-        ) {
+        if (!isMounted || hasResolvedInitialState) {
           return;
         }
 
@@ -136,10 +111,16 @@ export function useAuthSession(): AuthSessionState {
           errorMessage:
             'تعذر التحقق من حالة الحساب.',
         });
-      });
+      }, 8_000);
+    }
 
     return () => {
       isMounted = false;
+
+      if (initializationTimeout !== null) {
+        clearTimeout(initializationTimeout);
+      }
+
       subscription.unsubscribe();
     };
   }, []);

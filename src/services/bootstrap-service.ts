@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase } from '../lib/supabase';
 
 export type AppSettings = {
   app_name: string;
@@ -102,7 +102,7 @@ function isBookstoreSlug(
 
 async function getBookstoreCategory():
   Promise<StoreCategory | null> {
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('service_categories')
     .select(`
       id,
@@ -173,7 +173,7 @@ function findServiceAreaById(
 async function getAppBootstrap():
   Promise<AppBootstrap> {
   const { data, error } =
-    await supabase.rpc(
+    await publicSupabase.rpc(
       'get_app_bootstrap',
     );
 
