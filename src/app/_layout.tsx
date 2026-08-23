@@ -61,6 +61,62 @@ const DOT_DROP_DURATION_MS = 330;
 const WORDMARK_REVEAL_DURATION_MS = 420;
 const READY_HOLD_MS = 150;
 const EXIT_FADE_DURATION_MS = 260;
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 8000;
+const LAUNCH_GATE_TIMEOUT_MS = 10000;
+const DEVELOPMENT_HYDRATION_TIMEOUT_MS = 6000;
+
+const DEVELOPMENT_ALLOWED_LAUNCH_GATE:
+  AppLaunchGateResult = {
+    status: 'allowed',
+    currentVersion: null,
+    minimumVersion: null,
+    messageAr: null,
+    updateUrl: null,
+    supportWhatsapp: null,
+  };
+
+const LAUNCH_GATE_TIMEOUT_RESULT:
+  AppLaunchGateResult = {
+    status: 'error',
+    currentVersion: null,
+    minimumVersion: null,
+    messageAr:
+      'تعذر الاتصال بخدمة Navienty Now. تحقق من الإنترنت وحاول مرة أخرى.',
+    updateUrl: null,
+    supportWhatsapp: null,
+  };
+
+async function withTimeout<T>(
+  task: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeoutId:
+    | ReturnType<typeof setTimeout>
+    | null = null;
+
+  try {
+    return await Promise.race([
+      task,
+      new Promise<never>(
+        (_resolve, reject) => {
+          timeoutId = setTimeout(
+            () => {
+              reject(
+                new Error(message),
+              );
+            },
+            timeoutMs,
+          );
+        },
+      ),
+    ]);
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
 
 void SplashScreen.preventAutoHideAsync().catch(() => {
   // Safe during Fast Refresh / environments where the native splash
@@ -517,12 +573,19 @@ export default function RootLayout() {
     setLaunchGate,
   ] =
     useState<AppLaunchGateResult | null>(
-      null,
+      __DEV__
+        ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
+        : null,
     );
 
   const [
     isRefreshingLaunchGate,
     setIsRefreshingLaunchGate,
+  ] = useState(false);
+
+  const [
+    developmentHydrationFallbackReached,
+    setDevelopmentHydrationFallbackReached,
   ] = useState(false);
 
   /*
@@ -537,7 +600,11 @@ export default function RootLayout() {
 
     async function bootstrapAuth() {
       try {
-        await ensureAppSession();
+        await withTimeout(
+          ensureAppSession(),
+          AUTH_BOOTSTRAP_TIMEOUT_MS,
+          'Supabase auth bootstrap timed out.',
+        );
       } catch (error) {
         console.warn(
           'Unable to bootstrap anonymous Supabase session:',
@@ -566,37 +633,44 @@ export default function RootLayout() {
    * allow the app to render even when Supabase
    * is temporarily unreachable.
    *
-   * Production behavior remains unchanged.
+   * Production still evaluates the real launch gate only after auth
+   * bootstrap has resolved or reached its bounded timeout.
    */
   useEffect(() => {
+    if (__DEV__) {
+      console.log(
+        '[Navienty] Development launch gate bypass enabled.',
+      );
+      return;
+    }
+
     if (
       !authBootstrapFinished
     ) {
       return;
     }
 
-    if (__DEV__) {
-      console.log(
-        '[Navienty] Development launch gate bypass enabled.',
-      );
-
-      setLaunchGate({
-        status: 'allowed',
-        currentVersion: null,
-        minimumVersion: null,
-        messageAr: null,
-        updateUrl: null,
-        supportWhatsapp: null,
-      });
-
-      return;
-    }
-
     let cancelled = false;
 
     async function bootstrapLaunchGate() {
-      const result =
-        await getAppLaunchGate();
+      let result:
+        AppLaunchGateResult;
+
+      try {
+        result = await withTimeout(
+          getAppLaunchGate(),
+          LAUNCH_GATE_TIMEOUT_MS,
+          'App launch gate timed out.',
+        );
+      } catch (error) {
+        console.warn(
+          'Unable to resolve app launch gate before timeout:',
+          error,
+        );
+
+        result =
+          LAUNCH_GATE_TIMEOUT_RESULT;
+      }
 
       if (!cancelled) {
         setLaunchGate(
@@ -632,20 +706,31 @@ export default function RootLayout() {
          * even when Supabase cannot be reached.
          */
         if (__DEV__) {
-          setLaunchGate({
-            status: 'allowed',
-            currentVersion: null,
-            minimumVersion: null,
-            messageAr: null,
-            updateUrl: null,
-            supportWhatsapp: null,
-          });
+          setLaunchGate(
+            DEVELOPMENT_ALLOWED_LAUNCH_GATE,
+          );
 
           return;
         }
 
-        const result =
-          await getAppLaunchGate();
+        let result:
+          AppLaunchGateResult;
+
+        try {
+          result = await withTimeout(
+            getAppLaunchGate(),
+            LAUNCH_GATE_TIMEOUT_MS,
+            'App launch gate refresh timed out.',
+          );
+        } catch (error) {
+          console.warn(
+            'Unable to refresh app launch gate before timeout:',
+            error,
+          );
+
+          result =
+            LAUNCH_GATE_TIMEOUT_RESULT;
+        }
 
         setLaunchGate(
           result,
@@ -664,13 +749,94 @@ export default function RootLayout() {
     customerHasHydrated &&
     ordersHasHydrated;
 
+  /*
+   * SecureStore can occasionally remain pending inside Expo Go while it is
+   * migrating development data. Never let that development-only condition
+   * trap the app on its branded bootstrap screen. Production still requires
+   * all persisted stores to finish hydration before rendering user data.
+   */
+  useEffect(() => {
+    if (
+      !__DEV__ ||
+      appHasHydrated ||
+      developmentHydrationFallbackReached
+    ) {
+      return;
+    }
+
+    const timeoutId = setTimeout(
+      () => {
+        console.warn(
+          '[Navienty] Development storage hydration timed out; continuing without blocking the UI.',
+          {
+            cartHasHydrated,
+            customerHasHydrated,
+            ordersHasHydrated,
+          },
+        );
+
+        setDevelopmentHydrationFallbackReached(
+          true,
+        );
+      },
+      DEVELOPMENT_HYDRATION_TIMEOUT_MS,
+    );
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [
+    appHasHydrated,
+    cartHasHydrated,
+    customerHasHydrated,
+    developmentHydrationFallbackReached,
+    ordersHasHydrated,
+  ]);
+
+  const storageBootstrapFinished =
+    appHasHydrated ||
+    (__DEV__ &&
+      developmentHydrationFallbackReached);
+
+  const launchGateStatus =
+    launchGate?.status ?? null;
+
   const startupHasResolved =
-    appHasHydrated &&
-    authBootstrapFinished &&
+    storageBootstrapFinished &&
+    (__DEV__ ||
+      authBootstrapFinished) &&
     launchGate !== null;
 
+  useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
+    console.log(
+      '[Navienty] Startup readiness:',
+      {
+        cartHasHydrated,
+        customerHasHydrated,
+        ordersHasHydrated,
+        authBootstrapFinished,
+        launchGateStatus:
+          launchGateStatus,
+        developmentHydrationFallbackReached,
+        startupHasResolved,
+      },
+    );
+  }, [
+    authBootstrapFinished,
+    cartHasHydrated,
+    customerHasHydrated,
+    developmentHydrationFallbackReached,
+    launchGateStatus,
+    ordersHasHydrated,
+    startupHasResolved,
+  ]);
+
   const appIsAllowed =
-    launchGate?.status ===
+    launchGateStatus ===
     'allowed';
 
   const [
