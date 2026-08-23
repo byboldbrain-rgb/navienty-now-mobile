@@ -85,6 +85,9 @@ function AppBootstrapScreen({
   const exitStartedRef =
     useRef(false);
 
+  const finishedRef =
+    useRef(false);
+
   const holdTimerRef =
     useRef<
       ReturnType<typeof setTimeout> | null
@@ -135,15 +138,69 @@ function AppBootstrapScreen({
         return;
       }
 
-      nativeSplashHiddenRef.current =
-        true;
+      try {
+        SplashScreen.hide();
 
-      void SplashScreen.hideAsync().catch(
-        () => {
-          // Safe in Expo Go / Fast Refresh.
-        },
-      );
+        nativeSplashHiddenRef.current =
+          true;
+      } catch (error) {
+        /*
+         * Keep the ref false so onLayout can retry if Expo Go called
+         * this effect before its native splash controller was ready.
+         */
+        console.warn(
+          'Unable to hide native splash screen:',
+          error,
+        );
+      }
     }, []);
+
+  const finishBootstrap =
+    useCallback(() => {
+      if (finishedRef.current) {
+        return;
+      }
+
+      finishedRef.current = true;
+      onFinished();
+    }, [onFinished]);
+
+  /*
+   * Do not rely only on onLayout to release the native splash.
+   * Expo Go/development clients can report splash layout differently
+   * from standalone builds, while this React bootstrap screen is already
+   * ready to cover the transition as soon as the effect runs.
+   */
+  useEffect(() => {
+    hideNativeSplash();
+  }, [hideNativeSplash]);
+
+  /*
+   * Never allow an interrupted React Native animation to trap the app
+   * behind the bootstrap overlay. The normal branded animation still runs;
+   * this timer is only a last-resort release for Expo Go/Fast Refresh and
+   * reduced-motion or app-state interruptions.
+   */
+  useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
+    const fallbackTimer =
+      setTimeout(
+        finishBootstrap,
+        2500,
+      );
+
+    return () => {
+      clearTimeout(
+        fallbackTimer,
+      );
+    };
+  }, [
+    finishBootstrap,
+    isReady,
+  ]);
 
   useEffect(() => {
     revealWidth.setValue(0);
@@ -263,10 +320,8 @@ function AppBootstrapScreen({
             useNativeDriver: true,
           },
         ).start(
-          ({ finished }) => {
-            if (finished) {
-              onFinished();
-            }
+          () => {
+            finishBootstrap();
           },
         );
       }, READY_HOLD_MS);
@@ -286,7 +341,7 @@ function AppBootstrapScreen({
   }, [
     introFinished,
     isReady,
-    onFinished,
+    finishBootstrap,
     screenOpacity,
   ]);
 
