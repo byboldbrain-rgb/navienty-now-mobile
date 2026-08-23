@@ -1,0 +1,130 @@
+name: Android RC EAS Preview Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cto/launch-readiness-hardening
+    paths:
+      - .github/workflows/rc-android-eas-build.yml
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Android preview RC
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Checkout release-candidate branch
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Require Expo access token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not configured as a GitHub Actions repository secret."
+            exit 1
+          fi
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate image assets
+        run: node scripts/validate-image-assets.mjs
+
+      - name: Validate release config
+        run: node scripts/validate-release-config.mjs
+
+      - name: Validate checkout handoff
+        run: node scripts/validate-checkout-handoff.mjs
+
+      - name: Validate native maps config
+        run: node scripts/validate-native-maps-config.mjs
+
+      - name: Require Google Maps Android key in EAS preview
+        shell: bash
+        run: |
+          eas env:exec preview 'node -e "const key=(process.env.GOOGLE_MAPS_ANDROID_API_KEY||\"\").trim(); if(!key){console.error(\"GOOGLE_MAPS_ANDROID_API_KEY is missing from the EAS preview environment.\"); process.exit(1)} console.log(\"Google Maps Android build key is configured.\")"' --non-interactive
+
+      - name: Verify Expo project health
+        run: npx expo-doctor@latest
+
+      - name: Production dependency audit policy
+        run: npm run audit:prod
+
+      - name: Business and security tests
+        run: npm test
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Verify Expo authentication
+        run: eas whoami
+
+      - name: Build validated Android preview RC
+        shell: bash
+        run: |
+          set -o pipefail
+          eas build \
+            --platform android \
+            --profile preview \
+            --non-interactive \
+            --wait \
+            --json | tee eas-android-rc-build.json
+
+      - name: Record Android build result
+        if: success()
+        run: cat eas-android-rc-build.json
+
+      - name: Publish successful Android RC to PR
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_id="$(jq -r 'if type == "array" then .[0].id else .id end' eas-android-rc-build.json)"
+          artifact_url="$(jq -r 'if type == "array" then (. [0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // "") else (.artifacts.buildUrl // .artifacts.applicationArchiveUrl // "") end' eas-android-rc-build.json)"
+          dashboard_url="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/${build_id}"
+          gh pr comment 2 --body "### Android RC after native Maps fix
+- Source commit: \`${GITHUB_SHA}\`
+- EAS Build ID: \`${build_id}\`
+- Status: **FINISHED**
+- Install APK: ${artifact_url}
+- Dashboard: ${dashboard_url}
+
+This build includes EAS-injected Google Maps native configuration and the in-app Checkout handoff fix. Physical Android smoke testing is still required."
+
+      - name: Publish Android RC failure to PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh pr comment 2 --body "### Android RC after native Maps fix — FAILED
+- Source commit: \`${GITHUB_SHA}\`
+- GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+The new APK was not approved for physical testing. Check the Google Maps EAS environment gate and the failed RC step before retrying."

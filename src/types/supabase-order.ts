@@ -73,7 +73,11 @@ export type Order = {
   itemCount: number;
 
   subtotal: number;
+  voucherCode?: string | null;
+  voucherTitle?: string | null;
+  voucherDiscountAmount?: number;
   deliveryFee: number;
+  paymentProcessingFee?: number;
   total: number;
 
   currencyCode: string;
@@ -120,6 +124,8 @@ export type CreateWhatsAppOrderInput = {
   address: string;
   landmark: string;
   notes: string;
+
+  voucherCode?: string | null;
 
   items: Array<{
     productId: string;

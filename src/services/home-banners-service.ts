@@ -1,10 +1,11 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase } from '../lib/supabase';
 import {
   type PromoActionPayload,
   type PromoActionType,
   type PromoCampaignContent,
   type PromoCampaignTheme,
   type PromoImageFit,
+  type PromoImageBlockAction,
   type PromoPresentationType,
   type PromoSectionStyle,
 } from '../types/promo-campaign';
@@ -226,7 +227,7 @@ function normalizeContent(
         'action',
       );
 
-      const action =
+      const action: PromoImageBlockAction =
         rawAction === 'primary'
           ? 'primary'
           : 'none';
@@ -598,7 +599,7 @@ function mapHomeBanner(
 async function listHomeBannerImages(
   bannerId: string,
 ): Promise<HomeBannerImage[]> {
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('home_banner_images')
     .select(
       [
@@ -625,7 +626,7 @@ async function listHomeBannerImages(
   }
 
   return (
-    (data ?? []) as HomeBannerImageRow[]
+    (data ?? []) as unknown as HomeBannerImageRow[]
   )
     .filter(
       (row) =>
@@ -652,7 +653,7 @@ async function listHomeBanners(
       ? ['all']
       : ['all', audience];
 
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('home_banners')
     .select(HOME_BANNER_SELECT)
     .eq('is_active', true)
@@ -673,7 +674,7 @@ async function listHomeBanners(
 
   const currentTime = Date.now();
 
-  return ((data ?? []) as HomeBannerRow[])
+  return ((data ?? []) as unknown as HomeBannerRow[])
     .filter(
       (banner) =>
         banner.image_url.trim().length > 0 &&
@@ -705,7 +706,7 @@ async function getHomeBannerById(
       ? ['all']
       : ['all', audience];
 
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .from('home_banners')
     .select(HOME_BANNER_SELECT)
     .eq('id', normalizedBannerId)
@@ -723,7 +724,7 @@ async function getHomeBannerById(
     return null;
   }
 
-  const banner = data as HomeBannerRow;
+  const banner = data as unknown as HomeBannerRow;
 
   if (
     !banner.image_url.trim() ||

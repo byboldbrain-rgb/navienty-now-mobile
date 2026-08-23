@@ -1,12 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import {
-  useState,
-} from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
 import { AccountScreenSkeleton } from '../components/ui/loading-skeleton';
@@ -22,130 +20,100 @@ import { supabase } from '../lib/supabase';
 import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
+import {
+  isNotificationTestBuild,
+} from '../services/push-notifications-service';
 import { useCustomerStore } from '../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
   NAVIENTY_NOW_LAYOUT,
 } from '../theme/navienty-now-theme';
 
-const navientyNowLogo = require(
-  '../assets/images/navienty-now-logo.jpg',
-);
+const PAGE_HORIZONTAL_PADDING = 16;
 
-function getAccountDisplayName(
-  authState: ReturnType<
-    typeof useAuthSession
-  >,
-): string | null {
-  if (authState.status !== 'signedIn') {
-    return null;
-  }
+const FIELD_BACKGROUND = '#F8F8F8';
+const FIELD_BORDER = '#E8E8E8';
+const CARD_BORDER = '#ECECEC';
 
-  const metadata =
-    authState.session.user.user_metadata as Record<
-      string,
-      unknown
-    >;
+type ProfileFieldProps = {
+  label: string;
+  value: string;
+  placeholder: string;
 
-  const values = [
-    metadata.full_name,
-    metadata.name,
-    metadata.display_name,
-  ];
+  icon:
+    | 'person-outline'
+    | 'call-outline'
+    | 'location-outline'
+    | 'navigate-outline';
 
-  for (const value of values) {
-    if (
-      typeof value === 'string' &&
-      value.trim().length > 0
-    ) {
-      return value.trim();
-    }
-  }
+  keyboardType?:
+    | 'default'
+    | 'phone-pad';
 
-  return null;
-}
-
-function MenuRow({
-  title,
-  description,
-  symbol,
-  onPress,
-}: {
-  title: string;
-  description: string;
-  symbol: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={`${title}. ${description}`}
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.menuRow,
-        pressed && styles.rowPressed,
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.menuSymbol}>
-        <Text style={styles.menuSymbolText}>
-          {symbol}
-        </Text>
-      </View>
-
-      <View style={styles.menuCopy}>
-        <Text style={styles.menuTitle}>
-          {title}
-        </Text>
-
-        <Text style={styles.menuDescription}>
-          {description}
-        </Text>
-      </View>
-
-      <Text style={styles.menuArrow}>‹</Text>
-    </Pressable>
-  );
-}
+  onChangeText: (
+    value: string,
+  ) => void;
+};
 
 function ProfileField({
   label,
   value,
   placeholder,
-  keyboardType,
+  icon,
+  keyboardType = 'default',
   onChangeText,
-}: {
-  label: string;
-  value: string;
-  placeholder: string;
-  keyboardType?:
-    | 'default'
-    | 'phone-pad';
-  onChangeText: (
-    value: string,
-  ) => void;
-}) {
+}: ProfileFieldProps) {
+  const [
+    isFocused,
+    setIsFocused,
+  ] = useState(false);
+
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>
         {label}
       </Text>
 
-      <TextInput
-        accessibilityLabel={label}
-        keyboardType={
-          keyboardType ?? 'default'
-        }
-        placeholder={placeholder}
-        placeholderTextColor={
-          NAVIENTY_NOW_COLORS.textMuted
-        }
-        selectionColor={
-          NAVIENTY_NOW_COLORS.primary
-        }
-        style={styles.fieldInput}
-        value={value}
-        onChangeText={onChangeText}
-      />
+      <View
+        style={[
+          styles.fieldControl,
+
+          isFocused &&
+            styles.fieldControlFocused,
+        ]}
+      >
+        <View style={styles.fieldIconContainer}>
+          <Ionicons
+            color={
+              isFocused
+                ? NAVIENTY_NOW_COLORS.primary
+                : '#8B8B8F'
+            }
+            name={icon}
+            size={18}
+          />
+        </View>
+
+        <TextInput
+          accessibilityLabel={label}
+          autoCorrect={false}
+          keyboardType={keyboardType}
+          placeholder={placeholder}
+          placeholderTextColor="#A0A0A4"
+          selectionColor={
+            NAVIENTY_NOW_COLORS.primary
+          }
+          style={styles.fieldInput}
+          value={value}
+          onBlur={() => {
+            setIsFocused(false);
+          }}
+          onChangeText={onChangeText}
+          onFocus={() => {
+            setIsFocused(true);
+          }}
+        />
+      </View>
     </View>
   );
 }
@@ -156,73 +124,72 @@ export default function AccountScreen() {
 
   const customerName =
     useCustomerStore(
-      (state) => state.customerName,
+      (state) =>
+        state.customerName,
     );
 
   const phoneNumber =
     useCustomerStore(
-      (state) => state.phoneNumber,
+      (state) =>
+        state.phoneNumber,
     );
 
   const address =
     useCustomerStore(
-      (state) => state.address,
+      (state) =>
+        state.address,
     );
 
   const landmark =
     useCustomerStore(
-      (state) => state.landmark,
+      (state) =>
+        state.landmark,
     );
 
   const setCustomerName =
     useCustomerStore(
-      (state) => state.setCustomerName,
+      (state) =>
+        state.setCustomerName,
     );
 
   const setPhoneNumber =
     useCustomerStore(
-      (state) => state.setPhoneNumber,
+      (state) =>
+        state.setPhoneNumber,
     );
 
   const setAddress =
     useCustomerStore(
-      (state) => state.setAddress,
+      (state) =>
+        state.setAddress,
     );
 
   const setLandmark =
     useCustomerStore(
-      (state) => state.setLandmark,
+      (state) =>
+        state.setLandmark,
     );
 
-  const [isSigningOut, setIsSigningOut] =
-    useState(false);
+  const [
+    isSigningOut,
+    setIsSigningOut,
+  ] = useState(false);
 
-  const [errorMessage, setErrorMessage] =
-    useState<string | null>(null);
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState<string | null>(
+    null,
+  );
 
   const isPermanentAccount =
     authState.status === 'signedIn';
 
-  const isAnonymousAccount =
-    authState.status === 'anonymous';
-
-  const linkedDisplayName =
-    getAccountDisplayName(authState);
-
-  const displayedName =
-    customerName.trim() ||
-    linkedDisplayName ||
-    'ضيف Navienty Now';
-
-  const linkedContact =
-    isPermanentAccount
-      ? authState.session.user.email ??
-        authState.session.user.phone ??
-        null
-      : null;
-
   async function signOutPermanentAccount() {
-    if (!isPermanentAccount) {
+    if (
+      !isPermanentAccount ||
+      isSigningOut
+    ) {
       return;
     }
 
@@ -237,10 +204,10 @@ export default function AccountScreen() {
         throw error;
       }
 
-      /**
-       * Logging out of a permanent account should not return the app
-       * to a visible signed-out state. Immediately create a fresh
-       * anonymous session so shopping can continue normally.
+      /*
+       * بعد تسجيل الخروج بننشئ جلسة
+       * anonymous جديدة علشان المستخدم
+       * يقدر يكمل استخدام التطبيق والطلب.
        */
       await ensureAppSession();
 
@@ -260,113 +227,88 @@ export default function AccountScreen() {
     return (
       <>
         <StatusBar style="dark" />
+
         <AccountScreenSkeleton />
       </>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView
+      edges={['top']}
+      style={styles.screen}
+    >
       <StatusBar style="dark" />
 
-      <ScrollView
-        contentContainerStyle={
-          styles.pageContent
-        }
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          false
-        }
-      >
-        <View style={styles.container}>
-          <View style={styles.topBar}>
+      <View style={styles.pageShell}>
+        <ScrollView
+          contentContainerStyle={
+            styles.pageContent
+          }
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          {/* ======================================= */}
+          {/* HEADER                                  */}
+          {/* ======================================= */}
+
+          <View style={styles.header}>
             <Pressable
               accessibilityLabel="العودة"
               accessibilityRole="button"
+              hitSlop={10}
               style={({ pressed }) => [
                 styles.backButton,
-                pressed &&
-                  styles.rowPressed,
-              ]}
-              onPress={() =>
-                router.back()
-              }
-            >
-              <Text style={styles.backIcon}>
-                ›
-              </Text>
-            </Pressable>
 
+                pressed &&
+                  styles.backButtonPressed,
+              ]}
+              onPress={() => {
+                router.back();
+              }}
+            >
+              <Ionicons
+                color="#242424"
+                name="arrow-back"
+                size={22}
+              />
+            </Pressable>
+          </View>
+
+          {/* ======================================= */}
+          {/* PAGE HEADING                            */}
+          {/* ======================================= */}
+
+          <View style={styles.pageHeading}>
             <Text style={styles.pageTitle}>
               حسابي
             </Text>
 
-            <View
-              style={styles.topBarSpacer}
-            />
-          </View>
-
-          <View style={styles.profileCard}>
-            <Image
-              accessibilityLabel="شعار Navienty Now"
-              resizeMode="contain"
-              source={navientyNowLogo}
-              style={styles.profileLogo}
-            />
-
-            <View style={styles.profileCopy}>
-              <View
-                style={[
-                  styles.accountStatusBadge,
-                  isPermanentAccount
-                    ? styles.linkedStatusBadge
-                    : styles.guestStatusBadge,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.accountStatusText,
-                    isPermanentAccount
-                      ? styles.linkedStatusText
-                      : styles.guestStatusText,
-                  ]}
-                >
-                  {isPermanentAccount
-                    ? 'حساب مرتبط'
-                    : 'حساب ضيف'}
-                </Text>
-              </View>
-
-              <Text
-                numberOfLines={1}
-                style={styles.profileName}
-              >
-                {displayedName}
-              </Text>
-
-              <Text
-                style={
-                  styles.profileDescription
-                }
-              >
-                {isPermanentAccount
-                  ? linkedContact ??
-                    'بيانات حسابك مرتبطة بـ Navienty Now'
-                  : 'بيانات الطلب محفوظة على هذا الجهاز'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoCard}>
-            <View
-              style={
-                styles.sectionHeadingRow
-              }
+            <Text
+              style={styles.pageSubtitle}
             >
-              <View>
+              بياناتك المستخدمة في
+              الطلب والتوصيل
+            </Text>
+          </View>
+
+          {/* ======================================= */}
+          {/* DELIVERY DETAILS                       */}
+          {/* ======================================= */}
+
+          <View style={styles.formCard}>
+            <View
+              style={styles.formCardHeader}
+            >
+              <View
+                style={styles.formHeading}
+              >
                 <Text
                   style={
-                    styles.sectionTitle
+                    styles.formHeadingTitle
                   }
                 >
                   بيانات التوصيل
@@ -374,201 +316,234 @@ export default function AccountScreen() {
 
                 <Text
                   style={
-                    styles.sectionDescription
+                    styles.formHeadingDescription
                   }
                 >
-                  هنستخدمها تلقائيًا في
-                  الطلبات القادمة
+                  هنستخدم البيانات دي
+                  تلقائيًا مع طلباتك
                 </Text>
               </View>
 
               <View
-                style={
-                  styles.savedBadge
-                }
+                style={styles.savedBadge}
               >
+                <Ionicons
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                  name="checkmark"
+                  size={12}
+                />
+
                 <Text
                   style={
                     styles.savedBadgeText
                   }
                 >
-                  تحفظ تلقائيًا
+                  حفظ تلقائي
                 </Text>
               </View>
             </View>
 
-            <ProfileField
-              label="الاسم"
-              placeholder="اكتب اسمك"
-              value={customerName}
-              onChangeText={
-                setCustomerName
-              }
-            />
-
-            <ProfileField
-              keyboardType="phone-pad"
-              label="رقم الهاتف"
-              placeholder="01012345678"
-              value={phoneNumber}
-              onChangeText={
-                setPhoneNumber
-              }
-            />
-
-            <ProfileField
-              label="العنوان"
-              placeholder="اكتب عنوان التوصيل"
-              value={address}
-              onChangeText={
-                setAddress
-              }
-            />
-
-            <ProfileField
-              label="علامة مميزة"
-              placeholder="مثال: بجوار البوابة الرئيسية"
-              value={landmark}
-              onChangeText={
-                setLandmark
-              }
-            />
-
-            <Text style={styles.localNote}>
-              البيانات دي بتتعبّى تلقائيًا
-              في الـ Checkout، وتقدر
-              تغيّرها في أي وقت.
-            </Text>
-          </View>
-
-          <View style={styles.menuCard}>
-            <MenuRow
-              description="راجع كل الطلبات المحفوظة وحالتها"
-              symbol="▤"
-              title="طلباتي"
-              onPress={() => {
-                router.push('/orders');
-              }}
+            <View
+              style={styles.formDivider}
             />
 
             <View
-              style={styles.menuDivider}
-            />
+              style={styles.fieldsContainer}
+            >
+              <ProfileField
+                icon="person-outline"
+                label="الاسم"
+                placeholder="اكتب اسمك"
+                value={customerName}
+                onChangeText={
+                  setCustomerName
+                }
+              />
 
-            <MenuRow
-              description="راجع المنتجات الحالية قبل إتمام الطلب"
-              symbol="□"
-              title="سلة الطلب"
-              onPress={() => {
-                router.push('/cart');
-              }}
-            />
+              <ProfileField
+                icon="call-outline"
+                keyboardType="phone-pad"
+                label="رقم الهاتف"
+                placeholder="01012345678"
+                value={phoneNumber}
+                onChangeText={
+                  setPhoneNumber
+                }
+              />
+
+              <ProfileField
+                icon="location-outline"
+                label="عنوان التوصيل"
+                placeholder="اكتب عنوان التوصيل"
+                value={address}
+                onChangeText={
+                  setAddress
+                }
+              />
+
+              <ProfileField
+                icon="navigate-outline"
+                label="علامة مميزة"
+                placeholder="مثال: بجوار البوابة الرئيسية"
+                value={landmark}
+                onChangeText={
+                  setLandmark
+                }
+              />
+            </View>
+
+            <View
+              style={styles.autoSaveHint}
+            >
+              <Ionicons
+                color="#727276"
+                name="information-circle-outline"
+                size={16}
+              />
+
+              <Text
+                style={
+                  styles.autoSaveHintText
+                }
+              >
+                أي تعديل بتعمله هنا
+                هيتحفظ تلقائيًا ويظهر في
+                صفحة إتمام الطلب.
+              </Text>
+            </View>
           </View>
 
-          {!isPermanentAccount && (
-            <View
-              style={styles.linkAccountCard}
+          {isNotificationTestBuild() && (
+            <Pressable
+              accessibilityLabel="اختبار الإشعارات"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.notificationDevCard,
+                pressed &&
+                  styles.notificationDevCardPressed,
+              ]}
+              onPress={() => {
+                router.push('/notification-test');
+              }}
             >
               <View
-                style={
-                  styles.linkAccountIcon
-                }
+                style={styles.notificationDevIcon}
+              >
+                <Ionicons
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                  name="notifications-outline"
+                  size={19}
+                />
+              </View>
+
+              <View
+                style={styles.notificationDevCopy}
               >
                 <Text
+                  style={styles.notificationDevTitle}
+                >
+                  اختبار الإشعارات
+                </Text>
+
+                <Text
                   style={
-                    styles.linkAccountIconText
+                    styles.notificationDevDescription
                   }
                 >
-                  ↗
+                  أدوات اختبار Local وRemote Push
                 </Text>
               </View>
 
-              <Text
-                style={
-                  styles.linkAccountTitle
-                }
-              >
-                احفظ حسابك على أي جهاز
-              </Text>
-
-              <Text
-                style={
-                  styles.linkAccountDescription
-                }
-              >
-                ربط الحساب اختياري. تقدر
-                تطلب من غير تسجيل دخول،
-                لكن الربط يساعدك لاحقًا في
-                استرجاع حسابك على جهاز آخر.
-              </Text>
-
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.linkAccountButton,
-                  pressed &&
-                    styles.primaryPressed,
-                ]}
-                onPress={() => {
-                  router.push('/login');
-                }}
-              >
-                <Text
-                  style={
-                    styles.linkAccountButtonText
-                  }
-                >
-                  ربط الحساب اختياريًا
-                </Text>
-              </Pressable>
-            </View>
+              <Ionicons
+                color="#9A9A9E"
+                name="chevron-back"
+                size={17}
+              />
+            </Pressable>
           )}
 
-          {isAnonymousAccount && (
-            <View style={styles.guestNote}>
-              <Text
-                style={styles.guestNoteText}
-              >
-                لو حذفت التطبيق أو مسحت
-                بياناته قبل ربط الحساب،
-                الجلسة المؤقتة وبياناتها
-                ممكن ما تقدرش تسترجعها.
-              </Text>
-            </View>
-          )}
+          {/* ======================================= */}
+          {/* ERROR                                   */}
+          {/* ======================================= */}
 
           {errorMessage && (
             <View style={styles.errorCard}>
-              <Text style={styles.errorText}>
+              <Ionicons
+                color={
+                  NAVIENTY_NOW_COLORS.error
+                }
+                name="alert-circle-outline"
+                size={18}
+              />
+
+              <Text
+                style={styles.errorText}
+              >
                 {errorMessage}
               </Text>
             </View>
           )}
 
+          {/* ======================================= */}
+          {/* SIGN OUT                                */}
+          {/* ======================================= */}
+
           {isPermanentAccount && (
-            <Pressable
-              accessibilityLabel="تسجيل الخروج"
-              accessibilityRole="button"
-              disabled={isSigningOut}
-              style={({ pressed }) => [
-                styles.signOutButton,
-                isSigningOut &&
-                  styles.signOutButtonDisabled,
-                pressed &&
-                  !isSigningOut &&
-                  styles.signOutButtonPressed,
-              ]}
-              onPress={() => {
-                void signOutPermanentAccount();
-              }}
+            <View
+              style={
+                styles.accountActionsSection
+              }
             >
-              <View style={styles.signOutButtonContent}>
-                {isSigningOut && (
-                  <ActivityIndicator
-                    color={NAVIENTY_NOW_COLORS.error}
-                    size="small"
-                  />
-                )}
+              <View
+                style={
+                  styles.accountActionsDivider
+                }
+              />
+
+              <Pressable
+                accessibilityLabel="تسجيل الخروج"
+                accessibilityRole="button"
+                disabled={isSigningOut}
+                style={({ pressed }) => [
+                  styles.signOutButton,
+
+                  isSigningOut &&
+                    styles.signOutButtonDisabled,
+
+                  pressed &&
+                    !isSigningOut &&
+                    styles.signOutButtonPressed,
+                ]}
+                onPress={() => {
+                  void signOutPermanentAccount();
+                }}
+              >
+                <View
+                  style={
+                    styles.signOutIconContainer
+                  }
+                >
+                  {isSigningOut ? (
+                    <ActivityIndicator
+                      color={
+                        NAVIENTY_NOW_COLORS.error
+                      }
+                      size="small"
+                    />
+                  ) : (
+                    <Ionicons
+                      color={
+                        NAVIENTY_NOW_COLORS.error
+                      }
+                      name="log-out-outline"
+                      size={19}
+                    />
+                  )}
+                </View>
 
                 <Text
                   style={
@@ -577,460 +552,539 @@ export default function AccountScreen() {
                 >
                   تسجيل الخروج
                 </Text>
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
           )}
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
 
       <AppBottomNavigation
         activeTab="account"
-        isSignedIn={isPermanentAccount}
+        isSignedIn={
+          isPermanentAccount
+        }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  /* ========================================================= */
+  /* SCREEN                                                    */
+  /* ========================================================= */
+
   screen: {
     backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
+      NAVIENTY_NOW_COLORS.white,
+
     flex: 1,
+  },
+
+  pageShell: {
+    alignSelf: 'center',
+
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+
+    flex: 1,
+
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+
+    width: '100%',
   },
 
   pageContent: {
     flexGrow: 1,
+
     paddingBottom:
       NAVIENTY_NOW_LAYOUT.bottomNavigationHeight +
-      58,
+      48,
+
     paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop:
-      Platform.OS === 'ios' ? 30 : 20,
+      PAGE_HORIZONTAL_PADDING,
   },
 
-  container: {
-    alignSelf: 'center',
-    maxWidth:
-      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
-    width: '100%',
-  },
+  /* ========================================================= */
+  /* HEADER                                                    */
+  /* ========================================================= */
 
-  topBar: {
+  header: {
     alignItems: 'center',
+
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 50,
+
+    minHeight: 66,
+
+    paddingTop: 8,
   },
 
   backButton: {
     alignItems: 'center',
+
     backgroundColor:
       NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 20,
+
+    borderColor: '#E1E1E1',
+
+    borderRadius: 23,
     borderWidth: 1,
-    height: 40,
+
+    height: 46,
+
     justifyContent: 'center',
-    width: 40,
+
+    width: 46,
   },
 
-  backIcon: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 31,
-    lineHeight: 32,
+  backButtonPressed: {
+    backgroundColor: '#F7F7F7',
+
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
+  /* ========================================================= */
+  /* PAGE HEADING                                              */
+  /* ========================================================= */
+
+  pageHeading: {
+    alignItems: 'flex-end',
+
+    marginTop: 8,
+
+    paddingHorizontal: 1,
   },
 
   pageTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-
-  topBarSpacer: {
-    width: 40,
-  },
-
-  profileCard: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.majorRadius,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 22,
-    padding: 18,
-  },
-
-  profileLogo: {
-    borderRadius: 18,
-    height: 78,
-    marginRight: 16,
-    width: 78,
-  },
-
-  profileCopy: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-
-  accountStatusBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-
-  linkedStatusBadge: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryPale,
-  },
-
-  guestStatusBadge: {
-    backgroundColor: '#F3F3F5',
-  },
-
-  accountStatusText: {
-    fontSize: 9,
-    fontWeight: '900',
-  },
-
-  linkedStatusText: {
     color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-  },
+      NAVIENTY_NOW_COLORS.text,
 
-  guestStatusText: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-  },
+    fontSize: 24,
 
-  profileName: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 20,
-    fontWeight: '900',
-    marginTop: 8,
-    maxWidth: '100%',
+    fontWeight: '800',
+
+    letterSpacing: -0.45,
+
     textAlign: 'right',
+
     writingDirection: 'rtl',
   },
 
-  profileDescription: {
+  pageSubtitle: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 10,
-    lineHeight: 16,
+
+    fontSize: 12,
+
+    lineHeight: 19,
+
     marginTop: 5,
+
     textAlign: 'right',
+
     writingDirection: 'rtl',
   },
 
-  infoCard: {
+  /* ========================================================= */
+  /* FORM CARD                                                 */
+  /* ========================================================= */
+
+  formCard: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
+
+    borderColor: CARD_BORDER,
+
+    borderRadius: 20,
+
     borderWidth: 1,
-    marginTop: 17,
-    padding: 16,
+
+    marginTop: 24,
+
+    paddingHorizontal: 15,
+
+    paddingVertical: 16,
   },
 
-  sectionHeadingRow: {
+  formCardHeader: {
     alignItems: 'center',
+
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+
+    justifyContent:
+      'space-between',
   },
 
-  sectionTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 16,
-    fontWeight: '900',
+  formHeading: {
+    alignItems: 'flex-end',
+
+    flex: 1,
+
+    paddingLeft: 12,
+  },
+
+  formHeadingTitle: {
+    color:
+      NAVIENTY_NOW_COLORS.text,
+
+    fontSize: 15,
+
+    fontWeight: '800',
+
     textAlign: 'right',
+
     writingDirection: 'rtl',
   },
 
-  sectionDescription: {
+  formHeadingDescription: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 9,
-    marginTop: 4,
+
+    fontSize: 10,
+
+    lineHeight: 16,
+
+    marginTop: 3,
+
     textAlign: 'right',
+
     writingDirection: 'rtl',
   },
 
   savedBadge: {
+    alignItems: 'center',
+
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryPale,
+
     borderRadius: 999,
+
+    flexDirection: 'row-reverse',
+
+    gap: 4,
+
     paddingHorizontal: 9,
+
     paddingVertical: 6,
   },
 
   savedBadgeText: {
     color:
       NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 8,
-    fontWeight: '900',
+
+    fontSize: 8.5,
+
+    fontWeight: '800',
   },
 
+  formDivider: {
+    backgroundColor: '#EEEEEE',
+
+    height:
+      StyleSheet.hairlineWidth,
+
+    marginTop: 15,
+  },
+
+  fieldsContainer: {
+    paddingTop: 2,
+  },
+
+  /* ========================================================= */
+  /* FIELD                                                     */
+  /* ========================================================= */
+
   fieldGroup: {
-    marginTop: 12,
+    marginTop: 15,
   },
 
   fieldLabel: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 10,
-    fontWeight: '800',
+    color: '#47474A',
+
+    fontSize: 11,
+
+    fontWeight: '700',
+
     marginBottom: 7,
+
+    marginRight: 2,
+
     textAlign: 'right',
+
     writingDirection: 'rtl',
+  },
+
+  fieldControl: {
+    alignItems: 'center',
+
+    backgroundColor:
+      FIELD_BACKGROUND,
+
+    borderColor: FIELD_BORDER,
+
+    borderRadius: 14,
+
+    borderWidth: 1,
+
+    flexDirection: 'row-reverse',
+
+    height: 52,
+
+    paddingHorizontal: 12,
+  },
+
+  fieldControlFocused: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+
+    borderColor:
+      NAVIENTY_NOW_COLORS.primary,
+  },
+
+  fieldIconContainer: {
+    alignItems: 'center',
+
+    height: 30,
+
+    justifyContent: 'center',
+
+    marginLeft: 7,
+
+    width: 28,
   },
 
   fieldInput: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius: 14,
-    borderWidth: 1,
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 13,
-    minHeight: 48,
-    paddingHorizontal: 14,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  localNote: {
     color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 9,
-    lineHeight: 16,
-    marginTop: 13,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+      NAVIENTY_NOW_COLORS.text,
 
-  menuCard: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor:
-      NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
-    borderWidth: 1,
-    marginTop: 17,
-    overflow: 'hidden',
-  },
-
-  menuRow: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    minHeight: 82,
-    padding: 15,
-  },
-
-  rowPressed: {
-    opacity: 0.6,
-  },
-
-  menuSymbol: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primaryPale,
-    borderRadius: 15,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-
-  menuSymbolText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 22,
-    fontWeight: '700',
-  },
-
-  menuCopy: {
-    alignItems: 'flex-end',
     flex: 1,
-    marginHorizontal: 13,
-  },
 
-  menuTitle: {
-    color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 13,
+
+    fontWeight: '400',
+
+    height: '100%',
+
+    paddingHorizontal: 0,
+
+    paddingVertical: 0,
+
     textAlign: 'right',
+
     writingDirection: 'rtl',
   },
 
-  menuDescription: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 10,
-    lineHeight: 17,
-    marginTop: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+  /* ========================================================= */
+  /* SAVE HINT                                                 */
+  /* ========================================================= */
 
-  menuArrow: {
-    color: NAVIENTY_NOW_COLORS.textMuted,
-    fontSize: 28,
-    lineHeight: 29,
-  },
-
-  menuDivider: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.border,
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: 15,
-  },
-
-  linkAccountCard: {
+  autoSaveHint: {
     alignItems: 'center',
+
+    flexDirection: 'row-reverse',
+
+    marginTop: 16,
+
+    paddingHorizontal: 2,
+  },
+
+  autoSaveHintText: {
+    color: '#747478',
+
+    flex: 1,
+
+    fontSize: 9.5,
+
+    lineHeight: 16,
+
+    marginRight: 6,
+
+    textAlign: 'right',
+
+    writingDirection: 'rtl',
+  },
+
+  /* ========================================================= */
+  /* NOTIFICATION DEV TOOLS                                    */
+  /* ========================================================= */
+
+  notificationDevCard: {
+    alignItems: 'center',
+
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryPale,
-    borderColor: '#CDEAD8',
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
+
+    borderColor: '#D8EDE5',
+
+    borderRadius: 16,
     borderWidth: 1,
-    marginTop: 17,
-    padding: 18,
+
+    flexDirection: 'row-reverse',
+
+    marginTop: 14,
+
+    paddingHorizontal: 13,
+    paddingVertical: 12,
   },
 
-  linkAccountIcon: {
+  notificationDevCardPressed: {
+    opacity: 0.82,
+  },
+
+  notificationDevIcon: {
     alignItems: 'center',
+
     backgroundColor:
       NAVIENTY_NOW_COLORS.white,
-    borderRadius: 18,
-    height: 52,
+
+    borderRadius: 12,
+
+    height: 38,
+
     justifyContent: 'center',
-    width: 52,
+
+    marginLeft: 10,
+
+    width: 38,
   },
 
-  linkAccountIconText: {
-    color:
-      NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 24,
-    fontWeight: '900',
+  notificationDevCopy: {
+    alignItems: 'flex-end',
+
+    flex: 1,
   },
 
-  linkAccountTitle: {
+  notificationDevTitle: {
     color: NAVIENTY_NOW_COLORS.text,
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 12,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
 
-  linkAccountDescription: {
-    color:
-      NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 10,
-    lineHeight: 18,
-    marginTop: 7,
-    maxWidth: 390,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-
-  linkAccountButton: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 14,
-    justifyContent: 'center',
-    marginTop: 15,
-    minHeight: 48,
-    paddingHorizontal: 15,
-  },
-
-  linkAccountButtonText: {
-    color:
-      NAVIENTY_NOW_COLORS.white,
     fontSize: 12,
-    fontWeight: '900',
-  },
+    fontWeight: '800',
 
-  primaryPressed: {
-    opacity: 0.78,
-  },
-
-  guestNote: {
-    backgroundColor: '#FFF9E8',
-    borderColor: '#F0DDAA',
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 12,
-    padding: 12,
-  },
-
-  guestNoteText: {
-    color: '#7D652E',
-    fontSize: 9,
-    lineHeight: 16,
-    textAlign: 'center',
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
+
+  notificationDevDescription: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+
+    fontSize: 9.5,
+    lineHeight: 15,
+
+    marginTop: 2,
+
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  /* ========================================================= */
+  /* ERROR                                                     */
+  /* ========================================================= */
 
   errorCard: {
-    backgroundColor: '#FFF4F4',
-    borderColor: '#F0CCCC',
+    alignItems: 'center',
+
+    backgroundColor: '#FFF7F7',
+
+    borderColor: '#F1D6D6',
+
     borderRadius: 14,
+
     borderWidth: 1,
-    marginTop: 15,
-    padding: 12,
+
+    flexDirection: 'row-reverse',
+
+    marginTop: 14,
+
+    paddingHorizontal: 12,
+
+    paddingVertical: 11,
   },
 
   errorText: {
-    color: '#A13838',
+    color: '#A33E3E',
+
+    flex: 1,
+
     fontSize: 10,
+
     lineHeight: 17,
-    textAlign: 'center',
+
+    marginRight: 7,
+
+    textAlign: 'right',
+
     writingDirection: 'rtl',
+  },
+
+  /* ========================================================= */
+  /* ACCOUNT ACTIONS                                           */
+  /* ========================================================= */
+
+  accountActionsSection: {
+    marginTop: 24,
+  },
+
+  accountActionsDivider: {
+    backgroundColor: '#EEEEEE',
+
+    height:
+      StyleSheet.hairlineWidth,
+
+    marginBottom: 10,
   },
 
   signOutButton: {
     alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.white,
-    borderColor: '#E6BEBE',
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: 'center',
-    marginTop: 18,
-    minHeight: 52,
-  },
 
-  signOutButtonDisabled: {
-    opacity: 0.58,
+    borderRadius: 14,
+
+    flexDirection: 'row-reverse',
+
+    justifyContent: 'flex-start',
+
+    minHeight: 50,
+
+    paddingHorizontal: 10,
   },
 
   signOutButtonPressed: {
-    backgroundColor: '#FFF5F5',
+    backgroundColor: '#FFF7F7',
   },
 
-  signOutButtonContent: {
+  signOutButtonDisabled: {
+    opacity: 0.5,
+  },
+
+  signOutIconContainer: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 9,
+
+    backgroundColor: '#FFF1F1',
+
+    borderRadius: 12,
+
+    height: 36,
+
     justifyContent: 'center',
+
+    width: 36,
   },
 
   signOutButtonText: {
-    color: NAVIENTY_NOW_COLORS.error,
-    fontSize: 13,
-    fontWeight: '900',
+    color:
+      NAVIENTY_NOW_COLORS.error,
+
+    fontSize: 12,
+
+    fontWeight: '700',
+
+    marginRight: 11,
+
+    textAlign: 'right',
+
+    writingDirection: 'rtl',
   },
 });

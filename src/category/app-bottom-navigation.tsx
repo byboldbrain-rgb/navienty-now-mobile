@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -31,20 +32,18 @@ type MainTab =
 
 type AppBottomNavigationProps = {
   activeTab: MainTab;
-  isSignedIn: boolean;
+  isSignedIn?: boolean;
 };
 
 type TabDefinition = {
   key: MainTab;
   label: string;
   accessibilityLabel: string;
-
   route:
     | '/'
     | '/orders'
     | '/cart'
     | '/account';
-
   badgeCount: number;
 };
 
@@ -60,29 +59,11 @@ type CustomIconProps = {
 
 const NAV_BACKGROUND = '#FFFFFF';
 const NAV_BORDER = '#EEF0F1';
-
-/**
- * Strong graphite.
- *
- * Inactive icons remain very visible
- * without competing with the active
- * Navienty green.
- */
 const INACTIVE_COLOR = '#626A72';
-
 const ACTIVE_COLOR =
   NAVIENTY_NOW_COLORS.primary;
-
 const BADGE_BACKGROUND = '#E5484D';
 
-/**
- * Optical sizing.
- *
- * Not every 30px icon LOOKS 30px.
- *
- * Orders + Account have slightly less
- * visual mass, so they receive +1px.
- */
 const ICON_SIZES: Record<
   MainTab,
   number
@@ -103,9 +84,6 @@ function formatBadgeCount(
   return String(count);
 }
 
-/**
- * NAVIENTY HOME
- */
 function NavientyHomeIcon({
   active,
   size,
@@ -182,9 +160,6 @@ function NavientyHomeIcon({
   );
 }
 
-/**
- * NAVIENTY ORDERS
- */
 function NavientyOrdersIcon({
   active,
   size,
@@ -224,20 +199,14 @@ function NavientyOrdersIcon({
       />
 
       <Path
-        d="
-          M8.15 9.05
-          H15.85
-        "
+        d="M8.15 9.05 H15.85"
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
       />
 
       <Path
-        d="
-          M8.15 12.1
-          H12.15
-        "
+        d="M8.15 12.1 H12.15"
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -281,9 +250,6 @@ function NavientyOrdersIcon({
   );
 }
 
-/**
- * NAVIENTY BAG
- */
 function NavientyBagIcon({
   active,
   size,
@@ -336,36 +302,32 @@ function NavientyBagIcon({
         strokeLinejoin="round"
       />
 
-      {active ? (
-        <Path
-          d="
-            M9.05 13.35
-            C9.75 14.05 10.75 14.45 12 14.45
-            C13.25 14.45 14.25 14.05 14.95 13.35
-          "
-          stroke={color}
-          strokeWidth="2.35"
-          strokeLinecap="round"
-        />
-      ) : (
-        <Path
-          d="
-            M9.3 13.55
-            C10 14.1 10.88 14.4 12 14.4
-            C13.12 14.4 14 14.1 14.7 13.55
-          "
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-        />
-      )}
+      <Path
+        d={
+          active
+            ? `
+              M9.05 13.35
+              C9.75 14.05 10.75 14.45 12 14.45
+              C13.25 14.45 14.25 14.05 14.95 13.35
+            `
+            : `
+              M9.3 13.55
+              C10 14.1 10.88 14.4 12 14.4
+              C13.12 14.4 14 14.1 14.7 13.55
+            `
+        }
+        stroke={color}
+        strokeWidth={
+          active
+            ? 2.35
+            : strokeWidth
+        }
+        strokeLinecap="round"
+      />
     </Svg>
   );
 }
 
-/**
- * NAVIENTY ACCOUNT
- */
 function NavientyAccountIcon({
   active,
   size,
@@ -477,10 +439,9 @@ function TabIcon({
 
 export default function AppBottomNavigation({
   activeTab,
-  isSignedIn,
+  isSignedIn = false,
 }: AppBottomNavigationProps) {
   const router = useRouter();
-
   const insets =
     useSafeAreaInsets();
 
@@ -498,63 +459,55 @@ export default function AppBottomNavigation({
   const tabs: TabDefinition[] = [
     {
       key: 'home',
-
       label: 'الرئيسية',
-
       accessibilityLabel:
         'الانتقال إلى الصفحة الرئيسية',
-
       route: '/',
-
       badgeCount: 0,
     },
-
     {
       key: 'orders',
-
       label: 'طلباتي',
-
       accessibilityLabel:
         'الانتقال إلى الطلبات',
-
       route: '/orders',
-
       badgeCount:
         ordersCount,
     },
-
     {
       key: 'cart',
-
       label: 'السلة',
-
       accessibilityLabel:
         'الانتقال إلى سلة الطلب',
-
       route: '/cart',
-
       badgeCount:
         cartCount,
     },
-
     {
       key: 'account',
-
       label:
         isSignedIn
           ? 'حسابي'
           : 'دخول',
-
       accessibilityLabel:
         isSignedIn
           ? 'الانتقال إلى الحساب'
           : 'الانتقال إلى تسجيل الدخول',
-
       route: '/account',
-
       badgeCount: 0,
     },
   ];
+
+  const safeBottomPadding =
+    Platform.OS === 'android'
+      ? Math.max(
+          insets.bottom,
+          8,
+        )
+      : Math.max(
+          insets.bottom,
+          8,
+        );
 
   return (
     <View
@@ -563,10 +516,7 @@ export default function AppBottomNavigation({
         styles.navigationWrapper,
         {
           paddingBottom:
-            Math.max(
-              insets.bottom,
-              8,
-            ),
+            safeBottomPadding,
         },
       ]}
     >
@@ -599,7 +549,6 @@ export default function AppBottomNavigation({
                 pressed,
               }) => [
                 styles.tab,
-
                 pressed &&
                   styles.tabPressed,
               ]}
@@ -621,7 +570,6 @@ export default function AppBottomNavigation({
                 <View
                   style={[
                     styles.iconContainer,
-
                     active &&
                       styles.iconContainerActive,
                   ]}
@@ -641,6 +589,12 @@ export default function AppBottomNavigation({
                     }
                   >
                     <Text
+                      allowFontScaling={
+                        false
+                      }
+                      maxFontSizeMultiplier={
+                        1
+                      }
                       style={
                         styles.badgeText
                       }
@@ -654,17 +608,17 @@ export default function AppBottomNavigation({
               </View>
 
               <Text
+                allowFontScaling={false}
+                maxFontSizeMultiplier={1}
                 numberOfLines={1}
                 style={[
                   styles.tabLabel,
-
                   {
                     color:
                       active
                         ? ACTIVE_COLOR
                         : INACTIVE_COLOR,
                   },
-
                   active &&
                     styles.tabLabelActive,
                 ]}
@@ -684,76 +638,55 @@ const styles =
     navigationWrapper: {
       backgroundColor:
         NAV_BACKGROUND,
-
       borderTopColor:
         NAV_BORDER,
-
       borderTopWidth:
         StyleSheet.hairlineWidth,
-
       bottom: 0,
       left: 0,
-
       position:
         'absolute',
-
       right: 0,
-
       zIndex: 50,
-
       shadowColor: '#101828',
-
       shadowOffset: {
         width: 0,
         height: -2,
       },
-
       shadowOpacity: 0.025,
-
       shadowRadius: 8,
-
       elevation: 4,
     },
 
     navigationContainer: {
       alignSelf:
         'center',
-
       flexDirection:
         'row-reverse',
-
       height:
         NAVIENTY_NOW_LAYOUT
           .bottomNavigationHeight,
-
       maxWidth:
         NAVIENTY_NOW_LAYOUT
           .contentMaxWidth,
-
       paddingHorizontal: 8,
-
       width: '100%',
     },
 
     tab: {
       alignItems:
         'center',
-
       flex: 1,
-
       justifyContent:
         'center',
-
       minHeight: 60,
-
-      paddingHorizontal: 4,
-
+      minWidth: 0,
+      paddingHorizontal: 2,
       paddingTop: 4,
     },
 
     tabPressed: {
       opacity: 0.72,
-
       transform: [
         {
           scale: 0.965,
@@ -761,45 +694,26 @@ const styles =
       ],
     },
 
-    /**
-     * Larger optical stage.
-     *
-     * The glyph now has enough room
-     * to breathe at 30–31px.
-     */
     iconStage: {
       alignItems:
         'center',
-
       height: 38,
-
       justifyContent:
         'center',
-
       position:
         'relative',
-
       width: 50,
     },
 
     iconContainer: {
       alignItems:
         'center',
-
       height: 34,
-
       justifyContent:
         'center',
-
       width: 34,
     },
 
-    /**
-     * Active state stays restrained.
-     *
-     * Larger icons already have presence,
-     * so we don't need aggressive scaling.
-     */
     iconContainerActive: {
       transform: [
         {
@@ -811,78 +725,49 @@ const styles =
       ],
     },
 
-    /**
-     * Slightly larger badge to remain
-     * proportional with larger glyphs.
-     */
     badge: {
       alignItems:
         'center',
-
       backgroundColor:
         BADGE_BACKGROUND,
-
       borderColor:
         NAV_BACKGROUND,
-
       borderRadius: 999,
-
       borderWidth: 2,
-
       justifyContent:
         'center',
-
       minHeight: 17,
-
       minWidth: 17,
-
       paddingHorizontal: 3,
-
       position:
         'absolute',
-
       right: -1,
-
       top: -3,
-
       zIndex: 5,
     },
 
     badgeText: {
       color: '#FFFFFF',
-
       fontSize: 8,
-
       fontWeight: '800',
-
       includeFontPadding:
         false,
-
       lineHeight: 10,
-
       textAlign: 'center',
     },
 
-    /**
-     * 11px gives the label slightly
-     * more authority now that the icons
-     * are larger.
-     */
     tabLabel: {
+      alignSelf: 'stretch',
       fontSize: 11,
-
       fontWeight: '500',
-
       includeFontPadding:
         false,
-
       letterSpacing: -0.1,
-
       lineHeight: 15,
-
       marginTop: 3,
-
+      paddingHorizontal: 0,
       textAlign: 'center',
+      writingDirection: 'rtl',
     },
 
     tabLabelActive: {

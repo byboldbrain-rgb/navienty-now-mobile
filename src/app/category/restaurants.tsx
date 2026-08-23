@@ -1,3 +1,4 @@
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import {
   useEffect,
@@ -11,6 +12,7 @@ import {
   type ImageSourcePropType,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RestaurantsScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap, {
@@ -91,7 +94,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'arabic',
     label: 'أكل عربي',
-    image: require('../../assets/cuisines/arabic.png'),
+    image: require('../../assets/cuisines/arabic.webp'),
     keywords: [
       'عربي',
       'شامي',
@@ -102,7 +105,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'arabic-sweets',
     label: 'حلويات شرقية',
-    image: require('../../assets/cuisines/arabic-sweets.png'),
+    image: require('../../assets/cuisines/arabic-sweets.webp'),
     keywords: [
       'حلويات شرقية',
       'بقلاوة',
@@ -112,7 +115,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'bakery',
     label: 'مخبوزات',
-    image: require('../../assets/cuisines/bakery.png'),
+    image: require('../../assets/cuisines/bakery.webp'),
     keywords: [
       'مخبوزات',
       'مخبز',
@@ -123,7 +126,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'beverages',
     label: 'مشروبات',
-    image: require('../../assets/cuisines/beverages.png'),
+    image: require('../../assets/cuisines/beverages.webp'),
     keywords: [
       'مشروبات',
       'عصير',
@@ -133,7 +136,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'breakfast',
     label: 'فطار',
-    image: require('../../assets/cuisines/breakfast.png'),
+    image: require('../../assets/cuisines/breakfast.webp'),
     keywords: [
       'فطار',
       'إفطار',
@@ -143,7 +146,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'burgers',
     label: 'برجر',
-    image: require('../../assets/cuisines/burgers.png'),
+    image: require('../../assets/cuisines/burgers.webp'),
     keywords: [
       'برجر',
       'burger',
@@ -152,7 +155,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'cakes',
     label: 'كيك',
-    image: require('../../assets/cuisines/cakes.png'),
+    image: require('../../assets/cuisines/cakes.webp'),
     keywords: [
       'كيك',
       'تورتة',
@@ -162,7 +165,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'chicken',
     label: 'فراخ',
-    image: require('../../assets/cuisines/chicken.png'),
+    image: require('../../assets/cuisines/chicken.webp'),
     keywords: [
       'فراخ',
       'دجاج',
@@ -172,7 +175,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'chocolate',
     label: 'شوكولاتة',
-    image: require('../../assets/cuisines/chocolate.png'),
+    image: require('../../assets/cuisines/chocolate.webp'),
     keywords: [
       'شوكولاتة',
       'chocolate',
@@ -181,7 +184,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'coffee',
     label: 'قهوة وشاي',
-    image: require('../../assets/cuisines/coffee.png'),
+    image: require('../../assets/cuisines/coffee.webp'),
     keywords: [
       'قهوة',
       'شاي',
@@ -192,7 +195,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'crepes',
     label: 'كريب',
-    image: require('../../assets/cuisines/crepes.png'),
+    image: require('../../assets/cuisines/crepes.webp'),
     keywords: [
       'كريب',
       'crepe',
@@ -201,7 +204,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'desserts',
     label: 'حلويات',
-    image: require('../../assets/cuisines/desserts.png'),
+    image: require('../../assets/cuisines/desserts.webp'),
     keywords: [
       'حلويات',
       'ديسرت',
@@ -211,7 +214,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'egyptian',
     label: 'أكل مصري',
-    image: require('../../assets/cuisines/egyptian.png'),
+    image: require('../../assets/cuisines/egyptian.webp'),
     keywords: [
       'مصري',
       'طواجن',
@@ -221,7 +224,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'fast-food',
     label: 'وجبات سريعة',
-    image: require('../../assets/cuisines/fast-food.png'),
+    image: require('../../assets/cuisines/fast-food.webp'),
     keywords: [
       'وجبات سريعة',
       'fast food',
@@ -230,7 +233,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'foul-falafel',
     label: 'فول وطعمية',
-    image: require('../../assets/cuisines/foul-falafel.png'),
+    image: require('../../assets/cuisines/foul-falafel.webp'),
     keywords: [
       'فول',
       'طعمية',
@@ -240,7 +243,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'fried-chicken',
     label: 'فراخ مقلية',
-    image: require('../../assets/cuisines/fried-chicken.png'),
+    image: require('../../assets/cuisines/fried-chicken.webp'),
     keywords: [
       'فراخ مقلية',
       'بروست',
@@ -250,7 +253,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'grills',
     label: 'مشويات',
-    image: require('../../assets/cuisines/grills.png'),
+    image: require('../../assets/cuisines/grills.webp'),
     keywords: [
       'مشويات',
       'كباب',
@@ -261,7 +264,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'healthy',
     label: 'أكل صحي',
-    image: require('../../assets/cuisines/healthy.png'),
+    image: require('../../assets/cuisines/healthy.webp'),
     keywords: [
       'صحي',
       'دايت',
@@ -272,7 +275,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'koshary',
     label: 'كشري',
-    image: require('../../assets/cuisines/koshary.png'),
+    image: require('../../assets/cuisines/koshary.webp'),
     keywords: [
       'كشري',
       'koshary',
@@ -281,7 +284,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'pasta',
     label: 'مكرونة',
-    image: require('../../assets/cuisines/pasta.png'),
+    image: require('../../assets/cuisines/pasta.webp'),
     keywords: [
       'مكرونة',
       'باستا',
@@ -291,7 +294,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'pies',
     label: 'فطير',
-    image: require('../../assets/cuisines/pies.png'),
+    image: require('../../assets/cuisines/pies.webp'),
     keywords: [
       'فطير',
       'فطائر',
@@ -301,7 +304,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'pizza',
     label: 'بيتزا',
-    image: require('../../assets/cuisines/pizza.png'),
+    image: require('../../assets/cuisines/pizza.webp'),
     keywords: [
       'بيتزا',
       'pizza',
@@ -310,7 +313,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'sandwiches',
     label: 'ساندوتشات',
-    image: require('../../assets/cuisines/sandwiches.png'),
+    image: require('../../assets/cuisines/sandwiches.webp'),
     keywords: [
       'ساندوتش',
       'سندوتش',
@@ -320,7 +323,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'seafood',
     label: 'مأكولات بحرية',
-    image: require('../../assets/cuisines/seafood.png'),
+    image: require('../../assets/cuisines/seafood.webp'),
     keywords: [
       'سمك',
       'سي فود',
@@ -331,7 +334,7 @@ const CUISINES: CuisineItem[] = [
   {
     key: 'shawarma',
     label: 'شاورما',
-    image: require('../../assets/cuisines/shawarma.png'),
+    image: require('../../assets/cuisines/shawarma.webp'),
     keywords: [
       'شاورما',
       'shawarma',
@@ -479,9 +482,39 @@ function getStoreInitial(
   return source.charAt(0);
 }
 
+function prefetchRestaurantImages(
+  stores: StoreSummary[],
+) {
+  const urls = Array.from(
+    new Set(
+      stores
+        .slice(0, 6)
+        .flatMap((store) => [
+          getStoreCoverUrl(store),
+          getStoreLogoUrl(store),
+        ])
+        .filter(
+          (url): url is string =>
+            Boolean(url),
+        ),
+    ),
+  );
+
+  if (urls.length === 0) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    urls,
+    'memory-disk',
+  );
+}
+
 function StoreArtwork({
+  priority = 'normal',
   store,
 }: {
+  priority?: 'high' | 'normal' | 'low';
   store: StoreSummary;
 }) {
   const [
@@ -511,16 +544,16 @@ function StoreArtwork({
   return (
     <View style={styles.storeArtwork}>
       {canShowCover ? (
-        <Image
-          accessibilityIgnoresInvertColors
+        <ExpoImage
           accessibilityLabel={`صورة الغلاف الخاصة بـ ${store.name}`}
-          resizeMode="cover"
-          source={{
-            uri: coverUrl ?? '',
-          }}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          priority={priority}
+          source={coverUrl ?? ''}
           style={
             styles.storeCoverImage
           }
+          transition={120}
           onError={() => {
             setCoverFailed(true);
           }}
@@ -550,14 +583,14 @@ function StoreArtwork({
 
       <View style={styles.logoBadge}>
         {canShowLogo ? (
-          <Image
-            accessibilityIgnoresInvertColors
+          <ExpoImage
             accessibilityLabel={`لوجو ${store.name}`}
-            resizeMode="cover"
-            source={{
-              uri: logoUrl ?? '',
-            }}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            priority={priority}
+            source={logoUrl ?? ''}
             style={styles.logoImage}
+            transition={100}
             onError={() => {
               setLogoFailed(true);
             }}
@@ -649,6 +682,13 @@ export default function RestaurantsScreen() {
   ] = useState(false);
 
   const [
+    closedStoreNotice,
+    setClosedStoreNotice,
+  ] = useState<StoreSummary | null>(
+    null,
+  );
+
+  const [
     isLoading,
     setIsLoading,
   ] = useState(true);
@@ -686,6 +726,10 @@ export default function RestaurantsScreen() {
             item.slug ===
             RESTAURANTS_SLUG,
         ) ?? null;
+
+      prefetchRestaurantImages(
+        loadedStores,
+      );
 
       setCategory(loadedCategory);
       setStores(loadedStores);
@@ -980,14 +1024,11 @@ export default function RestaurantsScreen() {
             )}
 
             <CuisinePreviewItem
-              active={
-                selectedCuisineKeys.length >
-                0
-              }
+              active={false}
               cuisine={{
                 key: 'view-all',
                 label: 'عرض الكل',
-                image: require('../../assets/cuisines/view-all.png'),
+                image: require('../../assets/cuisines/view-all.webp'),
                 keywords: [],
               }}
               onPress={
@@ -1085,7 +1126,7 @@ export default function RestaurantsScreen() {
               }
             >
               {visibleStores.map(
-                (store) => {
+                (store, storeIndex) => {
                   const ratingInfo =
                     getStoreRatingInfo(
                       store,
@@ -1094,38 +1135,62 @@ export default function RestaurantsScreen() {
                   return (
                     <Pressable
                       key={store.id}
-                      accessibilityLabel={`فتح ${store.name}`}
+                      accessibilityLabel={
+                        store.isManuallyClosed
+                          ? `${store.name} مغلق`
+                          : `فتح ${store.name}`
+                      }
                       accessibilityRole="button"
                       style={({
                         pressed,
                       }) => [
                         styles.storeRow,
+                        store.isManuallyClosed &&
+                          styles.storeRowClosed,
                         pressed &&
                           styles.storeRowPressed,
                       ]}
-                      onPress={() =>
+                      onPress={() => {
+                        if (
+                          store.isManuallyClosed
+                        ) {
+                          setClosedStoreNotice(
+                            store,
+                          );
+                          return;
+                        }
+
                         router.push({
                           pathname:
                             '/store/[id]',
                           params: {
                             id: store.id,
                           },
-                        })
-                      }
+                        });
+                      }}
                     >
                       <StoreArtwork
+                        priority={
+                          storeIndex < 4
+                            ? 'high'
+                            : 'normal'
+                        }
                         store={store}
                       />
 
                       <View
-                        style={
-                          styles.storeBody
-                        }
+                        style={[
+                          styles.storeBody,
+                          store.isManuallyClosed &&
+                            styles.storeBodyClosed,
+                        ]}
                       >
                         <View
-                          style={
-                            styles.storeNameRow
-                          }
+                          style={[
+                            styles.storeNameRow,
+                            store.isManuallyClosed &&
+                              styles.storeNameRowClosed,
+                          ]}
                         >
                           {store.isFeatured && (
                             <View
@@ -1147,64 +1212,96 @@ export default function RestaurantsScreen() {
                             numberOfLines={
                               1
                             }
-                            style={
-                              styles.storeName
-                            }
+                            style={[
+                              styles.storeName,
+                              store.isManuallyClosed &&
+                                styles.storeNameClosed,
+                            ]}
                           >
                             {store.name}
                           </Text>
                         </View>
 
-                        <View
-                          style={
-                            styles.storeMetaRow
-                          }
-                        >
-                          {ratingInfo.hasRatings &&
-                          ratingInfo.rating !==
-                            null ? (
-                            <>
-                              <Text
-                                style={
-                                  styles.ratingStar
-                                }
-                              >
-                                ★
-                              </Text>
-
-                              <Text
-                                style={
-                                  styles.ratingText
-                                }
-                              >
-                                {ratingInfo.rating.toFixed(
-                                  1,
-                                )}
-                              </Text>
-                            </>
-                          ) : (
-                            <Text
-                              style={
-                                styles.newStoreText
-                              }
-                            >
-                              New
-                            </Text>
-                          )}
-                        </View>
-
-                        {store.isManuallyClosed && (
-                          <Text
-                            numberOfLines={
-                              1
-                            }
+                        {store.isManuallyClosed ? (
+                          <View
                             style={
-                              styles.closedMessage
+                              styles.closedStoreMetaRow
                             }
                           >
-                            {store.manualClosedNote ||
-                              'المطعم مغلق مؤقتًا'}
-                          </Text>
+                            {ratingInfo.hasRatings &&
+                            ratingInfo.rating !==
+                              null ? (
+                              <View
+                                style={
+                                  styles.closedRatingGroup
+                                }
+                              >
+                                <Text
+                                  style={
+                                    styles.closedRatingStar
+                                  }
+                                >
+                                  ★
+                                </Text>
+
+                                <Text
+                                  style={
+                                    styles.closedMetaText
+                                  }
+                                >
+                                  {ratingInfo.rating.toFixed(
+                                    1,
+                                  )}
+                                </Text>
+                              </View>
+                            ) : (
+                              <Text
+                                style={
+                                  styles.closedMetaText
+                                }
+                              >
+                                New
+                              </Text>
+                            )}
+                          </View>
+                        ) : (
+                          <View
+                            style={
+                              styles.storeMetaRow
+                            }
+                          >
+                            {ratingInfo.hasRatings &&
+                            ratingInfo.rating !==
+                              null ? (
+                              <>
+                                <Text
+                                  style={
+                                    styles.ratingStar
+                                  }
+                                >
+                                  ★
+                                </Text>
+
+                                <Text
+                                  style={
+                                    styles.ratingText
+                                  }
+                                >
+                                  {ratingInfo.rating.toFixed(
+                                    1,
+                                  )}
+                                </Text>
+                              </>
+                            ) : (
+                              <Text
+                                style={
+                                  styles.newStoreText
+                                }
+                              >
+                                New
+                              </Text>
+                            )}
+                          </View>
                         )}
                       </View>
                     </Pressable>
@@ -1215,6 +1312,13 @@ export default function RestaurantsScreen() {
           )}
         </View>
       </ScrollView>
+
+      <ClosedStoreNotice
+        store={closedStoreNotice}
+        onClose={() =>
+          setClosedStoreNotice(null)
+        }
+      />
 
       <CuisinesModal
         draftCuisineKeys={
@@ -1237,6 +1341,101 @@ export default function RestaurantsScreen() {
         }
       />
     </View>
+  );
+}
+
+function ClosedStoreNotice({
+  onClose,
+  store,
+}: {
+  onClose: () => void;
+  store: StoreSummary | null;
+}) {
+  return (
+    <Modal
+      animationType="fade"
+      statusBarTranslucent
+      transparent
+      visible={Boolean(store)}
+      onRequestClose={onClose}
+    >
+      <View
+        style={
+          styles.closedNoticeModal
+        }
+      >
+        <Pressable
+          accessibilityLabel="إغلاق التنبيه"
+          style={
+            styles.closedNoticeBackdrop
+          }
+          onPress={onClose}
+        />
+
+        <View
+          style={
+            styles.closedNoticeCard
+          }
+        >
+          <Pressable
+            accessibilityLabel="إغلاق"
+            accessibilityRole="button"
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.closedNoticeCloseButton,
+              pressed &&
+                styles.closedNoticePressed,
+            ]}
+            onPress={onClose}
+          >
+            <Text
+              style={
+                styles.closedNoticeCloseText
+              }
+            >
+              ×
+            </Text>
+          </Pressable>
+
+          <View
+            style={
+              styles.closedNoticeContent
+            }
+          >
+            <Text
+              numberOfLines={2}
+              style={
+                styles.closedNoticeTitle
+              }
+            >
+              {store?.name ?? 'المطعم'} مغلق حالياً
+            </Text>
+
+            <Text
+              style={
+                styles.closedNoticeDescription
+              }
+            >
+              بإمكانك إضافة الأصناف إلى سلتك وتنفيذ الطلب عند توفر المطعم.
+            </Text>
+          </View>
+
+          <View
+            style={
+              styles.closedNoticeWarningIcon
+            }
+          >
+            <Text
+              style={
+                styles.closedNoticeWarningText
+              }
+            >
+              !
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1311,6 +1510,42 @@ function CuisinesModal({
   const { height: windowHeight } =
     useWindowDimensions();
 
+  const insets =
+    useSafeAreaInsets();
+
+  /*
+   * iOS already has the footer in the correct visual position.
+   * On Android the Modal can sit much closer to the system
+   * navigation area, so lift only the Android footer by the
+   * device's real bottom safe-area + a small optical gap.
+   */
+  const sheetFooterBottomPadding =
+    Platform.OS === 'android'
+      ? Math.max(
+          48,
+          insets.bottom + 24,
+        )
+      : 30;
+
+  const cuisinesGridBottomPadding =
+    Platform.OS === 'android'
+      ? 130 +
+        Math.max(
+          18,
+          sheetFooterBottomPadding - 30,
+        )
+      : 130;
+
+  const viewResultsButtonHeight =
+    Platform.OS === 'android'
+      ? 54
+      : 62;
+
+  const viewResultsButtonFontSize =
+    Platform.OS === 'android'
+      ? 16
+      : 18;
+
   const sheetTranslateY =
     useRef(
       new Animated.Value(
@@ -1320,6 +1555,9 @@ function CuisinesModal({
 
   const isClosingRef =
     useRef(false);
+
+  const cuisineScrollOffsetRef =
+    useRef(0);
 
   useEffect(() => {
     if (!visible) {
@@ -1407,11 +1645,14 @@ function CuisinesModal({
     });
   }
 
-  const panResponder =
+  const sheetPanResponder =
     useMemo(
       () =>
         PanResponder.create({
           onStartShouldSetPanResponder:
+            () => false,
+
+          onStartShouldSetPanResponderCapture:
             () => false,
 
           onMoveShouldSetPanResponder:
@@ -1419,8 +1660,171 @@ function CuisinesModal({
               _event,
               gestureState,
             ) => {
+              const isAtTop =
+                cuisineScrollOffsetRef.current <=
+                1;
+
               const isMovingDown =
-                gestureState.dy > 4;
+                gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 2
+                  : 4);
+
+              const isMostlyVertical =
+                Math.abs(
+                  gestureState.dy,
+                ) >
+                Math.abs(
+                  gestureState.dx,
+                );
+
+              return (
+                isAtTop &&
+                isMovingDown &&
+                isMostlyVertical
+              );
+            },
+
+          onMoveShouldSetPanResponderCapture:
+            (
+              _event,
+              gestureState,
+            ) => {
+              const isAtTop =
+                cuisineScrollOffsetRef.current <=
+                1;
+
+              const isMovingDown =
+                gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 2
+                  : 4);
+
+              const isMostlyVertical =
+                Math.abs(
+                  gestureState.dy,
+                ) >
+                Math.abs(
+                  gestureState.dx,
+                );
+
+              return (
+                isAtTop &&
+                isMovingDown &&
+                isMostlyVertical
+              );
+            },
+
+          onPanResponderGrant: () => {
+            sheetTranslateY.stopAnimation();
+          },
+
+          onPanResponderMove: (
+            _event,
+            gestureState,
+          ) => {
+            sheetTranslateY.setValue(
+              Math.min(
+                windowHeight,
+                Math.max(
+                  0,
+                  gestureState.dy,
+                ),
+              ),
+            );
+          },
+
+          onPanResponderRelease: (
+            _event,
+            gestureState,
+          ) => {
+            const shouldClose =
+              gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 82
+                  : 110) ||
+              (
+                gestureState.dy > 20 &&
+                gestureState.vy >
+                  (Platform.OS === 'android'
+                    ? 0.68
+                    : 0.9)
+              );
+
+            if (shouldClose) {
+              requestClose();
+              return;
+            }
+
+            animateSheetBack();
+          },
+
+          onPanResponderTerminate:
+            () => {
+              animateSheetBack();
+            },
+
+          onPanResponderTerminationRequest:
+            () => false,
+
+          onShouldBlockNativeResponder:
+            () => true,
+        }),
+      [
+        sheetTranslateY,
+        windowHeight,
+      ],
+    );
+
+  /*
+   * Android fix:
+   *
+   * The native ScrollView can claim the gesture before the parent sheet.
+   * The visible handle therefore owns the touch immediately on Android.
+   * This guarantees that dragging from the grey handle always moves the
+   * complete sheet down.
+   */
+  const handlePanResponder =
+    useMemo(
+      () =>
+        PanResponder.create({
+          onStartShouldSetPanResponder:
+            () =>
+              Platform.OS === 'android',
+
+          onStartShouldSetPanResponderCapture:
+            () =>
+              Platform.OS === 'android',
+
+          onMoveShouldSetPanResponder:
+            (
+              _event,
+              gestureState,
+            ) => {
+              const isMovingDown =
+                gestureState.dy > 1;
+
+              const isMostlyVertical =
+                Math.abs(
+                  gestureState.dy,
+                ) >
+                Math.abs(
+                  gestureState.dx,
+                );
+
+              return (
+                isMovingDown &&
+                isMostlyVertical
+              );
+            },
+
+          onMoveShouldSetPanResponderCapture:
+            (
+              _event,
+              gestureState,
+            ) => {
+              const isMovingDown =
+                gestureState.dy > 1;
 
               const isMostlyVertical =
                 Math.abs(
@@ -1445,9 +1849,12 @@ function CuisinesModal({
             gestureState,
           ) => {
             const nextTranslateY =
-              Math.max(
-                0,
-                gestureState.dy,
+              Math.min(
+                windowHeight,
+                Math.max(
+                  0,
+                  gestureState.dy,
+                ),
               );
 
             sheetTranslateY.setValue(
@@ -1459,17 +1866,20 @@ function CuisinesModal({
             _event,
             gestureState,
           ) => {
-            const draggedFarEnough =
-              gestureState.dy > 120;
+            const shouldClose =
+              gestureState.dy >
+                (Platform.OS === 'android'
+                  ? 64
+                  : 100) ||
+              (
+                gestureState.dy > 16 &&
+                gestureState.vy >
+                  (Platform.OS === 'android'
+                    ? 0.55
+                    : 0.85)
+              );
 
-            const flickedDownFast =
-              gestureState.dy > 30 &&
-              gestureState.vy > 1.1;
-
-            if (
-              draggedFarEnough ||
-              flickedDownFast
-            ) {
+            if (shouldClose) {
               requestClose();
               return;
             }
@@ -1481,6 +1891,12 @@ function CuisinesModal({
             () => {
               animateSheetBack();
             },
+
+          onPanResponderTerminationRequest:
+            () => false,
+
+          onShouldBlockNativeResponder:
+            () => true,
         }),
       [
         sheetTranslateY,
@@ -1525,17 +1941,19 @@ function CuisinesModal({
               ],
             },
           ]}
+          {...sheetPanResponder.panHandlers}
         >
           <View
             style={
               styles.sheetDragArea
             }
-            {...panResponder.panHandlers}
           >
             <View
+              collapsable={false}
               style={
                 styles.sheetHandleTouchArea
               }
+              {...handlePanResponder.panHandlers}
             >
               <View
                 style={
@@ -1604,14 +2022,30 @@ function CuisinesModal({
           </View>
 
           <ScrollView
-            contentContainerStyle={
-              styles.cuisinesGrid
-            }
+            contentContainerStyle={[
+              styles.cuisinesGrid,
+              {
+                paddingBottom:
+                  cuisinesGridBottomPadding,
+              },
+            ]}
             showsVerticalScrollIndicator={
               false
             }
-            bounces
+            bounces={
+              Platform.OS === 'ios'
+            }
+            nestedScrollEnabled
             overScrollMode="never"
+            scrollEventThrottle={16}
+            onScroll={(event) => {
+              cuisineScrollOffsetRef.current =
+                Math.max(
+                  0,
+                  event.nativeEvent.contentOffset
+                    .y,
+                );
+            }}
           >
             {CUISINES.map(
               (cuisine) => {
@@ -1658,21 +2092,6 @@ function CuisinesModal({
                         }
                       />
 
-                      {active && (
-                        <View
-                          style={
-                            styles.cuisineSelectedBadge
-                          }
-                        >
-                          <Text
-                            style={
-                              styles.cuisineSelectedBadgeText
-                            }
-                          >
-                            ✓
-                          </Text>
-                        </View>
-                      )}
                     </View>
 
                     <Text
@@ -1694,9 +2113,13 @@ function CuisinesModal({
           </ScrollView>
 
           <View
-            style={
-              styles.sheetFooter
-            }
+            style={[
+              styles.sheetFooter,
+              {
+                paddingBottom:
+                  sheetFooterBottomPadding,
+              },
+            ]}
           >
             <Pressable
               accessibilityRole="button"
@@ -1704,6 +2127,10 @@ function CuisinesModal({
                 pressed,
               }) => [
                 styles.viewResultsButton,
+                {
+                  minHeight:
+                    viewResultsButtonHeight,
+                },
                 pressed &&
                   styles.pressed,
               ]}
@@ -1712,9 +2139,13 @@ function CuisinesModal({
               }
             >
               <Text
-                style={
-                  styles.viewResultsButtonText
-                }
+                style={[
+                  styles.viewResultsButtonText,
+                  {
+                    fontSize:
+                      viewResultsButtonFontSize,
+                  },
+                ]}
               >
                 عرض النتائج
               </Text>
@@ -1929,6 +2360,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
+  storeRowClosed: {
+    direction: 'rtl',
+    flexDirection: 'row-reverse',
+  },
+
   storeRowPressed: {
     opacity: 0.76,
   },
@@ -2011,7 +2447,7 @@ const styles = StyleSheet.create({
   closedOverlay: {
     alignItems: 'center',
     backgroundColor:
-      'rgba(23,23,26,0.58)',
+      'rgba(18,18,20,0.66)',
     bottom: 0,
     justifyContent: 'center',
     left: 0,
@@ -2023,8 +2459,18 @@ const styles = StyleSheet.create({
 
   closedOverlayText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 26,
     fontWeight: '900',
+    letterSpacing: -0.35,
+    lineHeight: 32,
+    textAlign: 'center',
+    textShadowColor:
+      'rgba(0,0,0,0.22)',
+    textShadowOffset: {
+      height: 1,
+      width: 0,
+    },
+    textShadowRadius: 3,
   },
 
   storeBody: {
@@ -2035,11 +2481,21 @@ const styles = StyleSheet.create({
     paddingRight: 2,
   },
 
+  storeBodyClosed: {
+    alignItems: 'stretch',
+    paddingLeft: 2,
+    paddingRight: 0,
+  },
+
   storeNameRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 6,
     width: '100%',
+  },
+
+  storeNameRowClosed: {
+    flexDirection: 'row-reverse',
   },
 
   storeName: {
@@ -2051,6 +2507,14 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     textAlign: 'left',
     writingDirection: 'auto',
+  },
+
+  storeNameClosed: {
+    color: '#202024',
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   proBadge: {
@@ -2102,12 +2566,133 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
 
-  closedMessage: {
-    color: '#C23D3D',
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 5,
-    textAlign: 'left',
+  closedStoreMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 5,
+    justifyContent: 'flex-start',
+    marginTop: 8,
+    minHeight: 22,
+    width: '100%',
+  },
+
+  closedRatingGroup: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 4,
+  },
+
+  closedRatingStar: {
+    color: '#F4AF00',
+    fontSize: 18,
+    lineHeight: 20,
+  },
+
+  closedMetaText: {
+    color: '#4D4D53',
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 20,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  closedNoticeModal: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+
+  closedNoticeBackdrop: {
+    backgroundColor:
+      'rgba(18,18,20,0.28)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+
+  closedNoticeCard: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#FFF4D8',
+    borderRadius: 24,
+    flexDirection: 'row',
+    marginBottom: 18,
+    marginHorizontal: 16,
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    minHeight: 106,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 4,
+      width: 0,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    width: '92%',
+  },
+
+  closedNoticeCloseButton: {
+    alignItems: 'center',
+    flexShrink: 0,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+
+  closedNoticeCloseText: {
+    color: '#262626',
+    fontSize: 34,
+    fontWeight: '300',
+    lineHeight: 34,
+  },
+
+  closedNoticeContent: {
+    flex: 1,
+    paddingHorizontal: 10,
+  },
+
+  closedNoticeTitle: {
+    color: '#252525',
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 21,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  closedNoticeDescription: {
+    color: '#343434',
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 19,
+    marginTop: 4,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  closedNoticeWarningIcon: {
+    alignItems: 'center',
+    flexShrink: 0,
+    height: 38,
+    justifyContent: 'center',
+    marginLeft: 2,
+    width: 38,
+  },
+
+  closedNoticeWarningText: {
+    color: '#9A6A00',
+    fontSize: 31,
+    fontWeight: '900',
+    lineHeight: 34,
+  },
+
+  closedNoticePressed: {
+    opacity: 0.55,
   },
 
   emptyCard: {
@@ -2197,7 +2782,10 @@ const styles = StyleSheet.create({
   sheetHandleTouchArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 28,
+    minHeight:
+      Platform.OS === 'android'
+        ? 44
+        : 28,
     paddingTop: 7,
   },
 
@@ -2223,23 +2811,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E3E3E6',
-    borderRadius: 27,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 54,
+    height: 44,
     justifyContent: 'center',
-    width: 54,
+    width: 44,
   },
 
   sheetCloseIcon: {
     color: '#151518',
-    fontSize: 34,
+    fontSize: 26,
     fontWeight: '300',
-    lineHeight: 35,
+    lineHeight: 28,
   },
 
   sheetTitle: {
     color: '#18181B',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
   },
 
@@ -2247,16 +2835,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E3E3E6',
-    borderRadius: 27,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 54,
+    height: 44,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
 
   resetCuisineButtonText: {
     color: '#1C1C1F',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
   },
 
@@ -2307,26 +2895,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
 
-  cuisineSelectedBadge: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderColor: '#FFFFFF',
-    borderRadius: 11,
-    borderWidth: 2,
-    height: 22,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: -2,
-    top: -2,
-    width: 22,
-  },
 
-  cuisineSelectedBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-  },
 
   cuisineGridLabel: {
     color: '#6B6B70',
@@ -2348,7 +2917,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    paddingBottom: 30,
     paddingHorizontal: 25,
     paddingTop: 20,
     position: 'absolute',
@@ -2361,12 +2929,10 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.primary,
     borderRadius: 999,
     justifyContent: 'center',
-    minHeight: 62,
   },
 
   viewResultsButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
     fontWeight: '900',
   },
 

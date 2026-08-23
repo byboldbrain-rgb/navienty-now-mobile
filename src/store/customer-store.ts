@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import {
   createJSONStorage,
   persist,
 } from 'zustand/middleware';
+
+import { secureAuthStorage } from '../lib/secure-auth-storage';
 
 export type PaymentMethodId = string;
 
@@ -132,6 +135,11 @@ const initialCustomerState:
     landmark: '',
     paymentMethod: null,
   };
+
+const customerPersistStorage =
+  Platform.OS === 'web'
+    ? AsyncStorage
+    : secureAuthStorage;
 
 export const useCustomerStore =
   create<CustomerState>()(
@@ -334,8 +342,15 @@ export const useCustomerStore =
         name:
           'navienty-now-customer',
 
+        /**
+         * Native customer state contains phone/address/location PII. Persist
+         * it through encrypted SecureStore-backed storage instead of plaintext
+         * AsyncStorage. The adapter migrates the legacy AsyncStorage value on
+         * first read and removes that plaintext copy after a successful write.
+         * Web keeps its normal browser storage behavior.
+         */
         storage: createJSONStorage(
-          () => AsyncStorage,
+          () => customerPersistStorage,
         ),
 
         partialize: (
@@ -522,7 +537,7 @@ export const useCustomerStore =
             );
           },
 
-        version: 5,
+        version: 6,
       },
     ),
   );

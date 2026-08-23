@@ -1,3 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  createClientRequestId,
+  getOrderRequestFingerprint,
+} from '../domain/order-idempotency';
 import { supabase } from '../lib/supabase';
 import type {
   CreateWhatsAppOrderInput,
@@ -68,7 +74,11 @@ type RawOrderDetails = {
 
   summary: {
     subtotal: NumericValue;
+    voucher_code?: string | null;
+    voucher_title_ar?: string | null;
+    voucher_discount_amount?: NumericValue;
     delivery_fee: NumericValue;
+    payment_processing_fee?: NumericValue;
     total_amount: NumericValue;
     currency_code: string;
     currency_symbol: string;
@@ -282,9 +292,29 @@ function mapOrder(
       rawOrder.summary.subtotal,
     ),
 
+    voucherCode:
+      rawOrder.summary.voucher_code ??
+      null,
+
+    voucherTitle:
+      rawOrder.summary.voucher_title_ar ??
+      null,
+
+    voucherDiscountAmount:
+      toNumber(
+        rawOrder.summary
+          .voucher_discount_amount,
+      ),
+
     deliveryFee: toNumber(
       rawOrder.summary.delivery_fee,
     ),
+
+    paymentProcessingFee:
+      toNumber(
+        rawOrder.summary
+          .payment_processing_fee,
+      ),
 
     total: toNumber(
       rawOrder.summary.total_amount,
@@ -371,25 +401,164 @@ function mapOrder(
   };
 }
 
-function createClientRequestId():
-  string {
+const PENDING_ORDER_ATTEMPT_STORAGE_KEY =
+  '@navienty-now/pending-order-create-v1';
+
+const PENDING_ORDER_ATTEMPT_MAX_AGE_MS =
+  10 * 60 * 1000;
+
+type PendingOrderAttempt = {
+  fingerprint: string;
+  clientRequestId: string;
+  createdAt: number;
+};
+
+let memoryPendingOrderAttempt:
+  | PendingOrderAttempt
+  | null = null;
+
+function isReusablePendingOrderAttempt(
+  attempt: PendingOrderAttempt | null,
+  fingerprint: string,
+  currentTime: number,
+): attempt is PendingOrderAttempt {
   return (
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-      .replace(/[xy]/g, (character) => {
-        const randomValue =
-          Math.floor(
-            Math.random() * 16,
-          );
-
-        const value =
-          character === 'x'
-            ? randomValue
-            : (randomValue & 0x3) |
-              0x8;
-
-        return value.toString(16);
-      })
+    attempt !== null &&
+    attempt.fingerprint === fingerprint &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      attempt.clientRequestId,
+    ) &&
+    Number.isFinite(attempt.createdAt) &&
+    attempt.createdAt > 0 &&
+    currentTime - attempt.createdAt >= 0 &&
+    currentTime - attempt.createdAt <=
+      PENDING_ORDER_ATTEMPT_MAX_AGE_MS
   );
+}
+
+function parsePendingOrderAttempt(
+  value: string | null,
+): PendingOrderAttempt | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<PendingOrderAttempt>;
+
+    if (
+      typeof parsed.fingerprint !== 'string' ||
+      typeof parsed.clientRequestId !== 'string' ||
+      typeof parsed.createdAt !== 'number'
+    ) {
+      return null;
+    }
+
+    return {
+      fingerprint: parsed.fingerprint,
+      clientRequestId: parsed.clientRequestId,
+      createdAt: parsed.createdAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getOrCreatePendingOrderAttempt(
+  input: CreateWhatsAppOrderInput,
+): Promise<PendingOrderAttempt> {
+  const fingerprint =
+    getOrderRequestFingerprint(input);
+  const currentTime = Date.now();
+
+  if (
+    isReusablePendingOrderAttempt(
+      memoryPendingOrderAttempt,
+      fingerprint,
+      currentTime,
+    )
+  ) {
+    return memoryPendingOrderAttempt;
+  }
+
+  try {
+    const persistedAttempt =
+      parsePendingOrderAttempt(
+        await AsyncStorage.getItem(
+          PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+        ),
+      );
+
+    if (
+      isReusablePendingOrderAttempt(
+        persistedAttempt,
+        fingerprint,
+        currentTime,
+      )
+    ) {
+      memoryPendingOrderAttempt =
+        persistedAttempt;
+      return persistedAttempt;
+    }
+  } catch {
+    // Idempotency still works for this process through the in-memory fallback.
+  }
+
+  const nextAttempt: PendingOrderAttempt = {
+    fingerprint,
+    clientRequestId: createClientRequestId(),
+    createdAt: currentTime,
+  };
+
+  // Set memory before awaiting persistence so two rapid taps in the same
+  // process cannot generate separate client_request_id values.
+  memoryPendingOrderAttempt = nextAttempt;
+
+  try {
+    await AsyncStorage.setItem(
+      PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+      JSON.stringify(nextAttempt),
+    );
+  } catch {
+    // The in-memory attempt still protects retries while this process lives.
+  }
+
+  return nextAttempt;
+}
+
+async function clearPendingOrderAttempt(
+  attempt: PendingOrderAttempt,
+): Promise<void> {
+  if (
+    memoryPendingOrderAttempt?.clientRequestId ===
+      attempt.clientRequestId &&
+    memoryPendingOrderAttempt.fingerprint ===
+      attempt.fingerprint
+  ) {
+    memoryPendingOrderAttempt = null;
+  }
+
+  try {
+    const persistedAttempt =
+      parsePendingOrderAttempt(
+        await AsyncStorage.getItem(
+          PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+        ),
+      );
+
+    if (
+      persistedAttempt?.clientRequestId ===
+        attempt.clientRequestId &&
+      persistedAttempt.fingerprint ===
+        attempt.fingerprint
+    ) {
+      await AsyncStorage.removeItem(
+        PENDING_ORDER_ATTEMPT_STORAGE_KEY,
+      );
+    }
+  } catch {
+    // A stale attempt expires automatically after the short retry window.
+  }
 }
 
 function getErrorMessage(
@@ -464,12 +633,24 @@ function getErrorMessage(
       'المتجر مغلق أو غير متاح حاليًا.',
     ],
     [
+      'store_closed',
+      'المتجر مغلق حاليًا.',
+    ],
+    [
       'payment_method_not_available',
       'طريقة الدفع المختارة غير متاحة حاليًا.',
     ],
     [
       'product_not_available',
       'أحد المنتجات لم يعد متاحًا. ارجع إلى المتجر وحدّث السلة.',
+    ],
+    [
+      'prescription_required',
+      'هذا الطلب يحتوي على دواء يحتاج روشتة. ارفع الروشتة من صفحة إتمام الطلب ثم حاول مرة أخرى.',
+    ],
+    [
+      'prescription_approval_required',
+      'الروشتة ما زالت تحتاج مراجعة الصيدلية قبل تأكيد الطلب.',
     ],
     [
       'product_variant_required',
@@ -490,6 +671,58 @@ function getErrorMessage(
     [
       'invalid_delivery_address',
       'عنوان التوصيل غير مكتمل.',
+    ],
+    [
+      'voucher_invalid_code',
+      'اكتب كود كوبون صحيح.',
+    ],
+    [
+      'voucher_not_found',
+      'الكوبون غير موجود أو الكود غير صحيح.',
+    ],
+    [
+      'voucher_inactive',
+      'الكوبون غير متاح حاليًا.',
+    ],
+    [
+      'voucher_not_started',
+      'الكوبون لم يبدأ بعد.',
+    ],
+    [
+      'voucher_expired',
+      'انتهت صلاحية هذا الكوبون.',
+    ],
+    [
+      'voucher_store_not_eligible',
+      'الكوبون غير متاح لهذا المتجر.',
+    ],
+    [
+      'voucher_category_not_eligible',
+      'الكوبون غير متاح لهذا النوع من المتاجر.',
+    ],
+    [
+      'voucher_minimum_not_reached',
+      'قيمة المنتجات أقل من الحد الأدنى المطلوب لاستخدام الكوبون.',
+    ],
+    [
+      'voucher_usage_limit_reached',
+      'تم استخدام الكوبون بالكامل.',
+    ],
+    [
+      'voucher_user_limit_reached',
+      'استخدمت هذا الكوبون بالفعل بالحد المسموح.',
+    ],
+    [
+      'voucher_first_order_only',
+      'الكوبون متاح لأول طلب فقط.',
+    ],
+    [
+      'voucher_order_conflict',
+      'تعذر تغيير الكوبون لهذا الطلب. أعد المحاولة من صفحة إتمام الطلب.',
+    ],
+    [
+      'voucher_no_discount',
+      'لا يمكن تطبيق خصم على قيمة الطلب الحالية.',
     ],
     [
       'order_not_found',
@@ -574,9 +807,14 @@ export async function getOrderByToken(
 export async function createWhatsAppOrder(
   input: CreateWhatsAppOrderInput,
 ): Promise<Order> {
+  const pendingAttempt =
+    await getOrCreatePendingOrderAttempt(
+      input,
+    );
+
   const payload = {
     client_request_id:
-      createClientRequestId(),
+      pendingAttempt.clientRequestId,
 
     store_id: input.storeId,
 
@@ -612,6 +850,12 @@ export async function createWhatsAppOrder(
     notes:
       input.notes.trim(),
 
+    voucher_code:
+      input.voucherCode
+        ?.trim()
+        .toUpperCase() ||
+      null,
+
     items: input.items.map(
       (item) => ({
         product_id:
@@ -627,7 +871,7 @@ export async function createWhatsAppOrder(
 
   const { data, error } =
     await supabase.rpc(
-      'create_whatsapp_order',
+      'create_whatsapp_order_v2',
       {
         p_payload: payload,
       },
@@ -650,9 +894,15 @@ export async function createWhatsAppOrder(
     );
   }
 
-  return getOrderByToken(
+  const order = await getOrderByToken(
     createdOrder.access_token,
   );
+
+  await clearPendingOrderAttempt(
+    pendingAttempt,
+  );
+
+  return order;
 }
 
 export async function confirmWhatsAppOrderSent(

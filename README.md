@@ -1,56 +1,88 @@
-# Welcome to your Expo app 👋
+# Navienty Now Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Navienty Now mobile application built with Expo Router, React Native, TypeScript, and Supabase.
 
-## Get started
+## Current release stack
 
-1. Install dependencies
+- Expo SDK 57
+- React Native 0.86.2
+- React 19.2.3
+- TypeScript 6
+- Supabase (`now` schema)
+- Expo Notifications
 
-   ```bash
-   npm install
-   ```
+The native app identifiers are `com.navienty.now` on both Android and iOS.
 
-2. Start the app
+## Local development
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install the exact locked dependencies:
 
 ```bash
-npm run reset-project
+npm ci
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Copy the environment template and provide local development values without committing them:
 
-### Other setup steps
+```bash
+cp .env.example .env.local
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Required public client variables:
 
-## Learn more
+```text
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Start Expo:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npx expo start
+```
 
-## Join the community
+## Required checks
 
-Join our community of developers creating universal apps.
+Run the same release gates used by Mobile CI:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run audit:prod
+npm test
+npx tsc --noEmit
+npm run lint
+```
+
+`npm run audit:prod` keeps High/Critical dependency findings blocking. It contains a narrowly scoped temporary exception for the exact currently unpatched `image-size` advisories inherited through Metro build tooling; remove that exception as soon as upstream provides a patched dependency chain.
+
+## EAS environments
+
+`eas.json` explicitly separates:
+
+- `development`
+- `preview`
+- `production`
+
+Configure `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in the matching EAS environment. Do not commit environment values, Expo access tokens, certificates, keystores, provisioning profiles, or private keys.
+
+## Release Candidate builds
+
+The release-candidate workflow is:
+
+```text
+.github/workflows/rc-eas-build.yml
+```
+
+It requires the GitHub Actions repository secret:
+
+```text
+EXPO_TOKEN
+```
+
+The workflow verifies Expo authentication and submits Android and iOS `preview` builds to EAS. The secret must be stored in GitHub Actions/EAS configuration only and must never be committed to this repository.
+
+Before a release PR is marked ready for review, the resulting Android and iOS binaries must pass the physical-device smoke-test checklist documented on the launch-hardening pull request.
+
+## Push notifications
+
+`expo-notifications` is part of the current SDK 57 dependency set. Push registration and notification routing require a native EAS build; Expo Go is not the release-validation target.
+
+After changing native dependencies, notification configuration, app identifiers, or signing configuration, create a new native preview/production build before testing the affected behavior.

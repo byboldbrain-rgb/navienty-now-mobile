@@ -1,4 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import {
+  hasDifferentRestaurantCart,
+  isRestaurantCartCategory,
+  isSameCartLine,
+} from '../domain/cart-rules';
+
+export {
+  isRestaurantCartCategory,
+} from '../domain/cart-rules';
 import { create } from 'zustand';
 import {
   createJSONStorage,
@@ -28,6 +38,9 @@ export type CartProduct = {
    * Example: Small / Large / X-Large.
    */
   variantName?: string | null;
+
+  requiresPrescription?: boolean;
+  isAgeRestricted?: boolean;
 };
 
 export type CartItem = CartProduct & {
@@ -39,6 +52,8 @@ export type CartItem = CartProduct & {
    */
   variantId: string | null;
   variantName: string | null;
+  requiresPrescription: boolean;
+  isAgeRestricted: boolean;
 };
 
 export type CartStoreInformation = {
@@ -274,58 +289,6 @@ function normalizeCategorySlug(
     : null;
 }
 
-/**
- * Used by screens when they need to apply the restaurant-only rule.
- */
-export function isRestaurantCartCategory(
-  categorySlug:
-    | string
-    | null
-    | undefined,
-) {
-  const normalizedSlug =
-    normalizeCategorySlug(
-      categorySlug,
-    );
-
-  return (
-    normalizedSlug ===
-      'restaurants' ||
-    normalizedSlug ===
-      'restaurant'
-  );
-}
-
-/**
- * A cart line is identified by:
- *
- * product ID + selected variant ID
- *
- * Examples:
- *
- * pizza-1 + small
- * pizza-1 + large
- *
- * are two different cart lines.
- */
-function isSameCartLine(
-  item: CartItem,
-  productId: string,
-  variantId?:
-    | string
-    | null,
-) {
-  return (
-    item.id === productId &&
-    normalizeVariantId(
-      item.variantId,
-    ) ===
-      normalizeVariantId(
-        variantId,
-      )
-  );
-}
-
 function normalizeCartProduct(
   product: CartProduct,
 ): Omit<CartItem, 'quantity'> {
@@ -340,6 +303,12 @@ function normalizeCartProduct(
       normalizeVariantName(
         product.variantName,
       ),
+
+    requiresPrescription:
+      product.requiresPrescription === true,
+
+    isAgeRestricted:
+      product.isAgeRestricted === true,
   };
 }
 
@@ -372,6 +341,12 @@ function normalizeCartItem(
       normalizeVariantName(
         item.variantName,
       ),
+
+    requiresPrescription:
+      item.requiresPrescription === true,
+
+    isAgeRestricted:
+      item.isAgeRestricted === true,
   };
 }
 
@@ -765,31 +740,16 @@ export const useCartStore = create<CartState>()(
            * Restaurant A + Restaurant B = blocked.
            */
           if (
-            isRestaurantCartCategory(
+            hasDifferentRestaurantCart(
+              Object.values(state.carts),
+              store.id,
               categorySlug,
             )
           ) {
-            const anotherRestaurantCart =
-              Object.values(
-                state.carts,
-              ).find(
-                (cart) =>
-                  cart.items.length > 0 &&
-                  cart.storeId !==
-                    store.id &&
-                  isRestaurantCartCategory(
-                    cart.categorySlug,
-                  ),
-              );
+            result =
+              'different-restaurant';
 
-            if (
-              anotherRestaurantCart
-            ) {
-              result =
-                'different-restaurant';
-
-              return state;
-            }
+            return state;
           }
 
           const normalizedProduct =

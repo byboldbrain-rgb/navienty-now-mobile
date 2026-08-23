@@ -97,50 +97,20 @@ function getSubscriberDigits(
 function buildDetailedAddress(
   input: {
     buildingName: string;
-    unitNumber: string;
-    floor: string;
-    street: string;
     locationAddress: string;
   },
 ) {
   const parts: string[] = [];
 
-  const street =
-    input.street.trim();
-
   const buildingName =
     input.buildingName.trim();
-
-  const unitNumber =
-    input.unitNumber.trim();
-
-  const floor =
-    input.floor.trim();
 
   const locationAddress =
     input.locationAddress.trim();
 
-  if (street) {
-    parts.push(
-      `الشارع: ${street}`,
-    );
-  }
-
   if (buildingName) {
     parts.push(
       `المبنى: ${buildingName}`,
-    );
-  }
-
-  if (unitNumber) {
-    parts.push(
-      `رقم الوحدة: ${unitNumber}`,
-    );
-  }
-
-  if (floor) {
-    parts.push(
-      `الطابق: ${floor}`,
     );
   }
 
@@ -221,34 +191,10 @@ export default function AddressDetailsScreen() {
         state.buildingName,
     );
 
-  const savedUnitNumber =
-    useCustomerStore(
-      (state) =>
-        state.apartmentNumber,
-    );
-
-  const savedFloor =
-    useCustomerStore(
-      (state) =>
-        state.floor,
-    );
-
-  const savedStreet =
-    useCustomerStore(
-      (state) =>
-        state.street,
-    );
-
   const savedDeliveryInstructions =
     useCustomerStore(
       (state) =>
         state.deliveryInstructions,
-    );
-
-  const savedAddressLabel =
-    useCustomerStore(
-      (state) =>
-        state.addressLabel,
     );
 
   const setCustomerData =
@@ -265,27 +211,6 @@ export default function AddressDetailsScreen() {
   );
 
   const [
-    unitNumber,
-    setUnitNumber,
-  ] = useState(
-    savedUnitNumber,
-  );
-
-  const [
-    floor,
-    setFloor,
-  ] = useState(
-    savedFloor,
-  );
-
-  const [
-    street,
-    setStreet,
-  ] = useState(
-    savedStreet,
-  );
-
-  const [
     phoneSubscriber,
     setPhoneSubscriber,
   ] = useState(
@@ -299,13 +224,6 @@ export default function AddressDetailsScreen() {
     setDeliveryInstructions,
   ] = useState(
     savedDeliveryInstructions,
-  );
-
-  const [
-    addressLabel,
-    setAddressLabel,
-  ] = useState(
-    savedAddressLabel,
   );
 
   const [
@@ -373,11 +291,6 @@ export default function AddressDetailsScreen() {
       buildingName
         .trim()
         .length >= 1,
-
-    street:
-      street
-        .trim()
-        .length >= 2,
 
     phone:
       /^1[0125]\d{8}$/.test(
@@ -454,9 +367,6 @@ export default function AddressDetailsScreen() {
     const finalAddress =
       buildDetailedAddress({
         buildingName,
-        unitNumber,
-        floor,
-        street,
         locationAddress,
       });
 
@@ -471,19 +381,19 @@ export default function AddressDetailsScreen() {
         buildingName.trim(),
 
       apartmentNumber:
-        unitNumber.trim(),
+        '',
 
       floor:
-        floor.trim(),
+        '',
 
       street:
-        street.trim(),
+        '',
+
+      addressLabel:
+        '',
 
       deliveryInstructions:
         deliveryInstructions.trim(),
-
-      addressLabel:
-        addressLabel.trim(),
 
       /*
        * Checkout already submits landmark.
@@ -845,93 +755,6 @@ export default function AddressDetailsScreen() {
 
           <View
             style={
-              styles.twoColumnRow
-            }
-          >
-            <View
-              style={
-                styles.halfField
-              }
-            >
-              <TextInput
-                value={floor}
-                placeholder="الطابق"
-                placeholderTextColor={
-                  NAVIENTY_NOW_COLORS.textMuted
-                }
-                style={
-                  styles.input
-                }
-                textAlign="right"
-                keyboardType="number-pad"
-                onChangeText={
-                  setFloor
-                }
-              />
-            </View>
-
-            <View
-              style={
-                styles.halfField
-              }
-            >
-              <TextInput
-                value={
-                  unitNumber
-                }
-                placeholder="رقم الوحدة (اختياري)"
-                placeholderTextColor={
-                  NAVIENTY_NOW_COLORS.textMuted
-                }
-                style={
-                  styles.input
-                }
-                textAlign="right"
-                onChangeText={
-                  setUnitNumber
-                }
-              />
-            </View>
-          </View>
-
-          <View
-            style={
-              styles.fieldBlock
-            }
-          >
-            <TextInput
-              value={street}
-              placeholder="الشارع"
-              placeholderTextColor={
-                NAVIENTY_NOW_COLORS.textMuted
-              }
-              style={[
-                styles.input,
-
-                submitted &&
-                  !validation.street &&
-                  styles.inputError,
-              ]}
-              textAlign="right"
-              onChangeText={
-                setStreet
-              }
-            />
-
-            {submitted &&
-            !validation.street ? (
-              <Text
-                style={
-                  styles.errorText
-                }
-              >
-                اكتب اسم الشارع.
-              </Text>
-            ) : null}
-          </View>
-
-          <View
-            style={
               styles.fieldBlock
             }
           >
@@ -1033,32 +856,6 @@ export default function AddressDetailsScreen() {
               setDeliveryInstructions
             }
           />
-
-          <TextInput
-            value={
-              addressLabel
-            }
-            placeholder="تسمية العنوان (اختياري)"
-            placeholderTextColor={
-              NAVIENTY_NOW_COLORS.textMuted
-            }
-            style={[
-              styles.input,
-              styles.labelInput,
-            ]}
-            textAlign="right"
-            onChangeText={
-              setAddressLabel
-            }
-          />
-
-          <Text
-            style={
-              styles.labelHelper
-            }
-          >
-            سمِّ العنوان لو حابب تلاقيه بسرعة بعد كده، مثل: السكن أو البيت.
-          </Text>
         </View>
       </ScrollView>
 
@@ -1219,7 +1016,20 @@ const styles =
     },
 
     mapPreview: {
-      ...StyleSheet.absoluteFillObject,
+      position:
+        'absolute',
+
+      bottom:
+        0,
+
+      left:
+        0,
+
+      right:
+        0,
+
+      top:
+        0,
     },
 
     mapPinWrap: {
@@ -1390,22 +1200,6 @@ const styles =
         NAVIENTY_NOW_COLORS.error,
     },
 
-    twoColumnRow: {
-      flexDirection:
-        'row',
-
-      gap:
-        10,
-
-      marginBottom:
-        12,
-    },
-
-    halfField: {
-      flex:
-        1,
-    },
-
     errorText: {
       color:
         NAVIENTY_NOW_COLORS.error,
@@ -1525,34 +1319,6 @@ const styles =
 
       paddingTop:
         16,
-    },
-
-    labelInput: {
-      marginTop:
-        12,
-    },
-
-    labelHelper: {
-      color:
-        NAVIENTY_NOW_COLORS.textMuted,
-
-      fontSize:
-        10,
-
-      lineHeight:
-        16,
-
-      marginTop:
-        7,
-
-      paddingHorizontal:
-        4,
-
-      textAlign:
-        'right',
-
-      writingDirection:
-        'rtl',
     },
 
     bottomBar: {
