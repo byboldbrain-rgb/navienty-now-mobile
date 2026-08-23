@@ -8,7 +8,6 @@ import {
 } from 'react';
 import {
   Animated,
-  Image,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -19,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {

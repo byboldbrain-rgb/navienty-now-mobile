@@ -1690,7 +1690,115 @@ export function getCatalogSectionOffers(
  * ============================================================
  */
 
-export async function listStores(
+const PUBLIC_CATALOG_CACHE_TTL_MS =
+  60 * 1000;
+
+type TimedCacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const storeListCache =
+  new Map<
+    string,
+    TimedCacheEntry<StoreSummary[]>
+  >();
+
+const storeListRequests =
+  new Map<
+    string,
+    Promise<StoreSummary[]>
+  >();
+
+const storeCatalogCache =
+  new Map<
+    string,
+    TimedCacheEntry<StoreCatalog>
+  >();
+
+const storeCatalogRequests =
+  new Map<
+    string,
+    Promise<StoreCatalog>
+  >();
+
+function readTimedCache<T>(
+  cache: Map<
+    string,
+    TimedCacheEntry<T>
+  >,
+  key: string,
+): T | null {
+  const entry = cache.get(key);
+
+  if (!entry) {
+    return null;
+  }
+
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+
+  return entry.value;
+}
+
+function writeTimedCache<T>(
+  cache: Map<
+    string,
+    TimedCacheEntry<T>
+  >,
+  key: string,
+  value: T,
+) {
+  cache.set(key, {
+    value,
+    expiresAt:
+      Date.now() +
+      PUBLIC_CATALOG_CACHE_TTL_MS,
+  });
+}
+
+function getStoreListCacheKey(
+  options: {
+    serviceAreaId?: string;
+    categorySlug?: StoreCategorySlug;
+  },
+) {
+  const serviceAreaKey =
+    options.serviceAreaId?.trim() || '*';
+
+  const categoryKey =
+    options.categorySlug
+      ? normalizeSlug(
+          options.categorySlug,
+        )
+      : '*';
+
+  return `${serviceAreaKey}:${categoryKey}`;
+}
+
+function filterStoresByCategory(
+  stores: StoreSummary[],
+  categorySlug: StoreCategorySlug,
+) {
+  const categoryAliases =
+    new Set(
+      getStoreCategoryAliases(
+        categorySlug,
+      ),
+    );
+
+  return stores.filter((store) =>
+    categoryAliases.has(
+      normalizeSlug(
+        store.categorySlug,
+      ),
+    ),
+  );
+}
+
+async function loadStoresFromSupabase(
   options: {
     serviceAreaId?: string;
     categorySlug?:
@@ -1809,26 +1917,140 @@ export async function listStores(
     return [];
   }
 
-  const categoryAliases =
-    new Set(
-      getStoreCategoryAliases(
-        options.categorySlug,
-      ),
-    );
-
-  return (
-    fallbackResult.data as RawStoreSummary[]
-  )
-    .filter((store) =>
-      categoryAliases.has(
-        normalizeSlug(
-          store.category_slug,
-        ),
-      ),
-    )
-    .map(
+  const fallbackStores =
+    (
+      fallbackResult.data as RawStoreSummary[]
+    ).map(
       mapStoreSummary,
     );
+
+  writeTimedCache(
+    storeListCache,
+    getStoreListCacheKey({
+      serviceAreaId:
+        options.serviceAreaId,
+    }),
+    fallbackStores,
+  );
+
+  return filterStoresByCategory(
+    fallbackStores,
+    options.categorySlug,
+  );
+}
+
+export async function listStores(
+  options: {
+    serviceAreaId?: string;
+    categorySlug?:
+      StoreCategorySlug;
+  } = {},
+): Promise<StoreSummary[]> {
+  const cacheKey =
+    getStoreListCacheKey(options);
+
+  const cachedStores =
+    readTimedCache(
+      storeListCache,
+      cacheKey,
+    );
+
+  if (cachedStores) {
+    return cachedStores;
+  }
+
+  if (options.categorySlug) {
+    const allStoresKey =
+      getStoreListCacheKey({
+        serviceAreaId:
+          options.serviceAreaId,
+      });
+
+    const cachedAllStores =
+      readTimedCache(
+        storeListCache,
+        allStoresKey,
+      );
+
+    if (cachedAllStores) {
+      const filteredStores =
+        filterStoresByCategory(
+          cachedAllStores,
+          options.categorySlug,
+        );
+
+      writeTimedCache(
+        storeListCache,
+        cacheKey,
+        filteredStores,
+      );
+
+      return filteredStores;
+    }
+
+    const allStoresRequest =
+      storeListRequests.get(
+        allStoresKey,
+      );
+
+    if (allStoresRequest) {
+      const allStores =
+        await allStoresRequest;
+
+      const filteredStores =
+        filterStoresByCategory(
+          allStores,
+          options.categorySlug,
+        );
+
+      writeTimedCache(
+        storeListCache,
+        cacheKey,
+        filteredStores,
+      );
+
+      return filteredStores;
+    }
+  }
+
+  const pendingRequest =
+    storeListRequests.get(cacheKey);
+
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+
+  const request =
+    loadStoresFromSupabase(
+      options,
+    ).then((stores) => {
+      writeTimedCache(
+        storeListCache,
+        cacheKey,
+        stores,
+      );
+
+      return stores;
+    });
+
+  storeListRequests.set(
+    cacheKey,
+    request,
+  );
+
+  try {
+    return await request;
+  } finally {
+    if (
+      storeListRequests.get(
+        cacheKey,
+      ) === request
+    ) {
+      storeListRequests.delete(
+        cacheKey,
+      );
+    }
+  }
 }
 
 /* ============================================================
@@ -1919,7 +2141,7 @@ async function loadCatalogCategoryMeta(
  * ============================================================
  */
 
-export async function getStoreCatalog(
+async function loadStoreCatalogFromSupabase(
   storeId: string,
   serviceAreaId?: string,
 ): Promise<StoreCatalog> {
@@ -1991,4 +2213,77 @@ export async function getStoreCatalog(
     data as RawStoreCatalog,
     categoryMeta,
   );
+}
+
+export async function getStoreCatalog(
+  storeId: string,
+  serviceAreaId?: string,
+): Promise<StoreCatalog> {
+  const normalizedStoreId =
+    storeId.trim();
+
+  if (!normalizedStoreId) {
+    throw new Error(
+      'A store ID is required.',
+    );
+  }
+
+  const normalizedServiceAreaId =
+    serviceAreaId?.trim() || undefined;
+
+  const cacheKey =
+    `${normalizedStoreId}:` +
+    `${normalizedServiceAreaId ?? '*'}`;
+
+  const cachedCatalog =
+    readTimedCache(
+      storeCatalogCache,
+      cacheKey,
+    );
+
+  if (cachedCatalog) {
+    return cachedCatalog;
+  }
+
+  const pendingRequest =
+    storeCatalogRequests.get(
+      cacheKey,
+    );
+
+  if (pendingRequest) {
+    return pendingRequest;
+  }
+
+  const request =
+    loadStoreCatalogFromSupabase(
+      normalizedStoreId,
+      normalizedServiceAreaId,
+    ).then((catalog) => {
+      writeTimedCache(
+        storeCatalogCache,
+        cacheKey,
+        catalog,
+      );
+
+      return catalog;
+    });
+
+  storeCatalogRequests.set(
+    cacheKey,
+    request,
+  );
+
+  try {
+    return await request;
+  } finally {
+    if (
+      storeCatalogRequests.get(
+        cacheKey,
+      ) === request
+    ) {
+      storeCatalogRequests.delete(
+        cacheKey,
+      );
+    }
+  }
 }

@@ -88,6 +88,20 @@ type ServiceCategoryRow = {
   icon: string | null;
 };
 
+const APP_BOOTSTRAP_CACHE_TTL_MS =
+  5 * 60 * 1000;
+
+let cachedAppBootstrap:
+  | {
+      value: AppBootstrap;
+      expiresAt: number;
+    }
+  | null = null;
+
+let appBootstrapRequest:
+  | Promise<AppBootstrap>
+  | null = null;
+
 function isBookstoreSlug(
   slug: string,
 ): boolean {
@@ -170,7 +184,7 @@ function findServiceAreaById(
   return null;
 }
 
-async function getAppBootstrap():
+async function loadAppBootstrap():
   Promise<AppBootstrap> {
   const { data, error } =
     await publicSupabase.rpc(
@@ -235,6 +249,43 @@ async function getAppBootstrap():
       bookstoreCategory,
     ],
   };
+}
+
+async function getAppBootstrap():
+  Promise<AppBootstrap> {
+  const currentTime = Date.now();
+
+  if (
+    cachedAppBootstrap &&
+    cachedAppBootstrap.expiresAt >
+      currentTime
+  ) {
+    return cachedAppBootstrap.value;
+  }
+
+  if (appBootstrapRequest) {
+    return appBootstrapRequest;
+  }
+
+  appBootstrapRequest =
+    loadAppBootstrap().then(
+      (bootstrap) => {
+        cachedAppBootstrap = {
+          value: bootstrap,
+          expiresAt:
+            Date.now() +
+            APP_BOOTSTRAP_CACHE_TTL_MS,
+        };
+
+        return bootstrap;
+      },
+    );
+
+  try {
+    return await appBootstrapRequest;
+  } finally {
+    appBootstrapRequest = null;
+  }
 }
 
 export {
