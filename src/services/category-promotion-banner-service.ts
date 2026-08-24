@@ -10,7 +10,6 @@ export type CategoryPromotionBannerAudience =
 
 export type CategoryPromotionBannerPlacement =
   | 'supermarket'
-  | 'pharmacy'
   | 'bookstore';
 
 type HomeBannerProductRow = {

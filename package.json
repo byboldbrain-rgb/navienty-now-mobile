@@ -59,6 +59,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "validate:v1-scope": "node scripts/validate-v1-public-scope.mjs",
     "audit:prod": "node scripts/audit-production.mjs"
   },
   "private": true

@@ -428,7 +428,7 @@ export default function SearchScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               clearButtonMode="while-editing"
-              placeholder="ابحث عن مطعم، سوبرماركت أو صيدلية"
+              placeholder="ابحث عن مطعم، سوبرماركت أو مكتبة"
               placeholderTextColor={
                 NAVIENTY_NOW_COLORS.textMuted
               }

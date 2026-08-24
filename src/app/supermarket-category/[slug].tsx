@@ -1813,9 +1813,6 @@ export default function SupermarketCategoryScreen() {
         variantName:
           null,
 
-        requiresPrescription:
-          product.requiresPrescription,
-
         isAgeRestricted:
           product.isAgeRestricted,
       },

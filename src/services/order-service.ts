@@ -103,7 +103,6 @@ type RawOrderDetails = {
     quantity: number;
     unit_price: NumericValue;
     line_total: NumericValue;
-    requires_prescription: boolean;
     is_age_restricted: boolean;
   }>;
 
@@ -218,9 +217,6 @@ function mapOrder(
     icon: item.icon ?? '📦',
     imageUrl: item.image_url,
     quantity: item.quantity,
-
-    requiresPrescription:
-      item.requires_prescription,
 
     isAgeRestricted:
       item.is_age_restricted,
@@ -643,14 +639,6 @@ function getErrorMessage(
     [
       'product_not_available',
       'أحد المنتجات لم يعد متاحًا. ارجع إلى المتجر وحدّث السلة.',
-    ],
-    [
-      'prescription_required',
-      'هذا الطلب يحتوي على دواء يحتاج روشتة. ارفع الروشتة من صفحة إتمام الطلب ثم حاول مرة أخرى.',
-    ],
-    [
-      'prescription_approval_required',
-      'الروشتة ما زالت تحتاج مراجعة الصيدلية قبل تأكيد الطلب.',
     ],
     [
       'product_variant_required',

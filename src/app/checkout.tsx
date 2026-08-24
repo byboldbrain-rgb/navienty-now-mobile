@@ -25,6 +25,10 @@ import {
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
+  isV1PublicCategorySlug,
+  V1_UNAVAILABLE_CATEGORY_MESSAGE,
+} from '../config/v1-release-scope';
+import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
 import getAppBootstrap, {
@@ -40,12 +44,6 @@ import {
   createWhatsAppOrder,
   submitOrderForConfirmation,
 } from '../services/order-service';
-import {
-  attachPrescriptionToOrder,
-  getMyOpenPrescriptionSubmission,
-  pickAndUploadPrescription,
-  type PrescriptionSubmission,
-} from '../services/prescription-service';
 import {
   validateVoucher,
 } from '../services/voucher-service';
@@ -286,19 +284,7 @@ function StoreCheckoutScreen() {
     checkoutCart?.storeName ??
     null;
 
-  const isPharmacyCart =
-    checkoutCart?.categorySlug ===
-      'pharmacy';
-
-  const requiresPrescription =
-    isPharmacyCart &&
-    items.some(
-      (item) =>
-        item.requiresPrescription,
-    );
-
   const hasAgeRestrictedItems =
-    isPharmacyCart &&
     items.some(
       (item) =>
         item.isAgeRestricted,
@@ -486,33 +472,6 @@ function StoreCheckoutScreen() {
     setIsSubmittingOrder,
   ] = useState(false);
 
-  const [
-    prescriptionSubmission,
-    setPrescriptionSubmission,
-  ] = useState<PrescriptionSubmission | null>(
-    null,
-  );
-
-  const [
-    prescriptionFileName,
-    setPrescriptionFileName,
-  ] = useState<string | null>(null);
-
-  const [
-    isLoadingPrescription,
-    setIsLoadingPrescription,
-  ] = useState(false);
-
-  const [
-    isUploadingPrescription,
-    setIsUploadingPrescription,
-  ] = useState(false);
-
-  const [
-    prescriptionError,
-    setPrescriptionError,
-  ] = useState<string | null>(null);
-
   /* -------------------------------- */
   /* LOAD CHECKOUT DATA               */
   /* -------------------------------- */
@@ -673,63 +632,6 @@ function StoreCheckoutScreen() {
     subtotal,
   ]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadPrescription() {
-      if (
-        !requiresPrescription ||
-        !storeId
-      ) {
-        setPrescriptionSubmission(null);
-        setPrescriptionFileName(null);
-        setPrescriptionError(null);
-        setIsLoadingPrescription(false);
-        return;
-      }
-
-      try {
-        setIsLoadingPrescription(true);
-        setPrescriptionError(null);
-
-        const current =
-          await getMyOpenPrescriptionSubmission(
-            storeId,
-          );
-
-        if (!cancelled) {
-          setPrescriptionSubmission(current);
-          setPrescriptionFileName(
-            current?.status === 'submitted'
-              ? 'روشتة مرفوعة'
-              : null,
-          );
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setPrescriptionError(
-            error instanceof Error
-              ? error.message
-              : 'تعذر تحميل حالة الروشتة.',
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingPrescription(false);
-        }
-      }
-    }
-
-    void loadPrescription();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    requiresPrescription,
-    storeId,
-  ]);
-
   /* -------------------------------- */
   /* DERIVED DATA                     */
   /* -------------------------------- */
@@ -878,52 +780,6 @@ function StoreCheckoutScreen() {
 
 
 
-  async function uploadPrescription() {
-    if (
-      !storeId ||
-      isUploadingPrescription
-    ) {
-      return;
-    }
-
-    try {
-      setIsUploadingPrescription(true);
-      setPrescriptionError(null);
-
-      const result =
-        await pickAndUploadPrescription(
-          storeId,
-        );
-
-      if (
-        result.status ===
-        'submitted'
-      ) {
-        setPrescriptionSubmission(
-          result.submission,
-        );
-        setPrescriptionFileName(
-          result.fileName,
-        );
-      }
-    } catch (error) {
-      setPrescriptionError(
-        error instanceof Error
-          ? error.message
-          : 'تعذر رفع الروشتة.',
-      );
-    } finally {
-      setIsUploadingPrescription(false);
-    }
-  }
-
-  const prescriptionIsReady =
-    !requiresPrescription ||
-    prescriptionSubmission?.status ===
-      'submitted' ||
-    prescriptionSubmission?.status ===
-      'approved';
-
   /* -------------------------------- */
   /* VALIDATION                       */
   /* -------------------------------- */
@@ -949,9 +805,6 @@ function StoreCheckoutScreen() {
 
     paymentMethod:
       paymentMethod !== null,
-
-    prescription:
-      prescriptionIsReady,
   };
 
   const deliveryIsAvailable =
@@ -1130,6 +983,18 @@ function StoreCheckoutScreen() {
     setSubmitted(true);
 
     if (
+      !isV1PublicCategorySlug(
+        checkoutCart?.categorySlug,
+      )
+    ) {
+      Alert.alert(
+        'القسم غير متاح',
+        V1_UNAVAILABLE_CATEGORY_MESSAGE,
+      );
+      return;
+    }
+
+    if (
       !formIsValid ||
       !selectedPaymentMethod
     ) {
@@ -1296,17 +1161,6 @@ function StoreCheckoutScreen() {
             }),
           ),
         });
-
-      if (
-        requiresPrescription &&
-        prescriptionSubmission?.status ===
-          'submitted'
-      ) {
-        await attachPrescriptionToOrder(
-          createdOrder.id,
-          prescriptionSubmission.id,
-        );
-      }
 
       const whatsappPaymentMessage =
         `اكد الاوردر وهدفع عن طريق ${
@@ -1605,203 +1459,49 @@ function StoreCheckoutScreen() {
           </View>
         </View>
 
-        {(requiresPrescription ||
-          hasAgeRestrictedItems) && (
+        {hasAgeRestrictedItems && (
           <View style={styles.section}>
             <Text
               style={
                 styles.sectionTitle
               }
             >
-              متطلبات الصيدلية
+              متطلبات التسليم
             </Text>
 
-            {requiresPrescription && (
+            <View
+              style={
+                styles.ageVerificationCard
+              }
+            >
+              <Ionicons
+                name="card-outline"
+                size={18}
+                color="#7B4B14"
+              />
+
               <View
                 style={
-                  styles.prescriptionCard
+                  styles.ageVerificationCopy
                 }
               >
-                <View
+                <Text
                   style={
-                    styles.prescriptionHeader
+                    styles.ageVerificationTitle
                   }
                 >
-                  <View
-                    style={
-                      styles.prescriptionIcon
-                    }
-                  >
-                    <Ionicons
-                      name="document-text-outline"
-                      size={18}
-                      color="#8A5A18"
-                    />
-                  </View>
+                  التحقق من السن عند التسليم
+                </Text>
 
-                  <View
-                    style={
-                      styles.prescriptionCopy
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.prescriptionTitle
-                      }
-                    >
-                      هذا الطلب يحتاج روشتة
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.prescriptionDescription
-                      }
-                    >
-                      ارفع صورة واضحة أو PDF للروشتة قبل إرسال الطلب. الملف خاص ولا يظهر في الكتالوج أو لأي مستخدم آخر.
-                    </Text>
-                  </View>
-                </View>
-
-                {isLoadingPrescription ? (
-                  <View
-                    style={
-                      styles.prescriptionLoading
-                    }
-                  >
-                    <ActivityIndicator
-                      size="small"
-                      color="#8A5A18"
-                    />
-                  </View>
-                ) : prescriptionIsReady ? (
-                  <View
-                    style={
-                      styles.prescriptionReadyRow
-                    }
-                  >
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={17}
-                      color={BRAND_GREEN}
-                    />
-
-                    <Text
-                      style={
-                        styles.prescriptionReadyText
-                      }
-                      numberOfLines={1}
-                    >
-                      {prescriptionFileName ??
-                        'تم رفع الروشتة'}
-                    </Text>
-                  </View>
-                ) : null}
-
-                <Pressable
-                  disabled={
-                    isUploadingPrescription ||
-                    isLoadingPrescription
-                  }
-                  style={({ pressed }) => [
-                    styles.prescriptionButton,
-                    (isUploadingPrescription ||
-                      isLoadingPrescription) &&
-                      styles.prescriptionButtonDisabled,
-                    pressed &&
-                      !isUploadingPrescription &&
-                      !isLoadingPrescription &&
-                      styles.buttonPressed,
-                  ]}
-                  onPress={() => {
-                    void uploadPrescription();
-                  }}
-                >
-                  {isUploadingPrescription ? (
-                    <ActivityIndicator
-                      size="small"
-                      color="#ffffff"
-                    />
-                  ) : (
-                    <Ionicons
-                      name={
-                        prescriptionIsReady
-                          ? 'refresh-outline'
-                          : 'cloud-upload-outline'
-                      }
-                      size={17}
-                      color="#ffffff"
-                    />
-                  )}
-
-                  <Text
-                    style={
-                      styles.prescriptionButtonText
-                    }
-                  >
-                    {prescriptionIsReady
-                      ? 'استبدال الروشتة'
-                      : 'رفع الروشتة'}
-                  </Text>
-                </Pressable>
-
-                {prescriptionError && (
-                  <Text
-                    style={
-                      styles.prescriptionError
-                    }
-                  >
-                    {prescriptionError}
-                  </Text>
-                )}
-
-                {submitted &&
-                  !validation.prescription && (
-                    <Text
-                      style={
-                        styles.prescriptionError
-                      }
-                    >
-                      ارفع الروشتة قبل إرسال الطلب.
-                    </Text>
-                  )}
-              </View>
-            )}
-
-            {hasAgeRestrictedItems && (
-              <View
-                style={
-                  styles.ageVerificationCard
-                }
-              >
-                <Ionicons
-                  name="card-outline"
-                  size={18}
-                  color="#7B4B14"
-                />
-
-                <View
+                <Text
                   style={
-                    styles.ageVerificationCopy
+                    styles.ageVerificationText
                   }
                 >
-                  <Text
-                    style={
-                      styles.ageVerificationTitle
-                    }
-                  >
-                    التحقق من السن عند التسليم
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.ageVerificationText
-                    }
-                  >
-                    قد يطلب المندوب أو فريق الصيدلية بطاقة هوية قبل تسليم المنتجات المقيدة بالعمر.
-                  </Text>
-                </View>
+                  قد يطلب المندوب أو المتجر بطاقة هوية قبل تسليم المنتجات المقيدة بالعمر.
+                </Text>
               </View>
-            )}
+            </View>
           </View>
         )}
 
@@ -2507,103 +2207,6 @@ const styles =
       fontSize: 13,
       fontWeight: '800',
       marginTop: 3,
-      textAlign: 'right',
-    },
-
-    prescriptionCard: {
-      backgroundColor: '#FFF8EB',
-      borderColor: '#F0D8AE',
-      borderRadius: 16,
-      borderWidth: 1,
-      marginBottom: 12,
-      padding: 13,
-    },
-
-    prescriptionHeader: {
-      alignItems: 'flex-start',
-      flexDirection: 'row',
-    },
-
-    prescriptionIcon: {
-      alignItems: 'center',
-      backgroundColor: '#ffffff',
-      borderRadius: 17,
-      height: 34,
-      justifyContent: 'center',
-      width: 34,
-    },
-
-    prescriptionCopy: {
-      flex: 1,
-      marginLeft: 12,
-    },
-
-    prescriptionTitle: {
-      color: '#5D3B13',
-      fontSize: 13,
-      fontWeight: '800',
-      textAlign: 'right',
-    },
-
-    prescriptionDescription: {
-      color: '#806543',
-      fontSize: 11,
-      lineHeight: 18,
-      marginTop: 5,
-      textAlign: 'right',
-    },
-
-    prescriptionLoading: {
-      alignItems: 'center',
-      marginTop: 14,
-    },
-
-    prescriptionReadyRow: {
-      alignItems: 'center',
-      backgroundColor: '#ffffff',
-      borderRadius: 12,
-      flexDirection: 'row',
-      marginTop: 13,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-
-    prescriptionReadyText: {
-      color: '#325E42',
-      flex: 1,
-      fontSize: 11,
-      fontWeight: '700',
-      marginLeft: 8,
-      textAlign: 'right',
-    },
-
-    prescriptionButton: {
-      alignItems: 'center',
-      backgroundColor: '#8A5A18',
-      borderRadius: 14,
-      flexDirection: 'row',
-      gap: 8,
-      justifyContent: 'center',
-      marginTop: 13,
-      minHeight: 48,
-      paddingHorizontal: 16,
-    },
-
-    prescriptionButtonDisabled: {
-      opacity: 0.55,
-    },
-
-    prescriptionButtonText: {
-      color: '#ffffff',
-      fontSize: 12,
-      fontWeight: '800',
-    },
-
-    prescriptionError: {
-      color: '#B44343',
-      fontSize: 11,
-      lineHeight: 17,
-      marginTop: 9,
       textAlign: 'right',
     },
 

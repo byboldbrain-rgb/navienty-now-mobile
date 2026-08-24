@@ -1,3 +1,6 @@
+import {
+  isV1PublicCategorySlug,
+} from '../config/v1-release-scope';
 import { publicSupabase } from '../lib/supabase';
 
 export type AppSettings = {
@@ -212,8 +215,16 @@ async function loadAppBootstrap():
       ? bootstrap.store_categories
       : [];
 
+  const publicCategories =
+    currentCategories.filter(
+      (category) =>
+        isV1PublicCategorySlug(
+          category.slug,
+        ),
+    );
+
   const bookstoreExists =
-    currentCategories.some((category) => {
+    publicCategories.some((category) => {
       const slug =
         category.slug
           .trim()
@@ -229,7 +240,7 @@ async function loadAppBootstrap():
     return {
       ...bootstrap,
       store_categories:
-        currentCategories,
+        publicCategories,
     };
   }
 
@@ -245,7 +256,7 @@ async function loadAppBootstrap():
   return {
     ...bootstrap,
     store_categories: [
-      ...currentCategories,
+      ...publicCategories,
       bookstoreCategory,
     ],
   };

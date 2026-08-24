@@ -1,3 +1,6 @@
+import {
+  isV1PublicPromotion,
+} from '../config/v1-release-scope';
 import { publicSupabase } from '../lib/supabase';
 import {
   type PromoActionPayload,
@@ -18,8 +21,7 @@ export type HomeBannerAudience =
 export type HomeBannerPlacement =
   | 'main'
   | 'exclusive_offers'
-  | 'supermarket'
-  | 'pharmacy';
+  | 'supermarket';
 
 export type HomeBannerImage = {
   id: string;
@@ -678,6 +680,7 @@ async function listHomeBanners(
     .filter(
       (banner) =>
         banner.image_url.trim().length > 0 &&
+        isV1PublicPromotion(banner) &&
         isBannerCurrentlyVisible(
           banner,
           currentTime,
@@ -728,6 +731,7 @@ async function getHomeBannerById(
 
   if (
     !banner.image_url.trim() ||
+    !isV1PublicPromotion(banner) ||
     !isBannerCurrentlyVisible(
       banner,
       Date.now(),

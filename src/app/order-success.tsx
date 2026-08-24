@@ -361,7 +361,7 @@ function StoreOrderSuccessScreen() {
   /*
    * Store artwork.
    *
-   * Every store type (restaurant, supermarket, pharmacy, bookstore)
+   * Every public store type uses the same in-app confirmation flow.
    * lives in now.stores and can have:
    *
    * - logo_url
@@ -416,7 +416,7 @@ function StoreOrderSuccessScreen() {
        * 1) Universal source of truth: now.stores.
        *
        * Using the order's store_id means this works identically for
-       * restaurants, supermarkets, pharmacies and bookstores.
+       * restaurants, supermarkets, bookstores and other public categories.
        */
       try {
         const {

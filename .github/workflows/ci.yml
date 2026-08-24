@@ -31,6 +31,9 @@ jobs:
       - name: Validate image assets
         run: node scripts/validate-image-assets.mjs
 
+      - name: Validate v1 public scope
+        run: npm run validate:v1-scope
+
       - name: Validate release config
         run: node scripts/validate-release-config.mjs
 

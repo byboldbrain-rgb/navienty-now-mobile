@@ -34,11 +34,11 @@ Navienty Now يجمع احتياجاتك اليومية في تجربة عربي
 تعتمد المتاجر والخدمات والتغطية وطرق الدفع على المنطقة والتوافر. قد يتواصل فريق Navienty Now معك لتأكيد التفاصيل. واتساب قناة دعم اختيارية وليس مطلوبًا لإكمال الطلب داخل التطبيق.
 ```
 
-Do not mention pharmacy in the metadata unless the Organization/legal-service
-path is approved and pharmacy remains genuinely available in the submitted
-binary and production backend. If the Individual first-release path is chosen,
-the pharmacy, prescription, and regulated-product flows must be removed from
-the real public release before using this description.
+Version 1 is fixed to the Individual-account release scope: it does not offer
+pharmacy, prescription, or regulated-medicine ordering. Keep those features
+absent from the submitted binary, production catalog, banners, screenshots,
+metadata, and reviewer path. Run `npm run validate:v1-scope` before every
+release build.
 
 ### First-version release text
 
@@ -81,8 +81,7 @@ the deployed backend and every enabled SDK before submitting.
 | Purchase history | Orders, bookings, payment status | Yes | No |
 | User ID | Supabase Auth ownership and account operations | Yes | No |
 | Device ID | Push token/subscription | Yes | No |
-| Photos or videos / other user content | Prescription and payment-proof uploads | Yes | No |
-| Health | Prescription content when pharmacy is included | Yes | No |
+| Photos or videos / other user content | Payment-proof uploads | Yes | No |
 | Other financial info | Payment-proof content when uploaded | Yes | No |
 | Other diagnostic data | Backend diagnostic/error details, if enabled in production | Verify | No |
 
@@ -110,23 +109,15 @@ publication, trademark, menu, logo, or image rights.
 ## Age rating and regulated content
 
 Complete the current App Store Connect age-rating questionnaire from the final
-production scope. Do not guess the rating in advance. Pharmacy, prescriptions,
-medicines, health information, age-restricted products, or medical claims must
-be disclosed exactly as shipped.
-
-The app must follow one real release path:
-
-- Organization/legal entity with the required pharmacy/business authority and
-  the regulated flow disclosed to review; or
-- Individual release with pharmacy/prescription functionality genuinely
-  removed from the binary, backend exposure, metadata, screenshots, and public
-  customer experience.
+production scope. Do not guess the rating in advance. Disclose any
+age-restricted products or claims exactly as shipped. Version 1 must remain
+free of pharmacy, prescription, medicine-ordering, and medical-claim flows.
 
 ## Screenshots
 
 Create screenshots from the exact production TestFlight build with fictional
-customer data. Do not use real names, phone numbers, addresses, prescriptions,
-payment proofs, or order tokens.
+customer data. Do not use real names, phone numbers, addresses, payment proofs,
+or order tokens.
 
 Minimum prepared story:
 
@@ -149,7 +140,6 @@ The following are **BLOCKED** until production access is available:
 - a stable reviewer account if linked login is required;
 - a review service area/address;
 - a test merchant/item and non-operational payment/fulfillment path;
-- final pharmacy scope and any license/documentation;
 - support availability during the review window.
 
 Prepared review notes:
@@ -172,7 +162,7 @@ Account deletion is available from Account > Delete account and data for both an
 
 Native Sign in with Apple is available on iOS. Google and Facebook are also offered. [ADD LINKED TEST ACCOUNT INSTRUCTIONS IF REQUIRED.]
 
-[IF PHARMACY IS INCLUDED: explain prescription review, licensed operator, regulated-product controls, geographic availability, and provide requested authorization. Otherwise remove this paragraph and ensure pharmacy is genuinely absent from the public release.]
+Version 1 does not provide pharmacy, prescription, medicine-ordering, or medical-service functionality.
 ```
 
 Replace every bracketed placeholder before submission. Keep the review backend,

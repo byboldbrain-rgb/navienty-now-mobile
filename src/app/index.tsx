@@ -103,7 +103,7 @@ const HOME_PROMO_CARDS: PromoCard[] = [
     eyebrow: 'Navienty Now',
     title: 'كل احتياجاتك أقرب',
     description:
-      'مطاعم، سوبرماركت، صيدليات والمزيد من خلال تجربة واحدة سهلة.',
+      'مطاعم، سوبرماركت، مكتبات والمزيد من خلال تجربة واحدة سهلة.',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryDark,
     foregroundColor:

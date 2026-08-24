@@ -37,6 +37,7 @@ Run from the repository root with Node 22.13 or newer:
 ```bash
 npm ci
 node scripts/validate-image-assets.mjs
+npm run validate:v1-scope
 node scripts/validate-release-config.mjs
 node scripts/validate-checkout-handoff.mjs
 node scripts/validate-native-maps-config.mjs
@@ -64,6 +65,14 @@ then smoke-test one store order and one service booking with an authenticated
 test user. Confirm both records enter `waiting_confirmation` without opening
 WhatsApp and without populating WhatsApp-opened/sent timestamps.
 
+Version 1 has no pharmacy or prescription customer flow. In the production
+project, confirm the related store category and stores are inactive, related
+banners are inactive, the prescription gate is disabled, and customer roles
+cannot execute prescription RPCs. Historical tables may remain dormant for a
+future legally approved release; do not destructively drop them or rewrite
+already-applied migration history. The mobile release gate must pass even when
+the backend still contains dormant historical schema.
+
 ## 3. Account deletion operations
 
 The app supports deletion requests for linked and anonymous accounts and shows
@@ -74,8 +83,9 @@ For every request:
 1. Start processing with the existing admin RPC.
 2. Review the deletion preflight and Navienty Now scrub plan.
 3. Resolve active orders or bookings before removing customer ownership.
-4. Delete private prescription and payment-proof Storage objects that are not
-   subject to an approved legal hold.
+4. Delete private payment-proof objects and any historical prescription
+   objects left from pre-v1 testing that are not subject to an approved legal
+   hold.
 5. Remove or anonymize personal fields under the approved Egyptian legal and
    accounting retention schedule.
 6. Remove push subscriptions and other device identifiers.
@@ -106,7 +116,7 @@ Complete App Privacy using the actual production data flow, including:
 - name, phone number, and delivery address;
 - precise delivery location;
 - order and service-booking history;
-- prescriptions and payment proof uploads;
+- payment proof uploads;
 - account identifiers and push tokens;
 - diagnostic error details sent to the backend.
 
@@ -125,22 +135,18 @@ or replace it with content Navienty owns and can lawfully publish. Ordering
 from a merchant as an ordinary customer is not itself authorization to display
 their protected material or imply a partnership.
 
-## 5. Individual Apple Developer account decision
+## 5. Individual Apple Developer account scope
 
-The current Apple membership is Individual. Navienty Now includes pharmacy and
-prescription workflows, which are regulated and process sensitive information.
-Apple can require this kind of service to be submitted by the legal entity that
-provides it.
+The current Apple membership is Individual. The approved version 1 product
+scope permanently excludes pharmacy, prescription, medicine-ordering, and
+medical-service functionality from the real public release. This is enforced
+in client routes, catalog and banner filtering, cart hydration, checkout, CI,
+and production-backend configuration; it is not an App Review-only switch.
 
-Choose and document one legitimate release path before review:
-
-- convert the Apple Developer membership to an Organization/legal-entity
-  account with the required pharmacy/business authorization; or
-- remove the regulated pharmacy/prescription service from the public first
-  release as a real product-scope decision.
-
-Do not hide pharmacy only for App Review or remotely re-enable it after
-approval.
+Do not re-enable that scope through Supabase content, a remote banner, deep
+link, or over-the-air update. A future regulated release requires a separate
+legal review, the necessary business authorization, and an appropriate Apple
+membership decision before implementation or submission.
 
 An Individual membership also publishes the Account Holder's personal legal
 name as the App Store seller. The Navienty legal-entity name can appear as the
@@ -197,7 +203,8 @@ status, push, legal links, and deletion against the production backend.
 Only after the TestFlight candidate passes, select that exact build on the App
 Store version page and submit the version for App Review. Review notes must
 explain anonymous access, how to create a non-operational review order, the
-optional nature of WhatsApp, account deletion, location usage, prescription
-review when included, and any credentials needed for linked sign-in providers.
+optional nature of WhatsApp, account deletion, location usage, the v1 public
+scope, and any credentials needed for linked sign-in providers. State
+explicitly that version 1 has no pharmacy or medical ordering flow.
 Keep the backend, legal URLs, support contact, and reviewer path live throughout
 review.

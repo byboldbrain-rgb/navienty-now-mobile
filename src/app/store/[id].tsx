@@ -1226,23 +1226,6 @@ export default function StoreScreen() {
                                 </Text>
                               )}
 
-                              {product.requiresPrescription && (
-                                <View
-                                  style={
-                                    styles.warningBadge
-                                  }
-                                >
-                                  <Text
-                                    style={
-                                      styles.warningBadgeText
-                                    }
-                                  >
-                                    يتطلب
-                                    وصفة
-                                  </Text>
-                                </View>
-                              )}
-
                               {product.isAgeRestricted && (
                                 <View
                                   style={

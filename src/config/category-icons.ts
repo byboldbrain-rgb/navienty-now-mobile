@@ -27,14 +27,6 @@ const CATEGORY_ICONS: Record<
     '../assets/icons/categories/supermarket.webp',
   ),
 
-  // الصيدليات
-  pharmacy: require(
-    '../assets/icons/categories/pharmacy.webp',
-  ),
-  pharmacies: require(
-    '../assets/icons/categories/pharmacy.webp',
-  ),
-
   // المكتبات
   bookstore: require(
     '../assets/icons/categories/bookstore.webp',

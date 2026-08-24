@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
+  isV1PublicCategorySlug,
+} from '../config/v1-release-scope';
+import {
   hasDifferentRestaurantCart,
   isRestaurantCartCategory,
   isSameCartLine,
@@ -39,7 +42,6 @@ export type CartProduct = {
    */
   variantName?: string | null;
 
-  requiresPrescription?: boolean;
   isAgeRestricted?: boolean;
 };
 
@@ -52,7 +54,6 @@ export type CartItem = CartProduct & {
    */
   variantId: string | null;
   variantName: string | null;
-  requiresPrescription: boolean;
   isAgeRestricted: boolean;
 };
 
@@ -65,7 +66,7 @@ export type CartStoreInformation = {
    * Store category slug.
    *
    * Examples:
-   * restaurants / supermarket / pharmacy / library
+   * restaurants / supermarket / bookstore
    *
    * It is optional temporarily so older screens that have not
    * been migrated yet keep compiling. New/updated screens should
@@ -91,7 +92,8 @@ export type StoreCart = {
 
 export type AddItemResult =
   | 'added'
-  | 'different-restaurant';
+  | 'different-restaurant'
+  | 'unsupported-category';
 
 type CartState = {
   /**
@@ -304,9 +306,6 @@ function normalizeCartProduct(
         product.variantName,
       ),
 
-    requiresPrescription:
-      product.requiresPrescription === true,
-
     isAgeRestricted:
       product.isAgeRestricted === true,
   };
@@ -341,9 +340,6 @@ function normalizeCartItem(
       normalizeVariantName(
         item.variantName,
       ),
-
-    requiresPrescription:
-      item.requiresPrescription === true,
 
     isAgeRestricted:
       item.isAgeRestricted === true,
@@ -524,6 +520,9 @@ function normalizePersistedState(
 
         if (
           normalizedCart &&
+          isV1PublicCategorySlug(
+            normalizedCart.categorySlug,
+          ) &&
           normalizedCart.items.length >
             0
         ) {
@@ -584,53 +583,9 @@ function normalizePersistedState(
     return initialPersistedState;
   }
 
-  const migratedCart: StoreCart = {
-    storeId: oldStoreId,
-
-    storeName:
-      typeof candidate.storeName ===
-        'string'
-        ? candidate.storeName
-        : '',
-
-    storeIcon:
-      typeof candidate.storeIcon ===
-        'string'
-        ? candidate.storeIcon
-        : '🏪',
-
-    categorySlug: null,
-
-    deliveryFee:
-      typeof candidate.deliveryFee ===
-        'number' &&
-      Number.isFinite(
-        candidate.deliveryFee,
-      )
-        ? candidate.deliveryFee
-        : 0,
-
-    minimumOrder:
-      typeof candidate.minimumOrder ===
-        'number' &&
-      Number.isFinite(
-        candidate.minimumOrder,
-      )
-        ? candidate.minimumOrder
-        : 0,
-
-    items: oldItems,
-  };
-
-  return {
-    carts: {
-      [oldStoreId]:
-        migratedCart,
-    },
-
-    activeStoreId:
-      oldStoreId,
-  };
+  // Legacy carts do not identify their category. Clear them once so v1
+  // cannot restore an item from a category that is outside public scope.
+  return initialPersistedState;
 }
 
 function getActiveStoreId(
@@ -729,6 +684,17 @@ export const useCartStore = create<CartState>()(
               store.categorySlug,
             );
 
+          if (
+            !isV1PublicCategorySlug(
+              categorySlug,
+            )
+          ) {
+            result =
+              'unsupported-category';
+
+            return state;
+          }
+
           /**
            * Business rule:
            *
@@ -736,7 +702,7 @@ export const useCartStore = create<CartState>()(
            * stores/categories at the same time, BUT only one
            * restaurant cart may exist at once.
            *
-           * Restaurant + supermarket + pharmacy + library = OK.
+           * Restaurant + supermarket + bookstore = OK.
            * Restaurant A + Restaurant B = blocked.
            */
           if (
@@ -1262,13 +1228,14 @@ export const useCartStore = create<CartState>()(
       }),
 
       /**
-       * Version 3 changes the cart from one global store cart to:
+       * Version 4 clears category-unknown legacy carts and removes any
+       * persisted cart outside the public v1 scope.
        *
        * Record<storeId, StoreCart>
        *
-       * Existing version 1/2 carts are migrated automatically.
+       * Existing category-unknown version 1/2 carts are cleared once.
        */
-      version: 3,
+      version: 4,
 
       migrate: (
         persistedState,
