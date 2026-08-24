@@ -23,6 +23,12 @@ jobs:
       - name: Checkout project
         uses: actions/checkout@v5
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Require Expo access token
         shell: bash
         run: |
@@ -36,6 +42,9 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install project dependencies
+        run: npm ci
 
       - name: Verify Expo account
         run: eas whoami
