@@ -1,0 +1,69 @@
+name: EAS iOS production build and TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/app-store-launch-readiness
+    paths:
+      - .github/workflows/eas-ios-production-testflight.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-ios-production-testflight
+  cancel-in-progress: false
+
+jobs:
+  build_and_submit:
+    name: Build iOS and upload to TestFlight
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.head_commit.message == 'Start first iOS TestFlight build'
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Require Expo access token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not configured as a GitHub Actions repository secret."
+            exit 1
+          fi
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Verify production iOS configuration
+        run: eas config --platform ios --profile production --json --non-interactive
+
+      - name: Start production build and automatic TestFlight upload
+        shell: bash
+        run: |
+          eas build \
+            --platform ios \
+            --profile production \
+            --auto-submit \
+            --non-interactive \
+            --no-wait \
+            --message "Navienty Now v1.0.0 TestFlight" \
+            --what-to-test "اختبار الإصدار الأول: تسجيل الدخول، الموقع، تصفح الفئات، السلة، إنشاء الطلب، والإشعارات."
