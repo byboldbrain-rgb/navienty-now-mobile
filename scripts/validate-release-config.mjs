@@ -9,6 +9,12 @@ if (!expo || typeof expo !== 'object') {
 }
 
 const plugins = Array.isArray(expo.plugins) ? expo.plugins : [];
+const findPlugin = (name) =>
+  plugins.find(
+    (plugin) =>
+      plugin === name ||
+      (Array.isArray(plugin) && plugin[0] === name),
+  );
 const splashPlugin = plugins.find(
   (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen',
 );
@@ -45,6 +51,65 @@ if (expo.android?.package !== 'com.navienty.now') {
 
 if (expo.ios?.bundleIdentifier !== 'com.navienty.now') {
   throw new Error('Unexpected iOS bundle identifier.');
+}
+
+if (
+  expo.ios?.infoPlist?.ITSAppUsesNonExemptEncryption !== false
+) {
+  throw new Error(
+    'iOS export-compliance encryption declaration must be explicit.',
+  );
+}
+
+const locationPlugin = findPlugin('expo-location');
+const locationOptions = Array.isArray(locationPlugin)
+  ? locationPlugin[1]
+  : null;
+
+for (const option of [
+  'locationAlwaysAndWhenInUsePermission',
+  'locationAlwaysPermission',
+  'motionUsagePermission',
+  'isIosBackgroundLocationEnabled',
+]) {
+  if (locationOptions?.[option] !== false) {
+    throw new Error(
+      `expo-location.${option} must remain disabled for the release.`,
+    );
+  }
+}
+
+const notificationsPlugin = findPlugin(
+  'expo-notifications',
+);
+const notificationOptions = Array.isArray(
+  notificationsPlugin,
+)
+  ? notificationsPlugin[1]
+  : null;
+
+if (
+  notificationOptions?.enableBackgroundRemoteNotifications !==
+  false
+) {
+  throw new Error(
+    'Background remote notifications must remain disabled.',
+  );
+}
+
+const secureStorePlugin = findPlugin(
+  'expo-secure-store',
+);
+const secureStoreOptions = Array.isArray(
+  secureStorePlugin,
+)
+  ? secureStorePlugin[1]
+  : null;
+
+if (secureStoreOptions?.faceIDPermission !== false) {
+  throw new Error(
+    'Face ID permission must not be declared when the app does not use it.',
+  );
 }
 
 console.log(`Release config validation passed (splash image: ${splashImage}).`);

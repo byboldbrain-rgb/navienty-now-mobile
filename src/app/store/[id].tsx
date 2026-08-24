@@ -1932,10 +1932,10 @@ export default function StoreScreen() {
               style={styles.modalDescription}
             >
               عند بدء طلب جديد، سيتم إزالة سلة
-              مشترياتك من "
+              مشترياتك من «
               {conflictingRestaurantCart?.storeName ??
                 'المطعم الحالي'}
-              ".
+              ».
             </Text>
 
             <View style={styles.modalActionsRow}>
@@ -2019,7 +2019,11 @@ const styles = StyleSheet.create({
   },
 
   heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
 
     backgroundColor:
       'rgba(0,0,0,0.13)',

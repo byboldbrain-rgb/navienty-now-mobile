@@ -11,7 +11,6 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -29,12 +28,8 @@ import getAppBootstrap, {
   type AppBootstrap,
 } from '../../services/bootstrap-service';
 import {
-  buildWhatsAppUrl,
-} from '../../services/promo-action-service';
-import {
-  cancelServiceBookingAfterOpenFailure,
   createServiceBooking,
-  markServiceBookingWhatsAppOpened,
+  submitServiceBookingForConfirmation,
   type ServiceBooking,
 } from '../../services/service-bookings-service';
 import getServicePackageById, {
@@ -278,38 +273,13 @@ export default function ServicePackageCheckout({
       return;
     }
 
-    const whatsappNumber =
+    const supportWhatsAppNumber =
       bootstrap.settings.support_whatsapp ||
       bootstrap.settings.whatsapp_number ||
       '';
 
-    if (!whatsappNumber) {
-      Alert.alert(
-        'رقم واتساب غير متاح',
-        'لم يتم إعداد رقم واتساب للحجوزات في إعدادات التطبيق.',
-      );
-      return;
-    }
-
-    const whatsappMessage =
-      `عاوز اكد حجز ${servicePackage.nameAr} وهدفع من خلال ${selectedPaymentMethod.name_ar}`;
-
-    const whatsappUrl = buildWhatsAppUrl(
-      whatsappNumber,
-      whatsappMessage,
-    );
-
-    if (!whatsappUrl) {
-      Alert.alert(
-        'تعذر فتح واتساب',
-        'رقم واتساب غير صالح.',
-      );
-      return;
-    }
-
     let createdBooking:
       ServiceBooking | null = null;
-    let whatsappOpened = false;
 
     try {
       setIsSubmitting(true);
@@ -349,22 +319,35 @@ export default function ServicePackageCheckout({
           serviceAreaName:
             locationServiceAreaName?.trim() ||
             null,
-          whatsappNumber,
+          whatsappNumber:
+            supportWhatsAppNumber,
         });
 
-      await Linking.openURL(whatsappUrl);
-      whatsappOpened = true;
-
       try {
-        createdBooking =
-          await markServiceBookingWhatsAppOpened(
-            createdBooking.id,
-          );
-      } catch (confirmationError) {
-        console.warn(
-          'Unable to mark service booking WhatsApp as opened.',
-          confirmationError,
+        await submitServiceBookingForConfirmation(
+          createdBooking.id,
         );
+      } catch (submissionError) {
+        router.replace({
+          pathname: '/order-success',
+          params: {
+            serviceBookingId:
+              createdBooking.id,
+          },
+        });
+
+        const message =
+          submissionError instanceof Error
+            ? submissionError.message
+            : 'تعذر إرسال الحجز للمراجعة.';
+
+        Alert.alert(
+          'تم حفظ الحجز',
+          message +
+            '\n\nسيحاول التطبيق إكمال الإرسال تلقائيًا من شاشة الحجز.',
+        );
+
+        return;
       }
 
       router.replace({
@@ -375,24 +358,8 @@ export default function ServicePackageCheckout({
         },
       });
     } catch (error) {
-      if (
-        createdBooking &&
-        !whatsappOpened
-      ) {
-        try {
-          await cancelServiceBookingAfterOpenFailure(
-            createdBooking.id,
-            'whatsapp_open_failed',
-          );
-        } catch {
-          // Keep the original error visible.
-        }
-      }
-
       Alert.alert(
-        whatsappOpened
-          ? 'تم فتح واتساب'
-          : 'تعذر إرسال الحجز',
+        'تعذر إرسال الحجز',
         error instanceof Error
           ? error.message
           : 'حاول مرة أخرى.',
@@ -823,19 +790,19 @@ export default function ServicePackageCheckout({
         <View style={styles.whatsAppNotice}>
           <View style={styles.whatsAppIconContainer}>
             <Ionicons
-              name="logo-whatsapp"
+              name="shield-checkmark-outline"
               size={20}
               color={BRAND_GREEN}
             />
           </View>
           <View style={styles.whatsAppNoticeContent}>
             <Text style={styles.whatsAppNoticeTitle}>
-              تأكيد الطلب عبر واتساب
+              تأكيد الحجز داخل التطبيق
             </Text>
             <Text
               style={styles.whatsAppNoticeDescription}
             >
-              بعد الضغط على إرسال الطلب سيتم فتح واتساب برسالة جاهزة لتأكيد الحجز.
+              سيتم حفظ الحجز وإرساله لفريق Navienty Now مباشرة بدون الحاجة إلى تطبيق آخر.
             </Text>
           </View>
         </View>
@@ -868,7 +835,7 @@ export default function ServicePackageCheckout({
           }}
         >
           <Text style={styles.submitButtonText}>
-            إرسال الطلب
+            تأكيد الحجز
           </Text>
 
           {isSubmitting ? (
@@ -878,7 +845,7 @@ export default function ServicePackageCheckout({
             />
           ) : (
             <Ionicons
-              name="logo-whatsapp"
+              name="checkmark-circle-outline"
               size={18}
               color="#ffffff"
             />

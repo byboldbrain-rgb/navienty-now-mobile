@@ -12,12 +12,20 @@ if (!appConfig.includes('GOOGLE_MAPS_ANDROID_API_KEY')) {
   failures.push('app.config.js must read GOOGLE_MAPS_ANDROID_API_KEY');
 }
 
+if (!appConfig.includes('GOOGLE_MAPS_IOS_API_KEY')) {
+  failures.push('app.config.js must read GOOGLE_MAPS_IOS_API_KEY');
+}
+
 if (!appConfig.includes("'react-native-maps'")) {
   failures.push('app.config.js must configure the react-native-maps plugin');
 }
 
 if (!appConfig.includes('androidGoogleMapsApiKey')) {
   failures.push('react-native-maps must receive androidGoogleMapsApiKey');
+}
+
+if (!appConfig.includes('iosGoogleMapsApiKey')) {
+  failures.push('react-native-maps must receive iosGoogleMapsApiKey');
 }
 
 if (!appConfig.includes('googleMaps')) {

@@ -934,6 +934,42 @@ export async function confirmWhatsAppOrderSent(
   );
 }
 
+/**
+ * Completes the customer handoff inside Navienty Now.
+ *
+ * Unlike confirmWhatsAppOrderSent, this RPC does not record or imply that a
+ * WhatsApp message was opened or sent. The server operation is owner-scoped
+ * and idempotent so a customer can safely retry after a network interruption.
+ */
+export async function submitOrderForConfirmation(
+  accessToken: string,
+): Promise<Order> {
+  const { data, error } =
+    await supabase.rpc(
+      'submit_order_for_confirmation',
+      {
+        p_access_token:
+          accessToken,
+      },
+    );
+
+  if (error) {
+    throw new Error(
+      getErrorMessage(error),
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      'لم ترجع قاعدة البيانات تفاصيل الطلب بعد الإرسال.',
+    );
+  }
+
+  return mapOrder(
+    data as unknown as RawOrderDetails,
+  );
+}
+
 export async function cancelPendingWhatsAppOrder(
   accessToken: string,
   reason =

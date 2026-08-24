@@ -1,296 +1,374 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useState } from 'react';
 import {
-  useCallback,
-  useEffect,
-  useRef,
-} from 'react';
-import {
+  ActivityIndicator,
   Alert,
-  AppState,
-  type AppStateStatus,
+  Pressable,
+  ScrollView,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { OrderDetailsScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
-  confirmWhatsAppOrderSent,
+  submitOrderForConfirmation,
 } from '../services/order-service';
+import { useCartStore } from '../store/cart-store';
+import { useOrderNotesStore } from '../store/order-notes-store';
+import { useOrdersStore } from '../store/orders-store';
+import { useVoucherStore } from '../store/voucher-store';
 import {
-  useCartStore,
-} from '../store/cart-store';
-import {
-  useOrdersStore,
-} from '../store/orders-store';
-import {
-  openOrderInWhatsApp,
-} from '../utils/order-whatsapp';
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
+} from '../theme/navienty-now-theme';
+import { openOrderInWhatsApp } from '../utils/order-whatsapp';
 
-const CONFIRM_RETRY_DELAYS_MS = [
-  0,
-  700,
-  1500,
-];
-
-function wait(
-  milliseconds: number,
-): Promise<void> {
-  if (milliseconds <= 0) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
-}
-
-async function confirmOrderWithRetry(
-  accessToken: string,
-) {
-  let lastError: unknown = null;
-
-  for (
-    let index = 0;
-    index < CONFIRM_RETRY_DELAYS_MS.length;
-    index += 1
-  ) {
-    try {
-      await wait(
-        CONFIRM_RETRY_DELAYS_MS[index],
-      );
-
-      return await confirmWhatsAppOrderSent(
-        accessToken,
-      );
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(
-        'تعذر تأكيد إرسال الطلب.',
-      );
-}
-
-/**
- * Invisible WhatsApp handoff route.
- *
- * Checkout still routes here internally after creating the order, but the
- * customer never sees the old confirmation UI:
- *
- * 1) WhatsApp opens automatically.
- * 2) We wait until the app actually leaves the foreground.
- * 3) As soon as the customer returns to Navienty Now, we immediately move
- *    them to Order Success.
- * 4) The Supabase "WhatsApp sent" confirmation is completed in the
- *    background and the cart is cleared.
- *
- * Important: AppState can only tell us that the customer left the app and
- * returned. It cannot prove that they pressed Send inside WhatsApp. True
- * message-delivery verification would require WhatsApp Business webhooks.
- */
 export default function OrderConfirmationScreen() {
   const router = useRouter();
+
+  const [isSubmitting, setIsSubmitting] =
+    useState(false);
+  const [isOpeningWhatsApp, setIsOpeningWhatsApp] =
+    useState(false);
+
+  const clearStoreCart = useCartStore(
+    (state) => state.clearStoreCart,
+  );
+  const clearOrderNotes = useOrderNotesStore(
+    (state) => state.clearNote,
+  );
+  const setStoreVoucher = useVoucherStore(
+    (state) => state.setVoucher,
+  );
 
   const hasHydrated = useOrdersStore(
     (state) => state.hasHydrated,
   );
-
   const pendingOrder = useOrdersStore(
     (state) => state.pendingOrder,
   );
-
-  const confirmPendingOrder =
-    useOrdersStore(
-      (state) =>
-        state.confirmPendingOrder,
-    );
-
-  const clearCart = useCartStore(
-    (state) => state.clearCart,
+  const confirmPendingOrder = useOrdersStore(
+    (state) => state.confirmPendingOrder,
   );
 
-  const appStateRef = useRef<AppStateStatus>(
-    AppState.currentState,
-  );
+  async function submitPendingOrder() {
+    if (
+      !pendingOrder ||
+      isSubmitting ||
+      isOpeningWhatsApp
+    ) {
+      return;
+    }
 
-  const handoffStartedRef = useRef(false);
-  const appWasBackgroundedRef = useRef(false);
-  const returnHandledRef = useRef(false);
+    try {
+      setIsSubmitting(true);
 
-  const confirmInBackground = useCallback(
-    async (
-      accessToken: string,
-    ) => {
-      try {
-        const confirmedOrder =
-          await confirmOrderWithRetry(
-            accessToken,
-          );
-
-        confirmPendingOrder(
-          confirmedOrder,
+      const submittedOrder =
+        await submitOrderForConfirmation(
+          pendingOrder.accessToken,
         );
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'تعذر تأكيد إرسال الطلب.';
 
-        Alert.alert(
-          'الطلب تم إنشاؤه',
-          `${message}\n\nالطلب محفوظ ويمكنك متابعته من شاشة الطلب.`,
-        );
-      }
-    },
-    [confirmPendingOrder],
-  );
-
-  const handleReturnFromWhatsApp =
-    useCallback(() => {
-      if (
-        returnHandledRef.current
-      ) {
-        return;
-      }
-
-      const currentOrder =
-        useOrdersStore
-          .getState()
-          .pendingOrder ??
-        pendingOrder;
-
-      if (!currentOrder) {
-        return;
-      }
-
-      returnHandledRef.current = true;
+      confirmPendingOrder({
+        ...submittedOrder,
+        whatsappMessage:
+          pendingOrder.whatsappMessage,
+      });
 
       /*
-       * Move to success FIRST so the customer never lands back on an
-       * intermediate confirmation page while the network request finishes.
+       * A pending order can survive an app restart while the customer uses a
+       * different store cart. Clear only the cart and checkout metadata that
+       * belong to the submitted order.
        */
-      clearCart();
+      clearStoreCart(
+        pendingOrder.storeId,
+      );
+      setStoreVoucher(
+        pendingOrder.storeId,
+        null,
+      );
+      clearOrderNotes(
+        pendingOrder.storeId,
+      );
 
       router.replace({
         pathname: '/order-success',
         params: {
-          id: currentOrder.id,
+          id: submittedOrder.id,
         },
       });
-
-      void confirmInBackground(
-        currentOrder.accessToken,
-      );
-    },
-    [
-      clearCart,
-      confirmInBackground,
-      pendingOrder,
-      router,
-    ],
-  );
-
-  useEffect(() => {
-    const subscription =
-      AppState.addEventListener(
-        'change',
-        (nextState) => {
-          const previousState =
-            appStateRef.current;
-
-          appStateRef.current =
-            nextState;
-
-          if (
-            !handoffStartedRef.current ||
-            returnHandledRef.current
-          ) {
-            return;
-          }
-
-          if (
-            nextState === 'inactive' ||
-            nextState === 'background'
-          ) {
-            appWasBackgroundedRef.current =
-              true;
-            return;
-          }
-
-          if (
-            nextState === 'active' &&
-            previousState !== 'active' &&
-            appWasBackgroundedRef.current
-          ) {
-            handleReturnFromWhatsApp();
-          }
-        },
-      );
-
-    return () => {
-      subscription.remove();
-    };
-  }, [handleReturnFromWhatsApp]);
-
-  useEffect(() => {
-    if (!hasHydrated) {
-      return;
-    }
-
-    if (!pendingOrder) {
-      router.replace('/checkout');
-      return;
-    }
-
-    if (handoffStartedRef.current) {
-      return;
-    }
-
-    handoffStartedRef.current = true;
-    appWasBackgroundedRef.current = false;
-    returnHandledRef.current = false;
-
-    void openOrderInWhatsApp(
-      pendingOrder,
-    ).catch((error) => {
-      handoffStartedRef.current = false;
-
-      const message =
+    } catch (error) {
+      Alert.alert(
+        'تعذر تأكيد الطلب',
         error instanceof Error
           ? error.message
-          : 'تعذر فتح واتساب.';
+          : 'حاول مرة أخرى.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
+  async function openOptionalWhatsApp() {
+    if (
+      !pendingOrder ||
+      isSubmitting ||
+      isOpeningWhatsApp
+    ) {
+      return;
+    }
+
+    try {
+      setIsOpeningWhatsApp(true);
+
+      await openOrderInWhatsApp(
+        pendingOrder,
+      );
+    } catch (error) {
       Alert.alert(
         'تعذر فتح واتساب',
-        message,
-        [
-          {
-            text: 'رجوع',
-            onPress: () => {
-              router.replace('/checkout');
-            },
-          },
-        ],
+        error instanceof Error
+          ? error.message
+          : 'يمكنك تأكيد الطلب داخل التطبيق بدون واتساب.',
       );
-    });
-  }, [
-    hasHydrated,
-    pendingOrder,
-    router,
-  ]);
+    } finally {
+      setIsOpeningWhatsApp(false);
+    }
+  }
 
-  /*
-   * This route is intentionally visually empty. It only exists for the
-   * native app -> WhatsApp -> native app handoff.
-   */
+  if (!hasHydrated) {
+    return <OrderDetailsScreenSkeleton />;
+  }
+
+  if (!pendingOrder) {
+    return (
+      <SafeAreaView style={styles.stateScreen}>
+        <StatusBar style="dark" />
+
+        <View style={styles.stateIcon}>
+          <Ionicons
+            color={NAVIENTY_NOW_COLORS.primary}
+            name="checkmark-circle-outline"
+            size={34}
+          />
+        </View>
+
+        <Text style={styles.stateTitle}>
+          لا يوجد طلب معلّق
+        </Text>
+
+        <Text style={styles.stateDescription}>
+          يمكنك متابعة طلباتك الحالية من شاشة الطلبات.
+        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.homeButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => {
+            router.replace('/');
+          }}
+        >
+          <Text style={styles.homeButtonText}>
+            العودة للرئيسية
+          </Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
+
+  const isBusy =
+    isSubmitting || isOpeningWhatsApp;
+
   return (
-    <View
+    <SafeAreaView
+      edges={['top']}
       style={styles.screen}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    />
+    >
+      <StatusBar style="dark" />
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Pressable
+            accessibilityLabel="العودة لإتمام الطلب"
+            accessibilityRole="button"
+            hitSlop={10}
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => {
+              router.replace('/checkout');
+            }}
+          >
+            <Ionicons
+              color={NAVIENTY_NOW_COLORS.text}
+              name="arrow-back"
+              size={22}
+            />
+          </Pressable>
+
+          <Text style={styles.pageTitle}>
+            تأكيد الطلب
+          </Text>
+        </View>
+
+        <View style={styles.heroCard}>
+          <View style={styles.heroIcon}>
+            <Ionicons
+              color={NAVIENTY_NOW_COLORS.primary}
+              name="receipt-outline"
+              size={32}
+            />
+          </View>
+
+          <Text style={styles.heroTitle}>
+            طلبك محفوظ وجاهز للإرسال
+          </Text>
+
+          <Text style={styles.heroDescription}>
+            اضغط الزر الأخضر لإرسال الطلب للمراجعة داخل
+            Navienty Now. لا تحتاج إلى فتح أي تطبيق آخر.
+          </Text>
+        </View>
+
+        <View style={styles.orderCard}>
+          <View style={styles.storeRow}>
+            <View style={styles.storeIcon}>
+              <Text style={styles.storeIconText}>
+                {pendingOrder.storeIcon}
+              </Text>
+            </View>
+
+            <View style={styles.storeCopy}>
+              <Text style={styles.storeLabel}>
+                الطلب من
+              </Text>
+              <Text
+                numberOfLines={1}
+                style={styles.storeName}
+              >
+                {pendingOrder.storeName}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.orderCodeRow}>
+            <Text style={styles.orderCodeLabel}>
+              رقم الطلب
+            </Text>
+            <Text
+              selectable
+              style={styles.orderCodeValue}
+            >
+              {pendingOrder.orderCode}
+            </Text>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>
+                {pendingOrder.itemCount}
+              </Text>
+              <Text style={styles.summaryLabel}>
+                منتج
+              </Text>
+            </View>
+
+            <View style={styles.summaryDivider} />
+
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>
+                {pendingOrder.total}{' '}
+                {pendingOrder.currencySymbol}
+              </Text>
+              <Text style={styles.summaryLabel}>
+                الإجمالي
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityLabel="تأكيد الطلب داخل التطبيق"
+          accessibilityRole="button"
+          disabled={isBusy}
+          style={({ pressed }) => [
+            styles.submitButton,
+            isBusy && styles.disabledButton,
+            pressed &&
+              !isBusy &&
+              styles.submitButtonPressed,
+          ]}
+          onPress={() => {
+            void submitPendingOrder();
+          }}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator
+              color="#FFFFFF"
+              size="small"
+            />
+          ) : (
+            <Ionicons
+              color="#FFFFFF"
+              name="checkmark-circle-outline"
+              size={21}
+            />
+          )}
+
+          <Text style={styles.submitButtonText}>
+            تأكيد الطلب داخل التطبيق
+          </Text>
+        </Pressable>
+
+        <Pressable
+          accessibilityLabel="متابعة عبر واتساب، اختياري"
+          accessibilityRole="button"
+          disabled={isBusy}
+          style={({ pressed }) => [
+            styles.whatsAppButton,
+            isBusy && styles.disabledButton,
+            pressed &&
+              !isBusy &&
+              styles.buttonPressed,
+          ]}
+          onPress={() => {
+            void openOptionalWhatsApp();
+          }}
+        >
+          {isOpeningWhatsApp ? (
+            <ActivityIndicator
+              color="#168A48"
+              size="small"
+            />
+          ) : (
+            <Ionicons
+              color="#168A48"
+              name="logo-whatsapp"
+              size={21}
+            />
+          )}
+
+          <View style={styles.whatsAppCopy}>
+            <Text style={styles.whatsAppTitle}>
+              متابعة عبر واتساب (اختياري)
+            </Text>
+            <Text style={styles.whatsAppDescription}>
+              للتواصل مع فريق الدعم فقط
+            </Text>
+          </View>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -298,5 +376,246 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: '#FFFFFF',
     flex: 1,
+  },
+  content: {
+    alignSelf: 'center',
+    maxWidth: NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    paddingBottom: 40,
+    paddingHorizontal: 18,
+    width: '100%',
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 68,
+  },
+  backButton: {
+    alignItems: 'center',
+    borderColor: '#E4E4E4',
+    borderRadius: 23,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
+  pageTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '800',
+    marginLeft: 46,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  heroCard: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.primaryPale,
+    borderRadius: 22,
+    marginTop: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  heroIcon: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+  heroTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 14,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  heroDescription: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 20,
+    marginTop: 7,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  orderCard: {
+    borderColor: '#E8E8E8',
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 16,
+    padding: 16,
+  },
+  storeRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+  },
+  storeIcon: {
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 16,
+    height: 50,
+    justifyContent: 'center',
+    width: 50,
+  },
+  storeIconText: {
+    fontSize: 24,
+  },
+  storeCopy: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 11,
+  },
+  storeLabel: {
+    color: NAVIENTY_NOW_COLORS.textMuted,
+    fontSize: 10,
+    writingDirection: 'rtl',
+  },
+  storeName: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  orderCodeRow: {
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    borderRadius: 13,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  orderCodeLabel: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 11,
+  },
+  orderCodeValue: {
+    color: NAVIENTY_NOW_COLORS.primaryDark,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    marginTop: 16,
+  },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryValue: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  summaryLabel: {
+    color: NAVIENTY_NOW_COLORS.textMuted,
+    fontSize: 10,
+    marginTop: 3,
+  },
+  summaryDivider: {
+    backgroundColor: '#E8E8E8',
+    height: 32,
+    width: StyleSheet.hairlineWidth,
+  },
+  submitButton: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 16,
+    flexDirection: 'row-reverse',
+    gap: 9,
+    justifyContent: 'center',
+    marginTop: 20,
+    minHeight: 56,
+    paddingHorizontal: 16,
+  },
+  submitButtonPressed: {
+    backgroundColor: NAVIENTY_NOW_COLORS.primaryPressed,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  whatsAppButton: {
+    alignItems: 'center',
+    backgroundColor: '#F1FBF5',
+    borderColor: '#CEEEDD',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    marginTop: 11,
+    minHeight: 60,
+    paddingHorizontal: 16,
+  },
+  whatsAppCopy: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 10,
+  },
+  whatsAppTitle: {
+    color: '#168A48',
+    fontSize: 13,
+    fontWeight: '800',
+    writingDirection: 'rtl',
+  },
+  whatsAppDescription: {
+    color: '#548266',
+    fontSize: 10,
+    marginTop: 3,
+    writingDirection: 'rtl',
+  },
+  disabledButton: {
+    opacity: 0.55,
+  },
+  buttonPressed: {
+    opacity: 0.78,
+  },
+  stateScreen: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 30,
+  },
+  stateIcon: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.primaryPale,
+    borderRadius: 34,
+    height: 68,
+    justifyContent: 'center',
+    width: 68,
+  },
+  stateTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 19,
+    fontWeight: '800',
+    marginTop: 17,
+    textAlign: 'center',
+  },
+  stateDescription: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 20,
+    marginTop: 7,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+  homeButton: {
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 14,
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+  },
+  homeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
   },
 });

@@ -38,6 +38,7 @@ import {
 import {
   cancelPendingWhatsAppOrder,
   createWhatsAppOrder,
+  submitOrderForConfirmation,
 } from '../services/order-service';
 import {
   attachPrescriptionToOrder,
@@ -228,6 +229,12 @@ function StoreCheckoutScreen() {
         state.setActiveCart,
     );
 
+  const clearStoreCart =
+    useCartStore(
+      (state) =>
+        state.clearStoreCart,
+    );
+
   const checkoutStoreId =
     requestedStoreId ??
     activeStoreId;
@@ -387,6 +394,12 @@ function StoreCheckoutScreen() {
     useOrdersStore(
       (state) =>
         state.discardPendingOrder,
+    );
+
+  const confirmPendingOrder =
+    useOrdersStore(
+      (state) =>
+        state.confirmPendingOrder,
     );
 
   /* -------------------------------- */
@@ -1311,6 +1324,54 @@ function StoreCheckoutScreen() {
         orderForWhatsApp,
       );
 
+      let submittedOrder:
+        Awaited<
+          ReturnType<
+            typeof submitOrderForConfirmation
+          >
+        >;
+
+      try {
+        submittedOrder =
+          await submitOrderForConfirmation(
+            createdOrder.accessToken,
+          );
+      } catch (submissionError) {
+        /*
+         * The order already exists. Keep it locally and move to the visible
+         * recovery screen instead of cancelling it after a transient network
+         * failure. The in-app submission RPC is idempotent, so retrying is
+         * safe even if the server committed before the response was lost.
+         */
+        createdOrder = null;
+
+        const message =
+          submissionError instanceof Error
+            ? submissionError.message
+            : 'تعذر إرسال الطلب للمراجعة.';
+
+        router.replace(
+          '/order-confirmation',
+        );
+
+        Alert.alert(
+          'تم حفظ الطلب',
+          `${message}\n\nاضغط «تأكيد الطلب داخل التطبيق» للمحاولة مرة أخرى.`,
+        );
+
+        return;
+      }
+
+      confirmPendingOrder({
+        ...submittedOrder,
+        whatsappMessage:
+          whatsappPaymentMessage,
+      });
+
+      clearStoreCart(
+        activeStoreId,
+      );
+
       setStoreVoucher(
         activeStoreId,
         null,
@@ -1322,9 +1383,12 @@ function StoreCheckoutScreen() {
 
       createdOrder = null;
 
-      router.replace(
-        '/order-confirmation',
-      );
+      router.replace({
+        pathname: '/order-success',
+        params: {
+          id: submittedOrder.id,
+        },
+      });
     } catch (error) {
       if (createdOrder) {
         try {

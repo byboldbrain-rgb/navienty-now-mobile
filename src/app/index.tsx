@@ -2784,14 +2784,22 @@ const styles = StyleSheet.create({
   },
 
   headerTimeMoodLayer: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
+    left: 0,
     overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
     zIndex: 1,
   },
 
   headerTimeMoodBackground: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
     height: '100%',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
     width: '100%',
   },
 
@@ -2969,10 +2977,14 @@ const styles = StyleSheet.create({
   // layer. The bike begins completely outside the right edge, crosses the
   // header, exits completely outside the left edge, then resets invisibly.
   androidBikeLayer: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
     direction: 'ltr',
     elevation: 40,
+    left: 0,
     overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
     zIndex: 40,
   },
 
@@ -4038,4 +4050,3 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 });
-

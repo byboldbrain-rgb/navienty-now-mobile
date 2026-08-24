@@ -140,7 +140,7 @@ function getCurrentStatusCopy(
       return {
         title: 'جاري تسجيل الطلب',
         description:
-          'يتم الآن تسجيل تأكيد إرسال الطلب.',
+          'تم حفظ طلبك وسيحاول التطبيق إرساله للمراجعة تلقائيًا.',
       };
 
     case 'waiting-confirmation':

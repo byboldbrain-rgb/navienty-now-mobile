@@ -58,18 +58,32 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا."
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا.",
+          "motionUsagePermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false,
+          "isAndroidMotionActivityEnabled": false
         }
       ],
 
       [
         "expo-notifications",
         {
-          "defaultChannel": "orders"
+          "defaultChannel": "orders",
+          "enableBackgroundRemoteNotifications": false
         }
       ],
 
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
 
       "expo-font"
     ],
