@@ -1,3 +1,4 @@
+-- Production migration version: 20260824194322.
 begin;
 
 -- Version 1 is published from an Individual Apple Developer account and does

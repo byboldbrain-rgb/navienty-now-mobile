@@ -1,3 +1,4 @@
+-- Production migration version: 20260824194255.
 -- Complete the customer handoff inside Navienty Now.
 --
 -- WhatsApp remains an optional support channel. Submitting an order or a

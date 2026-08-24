@@ -7,7 +7,7 @@ const serviceCheckout = readFileSync(
   'utf8',
 );
 const inAppSubmissionMigration = readFileSync(
-  'supabase/migrations/20260824172816_add_in_app_order_submission.sql',
+  'supabase/migrations/20260824194255_add_in_app_order_submission.sql',
   'utf8',
 );
 

@@ -37,7 +37,7 @@ const scopeGuardPath =
   'src/config/v1-release-scope.ts';
 
 const backendScopeMigrationPath =
-  'supabase/migrations/20260824191333_disable_removed_v1_scope.sql';
+  'supabase/migrations/20260824194322_disable_removed_v1_scope.sql';
 
 const requiredGuards = new Map([
   [
