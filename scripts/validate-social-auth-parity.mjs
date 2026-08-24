@@ -8,6 +8,12 @@ const appConfig = readFileSync(
   'app.json',
   'utf8',
 );
+const packageJson = JSON.parse(
+  readFileSync(
+    'package.json',
+    'utf8',
+  ),
+);
 
 const failures = [];
 
@@ -26,7 +32,11 @@ for (const provider of [
 for (const requiredText of [
   'signInWithOAuth',
   'linkIdentity',
+  'signInWithIdToken',
   'openAuthSessionAsync',
+  '.signInAsync',
+  'CryptoDigestAlgorithm',
+  'getRandomBytesAsync',
   "'navientynow'",
   "'auth/callback'",
   'إستمرار عبر Apple',
@@ -42,6 +52,52 @@ if (!appConfig.includes('"scheme": "navientynow"')) {
   failures.push(
     'app config is missing the production OAuth scheme.',
   );
+}
+
+const expoConfig =
+  JSON.parse(appConfig).expo;
+
+if (
+  expoConfig.ios
+    ?.usesAppleSignIn !==
+  true
+) {
+  failures.push(
+    'iOS config must enable the native Sign in with Apple capability.',
+  );
+}
+
+const configuredPlugins =
+  (expoConfig.plugins ?? []).map(
+    (plugin) =>
+      Array.isArray(plugin)
+        ? plugin[0]
+        : plugin,
+  );
+
+if (
+  !configuredPlugins.includes(
+    'expo-apple-authentication',
+  )
+) {
+  failures.push(
+    'app config is missing the expo-apple-authentication plugin.',
+  );
+}
+
+for (const dependency of [
+  'expo-apple-authentication',
+  'expo-crypto',
+]) {
+  if (
+    !packageJson.dependencies?.[
+      dependency
+    ]
+  ) {
+    failures.push(
+      `package.json is missing ${dependency}.`,
+    );
+  }
 }
 
 if (failures.length > 0) {

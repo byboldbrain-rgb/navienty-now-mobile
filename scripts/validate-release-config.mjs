@@ -2,6 +2,7 @@ import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const appConfig = JSON.parse(await readFile('app.json', 'utf8'));
+const dynamicAppConfig = await readFile('app.config.js', 'utf8');
 const expo = appConfig?.expo;
 
 if (!expo || typeof expo !== 'object') {
@@ -51,6 +52,12 @@ if (expo.android?.package !== 'com.navienty.now') {
 
 if (expo.ios?.bundleIdentifier !== 'com.navienty.now') {
   throw new Error('Unexpected iOS bundle identifier.');
+}
+
+if (expo.ios?.supportsTablet !== false) {
+  throw new Error(
+    'The first App Store release must remain iPhone-only until iPad is tested.',
+  );
 }
 
 if (
@@ -109,6 +116,22 @@ const secureStoreOptions = Array.isArray(
 if (secureStoreOptions?.faceIDPermission !== false) {
   throw new Error(
     'Face ID permission must not be declared when the app does not use it.',
+  );
+}
+
+if (
+  !dynamicAppConfig.includes(
+    'process.env.GOOGLE_SERVICES_JSON',
+  ) ||
+  !dynamicAppConfig.includes(
+    'existsSync(localGoogleServicesFile)',
+  ) ||
+  !dynamicAppConfig.includes(
+    "process.env.EAS_BUILD_PLATFORM === 'android'",
+  )
+) {
+  throw new Error(
+    'Android Firebase config must use the EAS file variable, a safe local fallback, and a remote-build gate.',
   );
 }
 

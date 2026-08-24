@@ -2,7 +2,33 @@
 
 This runbook covers the remaining operational work after the mobile release
 branch is merged. It deliberately keeps App Review behavior identical to the
-real customer experience.
+real customer experience. Never commit credentials or create review-only
+behavior that changes the public product after approval.
+
+## 0. Access prerequisites
+
+Use invitations, connected sessions, or the secret stores provided by the
+service. Do not send passwords, two-factor codes, `.p8` files, service-role
+keys, certificates, or Expo tokens in chat, issues, commits, or pull requests.
+
+The release operator needs:
+
+- access to the Expo account `navientynows-team` and EAS project
+  `32043d31-505f-44c7-8496-9bf8c32ba1e1`;
+- access to the production Navienty Supabase project containing the `now`
+  schema;
+- the Apple Account Holder present for agreements, two-factor prompts, and
+  first-time signing setup;
+- App Store Connect access to create and edit the app record, upload builds,
+  manage TestFlight, and submit the version;
+- access to the Google Cloud project that owns the iOS Maps key if the key is
+  not already stored in the EAS production environment;
+- access to the public website or hosting project for Privacy Policy, Terms,
+  and Support pages.
+
+Before changing anything, confirm the Expo project, Supabase project ref,
+Apple Team ID, App Store Connect app ID, and bundle identifier all belong to
+the same production release. The bundle identifier is `com.navienty.now`.
 
 ## 1. Release gates
 
@@ -87,6 +113,18 @@ Complete App Privacy using the actual production data flow, including:
 Do not claim tracking or advertising if neither is present, and do not omit
 sensitive uploads merely because their Storage buckets are private.
 
+Use [`app-store-connect-metadata.md`](app-store-connect-metadata.md) to fill
+the version record. Do not submit placeholder URLs or screenshots. The Support
+URL must show real contact information, and the Privacy Policy must identify
+the actual publisher/data controller and explain deletion and retention.
+
+The app contains merchant/catalog and payment-method content. Before answering
+App Store Connect's Content Rights question, keep written authorization for
+every protected third-party name, logo, image, menu, catalog, and other asset,
+or replace it with content Navienty owns and can lawfully publish. Ordering
+from a merchant as an ordinary customer is not itself authorization to display
+their protected material or imply a partnership.
+
 ## 5. Individual Apple Developer account decision
 
 The current Apple membership is Individual. Navienty Now includes pharmacy and
@@ -104,18 +142,62 @@ Choose and document one legitimate release path before review:
 Do not hide pharmacy only for App Review or remotely re-enable it after
 approval.
 
-## 6. Build and submission
+An Individual membership also publishes the Account Holder's personal legal
+name as the App Store seller. The Navienty legal-entity name can appear as the
+seller only after Apple verifies an Organization membership.
+
+## 6. Sign in with Apple production setup
+
+The iOS app uses Apple's native button and native Authentication Services flow.
+The generated entitlement must include `com.apple.developer.applesignin`, and
+the Apple App ID for `com.navienty.now` must enable Sign in with Apple.
+
+The current app still offers Apple OAuth on non-iOS platforms. In the Supabase
+Apple provider Client IDs field, put the Services ID first and include
+`com.navienty.now` as another accepted client ID. Configure the Services ID
+callback as:
+
+```text
+https://<production-project-ref>.supabase.co/auth/v1/callback
+```
+
+Also allow `navientynow://auth/callback` in Supabase Auth redirect URLs. Store
+the Apple signing key only in the relevant secret manager. The Apple OAuth
+client secret used by web/non-iOS login expires every six months, so assign an
+owner and a rotation reminder.
+
+On a physical iPhone, test first authorization, returning authorization,
+Hide My Email, cancellation, anonymous-account linking, sign-out/sign-in, and
+account deletion. Apple's full name is returned only on first authorization;
+confirm that it is saved then. If the deletion backend does not retain a valid
+Apple token for programmatic revocation, the approved deletion procedure must
+also direct the user to revoke Navienty Now under Apple Account settings.
+
+## 7. Build, TestFlight, and submission
 
 Confirm the production EAS environment contains the Supabase publishable
 configuration, restricted Google Maps iOS key, and notification credentials.
-Then:
+For later Android builds, store the gitignored `google-services.json` as the
+EAS secret file variable `GOOGLE_SERVICES_JSON`; do not commit the file.
+Create the App Store Connect app record first, copy its numeric Apple ID, and
+set `submit.production.ios.ascAppId` in `eas.json` before unattended submit.
+
+Create a production build, then upload that exact build to App Store Connect:
 
 ```bash
 eas build --platform ios --profile production
 eas submit --platform ios --profile production
 ```
 
-Use a physical-device smoke test or TestFlight before submission. Review notes
-must explain anonymous access, how to create a test order, the optional nature
-of WhatsApp, account deletion, location usage, prescription review, and any
-test credentials needed for linked sign-in providers.
+Complete export compliance, wait for App Store Connect processing, enable the
+build in TestFlight, and install it on a physical iPhone. Verify launch,
+foreground location, maps, all login providers, checkout, order/service
+status, push, legal links, and deletion against the production backend.
+
+Only after the TestFlight candidate passes, select that exact build on the App
+Store version page and submit the version for App Review. Review notes must
+explain anonymous access, how to create a non-operational review order, the
+optional nature of WhatsApp, account deletion, location usage, prescription
+review when included, and any credentials needed for linked sign-in providers.
+Keep the backend, legal URLs, support contact, and reviewer path live throughout
+review.

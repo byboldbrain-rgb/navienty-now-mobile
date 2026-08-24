@@ -45,6 +45,13 @@ npx expo start
 Run the same release gates used by Mobile CI:
 
 ```bash
+node scripts/validate-image-assets.mjs
+node scripts/validate-release-config.mjs
+node scripts/validate-checkout-handoff.mjs
+node scripts/validate-native-maps-config.mjs
+node scripts/validate-notification-lifecycle.mjs
+node scripts/validate-app-store-account-controls.mjs
+node scripts/validate-social-auth-parity.mjs
 npm run audit:prod
 npm test
 npx tsc --noEmit
@@ -62,6 +69,17 @@ npm run lint
 - `production`
 
 Configure `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in the matching EAS environment. Do not commit environment values, Expo access tokens, certificates, keystores, provisioning profiles, or private keys.
+
+The production iOS environment also requires a Google Maps key restricted to
+the `com.navienty.now` bundle identifier. See
+[`docs/app-store-release-runbook.md`](docs/app-store-release-runbook.md) for
+the exact App Store, Supabase, Sign in with Apple, privacy, and TestFlight
+release sequence.
+
+Android EAS builds read the gitignored Firebase configuration from a secret
+file environment variable named `GOOGLE_SERVICES_JSON`. Local development can
+instead provide `google-services.json` or `google-services.dev.json` at the
+repository root; neither file may be committed.
 
 ## Release Candidate builds
 
