@@ -1,0 +1,44 @@
+name: Expo connection check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/app-store-launch-readiness
+    paths:
+      - .github/workflows/expo-connection-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify Expo account and linked project
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v5
+
+      - name: Require Expo access token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not configured as a GitHub Actions repository secret."
+            exit 1
+          fi
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify Expo account
+        run: eas whoami
+
+      - name: Verify linked EAS project
+        run: eas project:info
