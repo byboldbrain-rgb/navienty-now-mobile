@@ -134,9 +134,21 @@ jobs:
 
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           if [ "$exit_code" -eq 0 ]; then
-            echo "App Store Connect project link: available"
+            status="$(jq -r '.status // "unknown"' "${RUNNER_TEMP}/asc-status.json")"
+            asc_app_id="$(jq -r '.appStoreConnectApp.ascAppIdentifier // "none"' "${RUNNER_TEMP}/asc-status.json")"
+            bundle_id="$(jq -r '.appStoreConnectApp.bundleIdentifier // "none"' "${RUNNER_TEMP}/asc-status.json")"
+
+            echo "status=$status" >> "$GITHUB_OUTPUT"
+            echo "asc_app_id=$asc_app_id" >> "$GITHUB_OUTPUT"
+            echo "bundle_id=$bundle_id" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect project link status: $status"
+            echo "App Store Connect app ID: $asc_app_id"
+            echo "App Store Connect bundle ID: $bundle_id"
           else
-            echo "App Store Connect project link: unavailable"
+            echo "status=unavailable" >> "$GITHUB_OUTPUT"
+            echo "asc_app_id=none" >> "$GITHUB_OUTPUT"
+            echo "bundle_id=none" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect project link status: unavailable"
           fi
 
       - name: Check App Store and TestFlight visibility
@@ -156,8 +168,13 @@ jobs:
 
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           if [ "$exit_code" -eq 0 ]; then
+            echo "reason=available" >> "$GITHUB_OUTPUT"
             echo "App Store/TestFlight status: available"
+          elif grep -qiE 'API key|Apple login|credentials' "${RUNNER_TEMP}/store-status.err"; then
+            echo "reason=asc-api-key-unavailable" >> "$GITHUB_OUTPUT"
+            echo "App Store/TestFlight status: ASC API key unavailable"
           else
+            echo "reason=unavailable" >> "$GITHUB_OUTPUT"
             echo "App Store/TestFlight status: unavailable"
           fi
 
@@ -178,8 +195,11 @@ jobs:
 
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
           if [ "$exit_code" -eq 0 ]; then
-            echo "Remote iOS build number: available"
+            build_number="$(jq -r '.buildNumber // "not-configured"' "${RUNNER_TEMP}/ios-build-version.json")"
+            echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+            echo "Remote iOS build number: $build_number"
           else
+            echo "build_number=unavailable" >> "$GITHUB_OUTPUT"
             echo "Remote iOS build number: unavailable"
           fi
 
@@ -188,10 +208,20 @@ jobs:
         env:
           MISSING_ENV_COUNT: ${{ steps.production_env.outputs.missing_count }}
           ASC_LINK_EXIT: ${{ steps.asc_link.outputs.exit_code }}
+          ASC_LINK_STATUS: ${{ steps.asc_link.outputs.status }}
+          ASC_APP_ID: ${{ steps.asc_link.outputs.asc_app_id }}
+          ASC_BUNDLE_ID: ${{ steps.asc_link.outputs.bundle_id }}
           STORE_STATUS_EXIT: ${{ steps.store_status.outputs.exit_code }}
+          STORE_STATUS_REASON: ${{ steps.store_status.outputs.reason }}
           BUILD_NUMBER_EXIT: ${{ steps.build_number.outputs.exit_code }}
+          IOS_BUILD_NUMBER: ${{ steps.build_number.outputs.build_number }}
         run: |
           echo "Required production environment variables missing: ${MISSING_ENV_COUNT}"
           echo "App Store Connect project link command exit: ${ASC_LINK_EXIT}"
+          echo "App Store Connect project link status: ${ASC_LINK_STATUS}"
+          echo "App Store Connect app ID: ${ASC_APP_ID}"
+          echo "App Store Connect bundle ID: ${ASC_BUNDLE_ID}"
           echo "App Store/TestFlight status command exit: ${STORE_STATUS_EXIT}"
+          echo "App Store/TestFlight status reason: ${STORE_STATUS_REASON}"
           echo "Remote iOS build number command exit: ${BUILD_NUMBER_EXIT}"
+          echo "Remote iOS build number: ${IOS_BUILD_NUMBER}"
