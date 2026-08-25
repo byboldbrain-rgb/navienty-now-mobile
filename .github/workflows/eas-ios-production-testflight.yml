@@ -2,11 +2,6 @@ name: EAS iOS production build and TestFlight
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - codex/app-store-launch-readiness
-    paths:
-      - .github/workflows/eas-ios-production-testflight.yml
 
 permissions:
   contents: read
@@ -18,9 +13,6 @@ concurrency:
 jobs:
   build_and_submit:
     name: Build iOS and upload to TestFlight
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.head_commit.message == 'Retry iOS TestFlight build after Info.plist fix'
     runs-on: ubuntu-latest
     env:
       CI: '1'
@@ -65,5 +57,4 @@ jobs:
             --auto-submit \
             --non-interactive \
             --no-wait \
-            --message "Navienty Now v1.0.0 TestFlight" \
-            --what-to-test "اختبار الإصدار الأول: تسجيل الدخول، الموقع، تصفح الفئات، السلة، إنشاء الطلب، والإشعارات."
+            --message "Navienty Now v1.0.0 TestFlight"
