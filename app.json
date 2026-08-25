@@ -14,7 +14,8 @@
       "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMotionUsageDescription": "يستخدم Navienty Now بيانات الحركة لتحسين دقة تحديد موقعك أثناء اختيار عنوان التوصيل."
       }
     },
 
