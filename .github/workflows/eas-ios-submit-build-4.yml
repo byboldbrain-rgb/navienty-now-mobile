@@ -47,6 +47,9 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Install project dependencies
+        run: npm ci
+
       - name: Schedule existing build for TestFlight
         shell: bash
         run: |
