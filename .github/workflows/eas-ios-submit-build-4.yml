@@ -13,12 +13,12 @@ permissions:
 
 jobs:
   submit_build_4:
-    name: Wait for build 4 and submit to TestFlight
+    name: Submit build 4 to TestFlight
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.head_commit.message == 'Submit iOS build 4 to TestFlight'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 15
     env:
       CI: '1'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -47,35 +47,9 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Wait for EAS build and submit
+      - name: Schedule existing build for TestFlight
         shell: bash
         run: |
-          set -euo pipefail
-
-          for attempt in $(seq 1 120); do
-            build_json="$(eas build:view "$EAS_BUILD_ID" --json)"
-            status="$(jq -r '.status' <<<"$build_json")"
-            normalized_status="$(tr '[:upper:]_' '[:lower:]-' <<<"$status" | tr -d '[:space:]')"
-            echo "EAS build status: $status"
-
-            case "$normalized_status" in
-              finished)
-                break
-                ;;
-              errored|canceled)
-                echo "EAS build ended with status: $status"
-                exit 1
-                ;;
-            esac
-
-            if [ "$attempt" -eq 120 ]; then
-              echo "Timed out waiting for EAS build."
-              exit 1
-            fi
-
-            sleep 30
-          done
-
           eas submit \
             --platform ios \
             --id "$EAS_BUILD_ID" \
