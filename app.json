@@ -66,7 +66,7 @@
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا.",
-          "motionUsagePermission": false,
+          "motionUsagePermission": "يستخدم Navienty Now بيانات الحركة لتحسين دقة تحديد موقعك أثناء اختيار عنوان التوصيل.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
