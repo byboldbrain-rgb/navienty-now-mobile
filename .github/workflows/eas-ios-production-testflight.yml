@@ -20,7 +20,7 @@ jobs:
     name: Build iOS and upload to TestFlight
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.head_commit.message == 'Start first iOS TestFlight build'
+      github.event.head_commit.message == 'Retry iOS TestFlight build after Info.plist fix'
     runs-on: ubuntu-latest
     env:
       CI: '1'
