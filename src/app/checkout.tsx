@@ -12,6 +12,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -78,6 +79,17 @@ import {
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_DARK = '#009B45';
 const BRAND_GREEN_SOFT = '#EAF8F0';
+
+const WHATSAPP_ORDER_PHONE =
+  '201032995859';
+
+const WHATSAPP_ORDER_MESSAGE =
+  'أكد الاوردر بتاعي';
+
+const WHATSAPP_ORDER_URL =
+  `https://wa.me/${WHATSAPP_ORDER_PHONE}?text=${encodeURIComponent(
+    WHATSAPP_ORDER_MESSAGE,
+  )}`;
 
 /* ---------------------------------- */
 /* LOCAL PAYMENT METHOD IMAGES        */
@@ -1750,16 +1762,13 @@ function StoreCheckoutScreen() {
           ),
         });
 
-      const whatsappPaymentMessage =
-        `اكد الاوردر وهدفع عن طريق ${
-          createdOrder.paymentMethodTitle ||
-          selectedPaymentMethod.name_ar
-        }`;
+      const whatsappConfirmationMessage =
+        WHATSAPP_ORDER_MESSAGE;
 
       const orderForWhatsApp = {
         ...createdOrder,
         whatsappMessage:
-          whatsappPaymentMessage,
+          whatsappConfirmationMessage,
       };
 
       setPendingOrder(
@@ -1807,7 +1816,7 @@ function StoreCheckoutScreen() {
       confirmPendingOrder({
         ...submittedOrder,
         whatsappMessage:
-          whatsappPaymentMessage,
+          whatsappConfirmationMessage,
       });
 
       clearStoreCart(
@@ -1831,6 +1840,17 @@ function StoreCheckoutScreen() {
           id: submittedOrder.id,
         },
       });
+
+      try {
+        await Linking.openURL(
+          WHATSAPP_ORDER_URL,
+        );
+      } catch {
+        Alert.alert(
+          'تعذر فتح واتساب',
+          'تم إنشاء طلبك بنجاح. افتح واتساب وأرسل «أكد الاوردر بتاعي» إلى رقم ناڤينتي ناو.',
+        );
+      }
     } catch (error) {
       if (createdOrder) {
         try {
