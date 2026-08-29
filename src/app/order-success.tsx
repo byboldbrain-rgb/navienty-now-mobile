@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  type ImageSourcePropType,
   Linking,
   Pressable,
   ScrollView,
@@ -24,11 +25,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { supabase } from '../lib/supabase';
-
-import {
-  getStoreCatalog,
-} from '../services/catalog-service';
+import { getCategoryIcon } from '../config/category-icons';
+import { publicSupabase } from '../lib/supabase';
 import {
   getOrderByToken,
 } from '../services/order-service';
@@ -54,6 +52,21 @@ const BRAND_GREEN_SOFT =
   NAVIENTY_NOW_COLORS.primaryPale;
 
 const POLL_INTERVAL_MS = 8000;
+
+const PERSONAL_CARE_CATEGORY_IMAGE =
+  require(
+    '../assets/icons/categories/personal-care.webp',
+  );
+
+const LAUNDRY_CATEGORY_IMAGE =
+  require(
+    '../assets/icons/categories/laundry.webp',
+  );
+
+const REQUEST_ANYTHING_CATEGORY_IMAGE =
+  require(
+    '../assets/icons/categories/request-anything.webp',
+  );
 
 type TrackingStep = {
   key:
@@ -259,6 +272,102 @@ function normalizeWhatsAppNumber(
   return digits;
 }
 
+type RawOrderStoreCatalog = {
+  store?: {
+    id?: string | null;
+    category_slug?: string | null;
+    logo_url?: string | null;
+    cover_image_url?: string | null;
+  } | null;
+};
+
+type ResolvedOrderStoreArtwork = {
+  logoUrl: string;
+  coverImageUrl: string;
+  categorySlug: string;
+};
+
+function normalizeStoreCategorySlug(
+  value: string | null | undefined,
+) {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-');
+}
+
+function getOrderStoreCategoryArtwork(
+  categorySlug: string,
+): ImageSourcePropType | null {
+  const normalizedSlug =
+    normalizeStoreCategorySlug(
+      categorySlug,
+    );
+
+  if (
+    normalizedSlug ===
+      'laundry' ||
+    normalizedSlug ===
+      'laundry-ironing' ||
+    normalizedSlug ===
+      'wash-and-iron' ||
+    normalizedSlug ===
+      'washing-ironing'
+  ) {
+    return LAUNDRY_CATEGORY_IMAGE;
+  }
+
+  if (
+    normalizedSlug ===
+      'personal-care' ||
+    normalizedSlug ===
+      'personalcare' ||
+    normalizedSlug ===
+      'beauty' ||
+    normalizedSlug ===
+      'beauty-care' ||
+    normalizedSlug ===
+      'health-beauty'
+  ) {
+    return PERSONAL_CARE_CATEGORY_IMAGE;
+  }
+
+  if (
+    normalizedSlug ===
+      'request-anything' ||
+    normalizedSlug ===
+      'anything' ||
+    normalizedSlug ===
+      'other' ||
+    normalizedSlug ===
+      'special-request'
+  ) {
+    return REQUEST_ANYTHING_CATEGORY_IMAGE;
+  }
+
+  if (
+    normalizedSlug ===
+      'restaurant' ||
+    normalizedSlug ===
+      'restaurants' ||
+    normalizedSlug ===
+      'supermarket' ||
+    normalizedSlug ===
+      'supermarkets' ||
+    normalizedSlug ===
+      'bookstore' ||
+    normalizedSlug ===
+      'bookstores'
+  ) {
+    return getCategoryIcon(
+      normalizedSlug,
+    );
+  }
+
+  return null;
+}
+
 export default function OrderSuccessScreen() {
   const params =
     useLocalSearchParams<{
@@ -361,213 +470,150 @@ function StoreOrderSuccessScreen() {
   /*
    * Store artwork.
    *
-   * Every public store type uses the same in-app confirmation flow.
-   * lives in now.stores and can have:
+   * Priority:
    *
-   * - logo_url
-   * - cover_image_url
+   * 1. Real store logo.
+   * 2. Real store cover.
+   * 3. Product image snapshot stored with the order.
+   * 4. Category artwork bundled in the app.
+   * 5. Emoji only as the final fallback.
    *
-   * The previous implementation depended only on getStoreCatalog().
-   * That worked for restaurant catalogs, but some category-specific
-   * catalog payloads did not expose the image fields consistently.
+   * IMPORTANT:
    *
-   * We now read the artwork directly from now.stores by store_id first.
-   * If that direct read is unavailable for any reason, we still keep
-   * getStoreCatalog() as a compatibility fallback.
+   * We intentionally call get_store_catalog directly through
+   * publicSupabase instead of getStoreCatalog().
+   *
+   * catalog-service applies the public-v1 category gate after the
+   * RPC resolves. Active orders can belong to service/internal
+   * categories such as Laundry or Request Anything, so the order
+   * tracking screen must not inherit that catalog visibility filter.
    */
   const [
-    storeImageUrl,
-    setStoreImageUrl,
-  ] = useState<
-    string | null
-  >(null);
-
-  const [
-    storeImageResizeMode,
-    setStoreImageResizeMode,
-  ] = useState<
-    'contain' | 'cover'
-  >('contain');
+    resolvedStoreArtwork,
+    setResolvedStoreArtwork,
+  ] = useState<ResolvedOrderStoreArtwork>({
+    logoUrl: '',
+    coverImageUrl: '',
+    categorySlug: '',
+  });
 
   const [
     storeImageFailed,
     setStoreImageFailed,
   ] = useState(false);
 
+  const [
+    isResolvingStoreArtwork,
+    setIsResolvingStoreArtwork,
+  ] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
 
     setStoreImageFailed(false);
-    setStoreImageUrl(null);
-    setStoreImageResizeMode(
-      'contain',
-    );
+
+    setResolvedStoreArtwork({
+      logoUrl: '',
+      coverImageUrl: '',
+      categorySlug: '',
+    });
 
     if (
       !order?.storeId
     ) {
+      setIsResolvingStoreArtwork(
+        false,
+      );
+
       return () => {
         cancelled = true;
       };
     }
 
-    async function loadStoreImage() {
-      /*
-       * 1) Universal source of truth: now.stores.
-       *
-       * Using the order's store_id means this works identically for
-       * restaurants, supermarkets, bookstores and other public categories.
-       */
+    setIsResolvingStoreArtwork(
+      true,
+    );
+
+    async function loadStoreArtwork() {
       try {
         const {
           data,
           error,
-        } = await (
-          supabase as any
-        )
-          .schema('now')
-          .from('stores')
-          .select(
-            'logo_url, cover_image_url',
-          )
-          .eq(
-            'id',
-            order!.storeId,
-          )
-          .maybeSingle();
+        } =
+          await publicSupabase.rpc(
+            'get_store_catalog',
+            {
+              p_store_id:
+                order!.storeId,
+            },
+          );
+
+        if (cancelled) {
+          return;
+        }
 
         if (error) {
           throw error;
         }
 
+        const rawCatalog =
+          data as
+            | RawOrderStoreCatalog
+            | null;
+
+        const rawStore =
+          rawCatalog?.store;
+
+        setResolvedStoreArtwork({
+          logoUrl:
+            rawStore
+              ?.logo_url
+              ?.trim() ??
+            '',
+
+          coverImageUrl:
+            rawStore
+              ?.cover_image_url
+              ?.trim() ??
+            '',
+
+          categorySlug:
+            rawStore
+              ?.category_slug
+              ?.trim() ??
+            '',
+        });
+      } catch (error) {
         if (cancelled) {
           return;
         }
 
-        const logoUrl =
-          typeof data?.logo_url ===
-            'string'
-            ? data.logo_url.trim()
-            : '';
-
-        const coverImageUrl =
-          typeof data
-            ?.cover_image_url ===
-            'string'
-            ? data.cover_image_url.trim()
-            : '';
-
-        if (logoUrl) {
-          setStoreImageResizeMode(
-            'contain',
-          );
-          setStoreImageUrl(
-            logoUrl,
-          );
-          return;
-        }
-
-        if (coverImageUrl) {
-          setStoreImageResizeMode(
-            'cover',
-          );
-          setStoreImageUrl(
-            coverImageUrl,
-          );
-          return;
-        }
-      } catch (error) {
         console.warn(
-          'Unable to load store artwork directly from now.stores.',
+          'Unable to resolve order store artwork.',
+          order!.storeId,
           error,
         );
-      }
 
-      /*
-       * 2) Compatibility fallback.
-       *
-       * Some environments may restrict direct schema reads while
-       * catalog RPCs remain available. Support both camelCase and
-       * snake_case payloads defensively.
-       */
-      try {
-        const catalog =
-          await getStoreCatalog(
-            order!.storeId,
-            order!.serviceAreaId ||
-              undefined,
-          );
-
-        if (cancelled) {
-          return;
-        }
-
-        const catalogStore =
-          catalog.store as typeof catalog.store & {
-            logoUrl?: string | null;
-            logo_url?: string | null;
-            coverImageUrl?: string | null;
-            cover_image_url?: string | null;
-            imageUrl?: string | null;
-            image_url?: string | null;
-          };
-
-        const logoUrl =
-          catalogStore.logoUrl?.trim() ||
-          catalogStore.logo_url?.trim() ||
-          '';
-
-        const coverImageUrl =
-          catalogStore.coverImageUrl?.trim() ||
-          catalogStore.cover_image_url?.trim() ||
-          catalogStore.imageUrl?.trim() ||
-          catalogStore.image_url?.trim() ||
-          '';
-
-        if (logoUrl) {
-          setStoreImageResizeMode(
-            'contain',
-          );
-          setStoreImageUrl(
-            logoUrl,
-          );
-          return;
-        }
-
-        if (coverImageUrl) {
-          setStoreImageResizeMode(
-            'cover',
-          );
-          setStoreImageUrl(
-            coverImageUrl,
-          );
-          return;
-        }
-
-        setStoreImageUrl(
-          null,
-        );
-      } catch (error) {
+        setResolvedStoreArtwork({
+          logoUrl: '',
+          coverImageUrl: '',
+          categorySlug: '',
+        });
+      } finally {
         if (!cancelled) {
-          console.warn(
-            'Unable to load store artwork from catalog fallback.',
-            error,
-          );
-
-          setStoreImageUrl(
-            null,
+          setIsResolvingStoreArtwork(
+            false,
           );
         }
       }
     }
 
-    void loadStoreImage();
+    void loadStoreArtwork();
 
     return () => {
       cancelled = true;
     };
   }, [
-    order?.serviceAreaId,
     order?.storeId,
   ]);
 
@@ -965,11 +1011,56 @@ function StoreOrderSuccessScreen() {
     !isCancelled &&
     !isDelivered;
 
-  const showStoreImage =
-    Boolean(
-      storeImageUrl,
-    ) &&
+  const storeLogoUrl =
+    resolvedStoreArtwork
+      .logoUrl;
+
+  const storeCoverImageUrl =
+    resolvedStoreArtwork
+      .coverImageUrl;
+
+  const orderItemImageUrl =
+    order.items
+      .map(
+        (item) =>
+          item.imageUrl
+            ?.trim() ??
+          '',
+      )
+      .find(
+        (imageUrl) =>
+          imageUrl.length >
+          0,
+      ) ?? '';
+
+  const remoteStoreImageUrl =
+    storeLogoUrl ||
+    storeCoverImageUrl ||
+    orderItemImageUrl;
+
+  const localStoreArtwork =
+    getOrderStoreCategoryArtwork(
+      resolvedStoreArtwork
+        .categorySlug,
+    );
+
+  const showRemoteStoreImage =
+    remoteStoreImageUrl.length >
+      0 &&
     !storeImageFailed;
+
+  const showLocalStoreArtwork =
+    !showRemoteStoreImage &&
+    localStoreArtwork !==
+      null;
+
+  const storeImageResizeMode:
+    'contain' | 'cover' =
+    storeLogoUrl
+      ? 'contain'
+      : storeCoverImageUrl
+        ? 'cover'
+        : 'contain';
 
   return (
     <View
@@ -1084,14 +1175,17 @@ function StoreOrderSuccessScreen() {
                   styles.storeLogo
                 }
               >
-                {showStoreImage ? (
+                {showRemoteStoreImage ? (
                   <Image
+                    accessibilityIgnoresInvertColors
                     accessibilityLabel={`صورة ${order.storeName}`}
                     source={{
                       uri:
-                        storeImageUrl!,
+                        remoteStoreImageUrl,
                     }}
-                    resizeMode={storeImageResizeMode}
+                    resizeMode={
+                      storeImageResizeMode
+                    }
                     style={
                       styles.storeLogoImage
                     }
@@ -1100,6 +1194,24 @@ function StoreOrderSuccessScreen() {
                         true,
                       );
                     }}
+                  />
+                ) : showLocalStoreArtwork ? (
+                  <Image
+                    accessibilityIgnoresInvertColors
+                    accessibilityLabel={`صورة ${order.storeName}`}
+                    source={
+                      localStoreArtwork!
+                    }
+                    resizeMode="contain"
+                    style={
+                      styles.storeLogoImage
+                    }
+                  />
+                ) : isResolvingStoreArtwork ? (
+                  <View
+                    style={
+                      styles.storeLogoLoading
+                    }
                   />
                 ) : (
                   <Text
@@ -1367,7 +1479,7 @@ function StoreOrderSuccessScreen() {
                   styles.sectionTitle
                 }
               >
-                سنوصل الطلب إلى
+                هنوصل الطلب إلى
               </Text>
             </View>
 
@@ -1704,14 +1816,7 @@ function StoreOrderSuccessScreen() {
                 </Text>
               </Pressable>
 
-              <Text
-                style={
-                  styles.cancelOrderHelper
-                }
-              >
-                سيتم إرسال طلب الإلغاء إلى
-                فريق Navienty Now عبر واتساب.
-              </Text>
+
             </View>
           ) : null}
         </View>
@@ -1863,6 +1968,20 @@ const styles =
     storeLogoImage: {
       height: '88%',
       width: '88%',
+    },
+
+    storeLogoLoading: {
+      backgroundColor:
+        '#F1F4F2',
+
+      borderRadius:
+        12,
+
+      height:
+        '88%',
+
+      width:
+        '88%',
     },
 
     storeLogoText: {

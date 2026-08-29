@@ -56,6 +56,12 @@ type ProductCardMode =
   | 'category'
   | 'offers';
 
+const NAVIENTY_NOW_GREEN =
+  '#00B14F';
+
+const NAVIENTY_NOW_GREEN_DARK =
+  '#009245';
+
 /* ============================================================
  * LOCAL CATEGORY IMAGES
  * ============================================================
@@ -65,8 +71,6 @@ const ROOT_CATEGORY_IMAGES: Record<
   string,
   ImageSourcePropType
 > = {
-  offers: require('../../../assets/images/supermarket-categories/offers.webp'),
-
   'fruit-veg': require('../../../assets/images/supermarket-categories/fruit-veg.webp'),
 
   bakery: require('../../../assets/images/supermarket-categories/bakery.webp'),
@@ -694,7 +698,7 @@ function ProductCard({
             style={
               styles.productImage
             }
-            resizeMode="contain"
+            resizeMode="cover"
           />
         ) : (
           <Text
@@ -1294,7 +1298,7 @@ export default function SupermarketCategoryScreen() {
    * row-reverse. To keep the Arabic visual order:
    *
    * Right edge:
-   *   الكل → العروض → أول Subcategory → ...
+   *   الكل → أول Subcategory → ...
    *
    * the child categories are reversed only for display.
    */
@@ -1446,14 +1450,6 @@ export default function SupermarketCategoryScreen() {
             getCatalogSectionProducts(
               selectedSection,
               true,
-            );
-        } else if (
-          selectedFilterKey ===
-          'offers'
-        ) {
-          products =
-            getCatalogSectionOffers(
-              selectedSection,
             );
         } else {
           const selectedChild =
@@ -1771,6 +1767,38 @@ export default function SupermarketCategoryScreen() {
       return;
     }
 
+    const cartProduct = {
+      id:
+        product.id,
+
+      name:
+        product.name,
+
+      description:
+        product.description,
+
+      price:
+        product.price,
+
+      icon:
+        product.icon,
+
+      variantId:
+        null,
+
+      variantName:
+        null,
+
+      /*
+       * Keep the runtime age-restriction flag on the cart item without
+       * passing it as a fresh object literal to the older CartProduct type.
+       * The current cart-store typing in this release does not declare
+       * isAgeRestricted yet, which is what triggered TS2353.
+       */
+      isAgeRestricted:
+        product.isAgeRestricted,
+    };
+
     addItem(
       {
         id:
@@ -1791,31 +1819,7 @@ export default function SupermarketCategoryScreen() {
         minimumOrder:
           delivery.minimumOrder,
       },
-      {
-        id:
-          product.id,
-
-        name:
-          product.name,
-
-        description:
-          product.description,
-
-        price:
-          product.price,
-
-        icon:
-          product.icon,
-
-        variantId:
-          null,
-
-        variantName:
-          null,
-
-        isAgeRestricted:
-          product.isAgeRestricted,
-      },
+      cartProduct,
     );
   }
 
@@ -1926,13 +1930,6 @@ export default function SupermarketCategoryScreen() {
       }
 
       return 'لا توجد عروض متاحة حالياً.';
-    }
-
-    if (
-      selectedFilterKey ===
-      'offers'
-    ) {
-      return 'لا توجد عروض حالياً داخل هذه الفئة.';
     }
 
     if (
@@ -2303,9 +2300,9 @@ export default function SupermarketCategoryScreen() {
                 {/* CHILD CATEGORIES
                  *
                  * Reversed only for display because this ScrollView
-                 * uses a normal row. They come before OFFERS in the
+                 * uses a normal row. The ALL item is rendered last in the
                  * underlying LTR row so the visible Arabic order starts:
-                 * الكل → العروض → أول Subcategory → ثاني Subcategory → ...
+                 * الكل → أول Subcategory → ثاني Subcategory → ...
                  */}
 
                 {childCategoriesForDisplay.map(
@@ -2381,61 +2378,6 @@ export default function SupermarketCategoryScreen() {
                     );
                   },
                 )}
-
-
-                {/* OFFERS
-                 *
-                 * In the underlying LTR row, OFFERS is placed immediately
-                 * before ALL. Since the rail opens at the right edge, the
-                 * visible Arabic order becomes: الكل → العروض → Subcategories.
-                 */}
-
-                <Pressable
-                  style={
-                    styles.filterItem
-                  }
-                  onPress={() => {
-                    setSelectedFilterKey(
-                      'offers',
-                    );
-
-                    setSearchQuery(
-                      '',
-                    );
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.filterImageCircle,
-
-                      selectedFilterKey ===
-                        'offers' &&
-                        styles.filterImageCircleSelected,
-                    ]}
-                  >
-                    <Image
-                      source={
-                        ROOT_CATEGORY_IMAGES.offers
-                      }
-                      style={
-                        styles.filterCategoryImage
-                      }
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.filterLabel,
-
-                      selectedFilterKey ===
-                        'offers' &&
-                        styles.filterLabelSelected,
-                    ]}
-                  >
-                    العروض
-                  </Text>
-                </Pressable>
 
 
                 {/* ALL — rightmost / selected by default */}
@@ -3296,7 +3238,7 @@ const styles =
         'center',
 
       backgroundColor:
-        '#F8F8F8',
+        '#FFFFFF',
 
       borderColor:
         '#E1E1E1',
@@ -3309,7 +3251,7 @@ const styles =
         'center',
 
       overflow:
-        'visible',
+        'hidden',
 
       position:
         'relative',
@@ -3319,7 +3261,7 @@ const styles =
 
     offersProductImageBox: {
       backgroundColor:
-        '#F8F8F8',
+        '#FFFFFF',
 
       borderColor:
         '#DEDEDE',
@@ -3328,9 +3270,9 @@ const styles =
     },
 
     productImage: {
-      height: '82%',
+      height: '100%',
 
-      width: '82%',
+      width: '100%',
     },
 
     productFallback: {
@@ -3483,7 +3425,7 @@ const styles =
 
     addButtonText: {
       color:
-        '#F05A00',
+        NAVIENTY_NOW_GREEN,
 
       fontSize: 31,
 
@@ -3570,7 +3512,7 @@ const styles =
 
     quantityActionText: {
       color:
-        '#F05A00',
+        NAVIENTY_NOW_GREEN,
 
       fontSize: 19,
 
@@ -3899,7 +3841,7 @@ const styles =
         'center',
 
       backgroundColor:
-        '#F45A00',
+        NAVIENTY_NOW_GREEN,
 
       borderRadius: 28,
 
@@ -3955,7 +3897,7 @@ const styles =
         'center',
 
       backgroundColor:
-        'rgba(0,0,0,0.12)',
+        NAVIENTY_NOW_GREEN_DARK,
 
       borderRadius: 21,
 

@@ -1,22 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-import {
-  isV1PublicCategorySlug,
-} from '../config/v1-release-scope';
-import {
-  hasDifferentRestaurantCart,
-  isRestaurantCartCategory,
-  isSameCartLine,
-} from '../domain/cart-rules';
-
-export {
-  isRestaurantCartCategory,
-} from '../domain/cart-rules';
 import { create } from 'zustand';
 import {
   createJSONStorage,
   persist,
 } from 'zustand/middleware';
+import {
+  isV1PublicCategorySlug,
+} from '../config/v1-release-scope';
+import {
+  trackBehaviorEvent,
+} from '../services/behavioral-analytics-service';
+import {
+  getMatchingSearchAttributionForCartAdd,
+} from '../services/search-attribution-service';
 
 export type CartProduct = {
   /**
@@ -42,6 +38,10 @@ export type CartProduct = {
    */
   variantName?: string | null;
 
+  /**
+   * Snapshot used by checkout to know whether this product
+   * requires age verification.
+   */
   isAgeRestricted?: boolean;
 };
 
@@ -66,7 +66,7 @@ export type CartStoreInformation = {
    * Store category slug.
    *
    * Examples:
-   * restaurants / supermarket / bookstore
+   * restaurants / supermarket / pharmacy / library
    *
    * It is optional temporarily so older screens that have not
    * been migrated yet keep compiling. New/updated screens should
@@ -289,6 +289,58 @@ function normalizeCategorySlug(
   return normalizedValue.length > 0
     ? normalizedValue
     : null;
+}
+
+/**
+ * Used by screens when they need to apply the restaurant-only rule.
+ */
+export function isRestaurantCartCategory(
+  categorySlug:
+    | string
+    | null
+    | undefined,
+) {
+  const normalizedSlug =
+    normalizeCategorySlug(
+      categorySlug,
+    );
+
+  return (
+    normalizedSlug ===
+      'restaurants' ||
+    normalizedSlug ===
+      'restaurant'
+  );
+}
+
+/**
+ * A cart line is identified by:
+ *
+ * product ID + selected variant ID
+ *
+ * Examples:
+ *
+ * pizza-1 + small
+ * pizza-1 + large
+ *
+ * are two different cart lines.
+ */
+function isSameCartLine(
+  item: CartItem,
+  productId: string,
+  variantId?:
+    | string
+    | null,
+) {
+  return (
+    item.id === productId &&
+    normalizeVariantId(
+      item.variantId,
+    ) ===
+      normalizeVariantId(
+        variantId,
+      )
+  );
 }
 
 function normalizeCartProduct(
@@ -520,9 +572,6 @@ function normalizePersistedState(
 
         if (
           normalizedCart &&
-          isV1PublicCategorySlug(
-            normalizedCart.categorySlug,
-          ) &&
           normalizedCart.items.length >
             0
         ) {
@@ -583,9 +632,53 @@ function normalizePersistedState(
     return initialPersistedState;
   }
 
-  // Legacy carts do not identify their category. Clear them once so v1
-  // cannot restore an item from a category that is outside public scope.
-  return initialPersistedState;
+  const migratedCart: StoreCart = {
+    storeId: oldStoreId,
+
+    storeName:
+      typeof candidate.storeName ===
+        'string'
+        ? candidate.storeName
+        : '',
+
+    storeIcon:
+      typeof candidate.storeIcon ===
+        'string'
+        ? candidate.storeIcon
+        : '🏪',
+
+    categorySlug: null,
+
+    deliveryFee:
+      typeof candidate.deliveryFee ===
+        'number' &&
+      Number.isFinite(
+        candidate.deliveryFee,
+      )
+        ? candidate.deliveryFee
+        : 0,
+
+    minimumOrder:
+      typeof candidate.minimumOrder ===
+        'number' &&
+      Number.isFinite(
+        candidate.minimumOrder,
+      )
+        ? candidate.minimumOrder
+        : 0,
+
+    items: oldItems,
+  };
+
+  return {
+    carts: {
+      [oldStoreId]:
+        migratedCart,
+    },
+
+    activeStoreId:
+      oldStoreId,
+  };
 }
 
 function getActiveStoreId(
@@ -663,6 +756,63 @@ function updateStoreCartItems(
   };
 }
 
+async function trackSuccessfulCartAdd(
+  store: CartStoreInformation,
+  product: CartProduct,
+) {
+  const attribution =
+    await getMatchingSearchAttributionForCartAdd({
+      storeId: store.id,
+      storeCategorySlug:
+        store.categorySlug,
+      productId: product.id,
+    });
+
+  void trackBehaviorEvent({
+    eventName:
+      'cart_item_added',
+    searchSessionId:
+      attribution?.attribution
+        .searchSessionId ??
+      null,
+    properties: {
+      store_id: store.id,
+      store_category_slug:
+        store.categorySlug ??
+        null,
+      product_id:
+        product.id,
+      variant_id:
+        product.variantId ??
+        null,
+      unit_price:
+        Number(
+          product.price ?? 0,
+        ),
+      quantity_delta: 1,
+      attribution_source:
+        attribution
+          ? 'search'
+          : 'organic',
+      attribution_match:
+        attribution?.matchType ??
+        null,
+      query:
+        attribution?.attribution
+          .query ??
+        null,
+      clicked_result_type:
+        attribution?.attribution
+          .resultKind ??
+        null,
+      clicked_result_rank:
+        attribution?.attribution
+          .resultRank ??
+        null,
+    },
+  });
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
@@ -684,7 +834,18 @@ export const useCartStore = create<CartState>()(
               store.categorySlug,
             );
 
+          /**
+           * V1 release guard.
+           *
+           * Updated screens send categorySlug. If that explicit category is
+           * outside the public V1 scope, keep it out of the cart and let the
+           * caller show its existing unsupported-category handling.
+           *
+           * Missing categorySlug remains backward-compatible with older
+           * screens that have not been migrated yet.
+           */
           if (
+            categorySlug &&
             !isV1PublicCategorySlug(
               categorySlug,
             )
@@ -702,20 +863,35 @@ export const useCartStore = create<CartState>()(
            * stores/categories at the same time, BUT only one
            * restaurant cart may exist at once.
            *
-           * Restaurant + supermarket + bookstore = OK.
+           * Restaurant + supermarket + pharmacy + library = OK.
            * Restaurant A + Restaurant B = blocked.
            */
           if (
-            hasDifferentRestaurantCart(
-              Object.values(state.carts),
-              store.id,
+            isRestaurantCartCategory(
               categorySlug,
             )
           ) {
-            result =
-              'different-restaurant';
+            const anotherRestaurantCart =
+              Object.values(
+                state.carts,
+              ).find(
+                (cart) =>
+                  cart.items.length > 0 &&
+                  cart.storeId !==
+                    store.id &&
+                  isRestaurantCartCategory(
+                    cart.categorySlug,
+                  ),
+              );
 
-            return state;
+            if (
+              anotherRestaurantCart
+            ) {
+              result =
+                'different-restaurant';
+
+              return state;
+            }
           }
 
           const normalizedProduct =
@@ -816,6 +992,13 @@ export const useCartStore = create<CartState>()(
             ),
           };
         });
+
+        if (result === 'added') {
+          void trackSuccessfulCartAdd(
+            store,
+            product,
+          );
+        }
 
         return result;
       },
@@ -993,27 +1176,7 @@ export const useCartStore = create<CartState>()(
         storeId,
       ) => {
         set((state) => {
-          /**
-           * IMPORTANT:
-           * This action must be idempotent. Multiple screens can stay
-           * mounted at the same time when Expo Router uses modal/transparent
-           * presentations. Returning a brand-new Zustand state when the
-           * requested cart is already active can create an update feedback
-           * loop between those mounted screens.
-           */
           if (!storeId) {
-            const fallbackStoreId =
-              getFirstCartStoreId(
-                state.carts,
-              );
-
-            if (
-              state.activeStoreId ===
-              fallbackStoreId
-            ) {
-              return state;
-            }
-
             return {
               ...state,
 
@@ -1025,13 +1188,6 @@ export const useCartStore = create<CartState>()(
           }
 
           if (!state.carts[storeId]) {
-            return state;
-          }
-
-          if (
-            state.activeStoreId ===
-            storeId
-          ) {
             return state;
           }
 
@@ -1228,14 +1384,13 @@ export const useCartStore = create<CartState>()(
       }),
 
       /**
-       * Version 4 clears category-unknown legacy carts and removes any
-       * persisted cart outside the public v1 scope.
+       * Version 3 changes the cart from one global store cart to:
        *
        * Record<storeId, StoreCart>
        *
-       * Existing category-unknown version 1/2 carts are cleared once.
+       * Existing version 1/2 carts are migrated automatically.
        */
-      version: 4,
+      version: 3,
 
       migrate: (
         persistedState,

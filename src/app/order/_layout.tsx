@@ -553,7 +553,6 @@ const styles =
 
     starsRow: {
       alignItems: 'center',
-      direction: 'ltr',
       flexDirection: 'row',
       gap: 2,
     },

@@ -1,8 +1,5 @@
 import { Linking } from 'react-native';
 
-import {
-  isV1PublicPromotion,
-} from '../config/v1-release-scope';
 import type { HomeBanner } from './home-banners-service';
 
 export type PromoRouter = {
@@ -90,10 +87,6 @@ function hasHomeBannerAction(
 function canOpenHomeBanner(
   banner: HomeBanner,
 ): boolean {
-  if (!isV1PublicPromotion(banner)) {
-    return false;
-  }
-
   return (
     banner.presentationType === 'detail_screen' ||
     hasHomeBannerAction(banner)
@@ -105,10 +98,6 @@ async function openHomeBannerAction({
   router,
   fallbackWhatsAppNumber,
 }: OpenPromoActionOptions): Promise<boolean> {
-  if (!isV1PublicPromotion(banner)) {
-    return false;
-  }
-
   const payload = banner.actionPayload;
 
   switch (banner.actionType) {
@@ -238,8 +227,8 @@ async function openHomeBannerAction({
 }
 
 export {
-    buildWhatsAppUrl,
-    canOpenHomeBanner,
-    hasHomeBannerAction,
-    openHomeBannerAction
+  buildWhatsAppUrl,
+  canOpenHomeBanner,
+  hasHomeBannerAction,
+  openHomeBannerAction
 };

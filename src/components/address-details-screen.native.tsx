@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -27,6 +28,9 @@ import MapView, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  createRequestAnythingRequest,
+} from '../services/request-anything-service';
+import {
   useCustomerStore,
 } from '../store/customer-store';
 import {
@@ -38,6 +42,21 @@ const BRAND_GREEN =
 
 const BRAND_GREEN_DARK =
   NAVIENTY_NOW_COLORS.primaryPressed;
+
+/**
+ * مهم:
+ *
+ * Android:
+ * react-native-maps يستخدم Google Maps.
+ *
+ * iOS:
+ * نترك provider بدون قيمة حتى يستخدم Apple Maps
+ * تلقائيًا بدون الحاجة إلى Google Maps iOS API Key.
+ */
+const MAP_PROVIDER =
+  Platform.OS === 'android'
+    ? PROVIDER_GOOGLE
+    : undefined;
 
 const SCREEN_OPTIONS = {
   headerShown: false,
@@ -125,6 +144,7 @@ function buildDetailedAddress(
 
 export default function AddressDetailsScreen() {
   const router = useRouter();
+
   const insets =
     useSafeAreaInsets();
 
@@ -135,6 +155,18 @@ export default function AddressDetailsScreen() {
         | string[];
 
       source?:
+        | string
+        | string[];
+
+      flow?:
+        | string
+        | string[];
+
+      customRequest?:
+        | string
+        | string[];
+
+      pickupAddress?:
         | string
         | string[];
     }>();
@@ -148,6 +180,25 @@ export default function AddressDetailsScreen() {
     getSingleParam(
       params.source,
     );
+
+  const flow =
+    getSingleParam(
+      params.flow,
+    )?.trim();
+
+  const customRequest =
+    getSingleParam(
+      params.customRequest,
+    )?.trim() ?? '';
+
+  const pickupAddress =
+    getSingleParam(
+      params.pickupAddress,
+    )?.trim() ?? '';
+
+  const isRequestAnythingFlow =
+    flow ===
+    'request-anything';
 
   const locationLatitude =
     useCustomerStore(
@@ -167,6 +218,12 @@ export default function AddressDetailsScreen() {
         state.locationAddress,
     );
 
+  const locationServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
+
   const serviceAreaName =
     useCustomerStore(
       (state) =>
@@ -177,6 +234,12 @@ export default function AddressDetailsScreen() {
     useCustomerStore(
       (state) =>
         state.locationCityName,
+    );
+
+  const savedCustomerName =
+    useCustomerStore(
+      (state) =>
+        state.customerName,
     );
 
   const savedPhoneNumber =
@@ -204,6 +267,13 @@ export default function AddressDetailsScreen() {
     );
 
   const [
+    customerName,
+    setCustomerName,
+  ] = useState(
+    savedCustomerName,
+  );
+
+  const [
     buildingName,
     setBuildingName,
   ] = useState(
@@ -229,6 +299,16 @@ export default function AddressDetailsScreen() {
   const [
     submitted,
     setSubmitted,
+  ] = useState(false);
+
+  const [
+    isSubmittingRequest,
+    setIsSubmittingRequest,
+  ] = useState(false);
+
+  const [
+    isMapReady,
+    setIsMapReady,
   ] = useState(false);
 
   const hasCoordinate =
@@ -271,6 +351,17 @@ export default function AddressDetailsScreen() {
       ],
     );
 
+  /**
+   * إعادة إنشاء الخريطة عند تغيير الـPin.
+   *
+   * ده مفيد خصوصًا لو المستخدم دخل
+   * location-picker وعدّل المكان ثم رجع.
+   */
+  const mapKey =
+    hasCoordinate
+      ? `delivery-map-${locationLatitude}-${locationLongitude}`
+      : 'delivery-map-empty';
+
   const areaDisplayName = [
     serviceAreaName,
     cityName,
@@ -287,6 +378,12 @@ export default function AddressDetailsScreen() {
     );
 
   const validation = {
+    customerName:
+      !isRequestAnythingFlow ||
+      customerName
+        .trim()
+        .length >= 2,
+
     building:
       buildingName
         .trim()
@@ -304,7 +401,10 @@ export default function AddressDetailsScreen() {
     ).every(Boolean);
 
   function editPin() {
-    if (!storeId) {
+    if (
+      !storeId &&
+      !isRequestAnythingFlow
+    ) {
       Alert.alert(
         'تعذر تعديل الموقع',
         'تعذر تحديد المتجر الخاص بهذا الطلب. ارجع إلى السلة وحاول مرة أخرى.',
@@ -313,22 +413,35 @@ export default function AddressDetailsScreen() {
       return;
     }
 
-    /*
-     * Important:
-     *
-     * Use push, not replace.
-     *
-     * This keeps Address Details alive in the navigation stack,
-     * including everything the customer has typed locally.
-     *
-     * Address Details -> Map -> Back to same Address Details.
-     */
+    if (
+      isRequestAnythingFlow
+    ) {
+      router.push({
+        pathname:
+          '/location-picker',
+
+        params: {
+          flow:
+            'request-anything',
+
+          customRequest,
+
+          pickupAddress,
+
+          source:
+            'address-details',
+        },
+      });
+
+      return;
+    }
+
     router.push({
       pathname:
         '/location-picker',
 
       params: {
-        storeId,
+        storeId: storeId!,
 
         source:
           'address-details',
@@ -336,7 +449,7 @@ export default function AddressDetailsScreen() {
     });
   }
 
-  function saveAddress() {
+  async function saveAddress() {
     setSubmitted(true);
 
     if (!hasCoordinate) {
@@ -348,10 +461,28 @@ export default function AddressDetailsScreen() {
       return;
     }
 
-    if (!storeId) {
+    if (
+      !storeId &&
+      !isRequestAnythingFlow
+    ) {
       Alert.alert(
         'تعذر تحديد المتجر',
         'ارجع إلى السلة وحاول مرة أخرى.',
+      );
+
+      return;
+    }
+
+    if (
+      isRequestAnythingFlow &&
+      (
+        !customRequest ||
+        !pickupAddress
+      )
+    ) {
+      Alert.alert(
+        'بيانات الطلب غير مكتملة',
+        'ارجع إلى خدمة «اطلب أي حاجة» واكتب تفاصيل الطلب والمكان اللي هنجيبه منه.',
       );
 
       return;
@@ -370,7 +501,20 @@ export default function AddressDetailsScreen() {
         locationAddress,
       });
 
+    const trimmedCustomerName =
+      customerName.trim();
+
+    const trimmedInstructions =
+      deliveryInstructions.trim();
+
     setCustomerData({
+      ...(isRequestAnythingFlow
+        ? {
+            customerName:
+              trimmedCustomerName,
+          }
+        : {}),
+
       phoneNumber:
         finalPhoneNumber,
 
@@ -393,15 +537,90 @@ export default function AddressDetailsScreen() {
         '',
 
       deliveryInstructions:
-        deliveryInstructions.trim(),
+        trimmedInstructions,
 
-      /*
-       * Checkout already submits landmark.
-       * Reuse it for delivery instructions.
-       */
       landmark:
-        deliveryInstructions.trim(),
+        trimmedInstructions,
     });
+
+    if (
+      isRequestAnythingFlow
+    ) {
+      if (
+        !locationServiceAreaId
+      ) {
+        Alert.alert(
+          'تعذر تحديد منطقة التوصيل',
+          'ارجع إلى الخريطة وحدد موقع التوصيل مرة أخرى.',
+        );
+
+        return;
+      }
+
+      try {
+        setIsSubmittingRequest(
+          true,
+        );
+
+        const createdRequest =
+          await createRequestAnythingRequest({
+            requestText:
+              customRequest,
+
+            pickupAddress,
+
+            deliveryLatitude:
+              locationLatitude!,
+
+            deliveryLongitude:
+              locationLongitude!,
+
+            serviceAreaId:
+              locationServiceAreaId,
+
+            customerName:
+              trimmedCustomerName,
+
+            customerPhone:
+              finalPhoneNumber,
+
+            deliveryAddress:
+              finalAddress,
+
+            landmark:
+              trimmedInstructions,
+          });
+
+        Alert.alert(
+          'تم استلام طلبك',
+          `رقم الطلب: ${createdRequest.requestCode}\n\nهنراجع الحاجة والمكان والسعر معاك قبل أي تنفيذ.`,
+          [
+            {
+              text:
+                'تمام',
+
+              onPress: () => {
+                router.replace('/');
+              },
+            },
+          ],
+        );
+      } catch (error) {
+        Alert.alert(
+          'تعذر إرسال الطلب',
+
+          error instanceof Error
+            ? error.message
+            : 'تعذر إرسال طلب «اطلب أي حاجة». حاول مرة أخرى.',
+        );
+      } finally {
+        setIsSubmittingRequest(
+          false,
+        );
+      }
+
+      return;
+    }
 
     if (
       source ===
@@ -417,7 +636,7 @@ export default function AddressDetailsScreen() {
         '/checkout',
 
       params: {
-        storeId,
+        storeId: storeId!,
       },
     });
   }
@@ -495,7 +714,9 @@ export default function AddressDetailsScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.screen}
+      style={
+        styles.screen
+      }
       behavior={
         Platform.OS ===
         'ios'
@@ -549,7 +770,9 @@ export default function AddressDetailsScreen() {
             styles.headerTitle
           }
         >
-          عنوان جديد
+          {isRequestAnythingFlow
+            ? 'بيانات التوصيل'
+            : 'عنوان جديد'}
         </Text>
 
         <View
@@ -578,43 +801,184 @@ export default function AddressDetailsScreen() {
           false
         }
       >
+        {isRequestAnythingFlow ? (
+          <View
+            style={
+              styles.requestSummaryCard
+            }
+          >
+            <View
+              style={
+                styles.requestSummaryHeader
+              }
+            >
+              <View
+                style={
+                  styles.requestSummaryIcon
+                }
+              >
+                <Ionicons
+                  name="sparkles"
+                  size={19}
+                  color={
+                    BRAND_GREEN
+                  }
+                />
+              </View>
+
+              <Text
+                style={
+                  styles.requestSummaryTitle
+                }
+              >
+                اطلب أي حاجة
+              </Text>
+            </View>
+
+            <Text
+              style={
+                styles.requestSummaryLabel
+              }
+            >
+              طلبك
+            </Text>
+
+            <Text
+              numberOfLines={3}
+              style={
+                styles.requestSummaryValue
+              }
+            >
+              {customRequest}
+            </Text>
+
+            <View
+              style={
+                styles.requestSummaryDivider
+              }
+            />
+
+            <Text
+              style={
+                styles.requestSummaryLabel
+              }
+            >
+              نجيبه من
+            </Text>
+
+            <Text
+              numberOfLines={2}
+              style={
+                styles.requestSummaryValue
+              }
+            >
+              {pickupAddress}
+            </Text>
+          </View>
+        ) : null}
+
         <View
           style={
             styles.mapPreviewCard
           }
         >
+          {!isMapReady ? (
+            <View
+              style={
+                styles.mapLoadingOverlay
+              }
+            >
+              <ActivityIndicator
+                size="small"
+                color={
+                  BRAND_GREEN
+                }
+              />
+
+              <Text
+                style={
+                  styles.mapLoadingText
+                }
+              >
+                جاري تحميل الخريطة
+              </Text>
+            </View>
+          ) : null}
+
           <MapView
+            key={mapKey}
+
+            /**
+             * Android = Google Maps
+             * iOS = Apple Maps
+             */
             provider={
-              PROVIDER_GOOGLE
+              MAP_PROVIDER
             }
+
             style={
               styles.mapPreview
             }
+
             region={
               mapRegion
             }
+
+            mapType="standard"
+
             scrollEnabled={
               false
             }
+
             zoomEnabled={
               false
             }
+
             rotateEnabled={
               false
             }
+
             pitchEnabled={
               false
             }
+
             toolbarEnabled={
               false
             }
+
             showsCompass={
               false
             }
+
             showsMyLocationButton={
               false
             }
+
+            showsBuildings={
+              true
+            }
+
+            showsPointsOfInterests={
+              true
+            }
+
+            loadingEnabled={
+              true
+            }
+
+            loadingIndicatorColor={
+              BRAND_GREEN
+            }
+
+            loadingBackgroundColor={
+              NAVIENTY_NOW_COLORS.surface
+            }
+
             pointerEvents="none"
+
+            onMapReady={() => {
+              setIsMapReady(true);
+            }}
           >
             <Marker
               coordinate={{
@@ -624,22 +988,13 @@ export default function AddressDetailsScreen() {
                 longitude:
                   locationLongitude!,
               }}
-            >
-              <View
-                style={
-                  styles.mapPinWrap
-                }
-              >
-                <Ionicons
-                  name="location"
-                  size={30}
-                  color={
-                    BRAND_GREEN
-                  }
-                />
-              </View>
-            </Marker>
+              pinColor={
+                BRAND_GREEN
+              }
+            />
           </MapView>
+
+
         </View>
 
         <View
@@ -715,6 +1070,46 @@ export default function AddressDetailsScreen() {
             styles.formSection
           }
         >
+          {isRequestAnythingFlow ? (
+            <View
+              style={
+                styles.fieldBlock
+              }
+            >
+              <TextInput
+                value={
+                  customerName
+                }
+                placeholder="الاسم بالكامل"
+                placeholderTextColor={
+                  NAVIENTY_NOW_COLORS.textMuted
+                }
+                style={[
+                  styles.input,
+
+                  submitted &&
+                    !validation.customerName &&
+                    styles.inputError,
+                ]}
+                textAlign="right"
+                onChangeText={
+                  setCustomerName
+                }
+              />
+
+              {submitted &&
+              !validation.customerName ? (
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  اكتب اسمًا صحيحًا.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <View
             style={
               styles.fieldBlock
@@ -856,6 +1251,32 @@ export default function AddressDetailsScreen() {
               setDeliveryInstructions
             }
           />
+
+          {isRequestAnythingFlow ? (
+            <View
+              style={
+                styles.reviewNotice
+              }
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={18}
+                color={
+                  BRAND_GREEN
+                }
+              />
+
+              <Text
+                style={
+                  styles.reviewNoticeText
+                }
+              >
+                بعد الإرسال هنراجع
+                تفاصيل الطلب والسعر معاك
+                قبل أي تنفيذ.
+              </Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -872,25 +1293,43 @@ export default function AddressDetailsScreen() {
         ]}
       >
         <Pressable
+          disabled={
+            isSubmittingRequest
+          }
           style={({
             pressed,
           }) => [
             styles.saveButton,
 
+            isSubmittingRequest &&
+              styles.saveButtonDisabled,
+
             pressed &&
+              !isSubmittingRequest &&
               styles.saveButtonPressed,
           ]}
-          onPress={
-            saveAddress
-          }
+          onPress={() => {
+            void saveAddress();
+          }}
         >
-          <Text
-            style={
-              styles.saveButtonText
-            }
-          >
-            حفظ العنوان
-          </Text>
+          {isSubmittingRequest ? (
+            <ActivityIndicator
+              size="small"
+              color={
+                NAVIENTY_NOW_COLORS.white
+              }
+            />
+          ) : (
+            <Text
+              style={
+                styles.saveButtonText
+              }
+            >
+              {isRequestAnythingFlow
+                ? 'إرسال الطلب للمراجعة'
+                : 'حفظ العنوان'}
+            </Text>
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -902,7 +1341,9 @@ const styles =
     screen: {
       backgroundColor:
         NAVIENTY_NOW_COLORS.page,
-      flex: 1,
+
+      flex:
+        1,
     },
 
     header: {
@@ -998,46 +1439,289 @@ const styles =
         12,
     },
 
+    requestSummaryCard: {
+      backgroundColor:
+        '#10291B',
+
+      borderRadius:
+        20,
+
+      marginBottom:
+        12,
+
+      padding:
+        16,
+    },
+
+    requestSummaryHeader: {
+      alignItems:
+        'center',
+
+      flexDirection:
+        'row-reverse',
+    },
+
+    requestSummaryIcon: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.white,
+
+      borderRadius:
+        14,
+
+      height:
+        40,
+
+      justifyContent:
+        'center',
+
+      width:
+        40,
+    },
+
+    requestSummaryTitle: {
+      color:
+        NAVIENTY_NOW_COLORS.white,
+
+      flex:
+        1,
+
+      fontSize:
+        16,
+
+      fontWeight:
+        '900',
+
+      marginRight:
+        10,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    requestSummaryLabel: {
+      color:
+        'rgba(255,255,255,0.60)',
+
+      fontSize:
+        9.5,
+
+      fontWeight:
+        '800',
+
+      marginTop:
+        13,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    requestSummaryValue: {
+      color:
+        NAVIENTY_NOW_COLORS.white,
+
+      fontSize:
+        12,
+
+      fontWeight:
+        '700',
+
+      lineHeight:
+        19,
+
+      marginTop:
+        3,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
+    requestSummaryDivider: {
+      backgroundColor:
+        'rgba(255,255,255,0.12)',
+
+      height:
+        StyleSheet.hairlineWidth,
+
+      marginTop:
+        11,
+    },
+
+    /**
+     * تم إعطاء الكارت ارتفاع واضح.
+     * الخريطة الموجودة داخله ستأخذ
+     * 100% من العرض والارتفاع.
+     */
     mapPreviewCard: {
       backgroundColor:
         NAVIENTY_NOW_COLORS.surface,
 
+      borderColor:
+        NAVIENTY_NOW_COLORS.border,
+
       borderRadius:
         16,
 
+      borderWidth:
+        StyleSheet.hairlineWidth,
+
       height:
-        142,
+        156,
 
       overflow:
         'hidden',
+
+      position:
+        'relative',
 
       width:
         '100%',
     },
 
+    /**
+     * أهم تعديل في الـlayout:
+     *
+     * بدل absolute فقط،
+     * MapView نفسها لها dimensions صريحة.
+     */
     mapPreview: {
-      position:
-        'absolute',
+      height:
+        '100%',
+
+      width:
+        '100%',
+    },
+
+    mapLoadingOverlay: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.surface,
 
       bottom:
         0,
 
+      justifyContent:
+        'center',
+
       left:
         0,
+
+      position:
+        'absolute',
 
       right:
         0,
 
       top:
         0,
+
+      zIndex:
+        1,
     },
 
-    mapPinWrap: {
+    mapLoadingText: {
+      color:
+        NAVIENTY_NOW_COLORS.textSecondary,
+
+      fontSize:
+        10,
+
+      fontWeight:
+        '700',
+
+      marginTop:
+        7,
+
+      writingDirection:
+        'rtl',
+    },
+
+    mapCenterBadge: {
       alignItems:
         'center',
 
+      backgroundColor:
+        'rgba(255,255,255,0.95)',
+
+      borderColor:
+        'rgba(0,0,0,0.06)',
+
+      borderRadius:
+        15,
+
+      borderWidth:
+        StyleSheet.hairlineWidth,
+
+      bottom:
+        9,
+
+      flexDirection:
+        'row-reverse',
+
+      paddingHorizontal:
+        9,
+
+      paddingVertical:
+        6,
+
+      position:
+        'absolute',
+
+      right:
+        9,
+
+      zIndex:
+        3,
+    },
+
+    mapCenterBadgeIcon: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primaryPale,
+
+      borderRadius:
+        10,
+
+      height:
+        20,
+
       justifyContent:
         'center',
+
+      width:
+        20,
+    },
+
+    mapCenterBadgeText: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontSize:
+        9.5,
+
+      fontWeight:
+        '800',
+
+      marginRight:
+        5,
+
+      writingDirection:
+        'rtl',
     },
 
     areaCard: {
@@ -1321,6 +2005,58 @@ const styles =
         16,
     },
 
+    reviewNotice: {
+      alignItems:
+        'flex-start',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primaryPale,
+
+      borderColor:
+        '#D6F0E1',
+
+      borderRadius:
+        16,
+
+      borderWidth:
+        1,
+
+      flexDirection:
+        'row-reverse',
+
+      marginTop:
+        12,
+
+      padding:
+        12,
+    },
+
+    reviewNoticeText: {
+      color:
+        '#315D43',
+
+      flex:
+        1,
+
+      fontSize:
+        10.5,
+
+      fontWeight:
+        '700',
+
+      lineHeight:
+        17,
+
+      marginRight:
+        8,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+
     bottomBar: {
       backgroundColor:
         NAVIENTY_NOW_COLORS.white,
@@ -1365,6 +2101,11 @@ const styles =
 
       minHeight:
         52,
+    },
+
+    saveButtonDisabled: {
+      opacity:
+        0.55,
     },
 
     saveButtonPressed: {

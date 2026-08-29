@@ -1,6 +1,5 @@
 import { useRouter } from 'expo-router';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -32,18 +31,29 @@ type MainTab =
 
 type AppBottomNavigationProps = {
   activeTab: MainTab;
+
+  /**
+   * نحتفظ به فقط للتوافق مع الشاشات القديمة
+   * التي ما زالت تمرر isSignedIn.
+   *
+   * لا يتم استخدامه في اسم تبويب الحساب.
+   */
   isSignedIn?: boolean;
 };
 
 type TabDefinition = {
   key: MainTab;
+
   label: string;
+
   accessibilityLabel: string;
+
   route:
     | '/'
     | '/orders'
     | '/cart'
     | '/account';
+
   badgeCount: number;
 };
 
@@ -57,44 +67,75 @@ type CustomIconProps = {
   size: number;
 };
 
-const NAV_BACKGROUND = '#FFFFFF';
-const NAV_BORDER = '#EEF0F1';
-const INACTIVE_COLOR = '#626A72';
+const NAV_BACKGROUND =
+  '#FFFFFF';
+
+const NAV_BORDER =
+  '#EEF0F1';
+
+const INACTIVE_COLOR =
+  '#626A72';
+
 const ACTIVE_COLOR =
   NAVIENTY_NOW_COLORS.primary;
-const BADGE_BACKGROUND = '#E5484D';
+
+const BADGE_BACKGROUND =
+  '#E5484D';
+
+/**
+ * اسم الحساب ثابت دائمًا.
+ *
+ * لا نستخدم isSignedIn لتغيير الاسم.
+ */
+const ACCOUNT_LABEL =
+  'حسابي';
+
+const ACCOUNT_ACCESSIBILITY_LABEL =
+  'الانتقال إلى حسابي';
 
 const ICON_SIZES: Record<
   MainTab,
   number
 > = {
   home: 30,
+
   orders: 31,
+
   cart: 30,
+
   account: 31,
 };
 
 function formatBadgeCount(
   count: number,
 ): string {
-  if (count > 99) {
+  if (
+    count > 99
+  ) {
     return '99+';
   }
 
-  return String(count);
+  return String(
+    count,
+  );
 }
 
+/**
+ * HOME ICON
+ */
 function NavientyHomeIcon({
   active,
   size,
 }: CustomIconProps) {
-  const color = active
-    ? ACTIVE_COLOR
-    : INACTIVE_COLOR;
+  const color =
+    active
+      ? ACTIVE_COLOR
+      : INACTIVE_COLOR;
 
-  const strokeWidth = active
-    ? 2
-    : 1.8;
+  const strokeWidth =
+    active
+      ? 2
+      : 1.8;
 
   return (
     <Svg
@@ -160,17 +201,22 @@ function NavientyHomeIcon({
   );
 }
 
+/**
+ * ORDERS ICON
+ */
 function NavientyOrdersIcon({
   active,
   size,
 }: CustomIconProps) {
-  const color = active
-    ? ACTIVE_COLOR
-    : INACTIVE_COLOR;
+  const color =
+    active
+      ? ACTIVE_COLOR
+      : INACTIVE_COLOR;
 
-  const strokeWidth = active
-    ? 2
-    : 1.8;
+  const strokeWidth =
+    active
+      ? 2
+      : 1.8;
 
   return (
     <Svg
@@ -199,14 +245,20 @@ function NavientyOrdersIcon({
       />
 
       <Path
-        d="M8.15 9.05 H15.85"
+        d="
+          M8.15 9.05
+          H15.85
+        "
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
       />
 
       <Path
-        d="M8.15 12.1 H12.15"
+        d="
+          M8.15 12.1
+          H12.15
+        "
         stroke={color}
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -250,17 +302,22 @@ function NavientyOrdersIcon({
   );
 }
 
+/**
+ * CART / BAG ICON
+ */
 function NavientyBagIcon({
   active,
   size,
 }: CustomIconProps) {
-  const color = active
-    ? ACTIVE_COLOR
-    : INACTIVE_COLOR;
+  const color =
+    active
+      ? ACTIVE_COLOR
+      : INACTIVE_COLOR;
 
-  const strokeWidth = active
-    ? 2
-    : 1.8;
+  const strokeWidth =
+    active
+      ? 2
+      : 1.8;
 
   return (
     <Svg
@@ -302,43 +359,49 @@ function NavientyBagIcon({
         strokeLinejoin="round"
       />
 
-      <Path
-        d={
-          active
-            ? `
-              M9.05 13.35
-              C9.75 14.05 10.75 14.45 12 14.45
-              C13.25 14.45 14.25 14.05 14.95 13.35
-            `
-            : `
-              M9.3 13.55
-              C10 14.1 10.88 14.4 12 14.4
-              C13.12 14.4 14 14.1 14.7 13.55
-            `
-        }
-        stroke={color}
-        strokeWidth={
-          active
-            ? 2.35
-            : strokeWidth
-        }
-        strokeLinecap="round"
-      />
+      {active ? (
+        <Path
+          d="
+            M9.05 13.35
+            C9.75 14.05 10.75 14.45 12 14.45
+            C13.25 14.45 14.25 14.05 14.95 13.35
+          "
+          stroke={color}
+          strokeWidth="2.35"
+          strokeLinecap="round"
+        />
+      ) : (
+        <Path
+          d="
+            M9.3 13.55
+            C10 14.1 10.88 14.4 12 14.4
+            C13.12 14.4 14 14.1 14.7 13.55
+          "
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+      )}
     </Svg>
   );
 }
 
+/**
+ * ACCOUNT ICON
+ */
 function NavientyAccountIcon({
   active,
   size,
 }: CustomIconProps) {
-  const color = active
-    ? ACTIVE_COLOR
-    : INACTIVE_COLOR;
+  const color =
+    active
+      ? ACTIVE_COLOR
+      : INACTIVE_COLOR;
 
-  const strokeWidth = active
-    ? 2
-    : 1.8;
+  const strokeWidth =
+    active
+      ? 2
+      : 1.8;
 
   return (
     <Svg
@@ -400,9 +463,13 @@ function TabIcon({
   active,
 }: TabIconProps) {
   const size =
-    ICON_SIZES[kind];
+    ICON_SIZES[
+      kind
+    ];
 
-  if (kind === 'home') {
+  if (
+    kind === 'home'
+  ) {
     return (
       <NavientyHomeIcon
         active={active}
@@ -411,7 +478,9 @@ function TabIcon({
     );
   }
 
-  if (kind === 'orders') {
+  if (
+    kind === 'orders'
+  ) {
     return (
       <NavientyOrdersIcon
         active={active}
@@ -420,7 +489,9 @@ function TabIcon({
     );
   }
 
-  if (kind === 'cart') {
+  if (
+    kind === 'cart'
+  ) {
     return (
       <NavientyBagIcon
         active={active}
@@ -439,9 +510,10 @@ function TabIcon({
 
 export default function AppBottomNavigation({
   activeTab,
-  isSignedIn = false,
 }: AppBottomNavigationProps) {
-  const router = useRouter();
+  const router =
+    useRouter();
+
   const insets =
     useSafeAreaInsets();
 
@@ -456,67 +528,90 @@ export default function AppBottomNavigation({
         state.orders.length,
     );
 
-  const tabs: TabDefinition[] = [
-    {
-      key: 'home',
-      label: 'الرئيسية',
-      accessibilityLabel:
-        'الانتقال إلى الصفحة الرئيسية',
-      route: '/',
-      badgeCount: 0,
-    },
-    {
-      key: 'orders',
-      label: 'طلباتي',
-      accessibilityLabel:
-        'الانتقال إلى الطلبات',
-      route: '/orders',
-      badgeCount:
-        ordersCount,
-    },
-    {
-      key: 'cart',
-      label: 'السلة',
-      accessibilityLabel:
-        'الانتقال إلى سلة الطلب',
-      route: '/cart',
-      badgeCount:
-        cartCount,
-    },
-    {
-      key: 'account',
-      label:
-        isSignedIn
-          ? 'حسابي'
-          : 'دخول',
-      accessibilityLabel:
-        isSignedIn
-          ? 'الانتقال إلى الحساب'
-          : 'الانتقال إلى تسجيل الدخول',
-      route: '/account',
-      badgeCount: 0,
-    },
-  ];
+  const tabs:
+    TabDefinition[] =
+      [
+        {
+          key:
+            'home',
 
-  const safeBottomPadding =
-    Platform.OS === 'android'
-      ? Math.max(
-          insets.bottom,
-          8,
-        )
-      : Math.max(
-          insets.bottom,
-          8,
-        );
+          label:
+            'الرئيسية',
+
+          accessibilityLabel:
+            'الانتقال إلى الصفحة الرئيسية',
+
+          route:
+            '/',
+
+          badgeCount:
+            0,
+        },
+
+        {
+          key:
+            'orders',
+
+          label:
+            'طلباتي',
+
+          accessibilityLabel:
+            'الانتقال إلى طلباتي',
+
+          route:
+            '/orders',
+
+          badgeCount:
+            ordersCount,
+        },
+
+        {
+          key:
+            'cart',
+
+          label:
+            'السلة',
+
+          accessibilityLabel:
+            'الانتقال إلى السلة',
+
+          route:
+            '/cart',
+
+          badgeCount:
+            cartCount,
+        },
+
+        {
+          key:
+            'account',
+
+          label:
+            ACCOUNT_LABEL,
+
+          accessibilityLabel:
+            ACCOUNT_ACCESSIBILITY_LABEL,
+
+          route:
+            '/account',
+
+          badgeCount:
+            0,
+        },
+      ];
 
   return (
     <View
       accessibilityRole="tablist"
       style={[
         styles.navigationWrapper,
+
         {
           paddingBottom:
-            safeBottomPadding,
+            Math.max(
+              insets.bottom,
+              8,
+            ),
         },
       ]}
     >
@@ -525,109 +620,154 @@ export default function AppBottomNavigation({
           styles.navigationContainer
         }
       >
-        {tabs.map((tab) => {
-          const active =
-            tab.key === activeTab;
+        {tabs.map(
+          (
+            tab,
+          ) => {
+            const active =
+              tab.key ===
+              activeTab;
 
-          return (
-            <Pressable
-              key={tab.key}
-              accessibilityLabel={
-                tab.accessibilityLabel
-              }
-              accessibilityRole="tab"
-              accessibilityState={{
-                selected: active,
-              }}
-              hitSlop={{
-                top: 6,
-                bottom: 6,
-                left: 6,
-                right: 6,
-              }}
-              style={({
-                pressed,
-              }) => [
-                styles.tab,
-                pressed &&
-                  styles.tabPressed,
-              ]}
-              onPress={() => {
-                if (active) {
-                  return;
-                }
+            /**
+             * حماية إضافية:
+             *
+             * حتى لو تم تغيير label الخاص بالحساب
+             * بالخطأ داخل tabs مستقبلاً،
+             * سيتم عرض "حسابي" هنا دائمًا.
+             */
+            const displayedLabel =
+              tab.key ===
+              'account'
+                ? ACCOUNT_LABEL
+                : tab.label;
 
-                router.push(
-                  tab.route,
-                );
-              }}
-            >
-              <View
-                style={
-                  styles.iconStage
+            const displayedAccessibilityLabel =
+              tab.key ===
+              'account'
+                ? ACCOUNT_ACCESSIBILITY_LABEL
+                : tab.accessibilityLabel;
+
+            return (
+              <Pressable
+                key={
+                  tab.key
                 }
+                accessibilityLabel={
+                  displayedAccessibilityLabel
+                }
+                accessibilityRole="tab"
+                accessibilityState={{
+                  selected:
+                    active,
+                }}
+                hitSlop={{
+                  top: 6,
+                  bottom: 6,
+                  left: 6,
+                  right: 6,
+                }}
+                style={( {
+                  pressed,
+                } ) => [
+                  styles.tab,
+
+                  pressed &&
+                    styles.tabPressed,
+                ]}
+                onPress={() => {
+                  if (
+                    active
+                  ) {
+                    return;
+                  }
+
+                  router.push(
+                    tab.route,
+                  );
+                }}
               >
                 <View
-                  style={[
-                    styles.iconContainer,
-                    active &&
-                      styles.iconContainerActive,
-                  ]}
+                  style={
+                    styles.iconStage
+                  }
                 >
-                  <TabIcon
-                    active={active}
-                    kind={tab.key}
-                  />
-                </View>
-
-                {tab.badgeCount >
-                  0 && (
                   <View
-                    pointerEvents="none"
-                    style={
-                      styles.badge
-                    }
+                    style={[
+                      styles.iconContainer,
+
+                      active &&
+                        styles.iconContainerActive,
+                    ]}
                   >
-                    <Text
-                      allowFontScaling={
-                        false
+                    <TabIcon
+                      active={
+                        active
                       }
-                      maxFontSizeMultiplier={
-                        1
+                      kind={
+                        tab.key
                       }
+                    />
+                  </View>
+
+                  {tab.badgeCount >
+                    0 && (
+                    <View
+                      pointerEvents="none"
                       style={
-                        styles.badgeText
+                        styles.badge
                       }
                     >
-                      {formatBadgeCount(
-                        tab.badgeCount,
-                      )}
-                    </Text>
-                  </View>
-                )}
-              </View>
+                      <Text
+                        allowFontScaling={
+                          false
+                        }
+                        maxFontSizeMultiplier={
+                          1
+                        }
+                        style={
+                          styles.badgeText
+                        }
+                      >
+                        {formatBadgeCount(
+                          tab.badgeCount,
+                        )}
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-              <Text
-                allowFontScaling={false}
-                maxFontSizeMultiplier={1}
-                numberOfLines={1}
-                style={[
-                  styles.tabLabel,
+                <Text
+                  allowFontScaling={
+                    false
+                  }
+                  maxFontSizeMultiplier={
+                    1
+                  }
+                  numberOfLines={
+                    1
+                  }
+                  style={[
+                    styles.tabLabel,
+
+                    {
+                      color:
+                        active
+                          ? ACTIVE_COLOR
+                          : INACTIVE_COLOR,
+                    },
+
+                    active &&
+                      styles.tabLabelActive,
+                  ]}
+                >
                   {
-                    color:
-                      active
-                        ? ACTIVE_COLOR
-                        : INACTIVE_COLOR,
-                  },
-                  active &&
-                    styles.tabLabelActive,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                    displayedLabel
+                  }
+                </Text>
+              </Pressable>
+            );
+          },
+        )}
       </View>
     </View>
   );
@@ -638,58 +778,99 @@ const styles =
     navigationWrapper: {
       backgroundColor:
         NAV_BACKGROUND,
+
       borderTopColor:
         NAV_BORDER,
+
       borderTopWidth:
         StyleSheet.hairlineWidth,
-      bottom: 0,
-      left: 0,
+
+      bottom:
+        0,
+
+      left:
+        0,
+
       position:
         'absolute',
-      right: 0,
-      zIndex: 50,
-      shadowColor: '#101828',
+
+      right:
+        0,
+
+      zIndex:
+        50,
+
+      shadowColor:
+        '#101828',
+
       shadowOffset: {
-        width: 0,
-        height: -2,
+        width:
+          0,
+
+        height:
+          -2,
       },
-      shadowOpacity: 0.025,
-      shadowRadius: 8,
-      elevation: 4,
+
+      shadowOpacity:
+        0.025,
+
+      shadowRadius:
+        8,
+
+      elevation:
+        4,
     },
 
     navigationContainer: {
       alignSelf:
         'center',
+
       flexDirection:
         'row-reverse',
+
       height:
         NAVIENTY_NOW_LAYOUT
           .bottomNavigationHeight,
+
       maxWidth:
         NAVIENTY_NOW_LAYOUT
           .contentMaxWidth,
-      paddingHorizontal: 8,
-      width: '100%',
+
+      paddingHorizontal:
+        8,
+
+      width:
+        '100%',
     },
 
     tab: {
       alignItems:
         'center',
-      flex: 1,
+
+      flex:
+        1,
+
       justifyContent:
         'center',
-      minHeight: 60,
-      minWidth: 0,
-      paddingHorizontal: 2,
-      paddingTop: 4,
+
+      minHeight:
+        60,
+
+      paddingHorizontal:
+        4,
+
+      paddingTop:
+        4,
     },
 
     tabPressed: {
-      opacity: 0.72,
+      opacity:
+        0.72,
+
       transform: [
         {
-          scale: 0.965,
+          scale:
+            0.965,
         },
       ],
     },
@@ -697,30 +878,44 @@ const styles =
     iconStage: {
       alignItems:
         'center',
-      height: 38,
+
+      height:
+        38,
+
       justifyContent:
         'center',
+
       position:
         'relative',
-      width: 50,
+
+      width:
+        50,
     },
 
     iconContainer: {
       alignItems:
         'center',
-      height: 34,
+
+      height:
+        34,
+
       justifyContent:
         'center',
-      width: 34,
+
+      width:
+        34,
     },
 
     iconContainerActive: {
       transform: [
         {
-          translateY: -1,
+          translateY:
+            -1,
         },
+
         {
-          scale: 1.025,
+          scale:
+            1.025,
         },
       ],
     },
@@ -728,49 +923,89 @@ const styles =
     badge: {
       alignItems:
         'center',
+
       backgroundColor:
         BADGE_BACKGROUND,
+
       borderColor:
         NAV_BACKGROUND,
-      borderRadius: 999,
-      borderWidth: 2,
+
+      borderRadius:
+        999,
+
+      borderWidth:
+        2,
+
       justifyContent:
         'center',
-      minHeight: 17,
-      minWidth: 17,
-      paddingHorizontal: 3,
+
+      minHeight:
+        17,
+
+      minWidth:
+        17,
+
+      paddingHorizontal:
+        3,
+
       position:
         'absolute',
-      right: -1,
-      top: -3,
-      zIndex: 5,
+
+      right:
+        -1,
+
+      top:
+        -3,
+
+      zIndex:
+        5,
     },
 
     badgeText: {
-      color: '#FFFFFF',
-      fontSize: 8,
-      fontWeight: '800',
+      color:
+        '#FFFFFF',
+
+      fontSize:
+        8,
+
+      fontWeight:
+        '800',
+
       includeFontPadding:
         false,
-      lineHeight: 10,
-      textAlign: 'center',
+
+      lineHeight:
+        10,
+
+      textAlign:
+        'center',
     },
 
     tabLabel: {
-      alignSelf: 'stretch',
-      fontSize: 11,
-      fontWeight: '500',
+      fontSize:
+        11,
+
+      fontWeight:
+        '500',
+
       includeFontPadding:
         false,
-      letterSpacing: -0.1,
-      lineHeight: 15,
-      marginTop: 3,
-      paddingHorizontal: 0,
-      textAlign: 'center',
-      writingDirection: 'rtl',
+
+      letterSpacing:
+        -0.1,
+
+      lineHeight:
+        15,
+
+      marginTop:
+        3,
+
+      textAlign:
+        'center',
     },
 
     tabLabelActive: {
-      fontWeight: '700',
+      fontWeight:
+        '700',
     },
   });

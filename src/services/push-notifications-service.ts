@@ -11,12 +11,44 @@ import {
   registerPushSubscription,
 } from './push-subscriptions-service';
 
+/**
+ * Stable notification channel IDs.
+ *
+ * IMPORTANT:
+ * These IDs are part of the mobile/backend contract.
+ * Do not rename them after release unless there is a migration plan,
+ * because Android users can configure every channel independently.
+ */
+export const GENERAL_NOTIFICATION_CHANNEL_ID =
+  'general';
+
 export const ORDER_NOTIFICATION_CHANNEL_ID =
   'orders';
 
+export const OFFERS_NOTIFICATION_CHANNEL_ID =
+  'offers';
+
+export const ACCOUNT_NOTIFICATION_CHANNEL_ID =
+  'account';
+
+export const PUSH_NOTIFICATION_CHANNEL_IDS = {
+  general:
+    GENERAL_NOTIFICATION_CHANNEL_ID,
+  orders:
+    ORDER_NOTIFICATION_CHANNEL_ID,
+  offers:
+    OFFERS_NOTIFICATION_CHANNEL_ID,
+  account:
+    ACCOUNT_NOTIFICATION_CHANNEL_ID,
+} as const;
+
+export type PushNotificationChannelId =
+  (typeof PUSH_NOTIFICATION_CHANNEL_IDS)[keyof typeof PUSH_NOTIFICATION_CHANNEL_IDS];
+
 type PushRegistrationOptions = {
   requestPermission?: boolean;
-  devicePushToken?: Notifications.DevicePushToken;
+  devicePushToken?:
+    Notifications.DevicePushToken;
 };
 
 export type PushRegistrationResult =
@@ -52,27 +84,37 @@ export function isRunningInExpoGo() {
 
 export function isNotificationTestBuild() {
   const appVariant =
-    Constants.expoConfig?.extra?.appVariant;
+    Constants.expoConfig?.extra
+      ?.appVariant;
 
   return (
     __DEV__ ||
-    (typeof appVariant === 'string' &&
-      appVariant.trim().toLowerCase() ===
-        'development')
+    (
+      typeof appVariant ===
+        'string' &&
+      appVariant
+        .trim()
+        .toLowerCase() ===
+        'development'
+    )
   );
 }
 
 export function shouldAutoRegisterPushNotifications() {
   const configuredValue =
-    Constants.expoConfig?.extra?.pushAutoRegister;
+    Constants.expoConfig?.extra
+      ?.pushAutoRegister;
 
   if (configuredValue === false) {
     return false;
   }
 
   if (
-    typeof configuredValue === 'string' &&
-    configuredValue.trim().toLowerCase() ===
+    typeof configuredValue ===
+      'string' &&
+    configuredValue
+      .trim()
+      .toLowerCase() ===
       'false'
   ) {
     return false;
@@ -81,7 +123,8 @@ export function shouldAutoRegisterPushNotifications() {
   return true;
 }
 
-function getProjectId(): string | null {
+function getProjectId():
+  string | null {
   const configuredProjectId =
     Constants.expoConfig?.extra?.eas
       ?.projectId ??
@@ -101,7 +144,8 @@ function getProjectId(): string | null {
   return normalizedProjectId || null;
 }
 
-function getAppVersion(): string | null {
+function getAppVersion():
+  string | null {
   const configuredVersion =
     Constants.expoConfig?.version;
 
@@ -118,22 +162,85 @@ function getAppVersion(): string | null {
   return normalizedVersion || null;
 }
 
-export async function ensureOrderNotificationChannel() {
+/**
+ * Create all notification channels the released application may need.
+ *
+ * We create these on every native launch because setNotificationChannelAsync
+ * is idempotent. Creating them now means future Admin/Backend campaigns can
+ * target the correct channel without requiring a new mobile binary.
+ */
+export async function ensureNotificationChannels() {
   if (Platform.OS !== 'android') {
     return;
   }
 
-  await Notifications.setNotificationChannelAsync(
-    ORDER_NOTIFICATION_CHANNEL_ID,
-    {
-      name: 'تحديثات الطلبات',
-      description:
-        'تأكيد الطلب، التحضير، التوصيل، والإلغاء.',
-      importance:
-        Notifications.AndroidImportance.HIGH,
-      sound: 'default',
-    },
-  );
+  await Promise.all([
+    Notifications.setNotificationChannelAsync(
+      GENERAL_NOTIFICATION_CHANNEL_ID,
+      {
+        name: 'Navienty Now',
+        description:
+          'التحديثات العامة والمعلومات المهمة من Navienty Now.',
+        importance:
+          Notifications
+            .AndroidImportance
+            .DEFAULT,
+        sound: 'default',
+      },
+    ),
+
+    Notifications.setNotificationChannelAsync(
+      ORDER_NOTIFICATION_CHANNEL_ID,
+      {
+        name: 'تحديثات الطلبات',
+        description:
+          'تأكيد الطلب، التحضير، التوصيل، والإلغاء.',
+        importance:
+          Notifications
+            .AndroidImportance
+            .HIGH,
+        sound: 'default',
+      },
+    ),
+
+    Notifications.setNotificationChannelAsync(
+      OFFERS_NOTIFICATION_CHANNEL_ID,
+      {
+        name: 'العروض والمميزات',
+        description:
+          'العروض، المكافآت، والفرص المخصصة لك.',
+        importance:
+          Notifications
+            .AndroidImportance
+            .DEFAULT,
+        sound: 'default',
+      },
+    ),
+
+    Notifications.setNotificationChannelAsync(
+      ACCOUNT_NOTIFICATION_CHANNEL_ID,
+      {
+        name: 'الحساب والدفع',
+        description:
+          'التحديثات المهمة المتعلقة بحسابك وعمليات الدفع.',
+        importance:
+          Notifications
+            .AndroidImportance
+            .DEFAULT,
+        sound: 'default',
+      },
+    ),
+  ]);
+}
+
+/**
+ * Backward-compatible helper for any existing imports.
+ *
+ * The old implementation created only the orders channel.
+ * It now guarantees that the complete notification channel contract exists.
+ */
+export async function ensureOrderNotificationChannel() {
+  await ensureNotificationChannels();
 }
 
 async function registerPushNotificationsInternal(
@@ -146,40 +253,54 @@ async function registerPushNotificationsInternal(
     };
   }
 
-  await ensureOrderNotificationChannel();
+  /**
+   * Android 13+ needs at least one notification channel to exist before the
+   * notification permission flow can be presented correctly.
+   *
+   * Create the complete set before reading/requesting permission.
+   */
+  await ensureNotificationChannels();
 
   const existingPermissions =
-    await Notifications.getPermissionsAsync();
+    await Notifications
+      .getPermissionsAsync();
 
   let permissionStatus =
     existingPermissions.status;
 
   if (
-    String(permissionStatus).toLowerCase() !== 'granted' &&
-    options.requestPermission === true &&
-    existingPermissions.canAskAgain !== false
+    String(permissionStatus)
+      .toLowerCase() !==
+      'granted' &&
+    options.requestPermission ===
+      true &&
+    existingPermissions.canAskAgain !==
+      false
   ) {
     const requestedPermissions =
-      await Notifications.requestPermissionsAsync();
+      await Notifications
+        .requestPermissionsAsync();
 
     permissionStatus =
       requestedPermissions.status;
   }
 
   if (
-    String(permissionStatus).toLowerCase() !== 'granted'
+    String(permissionStatus)
+      .toLowerCase() !==
+    'granted'
   ) {
     return {
-      status: 'permission-not-granted',
+      status:
+        'permission-not-granted',
       expoPushToken: null,
     };
   }
 
   /**
-   * Local notifications remain available in Expo Go, but remote push token
-   * registration does not. Stop here after permission handling so Expo Go
-   * can still be used to verify the local notification UX without logging a
-   * misleading token-registration error.
+   * Local notifications remain useful in Expo Go, but production remote
+   * push registration should be tested in a Development Build/TestFlight/
+   * release build.
    */
   if (isRunningInExpoGo()) {
     return {
@@ -188,32 +309,37 @@ async function registerPushNotificationsInternal(
     };
   }
 
-  const projectId = getProjectId();
+  const projectId =
+    getProjectId();
 
   if (!projectId) {
     return {
-      status: 'project-id-missing',
+      status:
+        'project-id-missing',
       expoPushToken: null,
     };
   }
 
   /**
-   * Ensure the database RPC below always runs with the current permanent or
-   * anonymous Supabase identity. This also makes notification registration
-   * safe after a fresh install before the normal root bootstrap finishes.
+   * Make sure the RPC below always has an authenticated Supabase identity.
+   *
+   * Navienty Now supports anonymous app sessions before a customer links a
+   * permanent identity, so registration works immediately after install.
    */
   await ensureAppSession();
 
   const expoPushToken = (
-    await Notifications.getExpoPushTokenAsync({
-      projectId,
-      ...(options.devicePushToken
-        ? {
-            devicePushToken:
-              options.devicePushToken,
-          }
-        : {}),
-    })
+    await Notifications
+      .getExpoPushTokenAsync({
+        projectId,
+
+        ...(options.devicePushToken
+          ? {
+              devicePushToken:
+                options.devicePushToken,
+            }
+          : {}),
+      })
   ).data.trim();
 
   if (!expoPushToken) {
@@ -235,18 +361,19 @@ async function registerPushNotificationsInternal(
 }
 
 /**
- * Register the current installation with Navienty Now.
+ * Register/refresh the current installation with Navienty Now.
  *
- * By default this never opens a system permission prompt. Pass
- * requestPermission=true only from a contextual customer flow such as an
- * active order / service-booking screen.
+ * By default this NEVER displays the operating-system permission prompt.
+ *
+ * requestPermission=true should only be used from a contextual customer
+ * flow, such as tracking an active order/service booking.
  */
 export async function registerPushNotifications(
   options: PushRegistrationOptions = {},
 ): Promise<PushRegistrationResult> {
   /**
-   * Device-token rollover must use the token supplied by Expo immediately,
-   * so it must not share the generic in-flight registration promise.
+   * Device token rollover must use the token Expo supplied immediately.
+   * Do not merge this operation with a generic in-flight registration.
    */
   if (options.devicePushToken) {
     return registerPushNotificationsInternal(
@@ -255,10 +382,8 @@ export async function registerPushNotifications(
   }
 
   /**
-   * A contextual permission request must never be swallowed by a silent
-   * launch-time registration that happened to start a few milliseconds
-   * earlier. Wait for the silent attempt, reuse it if it registered, then
-   * run the permission-aware attempt if permission is still missing.
+   * A contextual permission request must not be swallowed by a silent
+   * registration which happened to start immediately beforehand.
    */
   if (
     options.requestPermission === true
@@ -305,11 +430,15 @@ export type LocalNotificationTestResult =
   | 'unsupported';
 
 /**
- * Developer smoke test for the notification presentation layer.
+ * Developer smoke test for:
  *
- * This intentionally uses a local notification, so it works in Expo Go and
- * does not depend on FCM/APNs credentials. Remote delivery is validated
- * separately from a development build.
+ * - notification permission
+ * - foreground presentation
+ * - Android general channel
+ * - notification tap routing
+ *
+ * This is a LOCAL notification. Remote delivery/APNs/FCM still needs to be
+ * tested separately from a Development Build/TestFlight/release build.
  */
 export async function scheduleLocalNotificationTest():
   Promise<LocalNotificationTestResult> {
@@ -317,42 +446,71 @@ export async function scheduleLocalNotificationTest():
     return 'unsupported';
   }
 
-  await ensureOrderNotificationChannel();
+  await ensureNotificationChannels();
 
   const existingPermissions =
-    await Notifications.getPermissionsAsync();
+    await Notifications
+      .getPermissionsAsync();
 
   let permissionStatus =
     existingPermissions.status;
 
   if (
-    String(permissionStatus).toLowerCase() !== 'granted' &&
-    existingPermissions.canAskAgain !== false
+    String(permissionStatus)
+      .toLowerCase() !==
+      'granted' &&
+    existingPermissions.canAskAgain !==
+      false
   ) {
     const requestedPermissions =
-      await Notifications.requestPermissionsAsync();
+      await Notifications
+        .requestPermissionsAsync();
 
     permissionStatus =
       requestedPermissions.status;
   }
 
   if (
-    String(permissionStatus).toLowerCase() !== 'granted'
+    String(permissionStatus)
+      .toLowerCase() !==
+    'granted'
   ) {
     return 'permission-not-granted';
   }
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Navienty Now',
-      body: 'الإشعارات المحلية شغالة بنجاح ✅',
-      sound: 'default',
-      data: {
-        type: 'local_notification_test',
+  await Notifications
+    .scheduleNotificationAsync({
+      content: {
+        title: 'Navienty Now',
+        body:
+          'الإشعارات المحلية شغالة بنجاح ✅',
+        sound: 'default',
+
+        /**
+         * Use the same generic navigation contract that future Admin
+         * notifications can use.
+         *
+         * Tapping this test notification should safely return to Home.
+         */
+        data: {
+          type: 'navigation',
+          url: '/',
+        },
       },
-    },
-    trigger: null,
-  });
+
+      trigger:
+        Platform.OS === 'android'
+          ? {
+              type:
+                Notifications
+                  .SchedulableTriggerInputTypes
+                  .TIME_INTERVAL,
+              seconds: 1,
+              channelId:
+                GENERAL_NOTIFICATION_CHANNEL_ID,
+            }
+          : null,
+    });
 
   return 'scheduled';
 }

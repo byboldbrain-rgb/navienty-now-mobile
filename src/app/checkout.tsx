@@ -22,6 +22,8 @@ import {
   type ImageSourcePropType,
 } from 'react-native';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
@@ -29,11 +31,17 @@ import {
   V1_UNAVAILABLE_CATEGORY_MESSAGE,
 } from '../config/v1-release-scope';
 import {
+  supabase,
+} from '../lib/supabase';
+import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
 import getAppBootstrap, {
   type AppBootstrap,
 } from '../services/bootstrap-service';
+import {
+  getStoreCatalog,
+} from '../services/catalog-service';
 import {
   getDeliveryLocationErrorMessage,
   resolveDeliveryLocation,
@@ -94,15 +102,203 @@ const PAYMENT_METHOD_IMAGES:
     ),
   };
 
+const LAUNDRY_CHECKOUT_IMAGE: ImageSourcePropType =
+  require(
+    '../assets/icons/categories/laundry.webp',
+  );
+
+const REQUEST_ANYTHING_CHECKOUT_IMAGE: ImageSourcePropType =
+  require(
+    '../assets/icons/categories/request-anything.webp',
+  );
+
+const REQUEST_ANYTHING_CATEGORY_ALIASES = new Set([
+  'request-anything',
+  'anything',
+  'other',
+  'special-request',
+]);
+
+const LAUNDRY_CATEGORY_ALIASES = new Set([
+  'laundry',
+  'laundry-ironing',
+  'wash-and-iron',
+  'washing-ironing',
+]);
+
 /* ---------------------------------- */
 /* FEES                               */
 /* ---------------------------------- */
 
 const PAYMENT_PROCESSING_FEE = 10;
+const SPIN_UNLOCK_SUBTOTAL_FALLBACK = 200;
 
 /* ---------------------------------- */
 /* TYPES                              */
 /* ---------------------------------- */
+
+type CheckoutSpinMode =
+  | 'welcome'
+  | 'standard';
+
+type CheckoutSpinRewardType =
+  | 'current_order_discount'
+  | 'next_order_discount'
+  | 'processing_fee_waiver';
+
+type CheckoutSpinState = {
+  eventId: string;
+  eventStatus: string;
+  storeId: string;
+  mode: CheckoutSpinMode;
+  rewardType: CheckoutSpinRewardType;
+  rewardValue: number;
+  minimumNextOrder: number | null;
+  expiresAt: string | null;
+  rewardStatus: string | null;
+  unlockSubtotal: number;
+};
+
+type CheckoutSpinStatusRpcResponse = {
+  enabled?: boolean | null;
+  mode?: string | null;
+  unlock_subtotal?: number | string | null;
+  has_existing_spin?: boolean | null;
+  event?: {
+    id?: string | null;
+    mode?: string | null;
+    store_id?: string | null;
+    status?: string | null;
+    reward?: {
+      type?: string | null;
+      value?: number | string | null;
+      minimum_next_order?: number | string | null;
+      expires_at?: string | null;
+      reward_status?: string | null;
+    } | null;
+  } | null;
+};
+
+function toFiniteNumber(
+  value:
+    | number
+    | string
+    | null
+    | undefined,
+  fallback = 0,
+) {
+  const numericValue =
+    Number(value);
+
+  return Number.isFinite(
+    numericValue,
+  )
+    ? numericValue
+    : fallback;
+}
+
+function normalizeCheckoutSpinMode(
+  value: string | null | undefined,
+): CheckoutSpinMode {
+  return value === 'standard'
+    ? 'standard'
+    : 'welcome';
+}
+
+function normalizeCheckoutSpinRewardType(
+  value: string | null | undefined,
+): CheckoutSpinRewardType | null {
+  if (
+    value ===
+      'current_order_discount' ||
+    value ===
+      'next_order_discount' ||
+    value ===
+      'processing_fee_waiver'
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function parseCheckoutSpinState(
+  response:
+    CheckoutSpinStatusRpcResponse,
+): CheckoutSpinState | null {
+  const event =
+    response.event;
+
+  if (
+    !response.enabled ||
+    !response.has_existing_spin ||
+    !event?.id ||
+    !event.store_id ||
+    !event.reward
+  ) {
+    return null;
+  }
+
+  const rewardType =
+    normalizeCheckoutSpinRewardType(
+      event.reward.type,
+    );
+
+  if (!rewardType) {
+    return null;
+  }
+
+  const minimumNextOrder =
+    event.reward.minimum_next_order ===
+        null ||
+      event.reward.minimum_next_order ===
+        undefined
+      ? null
+      : Math.max(
+          toFiniteNumber(
+            event.reward
+              .minimum_next_order,
+            0,
+          ),
+          0,
+        );
+
+  return {
+    eventId: event.id,
+    eventStatus:
+      event.status ?? 'issued',
+    storeId: event.store_id,
+    mode:
+      normalizeCheckoutSpinMode(
+        event.mode ??
+          response.mode,
+      ),
+    rewardType,
+    rewardValue:
+      Math.max(
+        toFiniteNumber(
+          event.reward.value,
+          0,
+        ),
+        0,
+      ),
+    minimumNextOrder,
+    expiresAt:
+      event.reward.expires_at ??
+      null,
+    rewardStatus:
+      event.reward.reward_status ??
+      null,
+    unlockSubtotal:
+      Math.max(
+        toFiniteNumber(
+          response.unlock_subtotal,
+          SPIN_UNLOCK_SUBTOTAL_FALLBACK,
+        ),
+        0,
+      ),
+  };
+}
 
 function getSingleParam(
   value:
@@ -113,6 +309,86 @@ function getSingleParam(
   return Array.isArray(value)
     ? value[0]
     : value;
+}
+
+type RequestAnythingCartDetails = {
+  kind: 'request-anything';
+  requestText: string;
+  pickupAddress: string;
+};
+
+function parseRequestAnythingCartDetails(
+  description: string,
+): RequestAnythingCartDetails | null {
+  if (!description.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed =
+      JSON.parse(
+        description,
+      ) as Partial<RequestAnythingCartDetails>;
+
+    if (
+      parsed.kind !==
+        'request-anything' ||
+      typeof parsed.requestText !==
+        'string' ||
+      typeof parsed.pickupAddress !==
+        'string'
+    ) {
+      return null;
+    }
+
+    const requestText =
+      parsed.requestText.trim();
+
+    const pickupAddress =
+      parsed.pickupAddress.trim();
+
+    if (
+      !requestText ||
+      !pickupAddress
+    ) {
+      return null;
+    }
+
+    return {
+      kind:
+        'request-anything',
+
+      requestText,
+
+      pickupAddress,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildRequestAnythingOrderNotes(
+  details: RequestAnythingCartDetails,
+  additionalNotes: string,
+) {
+  const requestDetails =
+    [
+      'نوع الطلب: اطلب أي حاجة',
+      `الطلب: ${details.requestText}`,
+      `نجيبه من: ${details.pickupAddress}`,
+    ].join('\n');
+
+  const trimmedAdditionalNotes =
+    additionalNotes.trim();
+
+  if (!trimmedAdditionalNotes) {
+    return requestDetails;
+  }
+
+  return [
+    requestDetails,
+    `ملاحظات إضافية من العميل: ${trimmedAdditionalNotes}`,
+  ].join('\n\n');
 }
 
 /* ---------------------------------- */
@@ -151,6 +427,7 @@ export default function CheckoutScreen() {
 
 function StoreCheckoutScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const params =
     useLocalSearchParams<{
@@ -184,6 +461,13 @@ function StoreCheckoutScreen() {
   const [
     bootstrapError,
     setBootstrapError,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
+    storeImageUrl,
+    setStoreImageUrl,
   ] = useState<string | null>(
     null,
   );
@@ -266,6 +550,25 @@ function StoreCheckoutScreen() {
       (state) => state.setVoucher,
     );
 
+  const [
+    checkoutSpin,
+    setCheckoutSpin,
+  ] = useState<CheckoutSpinState | null>(
+    null,
+  );
+
+  const [
+    isLoadingSpinStatus,
+    setIsLoadingSpinStatus,
+  ] = useState(false);
+
+  const [
+    spinStatusError,
+    setSpinStatusError,
+  ] = useState<string | null>(
+    null,
+  );
+
   const notes =
     useOrderNotesStore(
       (state) =>
@@ -284,10 +587,69 @@ function StoreCheckoutScreen() {
     checkoutCart?.storeName ??
     null;
 
+  const normalizedStoreCategorySlug =
+    (
+      checkoutCart?.categorySlug ??
+      ''
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, '-')
+      .replace(/\s+/g, '-');
+
+  const isLaundryCheckout =
+    LAUNDRY_CATEGORY_ALIASES.has(
+      normalizedStoreCategorySlug,
+    );
+
+  const isRequestAnythingCheckout =
+    REQUEST_ANYTHING_CATEGORY_ALIASES.has(
+      normalizedStoreCategorySlug,
+    );
+
+  const requestAnythingDetails =
+    isRequestAnythingCheckout
+      ? (
+          items
+            .map((item) =>
+              parseRequestAnythingCartDetails(
+                item.description,
+              ),
+            )
+            .find(
+              (
+                details,
+              ): details is RequestAnythingCartDetails =>
+                details !== null,
+            ) ?? null
+        )
+      : null;
+
+  const notesForSubmission =
+    requestAnythingDetails
+      ? buildRequestAnythingOrderNotes(
+          requestAnythingDetails,
+          notes,
+        )
+      : notes;
+
+  const storeImageSource:
+    ImageSourcePropType | null =
+    isRequestAnythingCheckout
+      ? REQUEST_ANYTHING_CHECKOUT_IMAGE
+      : isLaundryCheckout
+        ? LAUNDRY_CHECKOUT_IMAGE
+        : storeImageUrl
+          ? {
+              uri: storeImageUrl,
+            }
+          : null;
+
   const hasAgeRestrictedItems =
     items.some(
       (item) =>
-        item.isAgeRestricted,
+        'isAgeRestricted' in item &&
+        item.isAgeRestricted === true,
     );
 
   const subtotal =
@@ -306,8 +668,52 @@ function StoreCheckoutScreen() {
   const paymentProcessingFee =
     PAYMENT_PROCESSING_FEE;
 
+  const spinBelongsToCurrentStore =
+    !!checkoutSpin &&
+    !!storeId &&
+    checkoutSpin.storeId ===
+      storeId;
+
+  const spinEventIsAvailable =
+    checkoutSpin?.eventStatus ===
+      'issued';
+
+  const spinIsImmediateReward =
+    checkoutSpin?.rewardType ===
+      'current_order_discount' ||
+    checkoutSpin?.rewardType ===
+      'processing_fee_waiver';
+
+  const spinThresholdReached =
+    checkoutSpin?.mode === 'welcome' ||
+    Number(subtotal ?? 0) >=
+      (
+        checkoutSpin?.unlockSubtotal ??
+        SPIN_UNLOCK_SUBTOTAL_FALLBACK
+      );
+
+  const spinCanApplyToCurrentOrder =
+    !!checkoutSpin &&
+    spinBelongsToCurrentStore &&
+    spinEventIsAvailable &&
+    spinIsImmediateReward &&
+    spinThresholdReached;
+
+  /**
+   * One reward per order.
+   *
+   * If an immediate Spin reward is active, the voucher is ignored in
+   * the quote immediately and removed from the store below. This avoids
+   * even a single render where both discounts appear stacked.
+   */
+  const effectiveAppliedVoucher =
+    spinCanApplyToCurrentOrder
+      ? null
+      : appliedVoucher;
+
   const voucherDiscountTarget =
-    appliedVoucher?.discountTarget ??
+    effectiveAppliedVoucher
+      ?.discountTarget ??
     'order_subtotal';
 
   const voucherDiscountBase =
@@ -319,7 +725,7 @@ function StoreCheckoutScreen() {
   const voucherDiscount =
     Math.min(
       Math.max(
-        appliedVoucher
+        effectiveAppliedVoucher
           ?.discountAmount ?? 0,
         0,
       ),
@@ -355,10 +761,55 @@ function StoreCheckoutScreen() {
       0,
     );
 
-  const total =
+  const spinSubtotalDiscount =
+    spinCanApplyToCurrentOrder &&
+    checkoutSpin?.rewardType ===
+      'current_order_discount'
+      ? Math.min(
+          checkoutSpin.rewardValue,
+          discountedSubtotal,
+        )
+      : 0;
+
+  const spinProcessingFeeDiscount =
+    spinCanApplyToCurrentOrder &&
+    checkoutSpin?.rewardType ===
+      'processing_fee_waiver'
+      ? Math.min(
+          checkoutSpin.rewardValue,
+          paymentProcessingFee,
+        )
+      : 0;
+
+  const activeSpinSavings =
+    spinSubtotalDiscount +
+    spinProcessingFeeDiscount;
+
+  const totalBeforeSpin =
     discountedSubtotal +
     discountedDeliveryFee +
     paymentProcessingFee;
+
+  const total =
+    Math.max(
+      totalBeforeSpin -
+        activeSpinSavings,
+      0,
+    );
+
+  const hasFutureSpinReward =
+    !!checkoutSpin &&
+    spinBelongsToCurrentStore &&
+    checkoutSpin.eventStatus ===
+      'issued' &&
+    checkoutSpin.rewardType ===
+      'next_order_discount' &&
+    (
+      checkoutSpin.rewardStatus ===
+        null ||
+      checkoutSpin.rewardStatus ===
+        'available'
+    );
 
   /* -------------------------------- */
   /* ORDERS                           */
@@ -525,6 +976,99 @@ function StoreCheckoutScreen() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadCheckoutSpinStatus() {
+      if (!storeId) {
+        setCheckoutSpin(null);
+        setSpinStatusError(null);
+        setIsLoadingSpinStatus(false);
+        return;
+      }
+
+      try {
+        setIsLoadingSpinStatus(true);
+        setSpinStatusError(null);
+
+        await ensureAppSession();
+
+        const {
+          data,
+          error,
+        } =
+          await supabase.rpc(
+            'get_my_spin_status',
+            {
+              p_store_id: storeId,
+            },
+          );
+
+        if (error) {
+          throw error;
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        const response =
+          (data ?? {}) as
+            CheckoutSpinStatusRpcResponse;
+
+        setCheckoutSpin(
+          parseCheckoutSpinState(
+            response,
+          ),
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        console.warn(
+          'Unable to load Checkout Spin status.',
+          error,
+        );
+
+        setCheckoutSpin(null);
+        setSpinStatusError(
+          'تعذر تحديث مكافأة الـSpin. سيتم التحقق منها مرة أخرى عند إرسال الطلب.',
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingSpinStatus(false);
+        }
+      }
+    }
+
+    void loadCheckoutSpinStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
+
+  useEffect(() => {
+    if (
+      !storeId ||
+      !appliedVoucher ||
+      !spinCanApplyToCurrentOrder
+    ) {
+      return;
+    }
+
+    setStoreVoucher(
+      storeId,
+      null,
+    );
+  }, [
+    appliedVoucher,
+    setStoreVoucher,
+    spinCanApplyToCurrentOrder,
+    storeId,
+  ]);
+
+  useEffect(() => {
     if (
       checkoutStoreId &&
       carts[checkoutStoreId]
@@ -540,9 +1084,49 @@ function StoreCheckoutScreen() {
   ]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadStoreImage() {
+      if (!storeId) {
+        setStoreImageUrl(null);
+        return;
+      }
+
+      try {
+        const storeCatalog =
+          await getStoreCatalog(
+            storeId,
+          );
+
+        if (cancelled) {
+          return;
+        }
+
+        setStoreImageUrl(
+          storeCatalog.store.logoUrl ||
+            storeCatalog.store
+              .coverImageUrl ||
+            null,
+        );
+      } catch {
+        if (!cancelled) {
+          setStoreImageUrl(null);
+        }
+      }
+    }
+
+    void loadStoreImage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
+
+  useEffect(() => {
     if (
       !appliedVoucher ||
-      !storeId
+      !storeId ||
+      spinCanApplyToCurrentOrder
     ) {
       return;
     }
@@ -628,6 +1212,7 @@ function StoreCheckoutScreen() {
     deliveryFee,
     phoneNumber,
     setStoreVoucher,
+    spinCanApplyToCurrentOrder,
     storeId,
     subtotal,
   ]);
@@ -816,7 +1401,8 @@ function StoreCheckoutScreen() {
       validation,
     ).every(Boolean) &&
     deliveryIsAvailable &&
-    !isResolvingDelivery;
+    !isResolvingDelivery &&
+    !isLoadingSpinStatus;
 
   /* -------------------------------- */
   /* EMPTY CART                       */
@@ -1142,10 +1728,12 @@ function StoreCheckoutScreen() {
 
           landmark,
 
-          notes,
+          notes:
+            notesForSubmission,
 
           voucherCode:
-            appliedVoucher?.code ??
+            effectiveAppliedVoucher
+              ?.code ??
             null,
 
           items: items.map(
@@ -1286,18 +1874,9 @@ function StoreCheckoutScreen() {
           : undefined
       }
     >
-      <ScrollView
-        contentContainerStyle={
-          styles.pageContent
-        }
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={
-          false
-        }
+      <View
+        style={styles.header}
       >
-        <View
-          style={styles.header}
-        >
           <Pressable
             style={({
               pressed,
@@ -1317,31 +1896,19 @@ function StoreCheckoutScreen() {
             />
           </Pressable>
 
-          <View
-            style={
-              styles.headerContent
-            }
-          >
-            <Text
-              style={
-                styles.pageTitle
-              }
-            >
-              إتمام الطلب
-            </Text>
 
-            <Text
-              style={
-                styles.pageSubtitle
-              }
-              numberOfLines={1}
-            >
-              {storeName ??
-                'Navienty Now'}
-            </Text>
-          </View>
         </View>
 
+      <ScrollView
+        style={styles.mainScrollView}
+        contentContainerStyle={
+          styles.pageContent
+        }
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={
+          false
+        }
+      >
         <View
           style={styles.section}
         >
@@ -1514,14 +2081,6 @@ function StoreCheckoutScreen() {
             }
           >
             طريقة الدفع
-          </Text>
-
-          <Text
-            style={
-              styles.sectionDescription
-            }
-          >
-            اختر طريقة الدفع المناسبة لإتمام الطلب.
           </Text>
 
           <View
@@ -1777,6 +2336,105 @@ function StoreCheckoutScreen() {
             </Text>
           </View>
 
+          {activeSpinSavings > 0 ? (
+            <View
+              style={
+                styles.summaryRow
+              }
+            >
+              <Text
+                style={
+                  styles.spinDiscountLabel
+                }
+              >
+                مكافأة Spin
+              </Text>
+
+              <Text
+                style={
+                  styles.spinDiscountValue
+                }
+              >
+                -{formatPrice(
+                  activeSpinSavings,
+                )}
+              </Text>
+            </View>
+          ) : null}
+
+          {hasFutureSpinReward ? (
+            <View
+              style={
+                styles.spinFutureRewardCard
+              }
+            >
+              <View
+                style={
+                  styles.spinFutureRewardIcon
+                }
+              >
+                <Ionicons
+                  name="gift-outline"
+                  size={17}
+                  color={
+                    BRAND_GREEN_DARK
+                  }
+                />
+              </View>
+
+              <View
+                style={
+                  styles.spinFutureRewardCopy
+                }
+              >
+                <Text
+                  style={
+                    styles.spinFutureRewardTitle
+                  }
+                >
+                  {checkoutSpin
+                    ?.rewardValue ?? 0}
+                  ج للطلب الجاي
+                </Text>
+
+                <Text
+                  style={
+                    styles.spinFutureRewardText
+                  }
+                >
+                  محفوظة للطلب القادم
+                  {checkoutSpin
+                    ?.minimumNextOrder
+                    ? ` عند طلب ${checkoutSpin.minimumNextOrder}ج أو أكتر`
+                    : ''}
+                  . لا تُخصم من هذا الطلب.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          {spinStatusError ? (
+            <View
+              style={
+                styles.spinStatusNotice
+              }
+            >
+              <Ionicons
+                name="information-circle-outline"
+                size={15}
+                color="#8A6519"
+              />
+
+              <Text
+                style={
+                  styles.spinStatusNoticeText
+                }
+              >
+                {spinStatusError}
+              </Text>
+            </View>
+          ) : null}
+
           <View
             style={
               styles.summaryDivider
@@ -1809,9 +2467,15 @@ function StoreCheckoutScreen() {
       </ScrollView>
 
       <View
-        style={
-          styles.submitBarWrapper
-        }
+        style={[
+          styles.submitBarWrapper,
+          {
+            paddingBottom: Math.max(
+              insets.bottom,
+              18,
+            ),
+          },
+        ]}
       >
         <View
           style={
@@ -1844,31 +2508,31 @@ function StoreCheckoutScreen() {
               pressed,
             }) => [
               styles.submitButton,
-              isSubmittingOrder &&
+              (
+                isSubmittingOrder ||
+                isLoadingSpinStatus
+              ) &&
                 styles.submitButtonDisabled,
               pressed &&
                 !isSubmittingOrder &&
+                !isLoadingSpinStatus &&
                 styles.submitButtonPressed,
             ]}
             disabled={
-              isSubmittingOrder
+              isSubmittingOrder ||
+              isLoadingSpinStatus
             }
             onPress={
               submitOrder
             }
           >
-            {isSubmittingOrder ? (
+            {isSubmittingOrder ||
+            isLoadingSpinStatus ? (
               <ActivityIndicator
                 size="small"
                 color="#ffffff"
               />
-            ) : (
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={19}
-                color="#ffffff"
-              />
-            )}
+            ) : null}
 
             <Text
               style={
@@ -1876,7 +2540,9 @@ function StoreCheckoutScreen() {
               }
               numberOfLines={1}
             >
-              متابعة
+              {isLoadingSpinStatus
+                ? 'تحديث المكافأة...'
+                : 'متابعة'}
             </Text>
           </Pressable>
         </View>
@@ -1888,77 +2554,89 @@ function StoreCheckoutScreen() {
 const styles =
   StyleSheet.create({
     screen: {
-      backgroundColor:
-        '#ffffff',
+      backgroundColor: '#ffffff',
+      flex: 1,
+    },
+
+    mainScrollView: {
       flex: 1,
     },
 
     pageContent: {
-      paddingBottom: 122,
+      paddingBottom: 114,
     },
 
     header: {
       alignItems: 'center',
+      backgroundColor: '#ffffff',
       flexDirection: 'row',
-      paddingBottom: 20,
-      paddingHorizontal: 24,
-      paddingTop: 42,
+      flexShrink: 0,
+      paddingBottom: 14,
+      paddingHorizontal: 18,
+      paddingTop: 48,
+      position: 'relative',
+      zIndex: 100,
+
+      shadowColor: '#000000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.025,
+      shadowRadius: 4,
+      elevation: 2,
     },
 
     backButton: {
       alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
+      backgroundColor: '#ffffff',
       borderColor: '#e5e5e5',
-      borderRadius: 24,
+      borderRadius: 22,
       borderWidth: 1,
-      height: 48,
-      justifyContent:
-        'center',
-      width: 48,
+      height: 44,
+      justifyContent: 'center',
+      width: 44,
     },
 
     headerContent: {
       flex: 1,
-      marginLeft: 14,
+      marginLeft: 12,
     },
 
     pageTitle: {
       color: '#202020',
-      fontSize: 21,
+      fontSize: 18,
       fontWeight: '800',
     },
 
     pageSubtitle: {
       color: '#8a8a8a',
-      fontSize: 12,
+      fontSize: 11,
       marginTop: 2,
     },
 
     orderStoreSection: {
       alignItems: 'center',
-      borderBottomColor:
-        '#eeeeee',
-      borderBottomWidth: 1,
-      borderTopColor:
-        '#eeeeee',
-      borderTopWidth: 1,
-      flexDirection: 'row',
-      marginBottom: 5,
-      paddingHorizontal: 24,
-      paddingVertical: 14,
+      backgroundColor: '#F7FBF8',
+      borderColor: '#E2EEE7',
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: 'row-reverse',
+      marginBottom: 2,
+      marginHorizontal: 18,
+      marginTop: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
     },
 
     storeIconContainer: {
       alignItems: 'center',
-      backgroundColor:
-        '#f5f5f5',
-      borderColor: '#ededed',
-      borderRadius: 14,
+      backgroundColor: '#ffffff',
+      borderColor: '#E5ECE8',
+      borderRadius: 13,
       borderWidth: 1,
       height: 52,
-      justifyContent:
-        'center',
+      justifyContent: 'center',
       overflow: 'hidden',
       width: 52,
     },
@@ -1969,79 +2647,88 @@ const styles =
     },
 
     storeIcon: {
-      fontSize: 24,
+      fontSize: 22,
     },
 
     storeContent: {
       flex: 1,
-      marginLeft: 12,
+      marginRight: 12,
     },
 
     storeLabel: {
-      color: '#929292',
-      fontSize: 11,
+      color: '#638370',
+      fontSize: 10.5,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     storeName: {
       color: '#242424',
-      fontSize: 15,
+      fontSize: 14.5,
       fontWeight: '800',
       marginTop: 3,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     storeMeta: {
       color: '#818181',
-      fontSize: 11,
+      fontSize: 10.5,
       marginTop: 3,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     section: {
-      borderBottomColor:
-        '#f0f0f0',
-      borderBottomWidth: 1,
-      paddingBottom: 7,
+      backgroundColor: '#ffffff',
+      paddingBottom: 20,
       paddingHorizontal: 24,
-      paddingTop: 22,
+      paddingTop: 24,
     },
 
     sectionTitle: {
       color: '#242424',
-      fontSize: 18,
-      fontWeight: '800',
-      marginBottom: 13,
+      fontSize: 20,
+      fontWeight: '900',
+      letterSpacing: -0.4,
+      lineHeight: 28,
+      marginBottom: 16,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     sectionDescription: {
-      color: '#858585',
-      fontSize: 12,
+      color: '#777777',
+      fontSize: 11.5,
       lineHeight: 18,
       marginBottom: 14,
+      marginTop: -8,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     field: {
-      marginBottom: 16,
+      marginBottom: 14,
     },
 
     fieldLabel: {
       color: '#373737',
-      fontSize: 13,
+      fontSize: 12.5,
       fontWeight: '700',
       marginBottom: 7,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     inputContainer: {
       alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
-      borderColor: '#dfdfdf',
-      borderRadius: 14,
-      borderWidth: 1,
-      flexDirection: 'row',
-      minHeight: 52,
-      paddingHorizontal: 13,
+      backgroundColor: '#FFFFFF',
+      borderColor: '#DCDCDC',
+      borderRadius: 16,
+      borderWidth: 1.2,
+      flexDirection: 'row-reverse',
+      minHeight: 54,
+      paddingHorizontal: 15,
     },
 
     inputContainerError: {
@@ -2052,11 +2739,12 @@ const styles =
       color: '#242424',
       flex: 1,
       fontSize: 14,
+      fontWeight: '500',
       minHeight: 50,
-      paddingHorizontal: 11,
+      paddingHorizontal: 12,
       paddingVertical: 12,
-      writingDirection:
-        'rtl',
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     multilineContainer: {
@@ -2074,11 +2762,12 @@ const styles =
     },
 
     errorText: {
-      color: '#d64b4b',
-      fontSize: 11,
-      lineHeight: 17,
+      color: '#D64B4B',
+      fontSize: 10.5,
+      lineHeight: 16,
       marginTop: 7,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     mapLocationCard: {
@@ -2214,55 +2903,55 @@ const styles =
       alignItems: 'flex-start',
       backgroundColor: '#FFF8EB',
       borderColor: '#F0D8AE',
-      borderRadius: 18,
+      borderRadius: 16,
       borderWidth: 1,
-      flexDirection: 'row',
-      padding: 15,
+      flexDirection: 'row-reverse',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
 
     ageVerificationCopy: {
       flex: 1,
-      marginLeft: 12,
+      marginRight: 10,
     },
 
     ageVerificationTitle: {
       color: '#5D3B13',
-      fontSize: 13,
+      fontSize: 12.5,
       fontWeight: '800',
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     ageVerificationText: {
       color: '#806543',
-      fontSize: 11,
-      lineHeight: 18,
-      marginTop: 5,
+      fontSize: 10.5,
+      lineHeight: 17,
+      marginTop: 4,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     paymentMethods: {
-      gap: 9,
+      gap: 10,
     },
 
     paymentMethod: {
       alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
-      borderColor: '#dedede',
+      backgroundColor: '#FFFFFF',
+      borderColor: '#DCDCDC',
       borderRadius: 16,
-      borderWidth: 1,
-      flexDirection: 'row',
-      minHeight: 66,
+      borderWidth: 1.2,
+      flexDirection: 'row-reverse',
+      minHeight: 60,
       paddingHorizontal: 13,
-      paddingVertical: 10,
+      paddingVertical: 9,
     },
 
     paymentMethodSelected: {
-      backgroundColor:
-        BRAND_GREEN_SOFT,
-      borderColor:
-        BRAND_GREEN,
-      borderWidth: 1.5,
+      backgroundColor: BRAND_GREEN_SOFT,
+      borderColor: BRAND_GREEN,
+      borderWidth: 1.4,
     },
 
     paymentMethodPressed: {
@@ -2271,14 +2960,14 @@ const styles =
 
     paymentIconContainer: {
       alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
+      backgroundColor: '#ffffff',
+      borderColor: '#EDF0EE',
       borderRadius: 12,
-      height: 42,
-      justifyContent:
-        'center',
+      borderWidth: 1,
+      height: 40,
+      justifyContent: 'center',
       overflow: 'hidden',
-      width: 42,
+      width: 40,
     },
 
     paymentMethodImage: {
@@ -2287,29 +2976,29 @@ const styles =
     },
 
     paymentIcon: {
-      fontSize: 20,
+      fontSize: 19,
     },
 
     paymentContent: {
       flex: 1,
-      marginHorizontal: 13,
+      marginHorizontal: 12,
     },
 
     paymentTitle: {
       color: '#262626',
-      fontSize: 14,
+      fontSize: 13.5,
       fontWeight: '700',
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     radioOuter: {
       alignItems: 'center',
-      borderColor: '#b7b7b7',
+      borderColor: '#B7B7B7',
       borderRadius: 9,
-      borderWidth: 2,
+      borderWidth: 1.8,
       height: 18,
-      justifyContent:
-        'center',
+      justifyContent: 'center',
       width: 18,
     },
 
@@ -2327,26 +3016,29 @@ const styles =
     },
 
     paymentError: {
-      color: '#d64b4b',
-      fontSize: 11,
+      color: '#D64B4B',
+      fontSize: 10.5,
       marginTop: 9,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     orderSummarySection: {
-      borderBottomColor:
-        '#f0f0f0',
-      borderBottomWidth: 1,
+      backgroundColor: '#ffffff',
+      paddingBottom: 24,
       paddingHorizontal: 24,
-      paddingVertical: 22,
+      paddingTop: 30,
     },
 
     orderSummaryTitle: {
       color: '#242424',
-      fontSize: 18,
-      fontWeight: '800',
-      marginBottom: 18,
+      fontSize: 21,
+      fontWeight: '900',
+      letterSpacing: -0.45,
+      lineHeight: 29,
+      marginBottom: 20,
       textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     itemsSummary: {
@@ -2394,75 +3086,175 @@ const styles =
 
     summaryRow: {
       alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
-      marginBottom: 16,
+      flexDirection: 'row-reverse',
+      justifyContent: 'space-between',
+      minHeight: 32,
     },
 
     summaryLabel: {
-      color: '#696969',
-      fontSize: 14,
+      color: '#313131',
+      fontSize: 13,
+      fontWeight: '500',
+      lineHeight: 19,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     summaryValue: {
       color: '#303030',
-      fontSize: 14,
-      fontWeight: '600',
+      fontSize: 13,
+      fontWeight: '500',
+      minWidth: 82,
+      textAlign: 'left',
+      writingDirection: 'ltr',
     },
 
     discountLabel: {
-      color: '#1F7A43',
-      fontSize: 14,
+      color: BRAND_GREEN,
+      fontSize: 12.5,
       fontWeight: '700',
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     discountValue: {
-      color: '#1F7A43',
-      fontSize: 14,
+      color: BRAND_GREEN,
+      fontSize: 12.5,
       fontWeight: '800',
+      minWidth: 82,
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
+
+    spinDiscountLabel: {
+      color: BRAND_GREEN,
+      fontSize: 12.5,
+      fontWeight: '800',
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    spinDiscountValue: {
+      color: BRAND_GREEN,
+      fontSize: 12.5,
+      fontWeight: '900',
+      minWidth: 82,
+      textAlign: 'left',
+      writingDirection: 'ltr',
+    },
+
+    spinFutureRewardCard: {
+      alignItems: 'center',
+      backgroundColor: BRAND_GREEN_SOFT,
+      borderColor: '#D5F0E0',
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: 'row-reverse',
+      marginBottom: 16,
+      marginTop: 8,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+    },
+
+    spinFutureRewardIcon: {
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+      borderRadius: 17,
+      height: 34,
+      justifyContent: 'center',
+      width: 34,
+    },
+
+    spinFutureRewardCopy: {
+      flex: 1,
+      marginRight: 10,
+    },
+
+    spinFutureRewardTitle: {
+      color: '#175F37',
+      fontSize: 12.5,
+      fontWeight: '800',
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    spinFutureRewardText: {
+      color: '#64806F',
+      fontSize: 10.5,
+      lineHeight: 17,
+      marginTop: 3,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    spinStatusNotice: {
+      alignItems: 'center',
+      backgroundColor: '#FFF8EB',
+      borderColor: '#F0D8AE',
+      borderRadius: 12,
+      borderWidth: 1,
+      flexDirection: 'row-reverse',
+      gap: 7,
+      marginBottom: 16,
+      marginTop: 8,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+    },
+
+    spinStatusNoticeText: {
+      color: '#806543',
+      flex: 1,
+      fontSize: 10.5,
+      lineHeight: 16,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     summaryDivider: {
-      backgroundColor:
-        '#eeeeee',
+      backgroundColor: '#EEEEEE',
       height: 1,
-      marginBottom: 19,
-      marginTop: 3,
+      marginBottom: 6,
+      marginTop: 14,
     },
 
     totalRow: {
       alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent:
-        'space-between',
+      flexDirection: 'row-reverse',
+      justifyContent: 'space-between',
+      marginTop: 14,
+      minHeight: 42,
     },
 
     totalLabel: {
       color: '#202020',
-      fontSize: 14,
-      fontWeight: '800',
+      fontSize: 16.5,
+      fontWeight: '900',
+      lineHeight: 23,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     totalValue: {
-      color: '#202020',
+      color: BRAND_GREEN,
       fontSize: 18,
       fontWeight: '900',
+      minWidth: 94,
+      textAlign: 'left',
+      writingDirection: 'ltr',
     },
 
     submitBarWrapper: {
-      backgroundColor:
-        '#ffffff',
-      borderTopColor:
-        '#e8e8e8',
+      backgroundColor: '#ffffff',
+      borderTopColor: '#e8e8e8',
       borderTopWidth: 1,
       bottom: 0,
       left: 0,
-      paddingBottom: 16,
-      paddingHorizontal: 20,
-      paddingTop: 14,
+      paddingBottom: 14,
+      paddingHorizontal: 18,
+      paddingTop: 12,
       position: 'absolute',
       right: 0,
+
       shadowColor: '#000000',
       shadowOffset: {
         width: 0,
@@ -2474,40 +3266,36 @@ const styles =
     },
 
     submitBar: {
-      flexDirection: 'row',
-      gap: 11,
+      flexDirection: 'row-reverse',
+      gap: 10,
     },
 
     backToCartButton: {
       alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
+      backgroundColor: '#ffffff',
       borderColor: '#252525',
-      borderRadius: 27,
+      borderRadius: 25,
       borderWidth: 1.5,
-      flex: 0.7,
-      height: 56,
-      justifyContent:
-        'center',
+      flex: 1,
+      height: 52,
+      justifyContent: 'center',
     },
 
     backToCartButtonText: {
       color: '#242424',
-      fontSize: 14,
+      fontSize: 14.5,
       fontWeight: '800',
     },
 
     submitButton: {
       alignItems: 'center',
-      backgroundColor:
-        BRAND_GREEN,
-      borderRadius: 27,
-      flex: 1.3,
-      flexDirection: 'row',
+      backgroundColor: BRAND_GREEN,
+      borderRadius: 25,
+      flex: 1,
+      flexDirection: 'row-reverse',
       gap: 7,
-      height: 56,
-      justifyContent:
-        'center',
+      height: 52,
+      justifyContent: 'center',
       paddingHorizontal: 15,
     },
 
@@ -2527,12 +3315,12 @@ const styles =
 
     submitButtonText: {
       color: '#ffffff',
-      fontSize: 16,
+      fontSize: 14.5,
       fontWeight: '800',
     },
 
     bottomButtonPressed: {
-      opacity: 0.75,
+      opacity: 0.88,
       transform: [
         {
           scale: 0.98,
@@ -2556,79 +3344,72 @@ const styles =
 
     emptyBackButton: {
       alignItems: 'center',
-      backgroundColor:
-        '#ffffff',
+      backgroundColor: '#ffffff',
       borderColor: '#e4e4e4',
-      borderRadius: 24,
+      borderRadius: 22,
       borderWidth: 1,
-      height: 48,
-      justifyContent:
-        'center',
-      left: 24,
+      height: 44,
+      justifyContent: 'center',
+      left: 20,
       position: 'absolute',
-      top: 54,
-      width: 48,
+      top: 48,
+      width: 44,
       zIndex: 5,
     },
 
     emptyIconContainer: {
       alignItems: 'center',
-      backgroundColor:
-        BRAND_GREEN_SOFT,
-      borderRadius: 40,
-      height: 80,
-      justifyContent:
-        'center',
-      width: 80,
+      backgroundColor: BRAND_GREEN_SOFT,
+      borderRadius: 34,
+      height: 68,
+      justifyContent: 'center',
+      width: 68,
     },
 
     errorIconContainer: {
       alignItems: 'center',
       alignSelf: 'center',
-      backgroundColor:
-        '#fff1f1',
-      borderRadius: 48,
-      height: 96,
-      justifyContent:
-        'center',
+      backgroundColor: '#fff1f1',
+      borderRadius: 40,
+      height: 80,
+      justifyContent: 'center',
       marginTop: 'auto',
-      width: 96,
+      width: 80,
     },
 
     emptyTitle: {
       color: '#242424',
-      fontSize: 20,
+      fontSize: 18,
       fontWeight: '800',
-      marginTop: 18,
+      marginTop: 15,
       textAlign: 'center',
     },
 
     emptyDescription: {
       alignSelf: 'center',
       color: '#7c7c7c',
-      fontSize: 14,
-      lineHeight: 22,
-      marginTop: 8,
-      maxWidth: 330,
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 7,
+      maxWidth: 310,
       textAlign: 'center',
     },
 
     primaryButton: {
       alignItems: 'center',
       alignSelf: 'center',
-      backgroundColor:
-        BRAND_GREEN,
-      borderRadius: 29,
+      backgroundColor: BRAND_GREEN,
+      borderRadius: 23,
       marginBottom: 'auto',
-      marginTop: 24,
-      minWidth: 220,
-      paddingHorizontal: 30,
-      paddingVertical: 16,
+      marginTop: 18,
+      minWidth: 174,
+      paddingHorizontal: 22,
+      paddingVertical: 12,
     },
 
     primaryButtonText: {
       color: '#ffffff',
-      fontSize: 16,
+      fontSize: 13,
       fontWeight: '800',
     },
 

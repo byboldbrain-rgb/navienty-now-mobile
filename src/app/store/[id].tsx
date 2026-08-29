@@ -9,7 +9,6 @@ import {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Image,
   ImageBackground,
   LayoutChangeEvent,
@@ -28,13 +27,16 @@ import {
   getStoreCatalog,
 } from '../../services/catalog-service';
 
+import { StoreScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   isRestaurantCartCategory,
   useCartStore,
 } from '../../store/cart-store';
-
-const BRAND_GREEN = '#00B14F';
-const BRAND_GREEN_DARK = '#009A45';
+import { useCustomerStore } from '../../store/customer-store';
+import {
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
+} from '../../theme/navienty-now-theme';
 
 function isImageUri(
   value: string | null | undefined,
@@ -88,8 +90,36 @@ function getProductImage(
   return firstImage?.imageUrl ?? null;
 }
 
+function BackArrowIcon() {
+  return (
+    <View style={styles.backArrowCanvas}>
+      <View style={styles.backArrowStem} />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowTop,
+        ]}
+      />
+
+      <View
+        style={[
+          styles.backArrowDiagonal,
+          styles.backArrowBottom,
+        ]}
+      />
+    </View>
+  );
+}
+
 export default function StoreScreen() {
   const router = useRouter();
+
+  const savedServiceAreaId =
+    useCustomerStore(
+      (state) =>
+        state.locationServiceAreaId,
+    );
 
   const params =
     useLocalSearchParams<{
@@ -222,13 +252,20 @@ export default function StoreScreen() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const [
-        loadedCatalog,
-        loadedBootstrap,
-      ] = await Promise.all([
-        getStoreCatalog(rawId),
-        getAppBootstrap(),
-      ]);
+      const loadedBootstrap =
+        await getAppBootstrap();
+
+      const serviceAreaId =
+        savedServiceAreaId ??
+        loadedBootstrap.settings
+          .default_service_area_id ??
+        undefined;
+
+      const loadedCatalog =
+        await getStoreCatalog(
+          rawId,
+          serviceAreaId,
+        );
 
       setCatalog(loadedCatalog);
 
@@ -260,28 +297,11 @@ export default function StoreScreen() {
 
   useEffect(() => {
     void loadStoreData();
-  }, [rawId]);
+  }, [rawId, savedServiceAreaId]);
 
 
   if (isLoading) {
-    return (
-      <View style={styles.stateScreen}>
-        <ActivityIndicator
-          size="large"
-          color={BRAND_GREEN}
-        />
-
-        <Text style={styles.stateTitle}>
-          جاري تحميل المطعم
-        </Text>
-
-        <Text
-          style={styles.stateDescription}
-        >
-          يتم تحميل المنتجات والأسعار.
-        </Text>
-      </View>
-    );
+    return <StoreScreenSkeleton />;
   }
 
   if (!catalog || errorMessage) {
@@ -295,7 +315,7 @@ export default function StoreScreen() {
           <Ionicons
             name="restaurant-outline"
             size={28}
-            color={BRAND_GREEN}
+            color={NAVIENTY_NOW_COLORS.primary}
           />
         </View>
 
@@ -789,6 +809,21 @@ export default function StoreScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.topHeader}>
+        <Pressable
+          accessibilityLabel="العودة"
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed &&
+              styles.headerButtonPressed,
+          ]}
+          onPress={() => router.back()}
+        >
+          <BackArrowIcon />
+        </Pressable>
+      </View>
+
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
@@ -801,6 +836,7 @@ export default function StoreScreen() {
           false
         }
       >
+        <View style={styles.container}>
         {/* HERO */}
 
         <View style={styles.hero}>
@@ -850,28 +886,6 @@ export default function StoreScreen() {
             </View>
           )}
 
-          {/* TOP BUTTONS */}
-
-          <View style={styles.topBar}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.topCircleButton,
-
-                pressed &&
-                  styles.topCircleButtonPressed,
-              ]}
-              onPress={() =>
-                router.back()
-              }
-            >
-              <Ionicons
-                name="arrow-back"
-                size={20}
-                color="#242424"
-              />
-            </Pressable>
-
-          </View>
         </View>
 
         {/* STORE CARD */}
@@ -947,7 +961,7 @@ export default function StoreScreen() {
             >
               <Ionicons
                 name="close"
-                size={12}
+                size={13}
                 color="#ffffff"
               />
             </View>
@@ -1051,7 +1065,7 @@ export default function StoreScreen() {
               <Ionicons
                 name="restaurant-outline"
                 size={28}
-                color={BRAND_GREEN}
+                color={NAVIENTY_NOW_COLORS.primary}
               />
             </View>
 
@@ -1204,17 +1218,19 @@ export default function StoreScreen() {
                                 styles.productBottomContent
                               }
                             >
-                              {!hasVariants && (
-                                <Text
-                                  style={
-                                    styles.productPrice
-                                  }
-                                >
-                                  {formatPrice(
-                                    displayPrice,
-                                  )}
-                                </Text>
-                              )}
+                              <Text
+                                style={
+                                  styles.productPrice
+                                }
+                              >
+                                {hasVariants
+                                  ? `من ${formatPrice(
+                                      displayPrice,
+                                    )}`
+                                  : formatPrice(
+                                      displayPrice,
+                                    )}
+                              </Text>
 
                               {hasVariants && (
                                 <Text
@@ -1277,7 +1293,7 @@ export default function StoreScreen() {
                               >
                                 <Ionicons
                                   name="image-outline"
-                                  size={30}
+                                  size={34}
                                   color="#b9b9b9"
                                 />
                               </View>
@@ -1316,7 +1332,7 @@ export default function StoreScreen() {
                                   name="chevron-forward"
                                   size={22}
                                   color={
-                                    BRAND_GREEN
+                                    NAVIENTY_NOW_COLORS.primary
                                   }
                                 />
                               </Pressable>
@@ -1352,7 +1368,7 @@ export default function StoreScreen() {
                                   name="add"
                                   size={22}
                                   color={
-                                    BRAND_GREEN
+                                    NAVIENTY_NOW_COLORS.primary
                                   }
                                 />
                               </Pressable>
@@ -1387,7 +1403,7 @@ export default function StoreScreen() {
                                   <Ionicons
                                     name="add"
                                     size={
-                                      16
+                                      17
                                     }
                                     color="#ffffff"
                                   />
@@ -1425,7 +1441,7 @@ export default function StoreScreen() {
                                   <Ionicons
                                     name="remove"
                                     size={
-                                      16
+                                      17
                                     }
                                     color="#ffffff"
                                   />
@@ -1442,6 +1458,7 @@ export default function StoreScreen() {
             ),
           )
         )}
+        </View>
       </ScrollView>
 
       {/* PRODUCT OPTIONS MODAL */}
@@ -1513,7 +1530,7 @@ export default function StoreScreen() {
                     >
                       <Ionicons
                         name="image-outline"
-                        size={42}
+                        size={46}
                         color="#b9b9b9"
                       />
                     </View>
@@ -1783,7 +1800,7 @@ export default function StoreScreen() {
                         name="add"
                         size={21}
                         color={
-                          BRAND_GREEN
+                          NAVIENTY_NOW_COLORS.primary
                         }
                       />
                     </Pressable>
@@ -1897,46 +1914,33 @@ export default function StoreScreen() {
         statusBarTranslucent
         onRequestClose={clearPendingCartRequest}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={clearPendingCartRequest}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
-            style={styles.modalCard}
-            onPress={(event) =>
-              event.stopPropagation()
-            }
-          >
+            style={styles.modalBackdrop}
+            onPress={clearPendingCartRequest}
+          />
+
+          <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               بدء سلة جديدة؟
             </Text>
 
-            <Text
-              style={styles.modalDescription}
-            >
-              عند بدء طلب جديد، سيتم إزالة سلة
-              مشترياتك من «
-              {conflictingRestaurantCart?.storeName ??
-                'المطعم الحالي'}
-              ».
+            <Text style={styles.modalDescription}>
+              {`عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من «${
+                conflictingRestaurantCart?.storeName ??
+                'المطعم السابق'
+              }».`}
             </Text>
 
-            <View style={styles.modalActionsRow}>
+            <View style={styles.modalActions}>
               <Pressable
                 style={({ pressed }) => [
-                  styles.replaceCartButton,
-                  pressed &&
-                    styles.modalActionPressed,
+                  styles.confirmNewCartButton,
+                  pressed && styles.buttonPressed,
                 ]}
-                onPress={
-                  replaceCartAndAddProduct
-                }
+                onPress={replaceCartAndAddProduct}
               >
-                <Text
-                  style={
-                    styles.replaceCartButtonText
-                  }
-                >
+                <Text style={styles.confirmNewCartButtonText}>
                   تأكيد البدء
                 </Text>
               </Pressable>
@@ -1944,24 +1948,17 @@ export default function StoreScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.cancelButton,
-                  pressed &&
-                    styles.modalActionPressed,
+                  pressed && styles.buttonPressed,
                 ]}
-                onPress={
-                  clearPendingCartRequest
-                }
+                onPress={clearPendingCartRequest}
               >
-                <Text
-                  style={
-                    styles.cancelButtonText
-                  }
-                >
+                <Text style={styles.cancelButtonText}>
                   إلغاء
                 </Text>
               </Pressable>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1969,8 +1966,100 @@ export default function StoreScreen() {
 
 const styles = StyleSheet.create({
   screen: {
+    backgroundColor: '#FFFFFF',
     flex: 1,
-    backgroundColor: '#ffffff',
+  },
+
+  topHeader: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderBottomColor: '#ECECEF',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 100,
+    paddingBottom: 14,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingTop: 34,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    zIndex: 10,
+  },
+
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
+    borderRadius: 20,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+
+  headerButtonPressed: {
+    backgroundColor: '#F7F7F7',
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
+  backArrowCanvas: {
+    height: 20,
+    position: 'relative',
+    width: 21,
+  },
+
+  backArrowStem: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2,
+    left: 3,
+    position: 'absolute',
+    top: 9,
+    width: 16,
+  },
+
+  backArrowDiagonal: {
+    backgroundColor: '#242424',
+    borderRadius: 2,
+    height: 2,
+    left: 2,
+    position: 'absolute',
+    width: 8,
+  },
+
+  backArrowTop: {
+    top: 6,
+    transform: [
+      {
+        rotate: '-42deg',
+      },
+    ],
+  },
+
+  backArrowBottom: {
+    top: 12,
+    transform: [
+      {
+        rotate: '42deg',
+      },
+    ],
+  },
+
+  container: {
+    alignSelf: 'center',
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    width: '100%',
   },
 
   pageContent: {
@@ -2015,7 +2104,7 @@ const styles = StyleSheet.create({
   heroFallback: {
     alignItems: 'center',
     backgroundColor:
-      BRAND_GREEN,
+      NAVIENTY_NOW_COLORS.primary,
     height: '100%',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -2047,43 +2136,6 @@ const styles = StyleSheet.create({
     fontSize: 90,
   },
 
-  topBar: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent:
-      'space-between',
-    left: 0,
-    paddingHorizontal: 22,
-    paddingTop: 52,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-
-
-  topCircleButton: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor:
-      'rgba(0,0,0,0.08)',
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: 'center',
-
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-
-    elevation: 4,
-
-    width: 48,
-  },
-
   topCircleButtonPressed: {
     opacity: 0.88,
     transform: [
@@ -2098,14 +2150,15 @@ const styles = StyleSheet.create({
   /* ---------------------------------- */
 
   storeCardWrapper: {
-    marginHorizontal: 18,
-    marginTop: -88,
+    marginHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    marginTop: -72,
   },
 
   storeCard: {
     backgroundColor: '#ffffff',
-    borderColor: '#ededed',
-    borderRadius: 28,
+    borderColor: '#ECECEF',
+    borderRadius: 22,
     borderWidth: 1,
     paddingBottom: 19,
     paddingHorizontal: 18,
@@ -2116,8 +2169,8 @@ const styles = StyleSheet.create({
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
 
     elevation: 5,
   },
@@ -2131,12 +2184,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fafafa',
     borderColor: '#eeeeee',
-    borderRadius: 19,
+    borderRadius: 17,
     borderWidth: 1,
-    height: 86,
+    height: 72,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 86,
+    width: 72,
   },
 
   storeLogoImage: {
@@ -2145,7 +2198,7 @@ const styles = StyleSheet.create({
   },
 
   storeLogoFallback: {
-    fontSize: 32,
+    fontSize: 34,
   },
 
   storeMainContent: {
@@ -2155,7 +2208,7 @@ const styles = StyleSheet.create({
 
   storeName: {
     color: '#1e1e1e',
-    fontSize: 28,
+    fontSize: 21,
     fontWeight: '900',
   },
 
@@ -2168,7 +2221,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff1f0',
     borderRadius: 13,
     flexDirection: 'row',
-    marginHorizontal: 20,
+    marginHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
     marginTop: 18,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -2180,14 +2234,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     height: 20,
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 10,
     width: 20,
   },
 
   closedNoticeText: {
     color: '#9e2b25',
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     lineHeight: 20,
     textAlign: 'right',
@@ -2229,17 +2283,17 @@ const styles = StyleSheet.create({
 
   categoryTab: {
     alignItems: 'center',
-    height: 66,
+    height: 58,
     justifyContent: 'flex-end',
-    marginHorizontal: 11,
-    minWidth: 90,
+    marginHorizontal: 9,
+    minWidth: 78,
   },
 
   categoryTabText: {
     color: '#7d7d7d',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    paddingBottom: 15,
+    paddingBottom: 13,
   },
 
   categoryTabTextActive: {
@@ -2250,7 +2304,7 @@ const styles = StyleSheet.create({
   categoryUnderline: {
     backgroundColor: 'transparent',
     borderRadius: 2,
-    height: 4,
+    height: 3,
     width: '100%',
   },
 
@@ -2269,10 +2323,11 @@ const styles = StyleSheet.create({
 
   productsSectionTitle: {
     color: '#242424',
-    fontSize: 23,
+    fontSize: 20,
     fontWeight: '900',
     marginBottom: 4,
-    paddingHorizontal: 21,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
     textAlign: 'right',
   },
 
@@ -2286,7 +2341,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: 'row',
     minHeight: 190,
-    paddingHorizontal: 21,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
     paddingVertical: 18,
   },
 
@@ -2306,17 +2362,17 @@ const styles = StyleSheet.create({
 
   productName: {
     color: '#252525',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    lineHeight: 23,
+    lineHeight: 22,
     textAlign: 'right',
   },
 
   productDescription: {
     color: '#858585',
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 7,
     textAlign: 'right',
   },
 
@@ -2329,16 +2385,16 @@ const styles = StyleSheet.create({
 
   productPrice: {
     color: '#303030',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'right',
   },
 
   productVariantHint: {
-    color: BRAND_GREEN,
-    fontSize: 12,
+    color: NAVIENTY_NOW_COLORS.primary,
+    fontSize: 11,
     fontWeight: '800',
-    marginTop: 6,
+    marginTop: 5,
     textAlign: 'right',
   },
 
@@ -2387,10 +2443,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#efefef',
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
-    bottom: -3,
-    height: 46,
+    bottom: -2,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
     right: 8,
@@ -2405,7 +2461,7 @@ const styles = StyleSheet.create({
 
     elevation: 5,
 
-    width: 46,
+    width: 44,
   },
 
   productAddButtonPressed: {
@@ -2420,10 +2476,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#efefef',
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
-    bottom: -3,
-    height: 46,
+    bottom: -2,
+    height: 44,
     justifyContent: 'center',
     position: 'absolute',
     right: 8,
@@ -2435,21 +2491,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 5,
-    width: 46,
+    width: 44,
   },
 
   productQuantityContainer: {
     alignItems: 'center',
     backgroundColor:
-      BRAND_GREEN,
+      NAVIENTY_NOW_COLORS.primary,
     borderRadius: 22,
-    bottom: -3,
+    bottom: -2,
     flexDirection: 'row',
     height: 44,
     justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
     position: 'absolute',
-    right: 6,
+    right: 4,
 
     shadowColor: '#000000',
     shadowOffset: {
@@ -2464,7 +2520,7 @@ const styles = StyleSheet.create({
 
   productQuantityButton: {
     alignItems: 'center',
-    borderRadius: 17,
+    borderRadius: 18,
     height: 34,
     justifyContent: 'center',
     width: 34,
@@ -2472,9 +2528,9 @@ const styles = StyleSheet.create({
 
   productQuantityText: {
     color: '#ffffff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
-    minWidth: 30,
+    minWidth: 26,
     textAlign: 'center',
   },
 
@@ -2519,11 +2575,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: 'rgba(0,0,0,0.08)',
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
-    height: 48,
+    height: 44,
     justifyContent: 'center',
-    left: 18,
+    left: 22,
     position: 'absolute',
     shadowColor: '#000000',
     shadowOffset: {
@@ -2533,8 +2589,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 5,
     elevation: 5,
-    top: 48,
-    width: 48,
+    top: 50,
+    width: 44,
   },
 
   productModalBody: {
@@ -2544,16 +2600,16 @@ const styles = StyleSheet.create({
 
   productModalTitle: {
     color: '#202020',
-    fontSize: 27,
+    fontSize: 22,
     fontWeight: '900',
-    lineHeight: 35,
+    lineHeight: 30,
     textAlign: 'right',
   },
 
   productModalDescription: {
     color: '#7a7a7a',
-    fontSize: 16,
-    lineHeight: 25,
+    fontSize: 14,
+    lineHeight: 22,
     marginTop: 10,
     textAlign: 'right',
   },
@@ -2570,15 +2626,15 @@ const styles = StyleSheet.create({
 
   variantSectionTitle: {
     color: '#202020',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
     textAlign: 'right',
   },
 
   variantSectionSubtitle: {
     color: '#888888',
-    fontSize: 15,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 5,
     textAlign: 'right',
   },
 
@@ -2591,7 +2647,7 @@ const styles = StyleSheet.create({
 
   requiredBadgeText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
   },
 
@@ -2614,8 +2670,8 @@ const styles = StyleSheet.create({
   },
 
   variantCardSelected: {
-    borderColor: BRAND_GREEN,
-    backgroundColor: '#EAF9F0',
+    borderColor: NAVIENTY_NOW_COLORS.primary,
+    backgroundColor: '#EAF8F0',
   },
 
   variantCardPressed: {
@@ -2625,39 +2681,39 @@ const styles = StyleSheet.create({
   variantRadio: {
     alignItems: 'center',
     borderColor: '#e5e5e5',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1.5,
-    height: 24,
+    height: 20,
     justifyContent: 'center',
     left: 10,
     position: 'absolute',
     top: 10,
-    width: 24,
+    width: 20,
   },
 
   variantRadioSelected: {
-    borderColor: BRAND_GREEN,
+    borderColor: NAVIENTY_NOW_COLORS.primary,
   },
 
   variantRadioDot: {
-    backgroundColor: BRAND_GREEN,
-    borderRadius: 5,
-    height: 10,
-    width: 10,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 4,
+    height: 8,
+    width: 8,
   },
 
   variantName: {
     color: '#252525',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    marginTop: 42,
+    marginTop: 38,
     textAlign: 'right',
   },
 
   variantPrice: {
     color: '#929292',
-    fontSize: 13,
-    marginTop: 6,
+    fontSize: 12,
+    marginTop: 5,
     textAlign: 'right',
   },
 
@@ -2684,8 +2740,8 @@ const styles = StyleSheet.create({
 
   productModalRequiredHint: {
     color: '#999999',
-    fontSize: 14,
-    marginBottom: 12,
+    fontSize: 12,
+    marginBottom: 10,
     textAlign: 'center',
   },
 
@@ -2703,32 +2759,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     height: 54,
     justifyContent: 'space-between',
-    paddingHorizontal: 7,
-    width: 150,
+    paddingHorizontal: 8,
+    width: 145,
   },
 
   modalQuantityButton: {
     alignItems: 'center',
-    borderRadius: 20,
-    height: 40,
+    borderRadius: 19,
+    height: 38,
     justifyContent: 'center',
-    width: 40,
+    width: 38,
   },
 
   modalQuantityText: {
     color: '#242424',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    minWidth: 25,
+    minWidth: 22,
     textAlign: 'center',
   },
 
   modalAddItemButton: {
     alignItems: 'center',
-    backgroundColor: BRAND_GREEN,
-    borderRadius: 32,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 27,
     flex: 1,
-    height: 64,
+    height: 54,
     justifyContent: 'center',
     paddingHorizontal: 14,
   },
@@ -2738,7 +2794,8 @@ const styles = StyleSheet.create({
   },
 
   modalAddItemButtonPressed: {
-    backgroundColor: BRAND_GREEN_DARK,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    opacity: 0.9,
     transform: [
       {
         scale: 0.99,
@@ -2748,7 +2805,7 @@ const styles = StyleSheet.create({
 
   modalAddItemButtonText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
     textAlign: 'center',
   },
@@ -2787,16 +2844,17 @@ const styles = StyleSheet.create({
   cartBar: {
     alignItems: 'center',
     backgroundColor:
-      BRAND_GREEN,
-    borderRadius: 35,
+      NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 999,
     flexDirection: 'row',
-    height: 70,
+    height: 58,
     paddingHorizontal: 14,
   },
 
   cartBarPressed: {
     backgroundColor:
-      BRAND_GREEN_DARK,
+      NAVIENTY_NOW_COLORS.primary,
+    opacity: 0.9,
 
     transform: [
       {
@@ -2808,30 +2866,30 @@ const styles = StyleSheet.create({
   cartCountCircle: {
     alignItems: 'center',
     backgroundColor:
-      'rgba(0,126,56,0.55)',
-    borderRadius: 25,
-    height: 50,
+      'rgba(255,255,255,0.18)',
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    width: 50,
+    width: 40,
   },
 
   cartCountText: {
     color: '#ffffff',
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '900',
   },
 
   cartButtonText: {
     color: '#ffffff',
     flex: 1,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
-    marginLeft: 15,
+    marginLeft: 13,
   },
 
   cartPrice: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '800',
   },
 
@@ -2848,7 +2906,7 @@ const styles = StyleSheet.create({
 
   emptyCatalogIconContainer: {
     alignItems: 'center',
-    backgroundColor: '#EAF9F0',
+    backgroundColor: '#EAF8F0',
     borderRadius: 29,
     height: 58,
     justifyContent: 'center',
@@ -2857,113 +2915,107 @@ const styles = StyleSheet.create({
 
   emptyCatalogTitle: {
     color: '#222222',
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '900',
     marginTop: 16,
   },
 
   emptyCatalogDescription: {
     color: '#777777',
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 19,
     marginTop: 7,
     maxWidth: 300,
     textAlign: 'center',
   },
 
   /* ---------------------------------- */
-  /* DIFFERENT RESTAURANT CART MODAL    */
+  /* MODAL                              */
   /* ---------------------------------- */
 
   modalOverlay: {
     alignItems: 'center',
-    backgroundColor:
-      'rgba(0,0,0,0.56)',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 32,
+    paddingHorizontal: 20,
+  },
+
+  modalBackdrop: {
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
 
   modalCard: {
-    alignSelf: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 30,
-    maxWidth: 440,
+    borderRadius: 28,
+    maxWidth: 540,
     paddingBottom: 24,
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: 30,
     width: '100%',
   },
 
   modalTitle: {
-    color: '#202020',
-    fontSize: 24,
+    color: '#222222',
+    fontSize: 20,
     fontWeight: '900',
-    lineHeight: 34,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
 
   modalDescription: {
     color: '#777777',
-    fontSize: 16,
-    lineHeight: 27,
-    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 23,
+    marginTop: 12,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
 
-  modalActionsRow: {
+  modalActions: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 26,
-    width: '100%',
   },
 
-  replaceCartButton: {
+  confirmNewCartButton: {
     alignItems: 'center',
-    backgroundColor: BRAND_GREEN,
-    borderRadius: 22,
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 999,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 58,
+    minHeight: 50,
     paddingHorizontal: 14,
   },
 
-  replaceCartButtonText: {
+  confirmNewCartButtonText: {
     color: '#ffffff',
-    fontSize: 17,
+    fontSize: 14,
     fontWeight: '900',
     textAlign: 'center',
   },
 
   cancelButton: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#E0E0E0',
-    borderRadius: 22,
-    borderWidth: 1.5,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E3E3E6',
+    borderRadius: 999,
+    borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 58,
+    minHeight: 50,
     paddingHorizontal: 14,
   },
 
   cancelButtonText: {
-    color: '#242424',
-    fontSize: 17,
+    color: '#222222',
+    fontSize: 14,
     fontWeight: '800',
     textAlign: 'center',
-  },
-
-  modalActionPressed: {
-    opacity: 0.82,
-    transform: [
-      {
-        scale: 0.985,
-      },
-    ],
   },
 
   /* ---------------------------------- */
@@ -2972,33 +3024,33 @@ const styles = StyleSheet.create({
 
   stateScreen: {
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 28,
   },
 
   stateIconContainer: {
     alignItems: 'center',
-    backgroundColor: '#EAF9F0',
-    borderRadius: 32,
-    height: 64,
+    backgroundColor: '#EAF8F0',
+    borderRadius: 33,
+    height: 66,
     justifyContent: 'center',
-    width: 64,
+    width: 66,
   },
 
   stateTitle: {
-    color: '#222222',
-    fontSize: 22,
+    color: '#17171A',
+    fontSize: 18,
     fontWeight: '900',
-    marginTop: 16,
+    marginTop: 17,
     textAlign: 'center',
   },
 
   stateDescription: {
-    color: '#777777',
-    fontSize: 13,
-    lineHeight: 21,
+    color: '#73737A',
+    fontSize: 12,
+    lineHeight: 19,
     marginTop: 8,
     maxWidth: 350,
     textAlign: 'center',
@@ -3006,7 +3058,7 @@ const styles = StyleSheet.create({
 
   retryButton: {
     backgroundColor:
-      BRAND_GREEN,
+      NAVIENTY_NOW_COLORS.primary,
     borderRadius: 15,
     marginTop: 22,
     paddingHorizontal: 22,
@@ -3015,7 +3067,7 @@ const styles = StyleSheet.create({
 
   retryButtonText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
 
@@ -3030,12 +3082,17 @@ const styles = StyleSheet.create({
   },
 
   errorButtonText: {
-    color: BRAND_GREEN,
-    fontSize: 14,
+    color: NAVIENTY_NOW_COLORS.primary,
+    fontSize: 13,
     fontWeight: '800',
   },
 
   buttonPressed: {
-    opacity: 0.74,
+    opacity: 0.76,
+    transform: [
+      {
+        scale: 0.985,
+      },
+    ],
   },
 });

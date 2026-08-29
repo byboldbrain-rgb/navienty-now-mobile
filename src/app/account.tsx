@@ -23,18 +23,15 @@ import { AccountScreenSkeleton } from '../components/ui/loading-skeleton';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { supabase } from '../lib/supabase';
 import {
-  ensureAppSession,
-} from '../services/anonymous-auth-service';
-import {
   cancelMyAccountDeletionRequest,
   getMyAccountDeletionRequest,
   requestAccountDeletion,
   type AccountDeletionRequest,
 } from '../services/account-deletion-service';
-import getAppBootstrap from '../services/bootstrap-service';
 import {
-  isNotificationTestBuild,
-} from '../services/push-notifications-service';
+  ensureAppSession,
+} from '../services/anonymous-auth-service';
+import getAppBootstrap from '../services/bootstrap-service';
 import { useCustomerStore } from '../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -600,12 +597,7 @@ export default function AccountScreen() {
               حسابي
             </Text>
 
-            <Text
-              style={styles.pageSubtitle}
-            >
-              بياناتك المستخدمة في
-              الطلب والتوصيل
-            </Text>
+
           </View>
 
           {/* ======================================= */}
@@ -627,35 +619,10 @@ export default function AccountScreen() {
                   بيانات التوصيل
                 </Text>
 
-                <Text
-                  style={
-                    styles.formHeadingDescription
-                  }
-                >
-                  هنستخدم البيانات دي
-                  تلقائيًا مع طلباتك
-                </Text>
+
               </View>
 
-              <View
-                style={styles.savedBadge}
-              >
-                <Ionicons
-                  color={
-                    NAVIENTY_NOW_COLORS.primary
-                  }
-                  name="checkmark"
-                  size={12}
-                />
 
-                <Text
-                  style={
-                    styles.savedBadgeText
-                  }
-                >
-                  حفظ تلقائي
-                </Text>
-              </View>
             </View>
 
             <View
@@ -696,287 +663,25 @@ export default function AccountScreen() {
                 }
               />
 
-              <ProfileField
-                icon="navigate-outline"
-                label="علامة مميزة"
-                placeholder="مثال: بجوار البوابة الرئيسية"
-                value={landmark}
-                onChangeText={
-                  setLandmark
-                }
-              />
+
             </View>
 
-            <View
-              style={styles.autoSaveHint}
-            >
-              <Ionicons
-                color="#727276"
-                name="information-circle-outline"
-                size={16}
-              />
 
-              <Text
-                style={
-                  styles.autoSaveHintText
-                }
-              >
-                أي تعديل بتعمله هنا
-                هيتحفظ تلقائيًا ويظهر في
-                صفحة إتمام الطلب.
-              </Text>
-            </View>
           </View>
 
-          {isNotificationTestBuild() && (
-            <Pressable
-              accessibilityLabel="اختبار الإشعارات"
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.notificationDevCard,
-                pressed &&
-                  styles.notificationDevCardPressed,
-              ]}
-              onPress={() => {
-                router.push('/notification-test');
-              }}
-            >
-              <View
-                style={styles.notificationDevIcon}
-              >
-                <Ionicons
-                  color={
-                    NAVIENTY_NOW_COLORS.primary
-                  }
-                  name="notifications-outline"
-                  size={19}
-                />
-              </View>
 
-              <View
-                style={styles.notificationDevCopy}
-              >
-                <Text
-                  style={styles.notificationDevTitle}
-                >
-                  اختبار الإشعارات
-                </Text>
-
-                <Text
-                  style={
-                    styles.notificationDevDescription
-                  }
-                >
-                  أدوات اختبار Local وRemote Push
-                </Text>
-              </View>
-
-              <Ionicons
-                color="#9A9A9E"
-                name="chevron-back"
-                size={17}
-              />
-            </Pressable>
-          )}
 
           {/* ======================================= */}
           {/* PRIVACY AND TERMS                       */}
           {/* ======================================= */}
 
-          <View style={styles.legalCard}>
-            <View style={styles.legalHeadingRow}>
-              <View style={styles.legalIcon}>
-                <Ionicons
-                  color={NAVIENTY_NOW_COLORS.primary}
-                  name="shield-checkmark-outline"
-                  size={20}
-                />
-              </View>
 
-              <View style={styles.legalHeadingCopy}>
-                <Text style={styles.legalTitle}>
-                  الخصوصية والشروط
-                </Text>
-                <Text style={styles.legalDescription}>
-                  راجع كيفية استخدام بياناتك وشروط الخدمة في أي وقت.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.legalLinks}>
-              <Pressable
-                accessibilityLabel="سياسة الخصوصية"
-                accessibilityRole="link"
-                style={({ pressed }) => [
-                  styles.legalLink,
-                  pressed && styles.legalLinkPressed,
-                ]}
-                onPress={() => {
-                  void openLegalDocument(
-                    'سياسة الخصوصية',
-                    privacyUrl,
-                  );
-                }}
-              >
-                <Ionicons
-                  color={NAVIENTY_NOW_COLORS.textSecondary}
-                  name="open-outline"
-                  size={17}
-                />
-                <Text style={styles.legalLinkText}>
-                  سياسة الخصوصية
-                </Text>
-              </Pressable>
-
-              <View style={styles.legalLinkDivider} />
-
-              <Pressable
-                accessibilityLabel="شروط الاستخدام"
-                accessibilityRole="link"
-                style={({ pressed }) => [
-                  styles.legalLink,
-                  pressed && styles.legalLinkPressed,
-                ]}
-                onPress={() => {
-                  void openLegalDocument(
-                    'شروط الاستخدام',
-                    termsUrl,
-                  );
-                }}
-              >
-                <Ionicons
-                  color={NAVIENTY_NOW_COLORS.textSecondary}
-                  name="open-outline"
-                  size={17}
-                />
-                <Text style={styles.legalLinkText}>
-                  شروط الاستخدام
-                </Text>
-              </Pressable>
-            </View>
-          </View>
 
           {/* ======================================= */}
           {/* ACCOUNT DELETION                        */}
           {/* ======================================= */}
 
-          {hasCustomerSession && (
-            <View style={styles.deletionCard}>
-              <View style={styles.deletionHeadingRow}>
-                <View style={styles.deletionIcon}>
-                  <Ionicons
-                    color={NAVIENTY_NOW_COLORS.error}
-                    name="trash-outline"
-                    size={20}
-                  />
-                </View>
 
-                <View style={styles.deletionHeadingCopy}>
-                  <Text style={styles.deletionTitle}>
-                    حذف الحساب والبيانات
-                  </Text>
-                  <Text style={styles.deletionDescription}>
-                    يمكنك طلب حذف الحساب من داخل التطبيق، بما في ذلك حساب الضيف. قد نحتفظ فقط بالسجلات المطلوبة قانونيًا بعد إزالة البيانات التي تعرّف بك.
-                  </Text>
-                </View>
-              </View>
-
-              {authState.status === 'anonymous' && (
-                <View style={styles.anonymousDeletionNote}>
-                  <Ionicons
-                    color="#806724"
-                    name="information-circle-outline"
-                    size={16}
-                  />
-                  <Text style={styles.anonymousDeletionNoteText}>
-                    هذا حساب ضيف مرتبط بالجهاز، وطلب الحذف يشمله أيضًا.
-                  </Text>
-                </View>
-              )}
-
-              {isLoadingDeletionRequest ? (
-                <View style={styles.deletionLoadingRow}>
-                  <ActivityIndicator
-                    color={NAVIENTY_NOW_COLORS.error}
-                    size="small"
-                  />
-                  <Text style={styles.deletionLoadingText}>
-                    جاري تحميل حالة طلب الحذف...
-                  </Text>
-                </View>
-              ) : hasActiveDeletionRequest &&
-                deletionRequest ? (
-                <View style={styles.deletionStatusBox}>
-                  <Text style={styles.deletionStatusTitle}>
-                    {deletionRequest.status === 'processing'
-                      ? 'بدأت معالجة طلب الحذف'
-                      : 'طلب الحذف مسجّل'}
-                  </Text>
-
-                  <Text style={styles.deletionStatusText}>
-                    موعد الإكمال المستهدف:{' '}
-                    {formatDeletionDate(
-                      deletionRequest.targetCompletionAt,
-                    )}
-                  </Text>
-
-                  {deletionRequest.status === 'pending' && (
-                    <Pressable
-                      accessibilityLabel="إلغاء طلب حذف الحساب"
-                      accessibilityRole="button"
-                      disabled={isCancellingDeletionRequest}
-                      style={({ pressed }) => [
-                        styles.cancelDeletionButton,
-                        isCancellingDeletionRequest &&
-                          styles.deletionButtonDisabled,
-                        pressed &&
-                          !isCancellingDeletionRequest &&
-                          styles.legalLinkPressed,
-                      ]}
-                      onPress={confirmCancelDeletionRequest}
-                    >
-                      {isCancellingDeletionRequest ? (
-                        <ActivityIndicator
-                          color={NAVIENTY_NOW_COLORS.textSecondary}
-                          size="small"
-                        />
-                      ) : (
-                        <Text style={styles.cancelDeletionButtonText}>
-                          إلغاء طلب الحذف
-                        </Text>
-                      )}
-                    </Pressable>
-                  )}
-                </View>
-              ) : (
-                <Pressable
-                  accessibilityLabel="طلب حذف الحساب"
-                  accessibilityRole="button"
-                  disabled={isSubmittingDeletionRequest}
-                  style={({ pressed }) => [
-                    styles.deleteAccountButton,
-                    isSubmittingDeletionRequest &&
-                      styles.deletionButtonDisabled,
-                    pressed &&
-                      !isSubmittingDeletionRequest &&
-                      styles.deleteAccountButtonPressed,
-                  ]}
-                  onPress={confirmAccountDeletionRequest}
-                >
-                  {isSubmittingDeletionRequest ? (
-                    <ActivityIndicator
-                      color="#FFFFFF"
-                      size="small"
-                    />
-                  ) : (
-                    <Text style={styles.deleteAccountButtonText}>
-                      طلب حذف الحساب
-                    </Text>
-                  )}
-                </Pressable>
-              )}
-            </View>
-          )}
 
           {/* ======================================= */}
           {/* ERROR                                   */}

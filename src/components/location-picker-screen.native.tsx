@@ -15,6 +15,7 @@ import {
   Alert,
   Keyboard,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -51,21 +52,19 @@ const LOCATION_SCREEN_OPTIONS = {
 };
 
 const FALLBACK_REGION: Region = {
-  latitude:
-    27.18858603,
-
-  longitude:
-    31.16372869,
-
-  latitudeDelta:
-    0.045,
-
-  longitudeDelta:
-    0.045,
+  latitude: 27.18858603,
+  longitude: 31.16372869,
+  latitudeDelta: 0.045,
+  longitudeDelta: 0.045,
 };
 
-const FOCUSED_REGION_DELTA =
-  0.009;
+const FOCUSED_REGION_DELTA = 0.009;
+
+const LAST_KNOWN_LOCATION_MAX_AGE_MS =
+  5 * 60 * 1000;
+
+const LAST_KNOWN_LOCATION_REQUIRED_ACCURACY =
+  500;
 
 type Coordinate = {
   latitude: number;
@@ -191,6 +190,18 @@ export default function LocationPickerScreen() {
       source?:
         | string
         | string[];
+
+      flow?:
+        | string
+        | string[];
+
+      customRequest?:
+        | string
+        | string[];
+
+      pickupAddress?:
+        | string
+        | string[];
     }>();
 
   const storeId =
@@ -203,6 +214,25 @@ export default function LocationPickerScreen() {
       params.source,
     );
 
+  const flow =
+    getSingleParam(
+      params.flow,
+    )?.trim();
+
+  const customRequest =
+    getSingleParam(
+      params.customRequest,
+    )?.trim() ?? '';
+
+  const pickupAddress =
+    getSingleParam(
+      params.pickupAddress,
+    )?.trim() ?? '';
+
+  const isRequestAnythingFlow =
+    flow ===
+      'request-anything';
+
   const mapRef =
     useRef<MapView | null>(
       null,
@@ -212,6 +242,14 @@ export default function LocationPickerScreen() {
     useRef(false);
 
   const mapWasDraggedRef =
+    useRef(false);
+
+  const pendingMapCoordinateRef =
+    useRef<Coordinate | null>(
+      null,
+    );
+
+  const initialLocationRequestRef =
     useRef(false);
 
   const locationLatitude =
@@ -297,12 +335,6 @@ export default function LocationPickerScreen() {
     useState(false);
 
   const [
-    mapReady,
-    setMapReady,
-  ] =
-    useState(false);
-
-  const [
     mapType,
     setMapType,
   ] =
@@ -336,8 +368,18 @@ export default function LocationPickerScreen() {
       coordinate,
     );
 
+    if (!mapRef.current) {
+      pendingMapCoordinateRef.current =
+        coordinate;
+
+      return;
+    }
+
+    pendingMapCoordinateRef.current =
+      null;
+
     mapRef.current
-      ?.animateToRegion(
+      .animateToRegion(
         {
           ...coordinate,
 
@@ -347,7 +389,33 @@ export default function LocationPickerScreen() {
           longitudeDelta:
             FOCUSED_REGION_DELTA,
         },
-        420,
+        320,
+      );
+  }
+
+  function handleMapReady() {
+    const pendingCoordinate =
+      pendingMapCoordinateRef.current;
+
+    if (!pendingCoordinate) {
+      return;
+    }
+
+    pendingMapCoordinateRef.current =
+      null;
+
+    mapRef.current
+      ?.animateToRegion(
+        {
+          ...pendingCoordinate,
+
+          latitudeDelta:
+            FOCUSED_REGION_DELTA,
+
+          longitudeDelta:
+            FOCUSED_REGION_DELTA,
+        },
+        220,
       );
   }
 
@@ -418,13 +486,7 @@ export default function LocationPickerScreen() {
     return granted;
   }
 
-  async function moveToCurrentLocation(
-    options?: {
-      silentPermissionFailure?: boolean;
-
-      respectManualSelection?: boolean;
-    },
-  ) {
+  async function moveToCurrentLocation() {
     try {
       setIsLocating(
         true,
@@ -434,12 +496,7 @@ export default function LocationPickerScreen() {
         await ensurePermission();
 
       if (!granted) {
-        if (
-          !options
-            ?.silentPermissionFailure
-        ) {
-          showPermissionAlert();
-        }
+        showPermissionAlert();
 
         return;
       }
@@ -454,14 +511,6 @@ export default function LocationPickerScreen() {
                   .High,
             },
           );
-
-      if (
-        options
-          ?.respectManualSelection &&
-        manualSelectionRef.current
-      ) {
-        return;
-      }
 
       const coordinate = {
         latitude:
@@ -494,17 +543,130 @@ export default function LocationPickerScreen() {
   }
 
   useEffect(() => {
-    if (
-      !hasSavedCoordinate
-    ) {
-      void moveToCurrentLocation({
-        silentPermissionFailure:
-          true,
+    let cancelled = false;
 
-        respectManualSelection:
-          true,
-      });
+    async function prepareLocationInBackground() {
+      if (
+        initialLocationRequestRef.current
+      ) {
+        return;
+      }
+
+      initialLocationRequestRef.current =
+        true;
+
+      try {
+        let permission =
+          await Location
+            .getForegroundPermissionsAsync();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          !permission.granted &&
+          !hasSavedCoordinate
+        ) {
+          permission =
+            await Location
+              .requestForegroundPermissionsAsync();
+
+          if (cancelled) {
+            return;
+          }
+        }
+
+        setPermissionDenied(
+          !permission.granted,
+        );
+
+        setHasLocationPermission(
+          permission.granted,
+        );
+
+        if (
+          !permission.granted ||
+          hasSavedCoordinate
+        ) {
+          return;
+        }
+
+        try {
+          const lastKnownLocation =
+            await Location
+              .getLastKnownPositionAsync(
+                {
+                  maxAge:
+                    LAST_KNOWN_LOCATION_MAX_AGE_MS,
+
+                  requiredAccuracy:
+                    LAST_KNOWN_LOCATION_REQUIRED_ACCURACY,
+                },
+              );
+
+          if (
+            !cancelled &&
+            lastKnownLocation &&
+            !manualSelectionRef.current
+          ) {
+            animateToCoordinate({
+              latitude:
+                lastKnownLocation
+                  .coords
+                  .latitude,
+
+              longitude:
+                lastKnownLocation
+                  .coords
+                  .longitude,
+            });
+          }
+        } catch {
+          // Last-known location is only a fast-path optimization.
+        }
+
+        try {
+          const currentLocation =
+            await Location
+              .getCurrentPositionAsync(
+                {
+                  accuracy:
+                    Location
+                      .Accuracy
+                      .Balanced,
+                },
+              );
+
+          if (
+            !cancelled &&
+            !manualSelectionRef.current
+          ) {
+            animateToCoordinate({
+              latitude:
+                currentLocation
+                  .coords
+                  .latitude,
+
+              longitude:
+                currentLocation
+                  .coords
+                  .longitude,
+            });
+          }
+        } catch {
+          // Keep last-known/fallback map visible.
+        }
+      } catch {
+        // Permission/location startup must never block map rendering.
+      }
     }
+
+    void prepareLocationInBackground();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function handleMapPress(
@@ -644,10 +806,28 @@ export default function LocationPickerScreen() {
       return;
     }
 
-    if (!storeId) {
+    if (
+      !storeId &&
+      !isRequestAnythingFlow
+    ) {
       Alert.alert(
         'السلة غير متاحة',
         'تعذر تحديد المتجر الخاص بهذه السلة. ارجع إلى السلة وحاول مرة أخرى.',
+      );
+
+      return;
+    }
+
+    if (
+      isRequestAnythingFlow &&
+      (
+        !customRequest ||
+        !pickupAddress
+      )
+    ) {
+      Alert.alert(
+        'بيانات الطلب غير مكتملة',
+        'ارجع إلى خدمة «اطلب أي حاجة» واكتب تفاصيل الطلب والمكان اللي هنجيبه منه.',
       );
 
       return;
@@ -667,9 +847,6 @@ export default function LocationPickerScreen() {
         return;
       }
 
-      /*
-       * Reverse geocode the exact selected pin.
-       */
       const addresses =
         await Location
           .reverseGeocodeAsync({
@@ -703,17 +880,6 @@ export default function LocationPickerScreen() {
         return;
       }
 
-      /*
-       * IMPORTANT:
-       *
-       * The backend is authoritative.
-       *
-       * The selected latitude/longitude are checked against the real
-       * service-area polygon stored in Supabase.
-       *
-       * This prevents a customer from choosing an unsupported place
-       * even if Google calls the whole location "الهضبة".
-       */
       const deliveryResolution =
         await resolveDeliveryLocation({
           latitude:
@@ -724,15 +890,26 @@ export default function LocationPickerScreen() {
             selectedCoordinate
               .longitude,
 
-          storeId,
+          storeId:
+            isRequestAnythingFlow
+              ? null
+              : storeId,
         });
 
+      const deliveryIsAvailable =
+        isRequestAnythingFlow
+          ? deliveryResolution
+              .serviceable ===
+            true
+          : deliveryResolution
+                .serviceable ===
+              true &&
+            deliveryResolution
+                .storeAvailable ===
+              true;
+
       if (
-        !deliveryResolution
-          .serviceable ||
-        deliveryResolution
-          .storeAvailable !==
-          true
+        !deliveryIsAvailable
       ) {
         Alert.alert(
           'التوصيل غير متاح',
@@ -745,9 +922,6 @@ export default function LocationPickerScreen() {
         return;
       }
 
-      /*
-       * Save only a server-validated location.
-       */
       setDeliveryLocation({
         latitude:
           selectedCoordinate
@@ -777,15 +951,6 @@ export default function LocationPickerScreen() {
             .cityName,
       });
 
-      /*
-       * We arrived from the existing Address Details screen.
-       *
-       * The Address Details screen is still underneath because it
-       * opened this map using router.push().
-       *
-       * Simply go back. This preserves all text fields the customer
-       * was already typing.
-       */
       if (
         source ===
         'address-details'
@@ -795,28 +960,35 @@ export default function LocationPickerScreen() {
         return;
       }
 
-      /*
-       * First-time Cart flow:
-       *
-       * Cart
-       * -> Location Picker
-       * -> Address Details
-       * -> Checkout
-       *
-       *
-       * Checkout edit flow:
-       *
-       * Checkout
-       * -> Location Picker
-       * -> Address Details
-       * -> back to Checkout after Save
-       */
+      if (
+        isRequestAnythingFlow
+      ) {
+        router.replace({
+          pathname:
+            '/address-details',
+
+          params: {
+            flow:
+              'request-anything',
+
+            customRequest,
+
+            pickupAddress,
+
+            source:
+              'request-anything-cart',
+          },
+        });
+
+        return;
+      }
+
       router.replace({
         pathname:
           '/address-details',
 
         params: {
-          storeId,
+          storeId: storeId!,
 
           source:
             source ===
@@ -852,7 +1024,6 @@ export default function LocationPickerScreen() {
         }
       />
 
-      {/* HEADER */}
       <View
         style={[
           styles.header,
@@ -936,7 +1107,6 @@ export default function LocationPickerScreen() {
         </View>
       </View>
 
-      {/* MAP */}
       <View
         style={
           styles.mapStage
@@ -945,7 +1115,10 @@ export default function LocationPickerScreen() {
         <MapView
           ref={mapRef}
           provider={
-            PROVIDER_GOOGLE
+            Platform.OS ===
+            'android'
+              ? PROVIDER_GOOGLE
+              : undefined
           }
           style={
             styles.map
@@ -956,7 +1129,10 @@ export default function LocationPickerScreen() {
           mapType={
             mapType
           }
-          loadingEnabled
+          loadingEnabled={
+            Platform.OS ===
+            'android'
+          }
           pitchEnabled={
             false
           }
@@ -975,10 +1151,8 @@ export default function LocationPickerScreen() {
           toolbarEnabled={
             false
           }
-          onMapReady={() =>
-            setMapReady(
-              true,
-            )
+          onMapReady={
+            handleMapReady
           }
           onPanDrag={() => {
             mapWasDraggedRef.current =
@@ -992,31 +1166,6 @@ export default function LocationPickerScreen() {
           }
         />
 
-        {!mapReady ? (
-          <View
-            pointerEvents="none"
-            style={
-              styles.mapLoadingOverlay
-            }
-          >
-            <ActivityIndicator
-              size="large"
-              color={
-                BRAND_GREEN
-              }
-            />
-
-            <Text
-              style={
-                styles.mapLoadingText
-              }
-            >
-              جاري تحميل الخريطة...
-            </Text>
-          </View>
-        ) : null}
-
-        {/* SEARCH */}
         {searchVisible ? (
           <View
             style={
@@ -1124,7 +1273,6 @@ export default function LocationPickerScreen() {
           </View>
         ) : null}
 
-        {/* PERMISSION */}
         {permissionDenied ? (
           <Pressable
             style={({
@@ -1155,7 +1303,6 @@ export default function LocationPickerScreen() {
           </Pressable>
         ) : null}
 
-        {/* FIXED CENTER PIN */}
         <View
           pointerEvents="none"
           style={
@@ -1215,7 +1362,6 @@ export default function LocationPickerScreen() {
           </View>
         </View>
 
-        {/* MAP CONTROLS */}
         <View
           style={
             styles.mapControls
@@ -1300,7 +1446,6 @@ export default function LocationPickerScreen() {
         </View>
       </View>
 
-      {/* BOTTOM BUTTON */}
       <View
         style={[
           styles.bottomBar,
@@ -1483,43 +1628,20 @@ const styles =
     },
 
     map: {
-      position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 0,
-    },
+      position:
+        'absolute',
 
-    mapLoadingOverlay: {
-      position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    top: 0,
+      bottom:
+        0,
 
-      alignItems:
-        'center',
+      left:
+        0,
 
-      backgroundColor:
-        '#F3F5F4',
+      right:
+        0,
 
-      justifyContent:
-        'center',
-
-      zIndex:
-        15,
-    },
-
-    mapLoadingText: {
-      color:
-        NAVIENTY_NOW_COLORS
-          .textSecondary,
-
-      fontSize:
-        12,
-
-      marginTop:
-        9,
+      top:
+        0,
     },
 
     searchCard: {

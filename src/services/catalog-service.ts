@@ -7,6 +7,7 @@ import { publicSupabase } from '../lib/supabase';
 export type StoreCategorySlug =
   | 'restaurants'
   | 'supermarket'
+  | 'personal-care'
   | 'bookstore'
   | 'bookstores';
 

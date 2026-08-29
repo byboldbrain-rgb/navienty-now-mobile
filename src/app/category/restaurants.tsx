@@ -1,5 +1,8 @@
 import { Image as ExpoImage } from 'expo-image';
-import { useRouter } from 'expo-router';
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
 import {
   useEffect,
   useMemo,
@@ -343,11 +346,11 @@ const CUISINES: CuisineItem[] = [
 ];
 
 const PREVIEW_CUISINE_KEYS = [
-  'grills',
-  'desserts',
-  'sandwiches',
-  'crepes',
   'pizza',
+  'crepes',
+  'grills',
+  'sandwiches',
+  'desserts',
 ];
 
 function getStoreSearchText(
@@ -652,6 +655,48 @@ function BackArrowIcon() {
 export default function RestaurantsScreen() {
   const router = useRouter();
 
+  const params =
+    useLocalSearchParams<{
+      cuisine?:
+        | string
+        | string[];
+    }>();
+
+  const requestedCuisineParam =
+    Array.isArray(
+      params.cuisine,
+    )
+      ? params.cuisine[0]
+      : params.cuisine;
+
+  const requestedCuisineKey =
+    useMemo(() => {
+      const normalizedCuisine =
+        (
+          requestedCuisineParam ??
+          ''
+        )
+          .trim()
+          .toLowerCase();
+
+      if (!normalizedCuisine) {
+        return null;
+      }
+
+      return (
+        CUISINES.find(
+          (cuisine) =>
+            cuisine.key ===
+            normalizedCuisine,
+        )?.key ?? null
+      );
+    }, [
+      requestedCuisineParam,
+    ]);
+
+  const cuisinesPreviewScrollRef =
+    useRef<ScrollView | null>(null);
+
   const savedServiceAreaId =
     useCustomerStore(
       (state) =>
@@ -697,6 +742,31 @@ export default function RestaurantsScreen() {
     errorMessage,
     setErrorMessage,
   ] = useState<string | null>(null);
+
+  /*
+   * Home discovery can deep-link directly into a cuisine:
+   *
+   * /category/restaurants?cuisine=pizza
+   *
+   * The route only seeds the filter when the parameter changes.
+   * After that, the customer can clear or switch cuisines normally
+   * without this effect forcing the original selection back on.
+   */
+  useEffect(() => {
+    if (!requestedCuisineKey) {
+      return;
+    }
+
+    setSelectedCuisineKeys([
+      requestedCuisineKey,
+    ]);
+
+    setDraftCuisineKeys([
+      requestedCuisineKey,
+    ]);
+  }, [
+    requestedCuisineKey,
+  ]);
 
   async function loadRestaurants() {
     try {
@@ -999,11 +1069,22 @@ export default function RestaurantsScreen() {
             contentContainerStyle={
               styles.cuisinesPreviewContent
             }
+            key="restaurants-cuisines-exact-order"
+            ref={
+              cuisinesPreviewScrollRef
+            }
             showsHorizontalScrollIndicator={
               false
             }
             style={
               styles.cuisinesPreview
+            }
+            onContentSizeChange={() =>
+              cuisinesPreviewScrollRef.current?.scrollToEnd(
+                {
+                  animated: false,
+                },
+              )
             }
           >
             {previewCuisines.map(
@@ -1411,13 +1492,7 @@ function ClosedStoreNotice({
               {store?.name ?? 'المطعم'} مغلق حالياً
             </Text>
 
-            <Text
-              style={
-                styles.closedNoticeDescription
-              }
-            >
-              بإمكانك إضافة الأصناف إلى سلتك وتنفيذ الطلب عند توفر المطعم.
-            </Text>
+
           </View>
 
           <View
@@ -2047,69 +2122,71 @@ function CuisinesModal({
                 );
             }}
           >
-            {CUISINES.map(
-              (cuisine) => {
-                const active =
-                  draftCuisineKeys.includes(
-                    cuisine.key,
-                  );
+            {[...CUISINES]
+              .reverse()
+              .map(
+                (cuisine) => {
+                  const active =
+                    draftCuisineKeys.includes(
+                      cuisine.key,
+                    );
 
-                return (
-                  <Pressable
-                    key={
-                      cuisine.key
-                    }
-                    accessibilityRole="button"
-                    style={({
-                      pressed,
-                    }) => [
-                      styles.cuisineGridItem,
-                      pressed &&
-                        styles.pressed,
-                    ]}
-                    onPress={() =>
-                      onToggleCuisine(
-                        cuisine.key,
-                      )
-                    }
-                  >
-                    <View
-                      style={[
-                        styles.cuisineGridImage,
-                        active &&
-                          styles.cuisineGridImageActive,
-                      ]}
-                    >
-                      <Image
-                        accessibilityIgnoresInvertColors
-                        accessibilityLabel={`صورة ${cuisine.label}`}
-                        resizeMode="cover"
-                        source={
-                          cuisine.image
-                        }
-                        style={
-                          styles.cuisineGridPhoto
-                        }
-                      />
-
-                    </View>
-
-                    <Text
-                      numberOfLines={
-                        1
+                  return (
+                    <Pressable
+                      key={
+                        cuisine.key
                       }
-                      style={[
-                        styles.cuisineGridLabel,
-                        active &&
-                          styles.cuisineGridLabelActive,
+                      accessibilityRole="button"
+                      style={({
+                        pressed,
+                      }) => [
+                        styles.cuisineGridItem,
+                        pressed &&
+                          styles.pressed,
                       ]}
+                      onPress={() =>
+                        onToggleCuisine(
+                          cuisine.key,
+                        )
+                      }
                     >
-                      {cuisine.label}
-                    </Text>
-                  </Pressable>
-                );
-              },
-            )}
+                      <View
+                        style={[
+                          styles.cuisineGridImage,
+                          active &&
+                            styles.cuisineGridImageActive,
+                        ]}
+                      >
+                        <Image
+                          accessibilityIgnoresInvertColors
+                          accessibilityLabel={`صورة ${cuisine.label}`}
+                          resizeMode="cover"
+                          source={
+                            cuisine.image
+                          }
+                          style={
+                            styles.cuisineGridPhoto
+                          }
+                        />
+
+                      </View>
+
+                      <Text
+                        numberOfLines={
+                          1
+                        }
+                        style={[
+                          styles.cuisineGridLabel,
+                          active &&
+                            styles.cuisineGridLabelActive,
+                        ]}
+                      >
+                        {cuisine.label}
+                      </Text>
+                    </Pressable>
+                  );
+                },
+              )}
           </ScrollView>
 
           <View
@@ -2262,9 +2339,12 @@ const styles = StyleSheet.create({
 
   cuisinesPreview: {
     backgroundColor: '#FFFFFF',
+    direction: 'ltr',
   },
 
   cuisinesPreviewContent: {
+    direction: 'ltr',
+    flexDirection: 'row-reverse',
     gap: 16,
     paddingBottom: 13,
     paddingHorizontal:
