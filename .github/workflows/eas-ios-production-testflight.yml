@@ -20,7 +20,7 @@ jobs:
     name: Build iOS and upload to TestFlight
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.head_commit.message == 'Start iOS TestFlight build 5'
+      github.event.head_commit.message == 'Start iOS TestFlight build 6'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -87,4 +87,4 @@ jobs:
             --auto-submit \
             --non-interactive \
             --wait \
-            --message "Navienty Now v1.0.0 TestFlight build 5"
+            --message "Navienty Now v1.0.0 TestFlight build 6"
