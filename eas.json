@@ -35,7 +35,9 @@
       "distribution": "internal",
       "environment": "production",
       "env": {
-        "APP_VARIANT": "production"
+        "APP_VARIANT": "production",
+        "PUSH_AUTO_REGISTER": "false",
+        "ALLOW_ANDROID_BUILD_WITHOUT_GOOGLE_SERVICES": "true"
       },
       "android": {
         "buildType": "apk"
