@@ -30,6 +30,7 @@ import {
 } from '../../services/catalog-service';
 import { useCustomerStore } from '../../store/customer-store';
 import BookstoreScreen from './bookstore';
+import LaundryScreen from './laundry';
 import RestaurantsScreen from './restaurants';
 
 type BootstrapCategory =
@@ -44,6 +45,13 @@ const BOOKSTORE_ALIASES = new Set([
   'stationery',
 ]);
 
+const LAUNDRY_ALIASES = new Set([
+  'laundry',
+  'laundry-ironing',
+  'wash-and-iron',
+  'washing-ironing',
+]);
+
 export default function CategoryRouteScreen() {
   const params = useLocalSearchParams<{
     id?: string | string[];
@@ -53,12 +61,28 @@ export default function CategoryRouteScreen() {
     ? params.id[0]
     : params.id;
 
-  if (rawId === 'restaurants') {
+  const normalizedId = (rawId ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-');
+
+  if (normalizedId === 'restaurants') {
     return <RestaurantsScreen />;
   }
 
-  if (rawId && BOOKSTORE_ALIASES.has(rawId)) {
+  if (
+    normalizedId &&
+    BOOKSTORE_ALIASES.has(normalizedId)
+  ) {
     return <BookstoreScreen />;
+  }
+
+  if (
+    normalizedId &&
+    LAUNDRY_ALIASES.has(normalizedId)
+  ) {
+    return <LaundryScreen />;
   }
 
   return (
