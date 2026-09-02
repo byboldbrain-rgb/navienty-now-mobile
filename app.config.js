@@ -17,6 +17,10 @@ const pushAutoRegister =
   process.env.PUSH_AUTO_REGISTER?.trim().toLowerCase() !==
   'false';
 
+const allowAndroidBuildWithoutGoogleServices =
+  process.env.ALLOW_ANDROID_BUILD_WITHOUT_GOOGLE_SERVICES?.trim().toLowerCase() ===
+  'true';
+
 module.exports = ({ config }) => {
   const existingPlugins = Array.isArray(config.plugins)
     ? config.plugins.filter((plugin) => {
@@ -70,10 +74,11 @@ module.exports = ({ config }) => {
   if (
     process.env.EAS_BUILD === 'true' &&
     process.env.EAS_BUILD_PLATFORM === 'android' &&
-    !googleServicesFile
+    !googleServicesFile &&
+    !allowAndroidBuildWithoutGoogleServices
   ) {
     throw new Error(
-      'GOOGLE_SERVICES_JSON must be configured as an EAS secret file for Android builds.',
+      'GOOGLE_SERVICES_JSON must be configured as an EAS secret file for Android production builds.',
     );
   }
 
