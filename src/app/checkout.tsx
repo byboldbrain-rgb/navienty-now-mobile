@@ -1895,7 +1895,13 @@ function StoreCheckoutScreen() {
       }
     >
       <View
-        style={styles.header}
+        style={[
+          styles.header,
+          Platform.OS === 'android' && {
+            paddingTop:
+              Math.max(insets.top, 24) + 10,
+          },
+        ]}
       >
           <Pressable
             style={({
@@ -1921,9 +1927,13 @@ function StoreCheckoutScreen() {
 
       <ScrollView
         style={styles.mainScrollView}
-        contentContainerStyle={
-          styles.pageContent
-        }
+        contentContainerStyle={[
+          styles.pageContent,
+          Platform.OS === 'android' && {
+            paddingBottom:
+              114 + Math.max(insets.bottom, 0),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={
           false

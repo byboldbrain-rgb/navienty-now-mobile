@@ -3532,7 +3532,15 @@ function StoreCartScreen() {
 
       {/* STICKY HEADER */}
 
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          Platform.OS === 'android' && {
+            paddingTop:
+              Math.max(insets.top, 24) + 10,
+          },
+        ]}
+      >
         <Pressable
           style={({ pressed }) => [
             styles.backButton,

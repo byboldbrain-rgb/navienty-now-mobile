@@ -13,12 +13,14 @@ import {
   ImageBackground,
   LayoutChangeEvent,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
@@ -114,6 +116,7 @@ function BackArrowIcon() {
 
 export default function StoreScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -809,7 +812,17 @@ export default function StoreScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.topHeader}>
+      <View
+        style={[
+          styles.topHeader,
+          Platform.OS === 'android' && {
+            minHeight:
+              Math.max(insets.top, 24) + 76,
+            paddingTop:
+              Math.max(insets.top, 24) + 10,
+          },
+        ]}
+      >
         <Pressable
           accessibilityLabel="العودة"
           accessibilityRole="button"
@@ -831,6 +844,12 @@ export default function StoreScreen() {
 
           cartItemCount > 0 &&
             styles.pageContentWithBottomBar,
+
+          cartItemCount > 0 &&
+            Platform.OS === 'android' && {
+              paddingBottom:
+                140 + Math.max(insets.bottom, 0),
+            },
         ]}
         showsVerticalScrollIndicator={
           false
@@ -1484,9 +1503,13 @@ export default function StoreScreen() {
                 showsVerticalScrollIndicator={
                   false
                 }
-                contentContainerStyle={
-                  styles.productModalScrollContent
-                }
+                contentContainerStyle={[
+                  styles.productModalScrollContent,
+                  Platform.OS === 'android' && {
+                    paddingBottom:
+                      170 + Math.max(insets.bottom, 0),
+                  },
+                ]}
               >
                 <View
                   style={
@@ -1544,6 +1567,11 @@ export default function StoreScreen() {
                       pressed,
                     }) => [
                       styles.productModalCloseButton,
+
+                      Platform.OS === 'android' && {
+                        top:
+                          Math.max(insets.top, 24) + 12,
+                      },
 
                       pressed &&
                         styles.topCircleButtonPressed,
@@ -1719,9 +1747,13 @@ export default function StoreScreen() {
               </ScrollView>
 
               <View
-                style={
-                  styles.productModalBottomBar
-                }
+                style={[
+                  styles.productModalBottomBar,
+                  Platform.OS === 'android' && {
+                    paddingBottom:
+                      Math.max(insets.bottom, 8) + 12,
+                  },
+                ]}
               >
                 {!selectedVariant && (
                   <Text
@@ -1857,9 +1889,13 @@ export default function StoreScreen() {
 
       {cartItemCount > 0 ? (
         <View
-          style={
-            styles.cartBarWrapper
-          }
+          style={[
+            styles.cartBarWrapper,
+            Platform.OS === 'android' && {
+              paddingBottom:
+                Math.max(insets.bottom, 8) + 12,
+            },
+          ]}
         >
           <Pressable
             style={({ pressed }) => [

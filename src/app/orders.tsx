@@ -12,6 +12,7 @@ import {
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +20,7 @@ import {
   View,
   type ImageSourcePropType,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
 import { useAuthSession } from '../hooks/use-auth-session';
@@ -1032,6 +1034,9 @@ export default function OrdersScreen() {
   const router =
     useRouter();
 
+  const insets =
+    useSafeAreaInsets();
+
   const authState =
     useAuthSession();
 
@@ -1386,9 +1391,17 @@ export default function OrdersScreen() {
       }
     >
       <ScrollView
-        contentContainerStyle={
-          styles.pageContent
-        }
+        contentContainerStyle={[
+          styles.pageContent,
+          Platform.OS === 'android' && {
+            paddingTop:
+              Math.max(insets.top, 24) + 12,
+            paddingBottom:
+              NAVIENTY_NOW_LAYOUT.bottomNavigationHeight +
+              44 +
+              Math.max(insets.bottom, 0),
+          },
+        ]}
         showsVerticalScrollIndicator={
           false
         }

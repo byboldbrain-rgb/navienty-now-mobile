@@ -8,12 +8,14 @@ import {
 } from 'react';
 import {
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StoreListScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
@@ -135,6 +137,7 @@ function GenericCategoryScreen({
   categorySlug: string;
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -268,7 +271,15 @@ function GenericCategoryScreen({
 
   return (
     <ScrollView
-      contentContainerStyle={styles.pageContent}
+      contentContainerStyle={[
+        styles.pageContent,
+        Platform.OS === 'android' && {
+          paddingTop:
+            Math.max(insets.top, 24) + 18,
+          paddingBottom:
+            42 + Math.max(insets.bottom, 0),
+        },
+      ]}
       showsVerticalScrollIndicator={false}
       style={styles.screen}
     >

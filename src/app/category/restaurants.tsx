@@ -654,6 +654,7 @@ function BackArrowIcon() {
 
 export default function RestaurantsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const params =
     useLocalSearchParams<{
@@ -1038,7 +1039,17 @@ export default function RestaurantsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.topHeader}>
+      <View
+        style={[
+          styles.topHeader,
+          Platform.OS === 'android' && {
+            minHeight:
+              Math.max(insets.top, 24) + 76,
+            paddingTop:
+              Math.max(insets.top, 24) + 10,
+          },
+        ]}
+      >
         <Pressable
           accessibilityLabel="العودة"
           accessibilityRole="button"

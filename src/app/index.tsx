@@ -6443,6 +6443,18 @@ export default function HomeScreen() {
     }
 
     if (
+      normalizedSlug === 'laundry' ||
+      normalizedSlug === 'laundry-ironing' ||
+      normalizedSlug === 'wash-and-iron' ||
+      normalizedSlug === 'washing-ironing'
+    ) {
+      router.push(
+        '/category/laundry',
+      );
+      return;
+    }
+
+    if (
       normalizedSlug === 'request-anything' ||
       normalizedSlug === 'anything' ||
       normalizedSlug === 'other' ||
