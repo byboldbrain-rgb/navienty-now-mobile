@@ -38,6 +38,11 @@
       ]
     },
 
+    "androidNavigationBar": {
+      "backgroundColor": "#FFFFFF",
+      "barStyle": "dark-content"
+    },
+
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
