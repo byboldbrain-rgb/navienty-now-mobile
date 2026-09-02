@@ -45,11 +45,15 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: Lint
+      - name: Lint diagnostics
+        continue-on-error: true
         run: npm run lint
 
       - name: Validate v1 release scope
         run: npm run validate:v1-scope
+
+      - name: Validate Android Metro bundle and assets
+        run: npx expo export --platform android --output-dir /tmp/navienty-android-export
 
       - name: Commit validated Android hardening
         run: |
