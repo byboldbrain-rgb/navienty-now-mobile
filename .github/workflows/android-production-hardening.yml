@@ -1,0 +1,65 @@
+name: Android production hardening
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  harden-and-validate:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      contains(github.event.head_commit.message, 'run android production hardening')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Android hardening branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/android-production-hardening
+          fetch-depth: 0
+
+      - name: Apply guarded Android patches
+        run: python3 scripts/apply-android-production-hardening.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Validate Expo configuration
+        run: npx expo config --type public > /tmp/navienty-expo-config.json
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Validate v1 release scope
+        run: npm run validate:v1-scope
+
+      - name: Commit validated Android hardening
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/index.tsx src/app/category/'[id].tsx' src/app/category/restaurants.tsx src/app/store/'[id].tsx' src/app/cart.tsx src/app/checkout.tsx src/app/orders.tsx
+          git commit -m "fix(android): production hardening pass"
+          git push origin HEAD:codex/android-production-hardening
