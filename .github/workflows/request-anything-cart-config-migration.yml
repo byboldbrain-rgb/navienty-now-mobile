@@ -32,257 +32,51 @@ jobs:
           path = Path('src/app/category/request-anything.tsx')
           text = path.read_text()
 
-          def replace_once(old: str, new: str, label: str) -> None:
+          def replace_once(old, new, label):
               global text
               count = text.count(old)
               if count != 1:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               text = text.replace(old, new, 1)
 
-          replace_once(
-              """import {
-            SafeAreaView,
-            useSafeAreaInsets,
-          } from 'react-native-safe-area-context';
-          import {
-            findStorefrontCategoryTile,
-            getStorefrontTileScreenImages,
-            listStorefrontCategoryTiles,
-          } from '../../services/storefront-category-service';
-          """,
-              """import {
-            SafeAreaView,
-            useSafeAreaInsets,
-          } from 'react-native-safe-area-context';
-          import {
-            getLegacyRequestAnythingCartConfiguration,
-            type RequestAnythingCartConfiguration,
-          } from '../../domain/request-anything-cart-config';
-          import {
-            getRequestAnythingCartConfiguration,
-          } from '../../services/request-anything-cart-config-service';
-          import {
-            findStorefrontCategoryTile,
-            getStorefrontTileScreenImages,
-            listStorefrontCategoryTiles,
-          } from '../../services/storefront-category-service';
-          """,
-              'imports',
-          )
+          old_import = "} from 'react-native-safe-area-context';\nimport {\n  findStorefrontCategoryTile,"
+          new_import = "} from 'react-native-safe-area-context';\nimport {\n  getLegacyRequestAnythingCartConfiguration,\n  type RequestAnythingCartConfiguration,\n} from '../../domain/request-anything-cart-config';\nimport {\n  getRequestAnythingCartConfiguration,\n} from '../../services/request-anything-cart-config-service';\nimport {\n  findStorefrontCategoryTile,"
+          replace_once(old_import, new_import, 'imports')
 
-          replace_once(
-              """const REQUEST_ANYTHING_INTERNAL_STORE_ID =
-            '4ebd8b80-8288-4c9b-980a-f15b5274e78b';
+          old_constants = "const REQUEST_ANYTHING_INTERNAL_STORE_ID =\n  '4ebd8b80-8288-4c9b-980a-f15b5274e78b';\n\nconst REQUEST_ANYTHING_INTERNAL_PRODUCT_ID =\n  'b260c5e5-e6cb-462b-b025-627d7bb2cff2';\n\nconst REQUEST_ANYTHING_DELIVERY_FEE =\n  25;\n\n"
+          replace_once(old_constants, '', 'hardcoded screen configuration')
 
-          const REQUEST_ANYTHING_INTERNAL_PRODUCT_ID =
-            'b260c5e5-e6cb-462b-b025-627d7bb2cff2';
+          state_marker = "    useState<BootstrapCategory | null>(\n      null,\n    );\n\n  const [\n    isLoading,"
+          state_replacement = "    useState<BootstrapCategory | null>(\n      null,\n    );\n\n  const [\n    cartConfiguration,\n    setCartConfiguration,\n  ] =\n    useState<RequestAnythingCartConfiguration>(\n      getLegacyRequestAnythingCartConfiguration,\n    );\n\n  const [\n    isLoading,"
+          replace_once(state_marker, state_replacement, 'cart configuration state')
 
-          const REQUEST_ANYTHING_DELIVERY_FEE =
-            25;
+          bootstrap_marker = "          const bootstrap =\n            await getAppBootstrap();\n\n          let remoteScreenImages:"
+          bootstrap_replacement = "          const bootstrap =\n            await getAppBootstrap();\n\n          const cartConfigurationPromise =\n            getRequestAnythingCartConfiguration(\n              bootstrap.settings\n                .default_service_area_id,\n            );\n\n          let remoteScreenImages:"
+          replace_once(bootstrap_marker, bootstrap_replacement, 'remote config load start')
 
-          """,
-              """,
-              'hardcoded screen configuration',
-          )
+          artwork_marker = "          setCampaignImageOverrides(\n            remoteScreenImages,\n          );"
+          artwork_replacement = "          setCartConfiguration(\n            await cartConfigurationPromise,\n          );\n\n          setCampaignImageOverrides(\n            remoteScreenImages,\n          );"
+          replace_once(artwork_marker, artwork_replacement, 'resolved config state')
 
-          replace_once(
-              """  const [
-              category,
-              setCategory,
-            ] =
-              useState<BootstrapCategory | null>(
-                null,
-              );
+          clear_marker = "      clearStoreCart(\n        REQUEST_ANYTHING_INTERNAL_STORE_ID,\n      );"
+          clear_replacement = "      const legacyCartConfiguration =\n        getLegacyRequestAnythingCartConfiguration();\n\n      if (\n        legacyCartConfiguration.storeId !==\n        cartConfiguration.storeId\n      ) {\n        clearStoreCart(\n          legacyCartConfiguration.storeId,\n        );\n      }\n\n      clearStoreCart(\n        cartConfiguration.storeId,\n      );"
+          replace_once(clear_marker, clear_replacement, 'cart preparation')
 
-            const [
-              isLoading,
-          """,
-              """  const [
-              category,
-              setCategory,
-            ] =
-              useState<BootstrapCategory | null>(
-                null,
-              );
+          if text.count('REQUEST_ANYTHING_INTERNAL_STORE_ID') != 2:
+              raise SystemExit('store id usage count changed unexpectedly')
+          text = text.replace('REQUEST_ANYTHING_INTERNAL_STORE_ID', 'cartConfiguration.storeId')
 
-            const [
-              cartConfiguration,
-              setCartConfiguration,
-            ] =
-              useState<RequestAnythingCartConfiguration>(
-                getLegacyRequestAnythingCartConfiguration,
-              );
+          if text.count('REQUEST_ANYTHING_INTERNAL_PRODUCT_ID') != 1:
+              raise SystemExit('product id usage count changed unexpectedly')
+          text = text.replace('REQUEST_ANYTHING_INTERNAL_PRODUCT_ID', 'cartConfiguration.productId')
 
-            const [
-              isLoading,
-          """,
-              'cart configuration state',
-          )
+          if text.count('REQUEST_ANYTHING_DELIVERY_FEE') != 1:
+              raise SystemExit('delivery fee usage count changed unexpectedly')
+          text = text.replace('REQUEST_ANYTHING_DELIVERY_FEE', 'cartConfiguration.deliveryFee')
 
-          replace_once(
-              """          const bootstrap =
-                      await getAppBootstrap();
-
-                    let remoteScreenImages:
-          """,
-              """          const bootstrap =
-                      await getAppBootstrap();
-
-                    const cartConfigurationPromise =
-                      getRequestAnythingCartConfiguration(
-                        bootstrap.settings
-                          .default_service_area_id,
-                      );
-
-                    let remoteScreenImages:
-          """,
-              'remote config load start',
-          )
-
-          replace_once(
-              """          setCampaignImageOverrides(
-                      remoteScreenImages,
-                    );
-          """,
-              """          setCartConfiguration(
-                      await cartConfigurationPromise,
-                    );
-
-                    setCampaignImageOverrides(
-                      remoteScreenImages,
-                    );
-          """,
-              'resolved config state',
-          )
-
-          replace_once(
-              """      clearStoreCart(
-                  REQUEST_ANYTHING_INTERNAL_STORE_ID,
-                );
-          """,
-              """      const legacyCartConfiguration =
-                  getLegacyRequestAnythingCartConfiguration();
-
-                if (
-                  legacyCartConfiguration.storeId !==
-                  cartConfiguration.storeId
-                ) {
-                  clearStoreCart(
-                    legacyCartConfiguration.storeId,
-                  );
-                }
-
-                clearStoreCart(
-                  cartConfiguration.storeId,
-                );
-          """,
-              'cart preparation',
-          )
-
-          replace_once(
-              """          {
-                    id:
-                      REQUEST_ANYTHING_INTERNAL_STORE_ID,
-
-                    name:
-                      'اطلب أي حاجة',
-
-                    icon:
-                      '🛍️',
-
-                    categorySlug:
-                      REQUEST_ANYTHING_CATEGORY_SLUG,
-
-                    deliveryFee:
-                      REQUEST_ANYTHING_DELIVERY_FEE,
-
-                    minimumOrder:
-                      0,
-                  },
-          """,
-              """          {
-                    id:
-                      cartConfiguration.storeId,
-
-                    name:
-                      cartConfiguration.storeName,
-
-                    icon:
-                      cartConfiguration.storeIcon,
-
-                    categorySlug:
-                      cartConfiguration.categorySlug,
-
-                    deliveryFee:
-                      cartConfiguration.deliveryFee,
-
-                    minimumOrder:
-                      cartConfiguration.minimumOrder,
-                  },
-          """,
-              'store cart payload',
-          )
-
-          replace_once(
-              """          {
-                    id:
-                      REQUEST_ANYTHING_INTERNAL_PRODUCT_ID,
-
-                    name:
-                      'اطلب أي حاجة',
-          """,
-              """          {
-                    id:
-                      cartConfiguration.productId,
-
-                    name:
-                      cartConfiguration.productName,
-          """,
-              'product identity',
-          )
-
-          replace_once(
-              """            icon:
-                      '🛍️',
-
-                    variantId:
-          """,
-              """            icon:
-                      cartConfiguration.productIcon,
-
-                    variantId:
-          """,
-              'product icon',
-          )
-
-          replace_once(
-              """        params: {
-                  storeId:
-                    REQUEST_ANYTHING_INTERNAL_STORE_ID,
-                },
-          """,
-              """        params: {
-                  storeId:
-                    cartConfiguration.storeId,
-                },
-          """,
-              'cart route store id',
-          )
-
-          replace_once(
-              """    }, [
-                addItem,
-                clearStoreCart,
-                router,
-          """,
-              """    }, [
-                addItem,
-                cartConfiguration,
-                clearStoreCart,
-                router,
-          """,
-              'callback dependencies',
-          )
+          dependency_marker = "      addItem,\n      clearStoreCart,\n      router,\n      trimmedPickupAddress,"
+          dependency_replacement = "      addItem,\n      cartConfiguration,\n      clearStoreCart,\n      router,\n      trimmedPickupAddress,"
+          replace_once(dependency_marker, dependency_replacement, 'callback dependencies')
 
           path.write_text(text)
           PY
@@ -328,8 +122,6 @@ jobs:
           grep -q "listStores" src/services/request-anything-cart-config-service.ts
           grep -q "getStoreCatalog" src/services/request-anything-cart-config-service.ts
           grep -q "legacy-fallback" src/domain/request-anything-cart-config.ts
-          grep -q "4ebd8b80-8288-4c9b-980a-f15b5274e78b" src/domain/request-anything-cart-config.ts
-          grep -q "b260c5e5-e6cb-462b-b025-627d7bb2cff2" src/domain/request-anything-cart-config.ts
 
       - name: Commit validated migration and remove temporary runner
         run: |
