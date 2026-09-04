@@ -25,6 +25,9 @@ import {
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  useExpirationStatus,
+} from '../hooks/use-expiration-status';
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
@@ -704,18 +707,10 @@ function StoreCheckoutScreen() {
         SPIN_UNLOCK_SUBTOTAL_FALLBACK
       );
 
-  const spinExpirationTime =
-    checkoutSpin?.expiresAt
-      ? Date.parse(
-          checkoutSpin.expiresAt,
-        )
-      : NaN;
-
   const spinHasExpired =
-    Number.isFinite(
-      spinExpirationTime,
-    ) &&
-    spinExpirationTime <= Date.now();
+    useExpirationStatus(
+      checkoutSpin?.expiresAt ?? null,
+    );
 
   const nextOrderMinimum =
     Math.max(

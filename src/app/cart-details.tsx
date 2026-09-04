@@ -27,6 +27,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+    useExpirationStatus,
+} from '../hooks/use-expiration-status';
+
 import Svg, {
     Circle,
     Defs,
@@ -1660,8 +1664,9 @@ function StoreCartScreen() {
     spinSession.storeId !== storeId;
 
   const spinRewardExpired =
-    !!spinSession?.expiresAt &&
-    spinSession.expiresAt <= Date.now();
+    useExpirationStatus(
+      spinSession?.expiresAt ?? null,
+    );
 
   const nextOrderMinimum =
     Math.max(
