@@ -95,7 +95,7 @@ function CategoryArtwork({
         <ExpoImage
           accessibilityIgnoresInvertColors
           accessibilityLabel={
-            `?????? ??? ${category.name_ar}`
+            `أيقونة قسم ${category.name_ar}`
           }
           cachePolicy="memory-disk"
           contentFit="contain"
@@ -112,7 +112,7 @@ function CategoryArtwork({
         <Image
           accessibilityIgnoresInvertColors
           accessibilityLabel={
-            `?????? ??? ${category.name_ar}`
+            `أيقونة قسم ${category.name_ar}`
           }
           resizeMode="contain"
           source={localImageSource}
@@ -121,7 +121,7 @@ function CategoryArtwork({
       ) : (
         <Ionicons
           accessibilityLabel={
-            `?????? ??? ${category.name_ar}`
+            `أيقونة قسم ${category.name_ar}`
           }
           color={
             NAVIENTY_NOW_COLORS.primaryDark
