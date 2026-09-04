@@ -49,11 +49,20 @@ function toFiniteNumber(
     : fallback;
 }
 
-function roundCurrency(
-  value: number,
+/**
+ * PostgreSQL round(numeric, 2) rounds half values away from zero. Payment
+ * fees are non-negative, so calculating cents first avoids the common JS
+ * 4.975 -> 4.97 binary floating-point edge and matches the server result.
+ */
+function calculatePercentageFee(
+  subtotal: number,
+  percentage: number,
 ): number {
+  const rawCents =
+    subtotal * percentage;
+
   return Math.round(
-    (value + Number.EPSILON) * 100,
+    rawCents + 1e-9,
   ) / 100;
 }
 
@@ -97,14 +106,13 @@ export function calculatePaymentProcessingFee(
       break;
 
     case 'percentage':
-      fee = roundCurrency(
-        normalizedSubtotal *
-          toFiniteNumber(
-            configuration
-              .processing_fee_percentage,
-            0,
-          ) /
-          100,
+      fee = calculatePercentageFee(
+        normalizedSubtotal,
+        toFiniteNumber(
+          configuration
+            .processing_fee_percentage,
+          0,
+        ),
       );
       break;
 
