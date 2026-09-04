@@ -978,12 +978,13 @@ function RecentlyViewedCard({
         }
       >
         {canShowImage ? (
-          <Image
+          <ExpoImage
+            cachePolicy="memory-disk"
             accessibilityIgnoresInvertColors
             accessibilityLabel={
               `شعار ${item.title}`
             }
-            resizeMode={
+            contentFit={
               logoUrl
                 ? 'contain'
                 : 'cover'
@@ -997,6 +998,7 @@ function RecentlyViewedCard({
             onError={() => {
               setImageFailed(true);
             }}
+          transition={0}
           />
         ) : (
           <Text
@@ -1185,12 +1187,13 @@ function ForYouCard({
         }
       >
         {canShowImage ? (
-          <Image
+          <ExpoImage
+            cachePolicy="memory-disk"
             accessibilityIgnoresInvertColors
             accessibilityLabel={
               `صورة ${result.title}`
             }
-            resizeMode="contain"
+            contentFit="contain"
             source={{
               uri: imageUrl,
             }}
@@ -1200,6 +1203,7 @@ function ForYouCard({
             onError={() => {
               setImageFailed(true);
             }}
+          transition={0}
           />
         ) : (
           <Text
@@ -1639,12 +1643,13 @@ function RecentOrderArtwork({
       }
     >
       {canShowRemoteImage ? (
-        <Image
+        <ExpoImage
+          cachePolicy="memory-disk"
           accessibilityIgnoresInvertColors
           accessibilityLabel={
             `شعار ${order.storeName}`
           }
-          resizeMode={
+          contentFit={
             logoUrl
               ? 'contain'
               : 'cover'
@@ -1658,6 +1663,7 @@ function RecentOrderArtwork({
           onError={() => {
             setImageFailed(true);
           }}
+        transition={0}
         />
       ) : localImageSource ? (
         <Image

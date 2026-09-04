@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import {
     Fragment,
     useEffect,
@@ -418,12 +419,13 @@ function ActiveOrderStoreArtwork({
       }
     >
       {canShowRemoteImage ? (
-        <Image
+        <ExpoImage
+          cachePolicy="memory-disk"
           accessibilityIgnoresInvertColors
           accessibilityLabel={
             `صورة ${order.storeName}`
           }
-          resizeMode={
+          contentFit={
             logoUrl
               ? 'contain'
               : 'cover'
@@ -440,6 +442,7 @@ function ActiveOrderStoreArtwork({
               true,
             );
           }}
+        transition={0}
         />
       ) : localImageSource ? (
         <Image
