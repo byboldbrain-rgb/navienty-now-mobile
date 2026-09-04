@@ -29,6 +29,7 @@ import PushNotificationsBridge from '../components/push-notifications-bridge';
 import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
+import getAppBootstrap from '../services/bootstrap-service';
 import {
   getAppLaunchGate,
   type AppLaunchGateResult,
@@ -652,6 +653,28 @@ export default function RootLayout() {
 
   const launchGateStatus =
     launchGate?.status ?? null;
+
+  useEffect(() => {
+    if (launchGateStatus !== 'allowed') {
+      return;
+    }
+
+    /*
+     * Once maintenance/min-version checks have explicitly allowed the app,
+     * start the public Home bootstrap while any remaining auth/storage work is
+     * still resolving. getAppBootstrap() already provides in-flight de-duping
+     * and a short memory cache, so Home later reuses this request/result instead
+     * of serializing another network round-trip after the Stack mounts.
+     */
+    void getAppBootstrap().catch((error) => {
+      if (__DEV__) {
+        console.warn(
+          'Unable to prefetch Home bootstrap during startup.',
+          error,
+        );
+      }
+    });
+  }, [launchGateStatus]);
 
   const startupHasResolved =
     storageBootstrapFinished &&
