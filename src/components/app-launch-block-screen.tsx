@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
   Linking,
@@ -18,6 +19,11 @@ import {
 
 type AppLaunchBlockScreenProps = {
   gate: AppLaunchGateResult;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+};
+
+type OfflineErrorScreenProps = {
   isRefreshing: boolean;
   onRefresh: () => void;
 };
@@ -85,11 +91,86 @@ function getWhatsappUrl(
   return `https://wa.me/${digits}`;
 }
 
+function OfflineErrorScreen({
+  isRefreshing,
+  onRefresh,
+}: OfflineErrorScreenProps) {
+  return (
+    <View style={styles.offlineScreen}>
+      <StatusBar style="light" />
+
+      <View style={styles.offlineCard}>
+        <View style={styles.offlineIconWrap}>
+          <Ionicons
+            name="close"
+            size={48}
+            color={NAVIENTY_NOW_COLORS.primary}
+          />
+        </View>
+
+        <View style={styles.offlineCardBody}>
+          <Text style={styles.offlineTitle}>
+            مفيش إنترنت
+          </Text>
+
+          <Text style={styles.offlineMessage}>
+            واضح إن النت فاصل. اتأكد إنك متصل بالإنترنت وحاول تاني.
+          </Text>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="حاول تاني"
+          disabled={isRefreshing}
+          style={({ pressed }) => [
+            styles.offlineRetryButton,
+            pressed &&
+              !isRefreshing &&
+              styles.offlineRetryButtonPressed,
+            isRefreshing &&
+              styles.offlineRetryButtonDisabled,
+          ]}
+          onPress={onRefresh}
+        >
+          {isRefreshing ? (
+            <>
+              <ActivityIndicator
+                size="small"
+                color={NAVIENTY_NOW_COLORS.white}
+              />
+              <Text
+                style={styles.offlineRetryButtonText}
+              >
+                بنحاول تاني...
+              </Text>
+            </>
+          ) : (
+            <Text
+              style={styles.offlineRetryButtonText}
+            >
+              حاول تاني
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function AppLaunchBlockScreen({
   gate,
   isRefreshing,
   onRefresh,
 }: AppLaunchBlockScreenProps) {
+  if (gate.status === 'error') {
+    return (
+      <OfflineErrorScreen
+        isRefreshing={isRefreshing}
+        onRefresh={onRefresh}
+      />
+    );
+  }
+
   const presentation =
     getPresentation(gate.status);
 
@@ -273,6 +354,116 @@ export default function AppLaunchBlockScreen({
 }
 
 const styles = StyleSheet.create({
+  offlineScreen: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryDark,
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 34,
+  },
+
+  offlineCard: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+    borderRadius: 28,
+    maxWidth: 430,
+    paddingTop: 1,
+    shadowColor:
+      NAVIENTY_NOW_COLORS.black,
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
+    width: '100%',
+    elevation: 10,
+  },
+
+  offlineIconWrap: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+    borderColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+    borderRadius: 48,
+    borderWidth: 2,
+    height: 96,
+    justifyContent: 'center',
+    marginTop: -49,
+    shadowColor:
+      NAVIENTY_NOW_COLORS.black,
+    shadowOffset: {
+      width: 0,
+      height: 7,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    width: 96,
+    elevation: 8,
+  },
+
+  offlineCardBody: {
+    alignItems: 'center',
+    paddingBottom: 32,
+    paddingHorizontal: 28,
+    paddingTop: 36,
+  },
+
+  offlineTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.6,
+    lineHeight: 37,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  offlineMessage: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 17,
+    fontWeight: '500',
+    lineHeight: 28,
+    marginTop: 12,
+    maxWidth: 330,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  offlineRetryButton: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    flexDirection: 'row',
+    gap: 9,
+    justifyContent: 'center',
+    minHeight: 70,
+    paddingHorizontal: 24,
+  },
+
+  offlineRetryButtonPressed: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPressed,
+  },
+
+  offlineRetryButtonDisabled: {
+    opacity: 0.72,
+  },
+
+  offlineRetryButtonText: {
+    color: NAVIENTY_NOW_COLORS.white,
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
   screen: {
     alignItems: 'center',
     backgroundColor:
