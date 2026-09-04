@@ -449,7 +449,7 @@ export default function NotificationSettingsScreen() {
                 العروض والمزايا
               </Text>
               <Text style={styles.sectionDescription}>
-                العروض مقفولة افتراضيًا. مش هنبعتلك رسائل تسويقية إلا لو اخترت تفعيلها بنفسك.
+                كل أنواع الإشعارات مفعلة افتراضيًا، وتقدر تقفل أي نوع في أي وقت.
               </Text>
             </View>
 
