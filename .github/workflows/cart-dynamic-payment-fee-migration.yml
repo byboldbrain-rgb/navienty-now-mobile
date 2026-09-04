@@ -1,0 +1,70 @@
+name: Cart dynamic payment fee migration
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+    paths:
+      - scripts/apply-cart-dynamic-payment-fee.py
+      - .github/workflows/cart-dynamic-payment-fee-migration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-validate-and-cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/android-production-hardening
+          fetch-depth: 0
+
+      - name: Apply guarded Cart migration
+        run: python3 scripts/apply-cart-dynamic-payment-fee.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Payment fee tests
+        run: node --test tests/payment-method.test.mjs
+
+      - name: Full test suite
+        run: npm test
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint -- --quiet
+
+      - name: Diff validation
+        run: git diff --check
+
+      - name: Verify intended Cart migration
+        run: |
+          grep -q "calculatePaymentProcessingFee" src/app/cart-details.tsx
+          grep -q "LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK" src/app/cart-details.tsx
+          if grep -q "const FIXED_PAYMENT_PROCESSING_FEE = 10;" src/app/cart-details.tsx; then
+            echo "Legacy hardcoded Cart fee is still active."
+            exit 1
+          fi
+
+      - name: Commit validated migration and remove temporary runner
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/cart-details.tsx
+          git rm scripts/apply-cart-dynamic-payment-fee.py
+          git rm .github/workflows/cart-dynamic-payment-fee-migration.yml
+          git commit -m "Migrate cart payment fee to Supabase"
+          git push origin HEAD:codex/android-production-hardening
