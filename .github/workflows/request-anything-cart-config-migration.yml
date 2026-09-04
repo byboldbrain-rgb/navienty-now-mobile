@@ -1,0 +1,363 @@
+name: Request Anything cart config migration
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+
+permissions:
+  contents: write
+
+concurrency:
+  group: request-anything-cart-config-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate-validate-and-cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/android-production-hardening
+          fetch-depth: 0
+
+      - name: Apply guarded Request Anything screen migration
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('src/app/category/request-anything.tsx')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str, label: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              """import {
+            SafeAreaView,
+            useSafeAreaInsets,
+          } from 'react-native-safe-area-context';
+          import {
+            findStorefrontCategoryTile,
+            getStorefrontTileScreenImages,
+            listStorefrontCategoryTiles,
+          } from '../../services/storefront-category-service';
+          """,
+              """import {
+            SafeAreaView,
+            useSafeAreaInsets,
+          } from 'react-native-safe-area-context';
+          import {
+            getLegacyRequestAnythingCartConfiguration,
+            type RequestAnythingCartConfiguration,
+          } from '../../domain/request-anything-cart-config';
+          import {
+            getRequestAnythingCartConfiguration,
+          } from '../../services/request-anything-cart-config-service';
+          import {
+            findStorefrontCategoryTile,
+            getStorefrontTileScreenImages,
+            listStorefrontCategoryTiles,
+          } from '../../services/storefront-category-service';
+          """,
+              'imports',
+          )
+
+          replace_once(
+              """const REQUEST_ANYTHING_INTERNAL_STORE_ID =
+            '4ebd8b80-8288-4c9b-980a-f15b5274e78b';
+
+          const REQUEST_ANYTHING_INTERNAL_PRODUCT_ID =
+            'b260c5e5-e6cb-462b-b025-627d7bb2cff2';
+
+          const REQUEST_ANYTHING_DELIVERY_FEE =
+            25;
+
+          """,
+              """,
+              'hardcoded screen configuration',
+          )
+
+          replace_once(
+              """  const [
+              category,
+              setCategory,
+            ] =
+              useState<BootstrapCategory | null>(
+                null,
+              );
+
+            const [
+              isLoading,
+          """,
+              """  const [
+              category,
+              setCategory,
+            ] =
+              useState<BootstrapCategory | null>(
+                null,
+              );
+
+            const [
+              cartConfiguration,
+              setCartConfiguration,
+            ] =
+              useState<RequestAnythingCartConfiguration>(
+                getLegacyRequestAnythingCartConfiguration,
+              );
+
+            const [
+              isLoading,
+          """,
+              'cart configuration state',
+          )
+
+          replace_once(
+              """          const bootstrap =
+                      await getAppBootstrap();
+
+                    let remoteScreenImages:
+          """,
+              """          const bootstrap =
+                      await getAppBootstrap();
+
+                    const cartConfigurationPromise =
+                      getRequestAnythingCartConfiguration(
+                        bootstrap.settings
+                          .default_service_area_id,
+                      );
+
+                    let remoteScreenImages:
+          """,
+              'remote config load start',
+          )
+
+          replace_once(
+              """          setCampaignImageOverrides(
+                      remoteScreenImages,
+                    );
+          """,
+              """          setCartConfiguration(
+                      await cartConfigurationPromise,
+                    );
+
+                    setCampaignImageOverrides(
+                      remoteScreenImages,
+                    );
+          """,
+              'resolved config state',
+          )
+
+          replace_once(
+              """      /*
+                 * Request Anything uses the exact same cart/order flow
+                 * as a normal store order.
+                 *
+                 * The Supabase migration creates a real internal store
+                 * and a real zero-price product. We keep one line only
+                 * and store the customer's free-form request inside the
+                 * local cart description so checkout can copy it into
+                 * now.orders.notes.
+                 */
+                clearStoreCart(
+                  REQUEST_ANYTHING_INTERNAL_STORE_ID,
+                );
+          """,
+              """      /*
+                 * Request Anything uses the exact same cart/order flow
+                 * as a normal store order. The internal store, placeholder
+                 * product and service-area delivery values now come from the
+                 * public Supabase catalog. The legacy configuration is only a
+                 * compatibility fallback for mixed/temporarily unavailable
+                 * backend deployments.
+                 *
+                 * The placeholder line stays zero-price by design. The user's
+                 * free-form request remains in the local cart description so
+                 * checkout can copy it into now.orders.notes.
+                 */
+                const legacyCartConfiguration =
+                  getLegacyRequestAnythingCartConfiguration();
+
+                if (
+                  legacyCartConfiguration.storeId !==
+                  cartConfiguration.storeId
+                ) {
+                  clearStoreCart(
+                    legacyCartConfiguration.storeId,
+                  );
+                }
+
+                clearStoreCart(
+                  cartConfiguration.storeId,
+                );
+          """,
+              'cart preparation',
+          )
+
+          replace_once(
+              """          {
+                    id:
+                      REQUEST_ANYTHING_INTERNAL_STORE_ID,
+
+                    name:
+                      'اطلب أي حاجة',
+
+                    icon:
+                      '🛍️',
+
+                    categorySlug:
+                      REQUEST_ANYTHING_CATEGORY_SLUG,
+
+                    deliveryFee:
+                      REQUEST_ANYTHING_DELIVERY_FEE,
+
+                    minimumOrder:
+                      0,
+                  },
+          """,
+              """          {
+                    id:
+                      cartConfiguration.storeId,
+
+                    name:
+                      cartConfiguration.storeName,
+
+                    icon:
+                      cartConfiguration.storeIcon,
+
+                    categorySlug:
+                      cartConfiguration.categorySlug,
+
+                    deliveryFee:
+                      cartConfiguration.deliveryFee,
+
+                    minimumOrder:
+                      cartConfiguration.minimumOrder,
+                  },
+          """,
+              'store cart payload',
+          )
+
+          replace_once(
+              """          {
+                    id:
+                      REQUEST_ANYTHING_INTERNAL_PRODUCT_ID,
+
+                    name:
+                      'اطلب أي حاجة',
+          """,
+              """          {
+                    id:
+                      cartConfiguration.productId,
+
+                    name:
+                      cartConfiguration.productName,
+          """,
+              'product identity',
+          )
+
+          replace_once(
+              """            icon:
+                      '🛍️',
+
+                    variantId:
+          """,
+              """            icon:
+                      cartConfiguration.productIcon,
+
+                    variantId:
+          """,
+              'product icon',
+          )
+
+          replace_once(
+              """        params: {
+                  storeId:
+                    REQUEST_ANYTHING_INTERNAL_STORE_ID,
+                },
+          """,
+              """        params: {
+                  storeId:
+                    cartConfiguration.storeId,
+                },
+          """,
+              'cart route store id',
+          )
+
+          replace_once(
+              """    }, [
+                addItem,
+                clearStoreCart,
+                router,
+          """,
+              """    }, [
+                addItem,
+                cartConfiguration,
+                clearStoreCart,
+                router,
+          """,
+              'callback dependencies',
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Request Anything config tests
+        run: node --experimental-strip-types --test tests/request-anything-cart-config.test.mjs
+
+      - name: Full test suite
+        run: npm test
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint -- --quiet
+
+      - name: Diff validation
+        run: git diff --check
+
+      - name: Verify intended migration
+        run: |
+          grep -q "getRequestAnythingCartConfiguration" src/app/category/request-anything.tsx
+          grep -q "cartConfiguration.storeId" src/app/category/request-anything.tsx
+          grep -q "cartConfiguration.productId" src/app/category/request-anything.tsx
+          grep -q "cartConfiguration.deliveryFee" src/app/category/request-anything.tsx
+          ! grep -q "REQUEST_ANYTHING_INTERNAL_STORE_ID" src/app/category/request-anything.tsx
+          ! grep -q "REQUEST_ANYTHING_INTERNAL_PRODUCT_ID" src/app/category/request-anything.tsx
+          ! grep -q "REQUEST_ANYTHING_DELIVERY_FEE" src/app/category/request-anything.tsx
+          grep -q "listStores" src/services/request-anything-cart-config-service.ts
+          grep -q "getStoreCatalog" src/services/request-anything-cart-config-service.ts
+          grep -q "legacy-fallback" src/domain/request-anything-cart-config.ts
+          grep -q "4ebd8b80-8288-4c9b-980a-f15b5274e78b" src/domain/request-anything-cart-config.ts
+          grep -q "b260c5e5-e6cb-462b-b025-627d7bb2cff2" src/domain/request-anything-cart-config.ts
+
+      - name: Commit validated migration and remove temporary runner
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/request-anything-cart-config-migration.yml
+          git add src/app/category/request-anything.tsx src/domain/request-anything-cart-config.ts src/services/request-anything-cart-config-service.ts tests/request-anything-cart-config.test.mjs
+          git commit -m "Migrate Request Anything cart config to Supabase"
+          git push origin HEAD:codex/android-production-hardening
