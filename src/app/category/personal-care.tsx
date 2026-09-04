@@ -2768,7 +2768,11 @@ export default function PersonalCareScreen() {
     );
   }
 
-  const currentStore = catalog.store;
+  const {
+    store: currentStore,
+    delivery,
+    businessHours,
+  } = catalog;
 
   const currentCart =
     carts[currentStore.id] ?? null;
@@ -2779,12 +2783,12 @@ export default function PersonalCareScreen() {
   const isStoreClosed =
     currentStore.isManuallyClosed ||
     !isStoreOpenByBusinessHours(
-      catalog.businessHours,
+      businessHours,
     );
 
   const nextOpeningLabel =
     getNextOpeningLabel(
-      catalog.businessHours,
+      businessHours,
     );
 
   const currentStoreItemCount =
@@ -2865,9 +2869,9 @@ export default function PersonalCareScreen() {
         icon: currentStore.icon,
         categorySlug: currentStore.categorySlug,
         deliveryFee:
-          catalog.delivery.deliveryFee,
+          delivery.deliveryFee,
         minimumOrder:
-          catalog.delivery.minimumOrder,
+          delivery.minimumOrder,
       },
       {
         id: product.id,
@@ -3240,7 +3244,7 @@ export default function PersonalCareScreen() {
               : 0
           }
           subtotal={currentStoreSubtotal}
-          minimumOrder={catalog.delivery.minimumOrder}
+          minimumOrder={delivery.minimumOrder}
           currencyCode={currencyCode}
           accentColor="#00B956"
           accentDarkColor="#009D49"
