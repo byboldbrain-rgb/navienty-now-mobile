@@ -1,21 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    Animated,
-    Easing,
-    Image,
-    type ImageSourcePropType,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
+  Animated,
+  Easing,
+  Image,
+  type ImageSourcePropType,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 
 import type { CampaignPopup } from '../services/campaign-popup-service';
@@ -87,16 +87,16 @@ export default function DynamicCampaignPopup({
     Math.max(286, viewportWidth - 32),
   );
 
-  const heroHeight = Math.min(
-    282,
-    Math.max(
-      218,
-      Math.round(cardWidth * 0.73),
-    ),
-  );
-
   const modalVerticalPadding =
     viewportHeight < 720 ? 16 : 28;
+
+  const cardHeight = Math.min(
+    Math.round(cardWidth * (4 / 3)),
+    Math.max(
+      360,
+      viewportHeight - modalVerticalPadding * 2,
+    ),
+  );
 
   const imageSource = useMemo(
     () =>
@@ -296,17 +296,11 @@ export default function DynamicCampaignPopup({
                   campaign.theme.surfaceColor,
                 borderColor:
                   campaign.theme.borderColor,
+                height: cardHeight,
               },
             ]}
           >
-            <View
-              style={[
-                styles.heroWrap,
-                {
-                  height: heroHeight,
-                },
-              ]}
-            >
+            <View style={styles.heroWrap}>
               <Image
                 accessibilityIgnoresInvertColors
                 accessibilityLabel={
@@ -475,18 +469,26 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     overflow: 'hidden',
-    width: '100%',
-  },
-
-  heroWrap: {
-    backgroundColor: '#DCE7DE',
-    overflow: 'hidden',
     position: 'relative',
     width: '100%',
   },
 
+  heroWrap: {
+    bottom: 0,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+
   heroImage: {
     height: '100%',
+    transform: [
+      {
+        scale: 1.015,
+      },
+    ],
     width: '100%',
   },
 
@@ -536,10 +538,13 @@ const styles = StyleSheet.create({
   },
 
   content: {
+    bottom: 0,
+    left: 0,
     paddingBottom: 22,
     paddingHorizontal: 22,
     paddingTop: 21,
-    width: '100%',
+    position: 'absolute',
+    right: 0,
   },
 
   copy: {
