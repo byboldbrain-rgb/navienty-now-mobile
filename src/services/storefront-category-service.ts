@@ -15,6 +15,9 @@ export type StorefrontCategoryTileKind =
   | 'merged'
   | 'offers';
 
+export type StorefrontCategoryTileMetadata =
+  Record<string, unknown>;
+
 export type StorefrontCategoryTile = {
   id: string;
   surface: StorefrontCategorySurface;
@@ -31,6 +34,8 @@ export type StorefrontCategoryTile = {
   sourceSlugs: string[];
 
   imageUrl: string | null;
+
+  metadata: StorefrontCategoryTileMetadata;
 
   sortOrder: number;
 };
@@ -51,6 +56,8 @@ type RawStorefrontCategoryTile = {
   source_slugs: string[] | null;
 
   image_url: string | null;
+
+  metadata: unknown;
 
   sort_order: number | string | null;
 };
@@ -85,6 +92,56 @@ function normalizeStorefrontIdentifier(
     .replace(/_/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
+}
+
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  );
+}
+
+function normalizeMetadata(
+  value: unknown,
+): StorefrontCategoryTileMetadata {
+  return isRecord(value)
+    ? value
+    : {};
+}
+
+function getRemoteImageMap(
+  value: unknown,
+): Record<string, string> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const images: Record<string, string> = {};
+
+  for (const [key, rawValue] of
+    Object.entries(value)) {
+    if (typeof rawValue !== 'string') {
+      continue;
+    }
+
+    const normalizedKey = key.trim();
+    const normalizedUrl = rawValue.trim();
+
+    if (
+      !normalizedKey ||
+      !/^https?:\/\//i.test(normalizedUrl)
+    ) {
+      continue;
+    }
+
+    images[normalizedKey] =
+      normalizedUrl;
+  }
+
+  return images;
 }
 
 function isStorefrontCategorySurface(
@@ -148,6 +205,11 @@ function isRawStorefrontCategoryTile(
       typeof row.image_url === 'string'
     ) &&
     (
+      row.metadata === null ||
+      row.metadata === undefined ||
+      isRecord(row.metadata)
+    ) &&
+    (
       row.sort_order === null ||
       typeof row.sort_order === 'number' ||
       typeof row.sort_order === 'string'
@@ -186,6 +248,9 @@ function mapStorefrontCategoryTile(
       row.image_url?.trim() ||
       null,
 
+    metadata:
+      normalizeMetadata(row.metadata),
+
     sortOrder:
       toSortOrder(row.sort_order),
   };
@@ -194,11 +259,8 @@ function mapStorefrontCategoryTile(
 /**
  * Resolve one configured tile from the identifiers already exposed by the
  * storefront-category contract. Matching is deliberately limited to key,
- * routeSlug and sourceSlugs so this helper does not depend on hidden backend
- * fields or on presentation labels.
- *
- * Callers may pass optional route/category identifiers directly. Nullish
- * values normalize to an empty identifier and are ignored.
+ * routeSlug and sourceSlugs so this helper does not depend on presentation
+ * labels or private backend fields.
  */
 export function findStorefrontCategoryTile(
   tiles: readonly StorefrontCategoryTile[],
@@ -242,26 +304,42 @@ export function findStorefrontCategoryTile(
 }
 
 /**
- * The verified storefront_category_tiles contract currently exposes only one
- * primary image URL. Deep-category image maps are not part of the selected
- * schema, so callers must keep using their bundled image fallbacks until the
- * backend contract explicitly provides those maps.
+ * Optional deep-category artwork contract.
+ *
+ * Admins can set:
+ * metadata.category_images = {
+ *   "category-or-subcategory-key": "https://..."
+ * }
+ *
+ * Only http(s) URLs are accepted. Invalid values are ignored, preserving the
+ * existing bundled image fallback in every caller.
  */
 export function getStorefrontTileCategoryImages(
-  _tile: StorefrontCategoryTile | null | undefined,
+  tile: StorefrontCategoryTile | null | undefined,
 ): Record<string, string> {
-  return {};
+  return getRemoteImageMap(
+    tile?.metadata?.category_images,
+  );
 }
 
 /**
- * Screen-specific artwork uses the same compatibility behavior as category
- * images. Returning an empty map preserves the existing bundled hero/detail
- * artwork instead of guessing database columns that are not in this service.
+ * Optional screen-specific artwork contract.
+ *
+ * Admins can set:
+ * metadata.screen_images = {
+ *   "hero": "https://...",
+ *   "detail_02": "https://..."
+ * }
+ *
+ * Callers already use bundled images as fallbacks, so an empty or malformed
+ * configuration cannot remove the current artwork.
  */
 export function getStorefrontTileScreenImages(
-  _tile: StorefrontCategoryTile | null | undefined,
+  tile: StorefrontCategoryTile | null | undefined,
 ): Record<string, string> {
-  return {};
+  return getRemoteImageMap(
+    tile?.metadata?.screen_images,
+  );
 }
 
 /**
@@ -303,6 +381,7 @@ export async function listStorefrontCategoryTiles(
         'route_slug',
         'source_slugs',
         'image_url',
+        'metadata',
         'sort_order',
       ].join(','),
     )
