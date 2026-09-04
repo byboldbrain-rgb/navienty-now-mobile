@@ -25,9 +25,12 @@ import CategoryCartDock, {
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
+import { supabase } from '../../lib/supabase';
 import loadAppBootstrap from '../../services/bootstrap-service';
 import {
+  type CatalogProduct,
   type CatalogSection,
+  getCatalogSectionProducts,
   getStoreCatalog,
   listStores,
   type StoreBusinessHour,
@@ -39,6 +42,7 @@ import {
 } from '../../services/storefront-category-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
+import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
 const CATEGORY_COLUMNS_PER_ROW = 4;
 const CATEGORY_HORIZONTAL_PADDING = 16;
@@ -73,6 +77,10 @@ const PAGE_MAX_WIDTH = 560;
 const PERSONAL_CARE_CATEGORY_IMAGES: Partial<
   Record<string, ImageSourcePropType>
 > = {
+  offers: require(
+    '../../../assets/images/supermarket-categories/offers.webp',
+  ),
+
   'face-care': require(
     '../../../assets/images/personal-care-categories/face-care.webp',
   ),
@@ -151,6 +159,7 @@ type PersonalCareCategoryDefinition = {
   key: string;
   label: string;
   aliases: string[];
+  isOffers?: boolean;
 
   /*
    * تستخدم عندما تكون الفئة الظاهرة في الواجهة
@@ -160,6 +169,30 @@ type PersonalCareCategoryDefinition = {
 };
 
 const PERSONAL_CARE_CATEGORIES: PersonalCareCategoryDefinition[] = [
+  {
+    key: 'offers',
+    label: 'عروض',
+    aliases: [
+      'offers',
+      'offer',
+      'deals',
+      'deal',
+      'discounts',
+      'discount',
+      'promotions',
+      'promotion',
+      'sale',
+      'sales',
+      'special-offers',
+      'special-offer',
+      'special-deals',
+      'special-deal',
+      'discounted-products',
+      'discounted',
+    ],
+    isOffers: true,
+  },
+
   {
     key: 'face-care',
     label: 'العناية بالوجه',
@@ -349,6 +382,61 @@ type CategoryDisplayItem = {
    * كل الـslugs الحقيقية التي تمثل الفئة.
    */
   sourceSlugs: string[];
+
+  isOffers: boolean;
+};
+
+type BannerAudience =
+  | 'all'
+  | 'signed_out'
+  | 'signed_in';
+
+type PersonalCareHomeBannerRow = {
+  id: string;
+  admin_label: string;
+  image_url: string;
+  storage_path: string | null;
+  alt_text_ar: string | null;
+  alt_text_en: string | null;
+  link_url: string | null;
+  audience: BannerAudience;
+  sort_order: number;
+  starts_at: string | null;
+  ends_at: string | null;
+};
+
+type PersonalCareHomeBannerProductRow = {
+  banner_id: string;
+  product_id: string;
+  sort_order: number;
+};
+
+type PersonalCarePromotionBanner = {
+  id: string;
+  adminLabel: string;
+  imageUrl: string;
+  storagePath: string | null;
+  altTextAr: string | null;
+  altTextEn: string | null;
+  linkUrl: string | null;
+  sortOrder: number;
+  productIds: string[];
+};
+
+type ResolvedPromotionBanner =
+  PersonalCarePromotionBanner & {
+    products: CatalogProduct[];
+  };
+
+type FeaturedProductCardProps = {
+  product: CatalogProduct;
+  currencyCode: string;
+  cardWidth: number;
+  quantity: number;
+  isStoreClosed: boolean;
+  onAdd: () => void;
+  onIncrease: () => void;
+  onDecrease: () => void;
 };
 
 const ARABIC_WEEK_DAYS = [
@@ -616,6 +704,199 @@ function getCategoryFallbackIcon(
   }
 
   return '🧴';
+}
+
+function getProductImage(
+  product: CatalogProduct,
+): string | null {
+  if (product.imageUrl) {
+    return product.imageUrl;
+  }
+
+  const coverImage = product.images.find(
+    (image) => image.isCover,
+  );
+
+  if (coverImage) {
+    return coverImage.imageUrl;
+  }
+
+  return product.images[0]?.imageUrl ?? null;
+}
+
+function getDiscountPercent(
+  product: CatalogProduct,
+): number | null {
+  const compareAtPrice =
+    product.compareAtPrice;
+
+  if (
+    compareAtPrice === null ||
+    compareAtPrice <= product.price ||
+    compareAtPrice <= 0
+  ) {
+    return null;
+  }
+
+  return Math.round(
+    ((compareAtPrice - product.price) /
+      compareAtPrice) *
+      100,
+  );
+}
+
+function formatMoney(
+  amount: number,
+  currencyCode: string,
+) {
+  return `${getArabicCurrencyLabel(
+    currencyCode,
+  )} ${amount.toFixed(2)}`;
+}
+
+function isPersonalCareBannerVisibleNow(
+  banner: PersonalCareHomeBannerRow,
+  now: number,
+) {
+  if (
+    banner.starts_at &&
+    new Date(banner.starts_at).getTime() > now
+  ) {
+    return false;
+  }
+
+  if (
+    banner.ends_at &&
+    new Date(banner.ends_at).getTime() < now
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+async function listPersonalCarePromotionBanners({
+  storeId,
+}: {
+  storeId: string;
+}): Promise<PersonalCarePromotionBanner[]> {
+  const { data: sessionData } =
+    await supabase.auth.getSession();
+
+  const allowedAudiences: BannerAudience[] =
+    sessionData.session
+      ? ['all', 'signed_in']
+      : ['all', 'signed_out'];
+
+  const { data, error } = await supabase
+    .schema('now')
+    .from('home_banners')
+    .select(
+      `
+        id,
+        admin_label,
+        image_url,
+        storage_path,
+        alt_text_ar,
+        alt_text_en,
+        link_url,
+        audience,
+        sort_order,
+        starts_at,
+        ends_at
+      `,
+    )
+    .eq('placement', 'personal-care')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .in('audience', allowedAudiences)
+    .order('sort_order', {
+      ascending: true,
+    })
+    .order('created_at', {
+      ascending: false,
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const now = Date.now();
+
+  const visibleBanners = (
+    (data ?? []) as PersonalCareHomeBannerRow[]
+  ).filter((banner) =>
+    isPersonalCareBannerVisibleNow(
+      banner,
+      now,
+    ),
+  );
+
+  if (visibleBanners.length === 0) {
+    return [];
+  }
+
+  const bannerIds = visibleBanners.map(
+    (banner) => banner.id,
+  );
+
+  const {
+    data: bannerProductsData,
+    error: bannerProductsError,
+  } = await supabase
+    .schema('now')
+    .from('home_banner_products')
+    .select(
+      `
+        banner_id,
+        product_id,
+        sort_order
+      `,
+    )
+    .in('banner_id', bannerIds)
+    .eq('is_active', true)
+    .order('sort_order', {
+      ascending: true,
+    })
+    .order('created_at', {
+      ascending: true,
+    });
+
+  if (bannerProductsError) {
+    throw bannerProductsError;
+  }
+
+  const bannerProducts = (
+    bannerProductsData ?? []
+  ) as PersonalCareHomeBannerProductRow[];
+
+  const productIdsByBanner =
+    new Map<string, string[]>();
+
+  for (const row of bannerProducts) {
+    const productIds =
+      productIdsByBanner.get(row.banner_id) ?? [];
+
+    productIds.push(row.product_id);
+
+    productIdsByBanner.set(
+      row.banner_id,
+      productIds,
+    );
+  }
+
+  return visibleBanners.map((banner) => ({
+    id: banner.id,
+    adminLabel: banner.admin_label,
+    imageUrl: banner.image_url,
+    storagePath: banner.storage_path,
+    altTextAr: banner.alt_text_ar,
+    altTextEn: banner.alt_text_en,
+    linkUrl: banner.link_url,
+    sortOrder: banner.sort_order,
+    productIds:
+      productIdsByBanner.get(banner.id) ?? [],
+  }));
 }
 
 function getArabicCurrencyLabel(
@@ -1009,6 +1290,214 @@ function CategoryVisual({
           {getCategoryFallbackIcon(item)}
         </Text>
       )}
+    </View>
+  );
+}
+
+function FeaturedProductCard({
+  product,
+  currencyCode,
+  cardWidth,
+  quantity,
+  isStoreClosed,
+  onAdd,
+  onIncrease,
+  onDecrease,
+}: FeaturedProductCardProps) {
+  const imageUrl =
+    getProductImage(product);
+
+  const discount =
+    getDiscountPercent(product);
+
+  return (
+    <View
+      style={[
+        styles.featuredProductCard,
+        {
+          width: cardWidth,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.featuredProductImageBox,
+          {
+            width: cardWidth,
+            height: cardWidth,
+          },
+        ]}
+      >
+        {imageUrl ? (
+          <Image
+            source={{
+              uri: imageUrl,
+            }}
+            style={
+              styles.featuredProductImage
+            }
+            resizeMode="cover"
+          />
+        ) : (
+          <Text
+            style={
+              styles.featuredProductFallback
+            }
+          >
+            {product.icon ||
+              '🛒'}
+          </Text>
+        )}
+
+        {discount !== null && (
+          <View
+            style={
+              styles.featuredDiscountBadge
+            }
+          >
+            <Text
+              style={
+                styles.featuredDiscountText
+              }
+              numberOfLines={1}
+            >
+              وفر {discount}%
+            </Text>
+          </View>
+        )}
+
+        {quantity === 0 ? (
+          <Pressable
+            disabled={
+              isStoreClosed
+            }
+            hitSlop={5}
+            style={({
+              pressed,
+            }) => [
+              styles.featuredAddButton,
+
+              isStoreClosed &&
+                styles.featuredAddButtonDisabled,
+
+              pressed &&
+                !isStoreClosed &&
+                styles.featuredAddButtonPressed,
+            ]}
+            onPress={onAdd}
+          >
+            <Text
+              style={
+                styles.featuredAddButtonText
+              }
+            >
+              +
+            </Text>
+          </Pressable>
+        ) : (
+          <View
+            style={
+              styles.featuredQuantityPill
+            }
+          >
+            <Pressable
+              hitSlop={4}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={
+                onDecrease
+              }
+            >
+              <Text
+                style={
+                  styles.featuredQuantityButtonText
+                }
+              >
+                −
+              </Text>
+            </Pressable>
+
+            <Text
+              style={
+                styles.featuredQuantityValue
+              }
+            >
+              {quantity}
+            </Text>
+
+            <Pressable
+              disabled={
+                isStoreClosed
+              }
+              hitSlop={4}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={
+                onIncrease
+              }
+            >
+              <Text
+                style={
+                  styles.featuredQuantityButtonText
+                }
+              >
+                +
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <Text
+        style={
+          styles.featuredProductName
+        }
+        numberOfLines={2}
+      >
+        {product.nameEn?.trim() ||
+          product.name}
+      </Text>
+
+      <View
+        style={styles.featuredPriceRow}
+      >
+        <View
+          style={
+            styles.featuredCurrentPriceWrap
+          }
+        >
+          <Text
+            style={
+              styles.featuredCurrentPrice
+            }
+            numberOfLines={1}
+          >
+            {formatMoney(
+              product.price,
+              currencyCode,
+            )}
+          </Text>
+        </View>
+
+        {product.compareAtPrice !==
+          null &&
+          product.compareAtPrice >
+            product.price && (
+            <Text
+              style={
+                styles.featuredOldPrice
+              }
+              numberOfLines={1}
+            >
+              {formatMoney(
+                product.compareAtPrice,
+                currencyCode,
+              )}
+            </Text>
+          )}
+      </View>
     </View>
   );
 }
@@ -1691,6 +2180,13 @@ export default function PersonalCareScreen() {
     useState<StoreCatalog | null>(null);
 
   const [
+    promotionBanners,
+    setPromotionBanners,
+  ] = useState<
+    PersonalCarePromotionBanner[]
+  >([]);
+
+  const [
     storefrontCategoryTiles,
     setStorefrontCategoryTiles,
   ] = useState<
@@ -1714,6 +2210,18 @@ export default function PersonalCareScreen() {
 
   const carts = useCartStore(
     (state) => state.carts,
+  );
+
+  const addItem = useCartStore(
+    (state) => state.addItem,
+  );
+
+  const increaseStoreItem = useCartStore(
+    (state) => state.increaseStoreItem,
+  );
+
+  const decreaseStoreItem = useCartStore(
+    (state) => state.decreaseStoreItem,
   );
 
   const setActiveCart = useCartStore(
@@ -1771,12 +2279,23 @@ export default function PersonalCareScreen() {
 
         const [
           loadedCatalog,
+          loadedPromotionBanners,
           loadedStorefrontCategoryTiles,
         ] = await Promise.all([
           getStoreCatalog(
             selectedStore.id,
             serviceAreaId,
           ),
+
+          listPersonalCarePromotionBanners({
+            storeId: selectedStore.id,
+          }).catch((bannerError) => {
+            console.warn(
+              'Unable to load personal-care banners:',
+              bannerError,
+            );
+            return [];
+          }),
 
           listStorefrontCategoryTiles(
             'personal-care',
@@ -1798,6 +2317,10 @@ export default function PersonalCareScreen() {
 
         setCatalog(loadedCatalog);
 
+        setPromotionBanners(
+          loadedPromotionBanners,
+        );
+
         setStorefrontCategoryTiles(
           loadedStorefrontCategoryTiles,
         );
@@ -1816,6 +2339,8 @@ export default function PersonalCareScreen() {
         }
 
         setCatalog(null);
+
+        setPromotionBanners([]);
 
         setStorefrontCategoryTiles(
           null,
@@ -1865,10 +2390,9 @@ export default function PersonalCareScreen() {
         (section) =>
           section.products.some(
             (product) =>
-              product.compareAtPrice !==
-                null &&
-              product.compareAtPrice >
-                product.price,
+              getDiscountPercent(
+                product,
+              ) !== null,
           ),
       );
 
@@ -1880,15 +2404,18 @@ export default function PersonalCareScreen() {
           (
             tile,
           ): CategoryDisplayItem | null => {
+            const isOffers =
+              tile.kind === 'offers';
+
             if (
-              tile.kind === 'offers' &&
+              isOffers &&
               !hasOffers
             ) {
               return null;
             }
 
             const matchingSections =
-              tile.kind === 'offers'
+              isOffers
                 ? []
                 : findPersonalCareStorefrontSections(
                     tile,
@@ -1960,6 +2487,8 @@ export default function PersonalCareScreen() {
               section,
 
               sourceSlugs,
+
+              isOffers,
             };
           },
         )
@@ -1971,13 +2500,23 @@ export default function PersonalCareScreen() {
         );
     }
 
-    return PERSONAL_CARE_CATEGORIES.map(
-      (definition) => {
+    return PERSONAL_CARE_CATEGORIES
+      .filter(
+        (definition) =>
+          !definition.isOffers ||
+          hasOffers,
+      )
+      .map((definition) => {
+        const isOffers =
+          definition.isOffers === true;
+
         const matchingSections =
-          findPersonalCareCategorySections(
-            definition,
-            rootSections,
-          );
+          isOffers
+            ? []
+            : findPersonalCareCategorySections(
+                definition,
+                rootSections,
+              );
 
         const section =
           matchingSections[0] ??
@@ -1997,18 +2536,22 @@ export default function PersonalCareScreen() {
             );
 
         const sourceSlugs =
-          matchedSourceSlugs.length > 0
-            ? matchedSourceSlugs
-            : definition.sourceSlugs ??
-              [
-                section?.slug ??
-                  definition.key,
-              ];
+          isOffers
+            ? ['offers']
+            : matchedSourceSlugs.length > 0
+              ? matchedSourceSlugs
+              : definition.sourceSlugs ??
+                [
+                  section?.slug ??
+                    definition.key,
+                ];
 
         const routeSlug =
-          section?.slug ??
-          definition.sourceSlugs?.[0] ??
-          definition.key;
+          isOffers
+            ? 'offers'
+            : section?.slug ??
+              definition.sourceSlugs?.[0] ??
+              definition.key;
 
         return {
           key:
@@ -2037,9 +2580,10 @@ export default function PersonalCareScreen() {
           section,
 
           sourceSlugs,
+
+          isOffers,
         };
-      },
-    );
+      });
   }, [
     catalog,
     storefrontCategoryTiles,
@@ -2060,6 +2604,54 @@ export default function PersonalCareScreen() {
       ),
     [categories],
   );
+
+  const catalogProductsById = useMemo(() => {
+    const productsById =
+      new Map<string, CatalogProduct>();
+
+    for (const section of catalog?.sections ?? []) {
+      const sectionProducts =
+        getCatalogSectionProducts(
+          section,
+          true,
+        );
+
+      for (const product of sectionProducts) {
+        productsById.set(product.id, product);
+      }
+
+      for (const product of section.products) {
+        productsById.set(product.id, product);
+      }
+    }
+
+    return productsById;
+  }, [catalog]);
+
+  const resolvedPromotionBanners = useMemo<
+    ResolvedPromotionBanner[]
+  >(() => {
+    return promotionBanners
+      .map((banner) => ({
+        ...banner,
+        products: banner.productIds
+          .map((productId) =>
+            catalogProductsById.get(productId),
+          )
+          .filter(
+            (
+              product,
+            ): product is CatalogProduct =>
+              Boolean(product),
+          ),
+      }))
+      .filter((banner) =>
+        Boolean(banner.imageUrl.trim()),
+      );
+  }, [
+    catalogProductsById,
+    promotionBanners,
+  ]);
 
   const pageWidth = Math.min(
     windowWidth,
@@ -2086,6 +2678,24 @@ export default function PersonalCareScreen() {
         categoryColumnWidth - 5,
       ),
     );
+
+  const featuredCardWidth = Math.min(
+    116,
+    Math.max(92, pageWidth * 0.3),
+  );
+
+  const promotionBannerWidth = Math.max(
+    pageWidth,
+    1,
+  );
+
+  const promotionBannerHeight = Math.round(
+    promotionBannerWidth * 0.64,
+  );
+
+  const promotionProductsOverlap = Math.round(
+    promotionBannerHeight * 0.49,
+  );
 
   if (isLoading) {
     return (
@@ -2198,6 +2808,27 @@ export default function PersonalCareScreen() {
   function openCategory(
     item: CategoryDisplayItem,
   ) {
+    if (item.isOffers) {
+      router.push({
+        pathname:
+          '/supermarket-category/[slug]',
+
+        params: {
+          slug: 'offers',
+
+          storeId:
+            currentStore.id,
+
+          categoryKey:
+            item.categoryKey,
+
+          label:
+            item.label,
+        },
+      });
+      return;
+    }
+
     router.push({
       pathname:
         '/personal-care-category/[slug]',
@@ -2218,6 +2849,93 @@ export default function PersonalCareScreen() {
           item.sourceSlugs.join(','),
       },
     });
+  }
+
+  function addFeaturedProduct(
+    product: CatalogProduct,
+  ) {
+    if (isStoreClosed) {
+      return;
+    }
+
+    addItem(
+      {
+        id: currentStore.id,
+        name: currentStore.name,
+        icon: currentStore.icon,
+        categorySlug: currentStore.categorySlug,
+        deliveryFee:
+          catalog.delivery.deliveryFee,
+        minimumOrder:
+          catalog.delivery.minimumOrder,
+      },
+      {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        icon: product.icon,
+        variantId: null,
+        variantName: null,
+      },
+    );
+  }
+
+  function increaseFeaturedProduct(
+    product: CatalogProduct,
+  ) {
+    if (isStoreClosed) {
+      return;
+    }
+
+    const existingItem = cartItems.find(
+      (item) =>
+        item.id === product.id &&
+        item.variantId === null,
+    );
+
+    if (existingItem) {
+      increaseStoreItem(
+        currentStore.id,
+        product.id,
+        null,
+      );
+      return;
+    }
+
+    addFeaturedProduct(product);
+  }
+
+  function decreaseFeaturedProduct(
+    productId: string,
+  ) {
+    const existingItem = cartItems.find(
+      (item) =>
+        item.id === productId &&
+        item.variantId === null,
+    );
+
+    if (!existingItem) {
+      return;
+    }
+
+    decreaseStoreItem(
+      currentStore.id,
+      productId,
+      null,
+    );
+  }
+
+  function getProductQuantity(
+    productId: string,
+  ) {
+    return (
+      cartItems.find(
+        (item) =>
+          item.id === productId &&
+          item.variantId === null,
+      )?.quantity ?? 0
+    );
   }
 
   function openCart() {
@@ -2416,6 +3134,103 @@ export default function PersonalCareScreen() {
               </View>
             )}
           </View>
+
+          {resolvedPromotionBanners.map(
+            (banner, bannerIndex) => (
+              <View
+                key={banner.id}
+                style={[
+                  styles.promotionSection,
+                  bannerIndex ===
+                    resolvedPromotionBanners.length -
+                      1 &&
+                    styles.promotionSectionLast,
+                ]}
+              >
+                <View
+                  pointerEvents="none"
+                  style={
+                    styles.promotionBannerFrame
+                  }
+                >
+                  <Image
+                    source={{
+                      uri: banner.imageUrl,
+                    }}
+                    style={[
+                      styles.promotionBanner,
+                      {
+                        height:
+                          promotionBannerHeight,
+                      },
+                    ]}
+                    resizeMode="cover"
+                    accessibilityLabel={
+                      banner.altTextAr ??
+                      banner.adminLabel
+                    }
+                  />
+                </View>
+
+                {banner.products.length > 0 && (
+                  <ScrollView
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={
+                      false
+                    }
+                    directionalLockEnabled
+                    contentContainerStyle={
+                      styles.promotionProductsRail
+                    }
+                    style={[
+                      styles.promotionProductsScroll,
+                      {
+                        marginTop:
+                          -promotionProductsOverlap,
+                      },
+                    ]}
+                  >
+                    {banner.products.map(
+                      (product) => (
+                        <FeaturedProductCard
+                          key={`${banner.id}-${product.id}`}
+                          product={product}
+                          currencyCode={
+                            currencyCode
+                          }
+                          cardWidth={
+                            featuredCardWidth
+                          }
+                          quantity={getProductQuantity(
+                            product.id,
+                          )}
+                          isStoreClosed={
+                            isStoreClosed
+                          }
+                          onAdd={() =>
+                            addFeaturedProduct(
+                              product,
+                            )
+                          }
+                          onIncrease={() =>
+                            increaseFeaturedProduct(
+                              product,
+                            )
+                          }
+                          onDecrease={() =>
+                            decreaseFeaturedProduct(
+                              product.id,
+                            )
+                          }
+                        />
+                      ),
+                    )}
+                  </ScrollView>
+                )}
+              </View>
+            ),
+          )}
         </ScrollView>
 
         <CategoryCartDock
@@ -2633,6 +3448,222 @@ const styles = StyleSheet.create({
     minHeight: 36,
     textAlign: 'center',
     writingDirection: 'rtl',
+  },
+
+  promotionSection: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 22,
+    overflow: 'visible',
+    width: '100%',
+  },
+
+  promotionSectionLast: {
+    marginBottom: 0,
+  },
+
+  promotionBannerFrame: {
+    marginHorizontal: 0,
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+    zIndex: 1,
+  },
+
+  promotionBanner: {
+    backgroundColor: '#F4F4F4',
+    width: '100%',
+  },
+
+  promotionProductsScroll: {
+    elevation: 10,
+    overflow: 'visible',
+    position: 'relative',
+    zIndex: 10,
+  },
+
+  promotionProductsRail: {
+    alignItems: 'flex-start',
+    gap: 7,
+    paddingBottom: 7,
+    paddingHorizontal: 21,
+    paddingTop: 0,
+  },
+
+  featuredProductCard: {
+    backgroundColor: 'transparent',
+    overflow: 'visible',
+  },
+
+  featuredProductImageBox: {
+    alignItems: 'center',
+    backgroundColor: '#F4F4F4',
+    borderColor: '#E8E8E8',
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+
+  featuredProductImage: {
+    height: '100%',
+    width: '100%',
+  },
+
+  featuredProductFallback: {
+    fontSize: 34,
+  },
+
+  featuredDiscountBadge: {
+    alignItems: 'center',
+    backgroundColor: '#BFFF00',
+    borderRadius: 3,
+    justifyContent: 'center',
+    left: 6,
+    minHeight: 17,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    position: 'absolute',
+    top: 6,
+    zIndex: 5,
+  },
+
+  featuredDiscountText: {
+    color: '#111111',
+    fontSize: 8.5,
+    fontWeight: '500',
+    lineHeight: 11,
+  },
+
+  featuredAddButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7E7E7',
+    borderRadius: 18,
+    borderWidth: 1,
+    bottom: 6,
+    elevation: 2,
+    height: 34,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 6,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    width: 34,
+    zIndex: 8,
+  },
+
+  featuredAddButtonPressed: {
+    backgroundColor: '#F8F8F8',
+    transform: [
+      {
+        scale: 0.94,
+      },
+    ],
+  },
+
+  featuredAddButtonDisabled: {
+    opacity: 0.45,
+  },
+
+  featuredAddButtonText: {
+    color: NAVIENTY_NOW_COLORS.primary,
+    fontSize: 25,
+    fontWeight: '300',
+    lineHeight: 27,
+    marginTop: -2,
+  },
+
+  featuredQuantityPill: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E7E7E7',
+    borderRadius: 18,
+    borderWidth: 1,
+    bottom: 6,
+    elevation: 2,
+    flexDirection: 'row',
+    height: 34,
+    position: 'absolute',
+    right: 6,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    zIndex: 8,
+  },
+
+  featuredQuantityButton: {
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    width: 25,
+  },
+
+  featuredQuantityButtonText: {
+    color: NAVIENTY_NOW_COLORS.primary,
+    fontSize: 18,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+
+  featuredQuantityValue: {
+    color: '#202020',
+    fontSize: 10,
+    fontWeight: '700',
+    minWidth: 14,
+    textAlign: 'center',
+  },
+
+  featuredProductName: {
+    color: '#202020',
+    fontSize: 12.5,
+    fontWeight: '500',
+    letterSpacing: -0.15,
+    lineHeight: 15,
+    marginTop: 6,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+
+  featuredPriceRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 1,
+  },
+
+  featuredCurrentPriceWrap: {
+    alignSelf: 'flex-start',
+    borderBottomColor: '#BFFF00',
+    borderBottomWidth: 2,
+  },
+
+  featuredCurrentPrice: {
+    color: '#202020',
+    fontSize: 10.5,
+    fontWeight: '500',
+    lineHeight: 13,
+    textAlign: 'left',
+    writingDirection: 'ltr',
+  },
+
+  featuredOldPrice: {
+    color: '#858585',
+    fontSize: 9,
+    lineHeight: 11,
+    textAlign: 'left',
+    textDecorationLine: 'line-through',
+    writingDirection: 'ltr',
   },
 
   emptyCategories: {

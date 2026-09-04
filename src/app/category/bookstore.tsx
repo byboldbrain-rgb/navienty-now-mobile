@@ -63,6 +63,9 @@ const CATEGORY_COLUMN_GAP = 7;
 const BOOKSTORE_CATEGORY_IMAGES: Partial<
   Record<string, ImageSourcePropType>
 > = {
+  offers: require(
+    '../../../assets/images/supermarket-categories/offers.webp',
+  ),
   'writing-tools': require(
     '../../../assets/images/bookstore-categories/writing-tools.webp',
   ),
@@ -102,6 +105,7 @@ type BookstoreCategoryDefinition = {
   key: string;
   label: string;
   aliases: string[];
+  isOffers?: boolean;
 };
 
 /**
@@ -109,6 +113,29 @@ type BookstoreCategoryDefinition = {
  * The first item is positioned at the far-right edge.
  */
 const BOOKSTORE_CATEGORIES: BookstoreCategoryDefinition[] = [
+  {
+    key: 'offers',
+    label: 'عروض',
+    aliases: [
+      'offers',
+      'offer',
+      'deals',
+      'deal',
+      'discounts',
+      'discount',
+      'promotions',
+      'promotion',
+      'sale',
+      'sales',
+      'special-offers',
+      'special-offer',
+      'special-deals',
+      'special-deal',
+      'discounted-products',
+      'discounted',
+    ],
+    isOffers: true,
+  },
   {
     key: 'writing-tools',
     label: 'أدوات الكتابة',
@@ -219,6 +246,7 @@ type CategoryDisplayItem = {
   imageSource: ImageSourcePropType | null;
   imageUrl: string | null;
   section: CatalogSection | null;
+  isOffers: boolean;
 };
 
 type ResolvedPromotionBanner =
@@ -1451,14 +1479,19 @@ function FeaturedProductCard({
   onIncrease,
   onDecrease,
 }: FeaturedProductCardProps) {
-  const imageUrl = getProductImage(product);
-  const discount = getDiscountPercent(product);
+  const imageUrl =
+    getProductImage(product);
+
+  const discount =
+    getDiscountPercent(product);
 
   return (
     <View
       style={[
         styles.featuredProductCard,
-        { width: cardWidth },
+        {
+          width: cardWidth,
+        },
       ]}
     >
       <View
@@ -1472,20 +1505,35 @@ function FeaturedProductCard({
       >
         {imageUrl ? (
           <Image
-            source={{ uri: imageUrl }}
-            style={styles.featuredProductImage}
+            source={{
+              uri: imageUrl,
+            }}
+            style={
+              styles.featuredProductImage
+            }
             resizeMode="cover"
           />
         ) : (
-          <Text style={styles.featuredProductFallback}>
-            {product.icon || '📚'}
+          <Text
+            style={
+              styles.featuredProductFallback
+            }
+          >
+            {product.icon ||
+              '🛒'}
           </Text>
         )}
 
         {discount !== null && (
-          <View style={styles.featuredDiscountBadge}>
+          <View
+            style={
+              styles.featuredDiscountBadge
+            }
+          >
             <Text
-              style={styles.featuredDiscountText}
+              style={
+                styles.featuredDiscountText
+              }
               numberOfLines={1}
             >
               وفر {discount}%
@@ -1495,28 +1543,46 @@ function FeaturedProductCard({
 
         {quantity === 0 ? (
           <Pressable
-            disabled={isStoreClosed}
+            disabled={
+              isStoreClosed
+            }
             hitSlop={5}
-            style={({ pressed }) => [
+            style={({
+              pressed,
+            }) => [
               styles.featuredAddButton,
+
               isStoreClosed &&
                 styles.featuredAddButtonDisabled,
+
               pressed &&
                 !isStoreClosed &&
                 styles.featuredAddButtonPressed,
             ]}
             onPress={onAdd}
           >
-            <Text style={styles.featuredAddButtonText}>
+            <Text
+              style={
+                styles.featuredAddButtonText
+              }
+            >
               +
             </Text>
           </Pressable>
         ) : (
-          <View style={styles.featuredQuantityPill}>
+          <View
+            style={
+              styles.featuredQuantityPill
+            }
+          >
             <Pressable
               hitSlop={4}
-              style={styles.featuredQuantityButton}
-              onPress={onDecrease}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={
+                onDecrease
+              }
             >
               <Text
                 style={
@@ -1527,15 +1593,25 @@ function FeaturedProductCard({
               </Text>
             </Pressable>
 
-            <Text style={styles.featuredQuantityValue}>
+            <Text
+              style={
+                styles.featuredQuantityValue
+              }
+            >
               {quantity}
             </Text>
 
             <Pressable
-              disabled={isStoreClosed}
+              disabled={
+                isStoreClosed
+              }
               hitSlop={4}
-              style={styles.featuredQuantityButton}
-              onPress={onIncrease}
+              style={
+                styles.featuredQuantityButton
+              }
+              onPress={
+                onIncrease
+              }
             >
               <Text
                 style={
@@ -1550,36 +1626,53 @@ function FeaturedProductCard({
       </View>
 
       <Text
-        style={styles.featuredProductName}
+        style={
+          styles.featuredProductName
+        }
         numberOfLines={2}
       >
-        {product.nameEn?.trim() || product.name}
+        {product.nameEn?.trim() ||
+          product.name}
       </Text>
 
-      <View style={styles.featuredCurrentPriceWrap}>
-        <Text
-          style={styles.featuredCurrentPrice}
-          numberOfLines={1}
+      <View
+        style={styles.featuredPriceRow}
+      >
+        <View
+          style={
+            styles.featuredCurrentPriceWrap
+          }
         >
-          {formatMoney(
-            product.price,
-            currencyCode,
-          )}
-        </Text>
-      </View>
-
-      {product.compareAtPrice !== null &&
-        product.compareAtPrice > product.price && (
           <Text
-            style={styles.featuredOldPrice}
+            style={
+              styles.featuredCurrentPrice
+            }
             numberOfLines={1}
           >
             {formatMoney(
-              product.compareAtPrice,
+              product.price,
               currencyCode,
             )}
           </Text>
-        )}
+        </View>
+
+        {product.compareAtPrice !==
+          null &&
+          product.compareAtPrice >
+            product.price && (
+            <Text
+              style={
+                styles.featuredOldPrice
+              }
+              numberOfLines={1}
+            >
+              {formatMoney(
+                product.compareAtPrice,
+                currencyCode,
+              )}
+            </Text>
+          )}
+      </View>
     </View>
   );
 }
@@ -1775,15 +1868,18 @@ export default function BookstoreScreen() {
           (
             tile,
           ): CategoryDisplayItem | null => {
+            const isOffers =
+              tile.kind === 'offers';
+
             if (
-              tile.kind === 'offers' &&
+              isOffers &&
               !hasOffers
             ) {
               return null;
             }
 
             const section =
-              tile.kind === 'offers'
+              isOffers
                 ? null
                 : findBookstoreStorefrontSection(
                     tile,
@@ -1815,6 +1911,7 @@ export default function BookstoreScreen() {
                 section?.imageUrl ??
                 null,
               section,
+              isOffers,
             };
           },
         )
@@ -1826,21 +1923,33 @@ export default function BookstoreScreen() {
         );
     }
 
-    return BOOKSTORE_CATEGORIES.map(
-      (definition) => {
+    return BOOKSTORE_CATEGORIES
+      .filter(
+        (definition) =>
+          !definition.isOffers ||
+          hasOffers,
+      )
+      .map((definition) => {
+        const isOffers =
+          definition.isOffers === true;
+
         const section =
-          findBookstoreCategorySection(
-            definition,
-            rootSections,
-          );
+          isOffers
+            ? null
+            : findBookstoreCategorySection(
+                definition,
+                rootSections,
+              );
 
         return {
           key:
             section?.id ??
             definition.key,
           slug:
-            section?.slug ??
-            definition.key,
+            isOffers
+              ? 'offers'
+              : section?.slug ??
+                definition.key,
           label: definition.label,
           imageSource:
             BOOKSTORE_CATEGORY_IMAGES[
@@ -1852,9 +1961,9 @@ export default function BookstoreScreen() {
             null,
           imageUrl: null,
           section,
+          isOffers,
         };
-      },
-    );
+      });
   }, [
     catalog,
     storefrontCategoryTiles,
@@ -2049,6 +2158,20 @@ export default function BookstoreScreen() {
   function openCategory(
     item: CategoryDisplayItem,
   ) {
+    if (item.isOffers) {
+      router.push({
+        pathname:
+          '/supermarket-category/[slug]',
+        params: {
+          slug: 'offers',
+          storeId: currentStore.id,
+          categoryKey: item.key,
+          label: item.label,
+        },
+      });
+      return;
+    }
+
     router.push({
       pathname: '/bookstore-category/[slug]',
       params: {
@@ -2597,14 +2720,19 @@ const styles = StyleSheet.create({
   promotionBannerFrame: {
     marginHorizontal: 0,
     overflow: 'hidden',
+    position: 'relative',
     width: '100%',
+    zIndex: 1,
   },
   promotionBanner: {
     backgroundColor: '#F4F4F4',
     width: '100%',
   },
   promotionProductsScroll: {
+    elevation: 10,
     overflow: 'visible',
+    position: 'relative',
+    zIndex: 10,
   },
   promotionProductsRail: {
     alignItems: 'flex-start',
@@ -2725,20 +2853,25 @@ const styles = StyleSheet.create({
   },
   featuredProductName: {
     color: '#202020',
-    fontSize: 10.5,
-    fontWeight: '400',
+    fontSize: 12.5,
+    fontWeight: '500',
     letterSpacing: -0.15,
-    lineHeight: 12.5,
-    marginTop: 7,
-    minHeight: 25,
+    lineHeight: 15,
+    marginTop: 6,
     textAlign: 'left',
     writingDirection: 'ltr',
+  },
+  featuredPriceRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 1,
   },
   featuredCurrentPriceWrap: {
     alignSelf: 'flex-start',
     borderBottomColor: '#BFFF00',
     borderBottomWidth: 2,
-    marginTop: 3,
   },
   featuredCurrentPrice: {
     color: '#202020',
@@ -2749,11 +2882,9 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
   },
   featuredOldPrice: {
-    alignSelf: 'flex-start',
     color: '#858585',
     fontSize: 9,
     lineHeight: 11,
-    marginTop: 1,
     textAlign: 'left',
     textDecorationLine: 'line-through',
     writingDirection: 'ltr',
