@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getCategoryIcon } from '../config/category-icons';
 import { publicSupabase } from '../lib/supabase';
 import {
+  getMyOrders,
   getOrderByToken,
 } from '../services/order-service';
 
@@ -632,19 +633,6 @@ function StoreOrderSuccessScreen() {
           return;
         }
 
-        const savedOrder =
-          getOrderFromState(
-            orderId,
-          );
-
-        if (!savedOrder) {
-          setRefreshError(
-            'لم يتم العثور على الطلب على هذا الجهاز.',
-          );
-
-          return;
-        }
-
         const silent =
           options?.silent ===
           true;
@@ -656,10 +644,49 @@ function StoreOrderSuccessScreen() {
             );
           }
 
-          const latestOrder =
-            await getOrderByToken(
-              savedOrder.accessToken,
+          const savedOrder =
+            getOrderFromState(
+              orderId,
             );
+
+          let latestOrder: Order;
+
+          if (savedOrder) {
+            latestOrder =
+              await getOrderByToken(
+                savedOrder.accessToken,
+              );
+          } else {
+            /**
+             * A notification deep link contains the server-side order ID, not
+             * the private access token persisted in the local orders store.
+             *
+             * If local storage was cleared/migrated or hydration did not retain
+             * this order, recover it from the owner-scoped order history RPC.
+             * get_my_orders() is restricted by auth.uid(), so an arbitrary ID in
+             * a notification/deep link cannot expose another customer's order.
+             */
+            const serverOrders =
+              await getMyOrders();
+
+            const recoveredOrder =
+              serverOrders.find(
+                (currentOrder) =>
+                  currentOrder.id ===
+                  orderId,
+              );
+
+            if (!recoveredOrder) {
+              setRefreshError(
+                'لم يتم العثور على الطلب.',
+              );
+
+              return;
+            }
+
+            latestOrder =
+              recoveredOrder;
+          }
 
           const store =
             useOrdersStore

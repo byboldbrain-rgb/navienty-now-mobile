@@ -18,6 +18,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import CategoryCartDock, {
+  useCartDockScrollBehavior,
+} from '../../components/cart/category-cart-dock';
+import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap from '../../services/bootstrap-service';
@@ -29,6 +33,10 @@ import {
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+  listStorefrontCategoryTiles,
+  type StorefrontCategoryTile,
+} from '../../services/storefront-category-service';
 import {
   listSupermarketPromotionBanners,
   type SupermarketPromotionBanner,
@@ -52,7 +60,8 @@ type SupermarketCategoryDefinition = {
 type CategoryDisplayItem = {
   key: string;
   label: string;
-  imageSource: ImageSourcePropType;
+  imageSource: ImageSourcePropType | null;
+  imageUrl: string | null;
   section: CatalogSection | null;
   isOffers: boolean;
 };
@@ -453,6 +462,33 @@ function findSectionForCategory(
           normalizedLabel ||
         normalizeValue(section.name) ===
           normalizedLabel,
+    ) ?? null
+  );
+}
+
+function findSectionForStorefrontTile(
+  tile: StorefrontCategoryTile,
+  sections: CatalogSection[],
+): CatalogSection | null {
+  const acceptedValues = new Set(
+    [
+      tile.key,
+      tile.routeSlug,
+      ...tile.sourceSlugs,
+    ].map(normalizeValue),
+  );
+
+  return (
+    sections.find((section) =>
+      [
+        section.slug,
+        section.name,
+        section.nameEn,
+      ].some((value) =>
+        acceptedValues.has(
+          normalizeValue(value),
+        ),
+      ),
     ) ?? null
   );
 }
@@ -1251,11 +1287,27 @@ function CategoryVisual({
 }) {
   return (
     <View style={styles.categoryImageBox}>
-      <Image
-        source={item.imageSource}
-        style={styles.categoryImage}
-        resizeMode="cover"
-      />
+      {item.imageUrl ? (
+        <Image
+          source={{
+            uri: item.imageUrl,
+          }}
+          style={styles.categoryImage}
+          resizeMode="cover"
+        />
+      ) : item.imageSource ? (
+        <Image
+          source={item.imageSource}
+          style={styles.categoryImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <Text
+          style={styles.categoryFallbackIcon}
+        >
+          🛒
+        </Text>
+      )}
     </View>
   );
 }
@@ -1471,6 +1523,11 @@ function FeaturedProductCard({
 export default function SupermarketScreen() {
   const router = useRouter();
 
+  const {
+    isScrollingDown: isCartDockScrollingDown,
+    onScroll: handleCartDockScroll,
+  } = useCartDockScrollBehavior();
+
   const { width: windowWidth } =
     useWindowDimensions();
 
@@ -1505,6 +1562,13 @@ export default function SupermarketScreen() {
   ] = useState<
     SupermarketPromotionBanner[]
   >([]);
+
+  const [
+    storefrontCategoryTiles,
+    setStorefrontCategoryTiles,
+  ] = useState<
+    StorefrontCategoryTile[] | null
+  >(null);
 
   const [
     currencyCode,
@@ -1594,6 +1658,7 @@ export default function SupermarketScreen() {
       const [
         loadedCatalog,
         loadedPromotionBanners,
+        loadedStorefrontCategoryTiles,
       ] = await Promise.all([
         getStoreCatalog(
           supermarket.id,
@@ -1613,6 +1678,17 @@ export default function SupermarketScreen() {
             return [];
           },
         ),
+
+        listStorefrontCategoryTiles(
+          'supermarket',
+        ).catch((categoryError) => {
+          console.warn(
+            'Unable to load supermarket category configuration:',
+            categoryError,
+          );
+
+          return null;
+        }),
       ]);
 
       setCatalog(
@@ -1621,6 +1697,10 @@ export default function SupermarketScreen() {
 
       setPromotionBanners(
         loadedPromotionBanners,
+      );
+
+      setStorefrontCategoryTiles(
+        loadedStorefrontCategoryTiles,
       );
 
       setCurrencyCode(
@@ -1632,6 +1712,10 @@ export default function SupermarketScreen() {
       setCatalog(null);
 
       setPromotionBanners([]);
+
+      setStorefrontCategoryTiles(
+        null,
+      );
 
       setErrorMessage(
         error instanceof Error
@@ -1655,29 +1739,127 @@ export default function SupermarketScreen() {
         catalog?.sections ??
         [];
 
-      return SUPERMARKET_CATEGORIES.map(
-        (definition) => ({
-          key:
-            definition.key,
-
-          label:
-            definition.label,
-
-          imageSource:
-            definition.imageSource,
-
-          isOffers:
-            definition.isOffers ===
-            true,
-
-          section:
-            findSectionForCategory(
-              definition,
-              sections,
+      const hasOffers =
+        sections.some(
+          (section) =>
+            section.products.some(
+              (product) =>
+                getDiscountPercent(
+                  product,
+                ) !== null,
             ),
-        }),
-      );
-    }, [catalog]);
+        );
+
+      if (
+        storefrontCategoryTiles !==
+        null
+      ) {
+        return storefrontCategoryTiles
+          .map(
+            (
+              tile,
+            ): CategoryDisplayItem | null => {
+              const isOffers =
+                tile.kind === 'offers';
+
+              if (
+                isOffers &&
+                !hasOffers
+              ) {
+                return null;
+              }
+
+              const section =
+                isOffers
+                  ? null
+                  : findSectionForStorefrontTile(
+                      tile,
+                      sections,
+                    );
+
+              if (
+                (tile.kind ===
+                  'catalog' ||
+                  tile.kind ===
+                    'merged') &&
+                !section
+              ) {
+                return null;
+              }
+
+              const localDefinition =
+                SUPERMARKET_CATEGORIES.find(
+                  (definition) =>
+                    definition.key ===
+                      tile.key ||
+                    definition.key ===
+                      tile.routeSlug,
+                );
+
+              return {
+                key: tile.key,
+
+                label:
+                  tile.labelAr,
+
+                imageSource:
+                  localDefinition
+                    ?.imageSource ??
+                  null,
+
+                imageUrl:
+                  tile.imageUrl ??
+                  section?.imageUrl ??
+                  null,
+
+                isOffers,
+
+                section,
+              };
+            },
+          )
+          .filter(
+            (
+              item,
+            ): item is CategoryDisplayItem =>
+              item !== null,
+          );
+      }
+
+      return SUPERMARKET_CATEGORIES
+        .filter(
+          (definition) =>
+            !definition.isOffers ||
+            hasOffers,
+        )
+        .map(
+          (definition) => ({
+            key:
+              definition.key,
+
+            label:
+              definition.label,
+
+            imageSource:
+              definition.imageSource,
+
+            imageUrl: null,
+
+            isOffers:
+              definition.isOffers ===
+              true,
+
+            section:
+              findSectionForCategory(
+                definition,
+                sections,
+              ),
+          }),
+        );
+    }, [
+      catalog,
+      storefrontCategoryTiles,
+    ]);
 
   const categoryColumns =
     useMemo(
@@ -1685,6 +1867,15 @@ export default function SupermarketScreen() {
         makeCategoryColumns(
           categories,
         ).reverse(),
+      [categories],
+    );
+
+  const searchSuggestions =
+    useMemo(
+      () =>
+        categories.map(
+          (item) => item.label,
+        ),
       [categories],
     );
 
@@ -1971,6 +2162,20 @@ export default function SupermarketScreen() {
     currentStoreItemCount >
     0;
 
+  function openCart() {
+    setActiveCart(
+      currentStore.id,
+    );
+
+    router.push({
+      pathname: '/cart',
+      params: {
+        storeId:
+          currentStore.id,
+      },
+    });
+  }
+
   function openCategory(
     item: CategoryDisplayItem,
   ) {
@@ -2199,10 +2404,17 @@ export default function SupermarketScreen() {
             shouldShowCartBar &&
               styles.mainContentWithCart,
           ]}
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={
             false
           }
         >
+          <CategorySearchEntry
+            scope="supermarket"
+            suggestions={searchSuggestions}
+          />
+
           <View
             style={
               styles.categoriesSection
@@ -2467,76 +2679,20 @@ export default function SupermarketScreen() {
           )}
         </ScrollView>
 
-        {shouldShowCartBar && (
-          <View
-            pointerEvents="box-none"
-            style={
-              styles.cartBarFloatingWrapper
-            }
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`عرض السلة، ${currentStoreItemCount} منتجات، الإجمالي ${formatCartMoney(
-                currentStoreSubtotal,
-                currencyCode,
-              )}`}
-              style={({
-                pressed,
-              }) => [
-                styles.cartBar,
-
-                pressed &&
-                  styles.cartBarPressed,
-              ]}
-              onPress={() => {
-                setActiveCart(
-                  currentStore.id,
-                );
-
-                router.push(
-                  '/cart',
-                );
-              }}
-            >
-              <View
-                style={
-                  styles.cartCountBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.cartCountText
-                  }
-                >
-                  {
-                    currentStoreItemCount
-                  }
-                </Text>
-              </View>
-
-              <View
-                style={
-                  styles.cartBarRight
-                }
-              >
-                <Text
-                  style={
-                    styles.cartBarText
-                  }
-                  numberOfLines={
-                    1
-                  }
-                >
-                  {formatCartMoney(
-                    currentStoreSubtotal,
-                    currencyCode,
-                  )}{' '}
-                  عرض السلة
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        )}
+        <CategoryCartDock
+          itemCount={
+            shouldShowCartBar
+              ? currentStoreItemCount
+              : 0
+          }
+          subtotal={currentStoreSubtotal}
+          minimumOrder={delivery.minimumOrder}
+          currencyCode={currencyCode}
+          accentColor="#00B956"
+          accentDarkColor="#009D49"
+          isScrollingDown={isCartDockScrollingDown}
+          onPress={openCart}
+        />
       </View>
     </SafeAreaView>
   );
@@ -2701,7 +2857,7 @@ const styles =
 
     mainContentWithCart: {
       paddingBottom:
-        115,
+        180,
     },
 
     categoriesSection: {
@@ -2792,6 +2948,10 @@ const styles =
 
       width:
         80,
+    },
+
+    categoryFallbackIcon: {
+      fontSize: 32,
     },
 
     categoryImage: {

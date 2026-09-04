@@ -11,6 +11,9 @@ import type {
   OrderStatus,
   PaymentStatus,
 } from '../types/supabase-order';
+import {
+  trackRememberedNotificationConversion,
+} from './notification-analytics-service';
 
 type NumericValue =
   | number
@@ -440,20 +443,28 @@ function parsePendingOrderAttempt(
   }
 
   try {
-    const parsed = JSON.parse(value) as Partial<PendingOrderAttempt>;
+    const parsed = JSON.parse(
+      value,
+    ) as Partial<PendingOrderAttempt>;
 
     if (
-      typeof parsed.fingerprint !== 'string' ||
-      typeof parsed.clientRequestId !== 'string' ||
-      typeof parsed.createdAt !== 'number'
+      typeof parsed.fingerprint !==
+        'string' ||
+      typeof parsed.clientRequestId !==
+        'string' ||
+      typeof parsed.createdAt !==
+        'number'
     ) {
       return null;
     }
 
     return {
-      fingerprint: parsed.fingerprint,
-      clientRequestId: parsed.clientRequestId,
-      createdAt: parsed.createdAt,
+      fingerprint:
+        parsed.fingerprint,
+      clientRequestId:
+        parsed.clientRequestId,
+      createdAt:
+        parsed.createdAt,
     };
   } catch {
     return null;
@@ -502,13 +513,15 @@ async function getOrCreatePendingOrderAttempt(
 
   const nextAttempt: PendingOrderAttempt = {
     fingerprint,
-    clientRequestId: createClientRequestId(),
+    clientRequestId:
+      createClientRequestId(),
     createdAt: currentTime,
   };
 
   // Set memory before awaiting persistence so two rapid taps in the same
   // process cannot generate separate client_request_id values.
-  memoryPendingOrderAttempt = nextAttempt;
+  memoryPendingOrderAttempt =
+    nextAttempt;
 
   try {
     await AsyncStorage.setItem(
@@ -526,9 +539,11 @@ async function clearPendingOrderAttempt(
   attempt: PendingOrderAttempt,
 ): Promise<void> {
   if (
-    memoryPendingOrderAttempt?.clientRequestId ===
+    memoryPendingOrderAttempt
+      ?.clientRequestId ===
       attempt.clientRequestId &&
-    memoryPendingOrderAttempt.fingerprint ===
+    memoryPendingOrderAttempt
+      .fingerprint ===
       attempt.fingerprint
   ) {
     memoryPendingOrderAttempt = null;
@@ -543,7 +558,8 @@ async function clearPendingOrderAttempt(
       );
 
     if (
-      persistedAttempt?.clientRequestId ===
+      persistedAttempt
+        ?.clientRequestId ===
         attempt.clientRequestId &&
       persistedAttempt.fingerprint ===
         attempt.fingerprint
@@ -713,6 +729,30 @@ function getErrorMessage(
       'لا يمكن تطبيق خصم على قيمة الطلب الحالية.',
     ],
     [
+      'spin_reward_not_found',
+      'تعذر العثور على مكافأة الـSpin. حدّث صفحة إتمام الطلب وحاول مرة أخرى.',
+    ],
+    [
+      'spin_reward_not_available',
+      'مكافأة الـSpin غير متاحة للاستخدام في هذا الطلب.',
+    ],
+    [
+      'spin_reward_expired',
+      'انتهت صلاحية مكافأة الـSpin.',
+    ],
+    [
+      'spin_minimum_not_reached',
+      'قيمة المنتجات أقل من الحد الأدنى المطلوب لاستخدام مكافأة الـSpin.',
+    ],
+    [
+      'spin_reward_already_consumed',
+      'تم استخدام مكافأة الـSpin بالفعل.',
+    ],
+    [
+      'spin_voucher_conflict',
+      'لا يمكن جمع مكافأة الـSpin مع كوبون خصم في نفس الطلب.',
+    ],
+    [
       'order_not_found',
       'لم يتم العثور على الطلب.',
     ],
@@ -844,6 +884,14 @@ export async function createWhatsAppOrder(
         .toUpperCase() ||
       null,
 
+    /**
+     * The server is the only authority allowed to decide what this Spin event
+     * means for the order. It may bind a newly-won future reward to its source
+     * order, or redeem an already-available reward exactly once.
+     */
+    spin_event_id:
+      input.spinEventId ?? null,
+
     items: input.items.map(
       (item) => ({
         product_id:
@@ -872,7 +920,9 @@ export async function createWhatsAppOrder(
   }
 
   const createdOrder =
-    data as unknown as RawCreatedOrder | null;
+    data as unknown as
+      | RawCreatedOrder
+      | null;
 
   if (
     !createdOrder?.access_token
@@ -882,13 +932,25 @@ export async function createWhatsAppOrder(
     );
   }
 
-  const order = await getOrderByToken(
-    createdOrder.access_token,
-  );
+  const order =
+    await getOrderByToken(
+      createdOrder.access_token,
+    );
 
   await clearPendingOrderAttempt(
     pendingAttempt,
   );
+
+  /**
+   * Best-effort campaign attribution. This can never fail the order: the
+   * order is already committed and remains the source of truth even if the
+   * analytics RPC is temporarily unavailable.
+   */
+  await trackRememberedNotificationConversion({
+    type: 'order_created',
+    resourceId: order.id,
+    valueEgp: order.total,
+  });
 
   return order;
 }

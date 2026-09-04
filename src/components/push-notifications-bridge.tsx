@@ -6,8 +6,12 @@ import {
   type Href,
 } from 'expo-router';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
 import { supabase } from '../lib/supabase';
+import {
+  trackNotificationEvent,
+} from '../services/notification-analytics-service';
 import {
   registerPushNotifications,
   shouldAutoRegisterPushNotifications,
@@ -49,6 +53,7 @@ const SAFE_EXACT_NOTIFICATION_PATHS =
     '/cart',
     '/orders',
     '/account',
+    '/notification-settings',
 
     '/category/restaurants',
     '/category/supermarket',
@@ -564,6 +569,16 @@ export default function PushNotificationsBridge({
     if (
       lastResponse?.notification
     ) {
+      void trackNotificationEvent(
+        lastResponse.notification.request.content.data,
+        'opened',
+        {
+          actionIdentifier:
+            lastResponse.actionIdentifier,
+          launch: 'cold-start',
+        },
+      );
+
       redirectFromNotification(
         lastResponse.notification,
       );
@@ -580,6 +595,16 @@ export default function PushNotificationsBridge({
       Notifications
         .addNotificationResponseReceivedListener(
           (response) => {
+            void trackNotificationEvent(
+              response.notification.request.content.data,
+              'opened',
+              {
+                actionIdentifier:
+                  response.actionIdentifier,
+                launch: 'response-listener',
+              },
+            );
+
             redirectFromNotification(
               response.notification,
             );
@@ -589,8 +614,24 @@ export default function PushNotificationsBridge({
           },
         );
 
+    const receivedSubscription =
+      Notifications
+        .addNotificationReceivedListener(
+          (notification) => {
+            void trackNotificationEvent(
+              notification.request.content.data,
+              'received_foreground',
+              {
+                appState:
+                  AppState.currentState,
+              },
+            );
+          },
+        );
+
     return () => {
       responseSubscription.remove();
+      receivedSubscription.remove();
     };
   }, [enabled]);
 
@@ -626,6 +667,25 @@ export default function PushNotificationsBridge({
     }
 
     void registerExistingPermission();
+
+    /**
+     * Notification permission can change while the user is in the operating
+     * system Settings app. Reconcile again whenever Navienty Now returns to
+     * the foreground so a revoked permission disables this installation's
+     * remembered subscription, and a re-enabled permission registers it again.
+     */
+    const appStateSubscription =
+      AppState.addEventListener(
+        'change',
+        (state) => {
+          if (
+            state === 'active' &&
+            !disposed
+          ) {
+            void registerExistingPermission();
+          }
+        },
+      );
 
     /**
      * Expo can rotate the underlying APNs/FCM device token while the app is
@@ -692,6 +752,8 @@ export default function PushNotificationsBridge({
 
     return () => {
       disposed = true;
+
+      appStateSubscription.remove();
 
       tokenSubscription.remove();
 

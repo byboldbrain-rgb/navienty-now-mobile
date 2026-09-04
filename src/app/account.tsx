@@ -290,6 +290,7 @@ export default function AccountScreen() {
             bootstrap.settings.privacy_url,
           ),
         );
+
         setTermsUrl(
           normalizeLegalUrl(
             bootstrap.settings.terms_url,
@@ -360,6 +361,7 @@ export default function AccountScreen() {
         title,
         'الرابط غير متاح حاليًا. تواصل مع دعم Navienty Now للحصول على نسخة.',
       );
+
       return;
     }
 
@@ -430,6 +432,7 @@ export default function AccountScreen() {
         {
           text: 'طلب حذف الحساب',
           style: 'destructive',
+
           onPress: () => {
             void submitAccountDeletionRequest();
           },
@@ -461,7 +464,9 @@ export default function AccountScreen() {
 
       setDeletionRequest({
         ...deletionRequest,
+
         status: 'cancelled',
+
         cancelledAt:
           new Date().toISOString(),
       });
@@ -487,6 +492,7 @@ export default function AccountScreen() {
         },
         {
           text: 'إلغاء طلب الحذف',
+
           onPress: () => {
             void cancelDeletionRequest();
           },
@@ -596,12 +602,10 @@ export default function AccountScreen() {
             <Text style={styles.pageTitle}>
               حسابي
             </Text>
-
-
           </View>
 
           {/* ======================================= */}
-          {/* DELIVERY DETAILS                       */}
+          {/* DELIVERY DETAILS                        */}
           {/* ======================================= */}
 
           <View style={styles.formCard}>
@@ -618,11 +622,7 @@ export default function AccountScreen() {
                 >
                   بيانات التوصيل
                 </Text>
-
-
               </View>
-
-
             </View>
 
             <View
@@ -662,26 +662,78 @@ export default function AccountScreen() {
                   setAddress
                 }
               />
-
-
             </View>
-
-
           </View>
 
+          {/* ======================================= */}
+          {/* NOTIFICATION SETTINGS                   */}
+          {/* ======================================= */}
 
+          <Pressable
+            accessibilityLabel="إعدادات الإشعارات. تحكم في تحديثات الطلبات والعروض وفترة الهدوء."
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.notificationSettingsCard,
+
+              pressed &&
+                styles.notificationSettingsCardPressed,
+            ]}
+            onPress={() => {
+              router.push(
+                '/notification-settings',
+              );
+            }}
+          >
+            <View
+              style={
+                styles.notificationSettingsIcon
+              }
+            >
+              <Ionicons
+                color={
+                  NAVIENTY_NOW_COLORS.primaryDark
+                }
+                name="notifications-outline"
+                size={21}
+              />
+            </View>
+
+            <View
+              style={
+                styles.notificationSettingsCopy
+              }
+            >
+              <Text
+                style={
+                  styles.notificationSettingsTitle
+                }
+              >
+                إعدادات الإشعارات
+              </Text>
+
+              <Text
+                style={
+                  styles.notificationSettingsDescription
+                }
+              >
+                تحكم في تحديثات الطلبات والعروض وفترة الهدوء
+              </Text>
+            </View>
+
+            <Ionicons
+              color="#9A9A9F"
+              name="chevron-back"
+              size={18}
+            />
+          </Pressable>
 
           {/* ======================================= */}
           {/* PRIVACY AND TERMS                       */}
           {/* ======================================= */}
 
-
-
           {/* ======================================= */}
           {/* ACCOUNT DELETION                        */}
           {/* ======================================= */}
-
-
 
           {/* ======================================= */}
           {/* ERROR                                   */}
@@ -1119,6 +1171,98 @@ const styles = StyleSheet.create({
     lineHeight: 16,
 
     marginRight: 6,
+
+    textAlign: 'right',
+
+    writingDirection: 'rtl',
+  },
+
+  /* ========================================================= */
+  /* NOTIFICATION SETTINGS                                     */
+  /* ========================================================= */
+
+  notificationSettingsCard: {
+    alignItems: 'center',
+
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.white,
+
+    borderColor: CARD_BORDER,
+
+    borderRadius: 18,
+
+    borderWidth: 1,
+
+    flexDirection: 'row-reverse',
+
+    marginTop: 16,
+
+    minHeight: 74,
+
+    paddingHorizontal: 14,
+
+    paddingVertical: 12,
+  },
+
+  notificationSettingsCardPressed: {
+    backgroundColor: '#F8FCFA',
+
+    opacity: 0.9,
+
+    transform: [
+      {
+        scale: 0.995,
+      },
+    ],
+  },
+
+  notificationSettingsIcon: {
+    alignItems: 'center',
+
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+
+    borderRadius: 14,
+
+    height: 44,
+
+    justifyContent: 'center',
+
+    marginLeft: 11,
+
+    width: 44,
+  },
+
+  notificationSettingsCopy: {
+    alignItems: 'flex-end',
+
+    flex: 1,
+
+    paddingLeft: 8,
+  },
+
+  notificationSettingsTitle: {
+    color:
+      NAVIENTY_NOW_COLORS.text,
+
+    fontSize: 14,
+
+    fontWeight: '800',
+
+    textAlign: 'right',
+
+    writingDirection: 'rtl',
+  },
+
+  notificationSettingsDescription: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+
+    fontSize: 9.5,
+
+    lineHeight: 16,
+
+    marginTop: 3,
 
     textAlign: 'right',
 

@@ -2,43 +2,48 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    useWindowDimensions,
-    View,
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import {
-    SafeAreaView,
-    useSafeAreaInsets,
+  SafeAreaView,
+  useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import {
+  findStorefrontCategoryTile,
+  getStorefrontTileScreenImages,
+  listStorefrontCategoryTiles,
+} from '../../services/storefront-category-service';
 
 import getAppBootstrap, {
-    type AppBootstrap,
+  type AppBootstrap,
 } from '../../services/bootstrap-service';
 import {
-    type HomeBanner,
-    type HomeBannerImage,
+  type HomeBanner,
+  type HomeBannerImage,
 } from '../../services/home-banners-service';
 import {
-    useCartStore,
+  useCartStore,
 } from '../../store/cart-store';
 import {
-    NAVIENTY_NOW_COLORS,
-    NAVIENTY_NOW_LAYOUT,
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
 } from '../../theme/navienty-now-theme';
 
 type BootstrapCategory =
@@ -210,6 +215,14 @@ export default function RequestAnythingScreen() {
       null,
     );
 
+  const [
+    campaignImageOverrides,
+    setCampaignImageOverrides,
+  ] =
+    useState<Record<string, string>>(
+      {},
+    );
+
   const addItem =
     useCartStore(
       (state) =>
@@ -266,6 +279,39 @@ export default function RequestAnythingScreen() {
           const bootstrap =
             await getAppBootstrap();
 
+          let remoteScreenImages:
+            Record<string, string> =
+            {};
+
+          try {
+            const remoteTiles =
+              await listStorefrontCategoryTiles(
+                'home',
+              );
+
+            const remoteTile =
+              findStorefrontCategoryTile(
+                remoteTiles,
+                [
+                  'request-anything',
+                ],
+              );
+
+            remoteScreenImages =
+              getStorefrontTileScreenImages(
+                remoteTile,
+              );
+          } catch {
+            /*
+             * Remote artwork is optional.
+             * Bundled images remain the fallback.
+             */
+          }
+
+          setCampaignImageOverrides(
+            remoteScreenImages,
+          );
+
           const bootstrapCategories =
             bootstrap
               .store_categories as
@@ -316,6 +362,10 @@ export default function RequestAnythingScreen() {
             null,
           );
 
+          setCampaignImageOverrides(
+            {},
+          );
+
           setErrorMessage(
             error instanceof Error
               ? error.message
@@ -349,6 +399,12 @@ export default function RequestAnythingScreen() {
               'request-anything-detail-02',
 
             imageUrl:
+              campaignImageOverrides[
+                'detail_02'
+              ] ??
+              campaignImageOverrides[
+                'detail02'
+              ] ??
               REQUEST_ANYTHING_DETAIL_IMAGE_02,
 
             altTextAr:
@@ -363,6 +419,12 @@ export default function RequestAnythingScreen() {
               'request-anything-detail-03',
 
             imageUrl:
+              campaignImageOverrides[
+                'detail_03'
+              ] ??
+              campaignImageOverrides[
+                'detail03'
+              ] ??
               REQUEST_ANYTHING_DETAIL_IMAGE_03,
 
             altTextAr:
@@ -378,6 +440,9 @@ export default function RequestAnythingScreen() {
           'request-anything',
 
         imageUrl:
+          campaignImageOverrides[
+            'hero'
+          ] ??
           REQUEST_ANYTHING_HERO_IMAGE,
 
         altTextAr:
@@ -423,7 +488,10 @@ export default function RequestAnythingScreen() {
 
         additionalImages,
       };
-    }, [category]);
+    }, [
+      campaignImageOverrides,
+      category,
+    ]);
 
   const trimmedRequest =
     requestText.trim();

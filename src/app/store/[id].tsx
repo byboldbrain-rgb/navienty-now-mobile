@@ -29,6 +29,9 @@ import {
   getStoreCatalog,
 } from '../../services/catalog-service';
 
+import CategoryCartDock, {
+  useCartDockScrollBehavior,
+} from '../../components/cart/category-cart-dock';
 import { StoreScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   isRestaurantCartCategory,
@@ -117,6 +120,11 @@ function BackArrowIcon() {
 export default function StoreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  const {
+    isScrollingDown: isCartDockScrollingDown,
+    onScroll: handleCartDockScroll,
+  } = useCartDockScrollBehavior();
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -848,9 +856,11 @@ export default function StoreScreen() {
           cartItemCount > 0 &&
             Platform.OS === 'android' && {
               paddingBottom:
-                140 + Math.max(insets.bottom, 0),
+                180 + Math.max(insets.bottom, 0),
             },
         ]}
+        onScroll={handleCartDockScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={
           false
         }
@@ -1887,59 +1897,16 @@ export default function StoreScreen() {
 
       {/* CART BOTTOM BAR */}
 
-      {cartItemCount > 0 ? (
-        <View
-          style={[
-            styles.cartBarWrapper,
-            Platform.OS === 'android' && {
-              paddingBottom:
-                Math.max(insets.bottom, 8) + 12,
-            },
-          ]}
-        >
-          <Pressable
-            style={({ pressed }) => [
-              styles.cartBar,
-
-              pressed &&
-                styles.cartBarPressed,
-            ]}
-            onPress={openCart}
-          >
-            <View
-              style={
-                styles.cartCountCircle
-              }
-            >
-              <Text
-                style={
-                  styles.cartCountText
-                }
-              >
-                {cartItemCount}
-              </Text>
-            </View>
-
-            <Text
-              style={
-                styles.cartButtonText
-              }
-            >
-              عرض السلة
-            </Text>
-
-            <Text
-              style={
-                styles.cartPrice
-              }
-            >
-              {formatPrice(
-                cartSubtotal,
-              )}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
+      <CategoryCartDock
+        itemCount={cartItemCount}
+        subtotal={cartSubtotal}
+        minimumOrder={delivery.minimumOrder}
+        currencyCode={currencySymbol}
+        accentColor={NAVIENTY_NOW_COLORS.primary}
+        accentDarkColor="#009245"
+        isScrollingDown={isCartDockScrollingDown}
+        onPress={openCart}
+      />
 
       {/* DIFFERENT RESTAURANT CART MODAL */}
 
@@ -2104,7 +2071,7 @@ const styles = StyleSheet.create({
   },
 
   pageContentWithBottomBar: {
-    paddingBottom: 140,
+    paddingBottom: 180,
   },
 
   /* ---------------------------------- */

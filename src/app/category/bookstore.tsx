@@ -18,6 +18,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import CategoryCartDock, {
+  useCartDockScrollBehavior,
+} from '../../components/cart/category-cart-dock';
+import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
@@ -34,6 +38,10 @@ import {
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+  listStorefrontCategoryTiles,
+  type StorefrontCategoryTile,
+} from '../../services/storefront-category-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
@@ -209,6 +217,7 @@ type CategoryDisplayItem = {
   slug: string;
   label: string;
   imageSource: ImageSourcePropType | null;
+  imageUrl: string | null;
   section: CatalogSection | null;
 };
 
@@ -363,6 +372,34 @@ function findBookstoreCategorySection(
       definition.key,
       definition.label,
       ...definition.aliases,
+    ].map(normalizeCategoryValue),
+  );
+
+  return (
+    sections.find((section) =>
+      [
+        section.slug,
+        section.name,
+        section.nameEn,
+      ].some((value) =>
+        acceptedValues.has(
+          normalizeCategoryValue(value),
+        ),
+      ),
+    ) ?? null
+  );
+}
+
+function findBookstoreStorefrontSection(
+  tile: StorefrontCategoryTile,
+  sections: CatalogSection[],
+): CatalogSection | null {
+  const acceptedValues = new Set(
+    [
+      tile.key,
+      tile.routeSlug,
+      tile.labelAr,
+      ...tile.sourceSlugs,
     ].map(normalizeCategoryValue),
   );
 
@@ -1379,7 +1416,15 @@ function CategoryVisual({
         },
       ]}
     >
-      {item.imageSource ? (
+      {item.imageUrl ? (
+        <Image
+          source={{
+            uri: item.imageUrl,
+          }}
+          style={styles.categoryImage}
+          resizeMode="cover"
+        />
+      ) : item.imageSource ? (
         <Image
           source={item.imageSource}
           style={styles.categoryImage}
@@ -1541,6 +1586,11 @@ function FeaturedProductCard({
 
 export default function BookstoreScreen() {
   const router = useRouter();
+
+  const {
+    isScrollingDown: isCartDockScrollingDown,
+    onScroll: handleCartDockScroll,
+  } = useCartDockScrollBehavior();
   const { width: windowWidth } =
     useWindowDimensions();
 
@@ -1554,6 +1604,13 @@ export default function BookstoreScreen() {
     promotionBanners,
     setPromotionBanners,
   ] = useState<BookstorePromotionBanner[]>([]);
+
+  const [
+    storefrontCategoryTiles,
+    setStorefrontCategoryTiles,
+  ] = useState<
+    StorefrontCategoryTile[] | null
+  >(null);
 
   const [currencyCode, setCurrencyCode] =
     useState('EGP');
@@ -1627,6 +1684,7 @@ export default function BookstoreScreen() {
       const [
         loadedCatalog,
         loadedPromotionBanners,
+        loadedStorefrontCategoryTiles,
       ] = await Promise.all([
         getStoreCatalog(
           bookstore.id,
@@ -1641,11 +1699,24 @@ export default function BookstoreScreen() {
           );
           return [];
         }),
+
+        listStorefrontCategoryTiles(
+          'bookstore',
+        ).catch((categoryError) => {
+          console.warn(
+            'Unable to load bookstore category configuration:',
+            categoryError,
+          );
+          return null;
+        }),
       ]);
 
       setCatalog(loadedCatalog);
       setPromotionBanners(
         loadedPromotionBanners,
+      );
+      setStorefrontCategoryTiles(
+        loadedStorefrontCategoryTiles,
       );
       setCurrencyCode(
         bootstrap.settings.currency_code || 'EGP',
@@ -1653,6 +1724,9 @@ export default function BookstoreScreen() {
     } catch (error) {
       setCatalog(null);
       setPromotionBanners([]);
+      setStorefrontCategoryTiles(
+        null,
+      );
       setErrorMessage(
         error instanceof Error
           ? error.message
@@ -1682,6 +1756,76 @@ export default function BookstoreScreen() {
               section.parentId === null,
           );
 
+    const hasOffers =
+      catalog.sections.some(
+        (section) =>
+          section.products.some(
+            (product) =>
+              getDiscountPercent(
+                product,
+              ) !== null,
+          ),
+      );
+
+    if (
+      storefrontCategoryTiles !== null
+    ) {
+      return storefrontCategoryTiles
+        .map(
+          (
+            tile,
+          ): CategoryDisplayItem | null => {
+            if (
+              tile.kind === 'offers' &&
+              !hasOffers
+            ) {
+              return null;
+            }
+
+            const section =
+              tile.kind === 'offers'
+                ? null
+                : findBookstoreStorefrontSection(
+                    tile,
+                    rootSections,
+                  );
+
+            if (
+              (tile.kind === 'catalog' ||
+                tile.kind === 'merged') &&
+              !section
+            ) {
+              return null;
+            }
+
+            return {
+              key: tile.key,
+              slug: tile.routeSlug,
+              label: tile.labelAr,
+              imageSource:
+                BOOKSTORE_CATEGORY_IMAGES[
+                  tile.key
+                ] ??
+                BOOKSTORE_CATEGORY_IMAGES[
+                  section?.slug ?? ''
+                ] ??
+                null,
+              imageUrl:
+                tile.imageUrl ??
+                section?.imageUrl ??
+                null,
+              section,
+            };
+          },
+        )
+        .filter(
+          (
+            item,
+          ): item is CategoryDisplayItem =>
+            item !== null,
+        );
+    }
+
     return BOOKSTORE_CATEGORIES.map(
       (definition) => {
         const section =
@@ -1706,17 +1850,29 @@ export default function BookstoreScreen() {
               section?.slug ?? ''
             ] ??
             null,
+          imageUrl: null,
           section,
         };
       },
     );
-  }, [catalog]);
+  }, [
+    catalog,
+    storefrontCategoryTiles,
+  ]);
 
   const categoryColumns = useMemo(
     () =>
       makeCategoryColumns(
         categories,
       ).reverse(),
+    [categories],
+  );
+
+  const searchSuggestions = useMemo(
+    () =>
+      categories.map(
+        (item) => item.label,
+      ),
     [categories],
   );
 
@@ -2071,8 +2227,15 @@ export default function BookstoreScreen() {
             shouldShowCartBar &&
               styles.mainContentWithCart,
           ]}
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
+          <CategorySearchEntry
+            scope="bookstore"
+            suggestions={searchSuggestions}
+          />
+
           <View style={styles.categoriesSection}>
             <Text style={styles.categoriesTitle}>
               تسوق حسب الفئة
@@ -2252,44 +2415,20 @@ export default function BookstoreScreen() {
           )}
         </ScrollView>
 
-        {shouldShowCartBar && (
-          <View
-            pointerEvents="box-none"
-            style={styles.cartBarFloatingWrapper}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`عرض السلة، ${currentStoreItemCount} منتجات، الإجمالي ${formatCartMoney(
-                currentStoreSubtotal,
-                currencyCode,
-              )}`}
-              style={({ pressed }) => [
-                styles.cartBar,
-                pressed && styles.cartBarPressed,
-              ]}
-              onPress={openCart}
-            >
-              <View style={styles.cartCountBadge}>
-                <Text style={styles.cartCountText}>
-                  {currentStoreItemCount}
-                </Text>
-              </View>
-
-              <View style={styles.cartBarRight}>
-                <Text
-                  style={styles.cartBarText}
-                  numberOfLines={1}
-                >
-                  {formatCartMoney(
-                    currentStoreSubtotal,
-                    currencyCode,
-                  )}{' '}
-                  عرض السلة
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        )}
+        <CategoryCartDock
+          itemCount={
+            shouldShowCartBar
+              ? currentStoreItemCount
+              : 0
+          }
+          subtotal={currentStoreSubtotal}
+          minimumOrder={delivery.minimumOrder}
+          currencyCode={currencyCode}
+          accentColor="#00B956"
+          accentDarkColor="#009D49"
+          isScrollingDown={isCartDockScrollingDown}
+          onPress={openCart}
+        />
       </View>
     </SafeAreaView>
   );
@@ -2369,7 +2508,7 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
   mainContentWithCart: {
-    paddingBottom: 115,
+    paddingBottom: 180,
   },
   categoriesSection: {
     backgroundColor: '#FFFFFF',

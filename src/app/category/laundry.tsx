@@ -16,6 +16,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  findStorefrontCategoryTile,
+  getStorefrontTileScreenImages,
+  listStorefrontCategoryTiles,
+} from '../../services/storefront-category-service';
 
 import PremiumPromoTemplate from '../../components/promo/premium-promo-template';
 import getAppBootstrap, {
@@ -45,33 +50,25 @@ type BootstrapCategory =
     subtitle_ar?: string | null;
   };
 
-const LAUNDRY_CATEGORY_SLUG =
-  'laundry';
+const LAUNDRY_CATEGORY_SLUG = 'laundry';
 
 const LAUNDRY_PRODUCT_SLUG =
   'wash-and-iron';
 
-const LAUNDRY_CATEGORY_ALIASES =
-  new Set([
-    'laundry',
-    'laundry-ironing',
-    'wash-and-iron',
-    'washing-ironing',
-  ]);
+const LAUNDRY_CATEGORY_ALIASES = new Set([
+  'laundry',
+  'laundry-ironing',
+  'wash-and-iron',
+  'washing-ironing',
+]);
 
 /*
  * ============================================================
  * LAUNDRY CAMPAIGN LOCAL ASSETS
  * ============================================================
  *
- * Hero:
- * 1112 × 1280 px
- *
- * Detail images:
- * 1125 × 792 px
- *
- * Path:
- * src/assets/images/laundry/
+ * Remote artwork from Supabase has priority.
+ * These bundled files are safe fallbacks.
  * ============================================================
  */
 
@@ -139,23 +136,21 @@ function findLaundryProduct(
   }
 
   const matchingProduct =
-    products.find(
-      (product) => {
-        const productSlug =
-          normalizeSlug(
-            product.slug,
-          );
-
-        return (
-          productSlug.includes(
-            'wash',
-          ) &&
-          productSlug.includes(
-            'iron',
-          )
+    products.find((product) => {
+      const productSlug =
+        normalizeSlug(
+          product.slug,
         );
-      },
-    );
+
+      return (
+        productSlug.includes(
+          'wash',
+        ) &&
+        productSlug.includes(
+          'iron',
+        )
+      );
+    });
 
   return (
     matchingProduct ??
@@ -165,8 +160,7 @@ function findLaundryProduct(
 }
 
 export default function LaundryScreen() {
-  const router =
-    useRouter();
+  const router = useRouter();
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -174,183 +168,161 @@ export default function LaundryScreen() {
         state.locationServiceAreaId,
     );
 
-  const [
-    category,
-    setCategory,
-  ] =
+  const [category, setCategory] =
     useState<BootstrapCategory | null>(
       null,
     );
 
-  const [
-    stores,
-    setStores,
-  ] =
-    useState<StoreSummary[]>(
-      [],
-    );
+  const [stores, setStores] = useState<
+    StoreSummary[]
+  >([]);
 
-  const [
-    isLoading,
-    setIsLoading,
-  ] =
+  const [isLoading, setIsLoading] =
     useState(true);
 
   const [
     isOpeningAction,
     setIsOpeningAction,
-  ] =
-    useState(false);
+  ] = useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState<string | null>(null);
 
   const [
-    errorMessage,
-    setErrorMessage,
+    campaignImageOverrides,
+    setCampaignImageOverrides,
   ] =
-    useState<string | null>(
-      null,
+    useState<Record<string, string>>(
+      {},
     );
 
-  const close =
-    useCallback(() => {
-      if (
-        router.canGoBack()
-      ) {
-        router.back();
+  const close = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
 
-        return;
-      }
-
-      router.replace('/');
-    }, [router]);
+    router.replace('/');
+  }, [router]);
 
   const loadLaundryData =
-    useCallback(
-      async () => {
+    useCallback(async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+
+        const [
+          bootstrap,
+          loadedStores,
+        ] = await Promise.all([
+          getAppBootstrap(),
+
+          listStores({
+            categorySlug:
+              LAUNDRY_CATEGORY_SLUG as StoreCategorySlug,
+
+            serviceAreaId:
+              savedServiceAreaId ??
+              undefined,
+          }),
+        ]);
+
+        let remoteScreenImages:
+          Record<string, string> =
+          {};
+
         try {
-          setIsLoading(
-            true,
-          );
+          const remoteTiles =
+            await listStorefrontCategoryTiles(
+              'home',
+            );
 
-          setErrorMessage(
-            null,
-          );
-
-          const [
-            bootstrap,
-            loadedStores,
-          ] =
-            await Promise.all([
-              getAppBootstrap(),
-
-              listStores({
-                categorySlug:
-                  LAUNDRY_CATEGORY_SLUG as StoreCategorySlug,
-
-                serviceAreaId:
-                  savedServiceAreaId ??
-                  undefined,
-              }),
-            ]);
-
-          const bootstrapCategories =
-            bootstrap
-              .store_categories as
-              BootstrapCategory[];
-
-          const loadedCategory =
-            bootstrapCategories.find(
-              (item) =>
-                LAUNDRY_CATEGORY_ALIASES.has(
-                  normalizeSlug(
-                    item.slug,
-                  ),
-                ),
-            ) ?? null;
-
-          setCategory(
-            loadedCategory ?? {
-              id:
+          const remoteTile =
+            findStorefrontCategoryTile(
+              remoteTiles,
+              [
                 'laundry',
+              ],
+            );
 
-              slug:
-                LAUNDRY_CATEGORY_SLUG,
-
-              name_ar:
-                'الغسيل والكي',
-
-              name_en:
-                'Laundry & Ironing',
-
-              icon:
-                '🧺',
-
-              image_url:
-                null,
-
-              is_active:
-                true,
-
-              sort_order:
-                0,
-
-              subtitle_ar:
-                'خدمة غسيل وكي سهلة وسريعة لملابسك.',
-            } as BootstrapCategory,
-          );
-
-          setStores(
-            loadedStores,
-          );
-        } catch (error) {
-          setStores(
-            [],
-          );
-
-          setCategory(
-            null,
-          );
-
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'تعذر تحميل خدمة الغسيل والكي.',
-          );
-        } finally {
-          setIsLoading(
-            false,
-          );
+          remoteScreenImages =
+            getStorefrontTileScreenImages(
+              remoteTile,
+            );
+        } catch {
+          /*
+           * Remote artwork is optional.
+           * Bundled images remain the fallback.
+           */
         }
-      },
-      [
-        savedServiceAreaId,
-      ],
-    );
+
+        setCampaignImageOverrides(
+          remoteScreenImages,
+        );
+
+        const bootstrapCategories =
+          bootstrap.store_categories as
+            BootstrapCategory[];
+
+        const loadedCategory =
+          bootstrapCategories.find(
+            (item) =>
+              LAUNDRY_CATEGORY_ALIASES.has(
+                normalizeSlug(
+                  item.slug,
+                ),
+              ),
+          ) ?? null;
+
+        setCategory(
+          loadedCategory ?? {
+            id: 'laundry',
+
+            slug:
+              LAUNDRY_CATEGORY_SLUG,
+
+            name_ar:
+              'الغسيل والكي',
+
+            name_en:
+              'Laundry & Ironing',
+
+            icon: '🧺',
+
+            image_url: null,
+
+            is_active: true,
+
+            sort_order: 0,
+
+            subtitle_ar:
+              'خدمة غسيل وكي سهلة وسريعة لملابسك.',
+          } as BootstrapCategory,
+        );
+
+        setStores(loadedStores);
+      } catch (error) {
+        setStores([]);
+
+        setCategory(null);
+
+        setCampaignImageOverrides(
+          {},
+        );
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'تعذر تحميل خدمة الغسيل والكي.',
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }, [savedServiceAreaId]);
 
   useEffect(() => {
     void loadLaundryData();
   }, [loadLaundryData]);
-
-  /*
-   * ============================================================
-   * LAUNDRY CAMPAIGN
-   * ============================================================
-   *
-   * الصور المعروضة في واجهة الحملة أصبحت Local Assets فقط.
-   *
-   * لم نعد نستخدم:
-   *
-   * category.image_url
-   * store.coverImageUrl
-   * store.logoUrl
-   *
-   * ترتيب الصور:
-   *
-   * 1. Hero
-   * 2. Detail 01
-   * 3. Detail 02
-   * 4. Detail 03
-   * ============================================================
-   */
 
   const laundryBanner =
     useMemo<
@@ -367,6 +339,12 @@ export default function LaundryScreen() {
               'laundry-detail-01',
 
             imageUrl:
+              campaignImageOverrides[
+                'detail_01'
+              ] ??
+              campaignImageOverrides[
+                'detail01'
+              ] ??
               LAUNDRY_DETAIL_IMAGE_01,
 
             altTextAr:
@@ -381,6 +359,12 @@ export default function LaundryScreen() {
               'laundry-detail-02',
 
             imageUrl:
+              campaignImageOverrides[
+                'detail_02'
+              ] ??
+              campaignImageOverrides[
+                'detail02'
+              ] ??
               LAUNDRY_DETAIL_IMAGE_02,
 
             altTextAr:
@@ -395,6 +379,12 @@ export default function LaundryScreen() {
               'laundry-detail-03',
 
             imageUrl:
+              campaignImageOverrides[
+                'detail_03'
+              ] ??
+              campaignImageOverrides[
+                'detail03'
+              ] ??
               LAUNDRY_DETAIL_IMAGE_03,
 
             altTextAr:
@@ -410,6 +400,10 @@ export default function LaundryScreen() {
           'laundry',
 
         imageUrl:
+          campaignImageOverrides[
+            'hero'
+          ] ??
+          category.image_url ??
           LAUNDRY_HERO_IMAGE,
 
         altTextAr:
@@ -455,7 +449,10 @@ export default function LaundryScreen() {
 
         additionalImages,
       };
-    }, [category]);
+    }, [
+      campaignImageOverrides,
+      category,
+    ]);
 
   /*
    * عند الضغط على "احجز دلوقتي":
@@ -470,219 +467,185 @@ export default function LaundryScreen() {
    * التسجيل النهائي للطلب في قاعدة البيانات
    * يتم من Checkout عند الضغط على "متابعة".
    */
-
   const openBooking =
-    useCallback(
-      async () => {
+    useCallback(async () => {
+      if (isOpeningAction) {
+        return;
+      }
+
+      try {
+        setIsOpeningAction(true);
+        setErrorMessage(null);
+
+        const laundryStore =
+          stores[0] ?? null;
+
+        if (!laundryStore) {
+          throw new Error(
+            'خدمة الغسيل والكي غير متاحة في منطقتك حاليًا.',
+          );
+        }
+
+        const catalog =
+          await getStoreCatalog(
+            laundryStore.id,
+            savedServiceAreaId ??
+              undefined,
+          );
+
         if (
-          isOpeningAction
-        ) {
-          return;
-        }
-
-        try {
-          setIsOpeningAction(
-            true,
-          );
-
-          setErrorMessage(
-            null,
-          );
-
-          const laundryStore =
-            stores[0] ??
-            null;
-
-          if (
-            !laundryStore
-          ) {
-            throw new Error(
-              'خدمة الغسيل والكي غير متاحة في منطقتك حاليًا.',
-            );
-          }
-
-          const catalog =
-            await getStoreCatalog(
-              laundryStore.id,
-
-              savedServiceAreaId ??
-                undefined,
-            );
-
-          if (
-            normalizeSlug(
-              catalog.store
-                .categorySlug,
-            ) !==
-            LAUNDRY_CATEGORY_SLUG
-          ) {
-            throw new Error(
-              'بيانات متجر الغسيل والكي غير صحيحة.',
-            );
-          }
-
-          if (
+          normalizeSlug(
             catalog.store
-              .isManuallyClosed
-          ) {
-            throw new Error(
-              catalog.store
-                .manualClosedNote ||
-                'خدمة الغسيل والكي مغلقة حاليًا.',
-            );
-          }
-
-          const laundryProduct =
-            findLaundryProduct(
-              catalog,
-            );
-
-          if (
-            !laundryProduct
-          ) {
-            throw new Error(
-              'تعذر العثور على خدمة غسيل وكي في الكتالوج.',
-            );
-          }
-
-          const cartState =
-            useCartStore
-              .getState();
-
-          const existingCart =
-            cartState.carts[
-              catalog.store.id
-            ] ??
-            null;
-
-          const productAlreadyInCart =
-            existingCart
-              ?.items
-              .some(
-                (item) =>
-                  item.id ===
-                    laundryProduct.id &&
-                  item.variantId ===
-                    null,
-              ) ??
-            false;
-
-          if (
-            !productAlreadyInCart
-          ) {
-            const addResult =
-              cartState.addItem(
-                {
-                  id:
-                    catalog.store.id,
-
-                  name:
-                    catalog.store.name,
-
-                  icon:
-                    catalog.store
-                      .icon ||
-                    '🧺',
-
-                  categorySlug:
-                    catalog.store
-                      .categorySlug,
-
-                  deliveryFee:
-                    catalog.delivery
-                      .deliveryFee,
-
-                  minimumOrder:
-                    catalog.delivery
-                      .minimumOrder,
-                },
-
-                {
-                  id:
-                    laundryProduct.id,
-
-                  name:
-                    laundryProduct
-                      .name,
-
-                  description:
-                    laundryProduct
-                      .description,
-
-                  price:
-                    laundryProduct
-                      .price,
-
-                  icon:
-                    laundryProduct
-                      .icon ||
-                    '🧺',
-
-                  variantId:
-                    null,
-
-                  variantName:
-                    null,
-
-                  isAgeRestricted:
-                    laundryProduct
-                      .isAgeRestricted,
-                },
-              );
-
-            if (
-              addResult ===
-              'unsupported-category'
-            ) {
-              throw new Error(
-                'قسم الغسيل والكي غير متاح للطلب حاليًا.',
-              );
-            }
-
-            if (
-              addResult ===
-              'different-restaurant'
-            ) {
-              throw new Error(
-                'تعذر إضافة خدمة الغسيل والكي إلى السلة.',
-              );
-            }
-          }
-
-          useCartStore
-            .getState()
-            .setActiveCart(
-              catalog.store.id,
-            );
-
-          router.push({
-            pathname:
-              '/cart',
-
-            params: {
-              storeId:
-                catalog.store.id,
-            },
-          });
-        } catch (error) {
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'تعذر إضافة خدمة الغسيل والكي إلى السلة.',
-          );
-        } finally {
-          setIsOpeningAction(
-            false,
+              .categorySlug,
+          ) !==
+          LAUNDRY_CATEGORY_SLUG
+        ) {
+          throw new Error(
+            'بيانات متجر الغسيل والكي غير صحيحة.',
           );
         }
-      },
-      [
-        isOpeningAction,
-        router,
-        savedServiceAreaId,
-        stores,
-      ],
-    );
+
+        if (
+          catalog.store
+            .isManuallyClosed
+        ) {
+          throw new Error(
+            catalog.store
+              .manualClosedNote ||
+              'خدمة الغسيل والكي مغلقة حاليًا.',
+          );
+        }
+
+        const laundryProduct =
+          findLaundryProduct(
+            catalog,
+          );
+
+        if (!laundryProduct) {
+          throw new Error(
+            'تعذر العثور على خدمة غسيل وكي في الكتالوج.',
+          );
+        }
+
+        const cartState =
+          useCartStore.getState();
+
+        const existingCart =
+          cartState.carts[
+            catalog.store.id
+          ] ?? null;
+
+        const productAlreadyInCart =
+          existingCart?.items.some(
+            (item) =>
+              item.id ===
+                laundryProduct.id &&
+              item.variantId === null,
+          ) ?? false;
+
+        if (
+          !productAlreadyInCart
+        ) {
+          const addResult =
+            cartState.addItem(
+              {
+                id:
+                  catalog.store.id,
+
+                name:
+                  catalog.store.name,
+
+                icon:
+                  catalog.store.icon ||
+                  '🧺',
+
+                categorySlug:
+                  catalog.store
+                    .categorySlug,
+
+                deliveryFee:
+                  catalog.delivery
+                    .deliveryFee,
+
+                minimumOrder:
+                  catalog.delivery
+                    .minimumOrder,
+              },
+              {
+                id:
+                  laundryProduct.id,
+
+                name:
+                  laundryProduct.name,
+
+                description:
+                  laundryProduct
+                    .description,
+
+                price:
+                  laundryProduct.price,
+
+                icon:
+                  laundryProduct.icon ||
+                  '🧺',
+
+                variantId: null,
+
+                variantName: null,
+
+                isAgeRestricted:
+                  laundryProduct
+                    .isAgeRestricted,
+              },
+            );
+
+          if (
+            addResult ===
+            'unsupported-category'
+          ) {
+            throw new Error(
+              'قسم الغسيل والكي غير متاح للطلب حاليًا.',
+            );
+          }
+
+          if (
+            addResult ===
+            'different-restaurant'
+          ) {
+            throw new Error(
+              'تعذر إضافة خدمة الغسيل والكي إلى السلة.',
+            );
+          }
+        }
+
+        useCartStore
+          .getState()
+          .setActiveCart(
+            catalog.store.id,
+          );
+
+        router.push({
+          pathname: '/cart',
+          params: {
+            storeId:
+              catalog.store.id,
+          },
+        });
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : 'تعذر إضافة خدمة الغسيل والكي إلى السلة.',
+        );
+      } finally {
+        setIsOpeningAction(false);
+      }
+    }, [
+      isOpeningAction,
+      router,
+      savedServiceAreaId,
+      stores,
+    ]);
 
   if (isLoading) {
     return (
@@ -691,9 +654,7 @@ export default function LaundryScreen() {
           styles.stateScreen
         }
       >
-        <StatusBar
-          style="dark"
-        />
+        <StatusBar style="dark" />
 
         <ActivityIndicator
           color={
@@ -705,8 +666,7 @@ export default function LaundryScreen() {
 
         <Text
           style={
-            styles
-              .stateDescription
+            styles.stateDescription
           }
         >
           جاري تحميل الخدمة...
@@ -715,23 +675,17 @@ export default function LaundryScreen() {
     );
   }
 
-  if (
-    !laundryBanner
-  ) {
+  if (!laundryBanner) {
     return (
       <SafeAreaView
         style={
           styles.stateScreen
         }
       >
-        <StatusBar
-          style="dark"
-        />
+        <StatusBar style="dark" />
 
         <View
-          style={
-            styles.errorIcon
-          }
+          style={styles.errorIcon}
         >
           <Ionicons
             color={
@@ -744,17 +698,14 @@ export default function LaundryScreen() {
         </View>
 
         <Text
-          style={
-            styles.stateTitle
-          }
+          style={styles.stateTitle}
         >
           الخدمة غير متاحة
         </Text>
 
         <Text
           style={
-            styles
-              .stateDescription
+            styles.stateDescription
           }
         >
           {errorMessage ||
@@ -763,23 +714,17 @@ export default function LaundryScreen() {
 
         <Pressable
           accessibilityRole="button"
-          style={({
-            pressed,
-          }) => [
+          style={({ pressed }) => [
             styles.stateButton,
 
             pressed &&
-              styles
-                .stateButtonPressed,
+              styles.stateButtonPressed,
           ]}
-          onPress={
-            close
-          }
+          onPress={close}
         >
           <Text
             style={
-              styles
-                .stateButtonText
+              styles.stateButtonText
             }
           >
             العودة للرئيسية
@@ -790,31 +735,19 @@ export default function LaundryScreen() {
   }
 
   return (
-    <View
-      style={
-        styles.screen
-      }
-    >
+    <View style={styles.screen}>
       <PremiumPromoTemplate
-        banner={
-          laundryBanner
-        }
+        banner={laundryBanner}
 
-        areaName={
-          null
-        }
+        areaName={null}
 
-        ctaEnabled={
-          true
-        }
+        ctaEnabled={true}
 
         isOpeningAction={
           isOpeningAction
         }
 
-        onClose={
-          close
-        }
+        onClose={close}
 
         onPressCta={() => {
           void openBooking();
@@ -830,8 +763,7 @@ export default function LaundryScreen() {
         >
           <Text
             style={
-              styles
-                .inlineErrorText
+              styles.inlineErrorText
             }
           >
             {errorMessage}
@@ -846,70 +778,53 @@ const styles =
   StyleSheet.create({
     screen: {
       backgroundColor:
-        NAVIENTY_NOW_COLORS
-          .page,
+        NAVIENTY_NOW_COLORS.page,
 
-      flex:
-        1,
+      flex: 1,
     },
 
     stateScreen: {
-      alignItems:
-        'center',
+      alignItems: 'center',
 
       backgroundColor:
-        NAVIENTY_NOW_COLORS
-          .page,
+        NAVIENTY_NOW_COLORS.page,
 
-      flex:
-        1,
+      flex: 1,
 
-      justifyContent:
-        'center',
+      justifyContent: 'center',
 
       paddingHorizontal:
         NAVIENTY_NOW_LAYOUT
-          .pageGutter +
-        10,
+          .pageGutter + 10,
     },
 
     errorIcon: {
-      alignItems:
-        'center',
+      alignItems: 'center',
 
       backgroundColor:
         NAVIENTY_NOW_COLORS
           .primaryPale,
 
-      borderRadius:
-        28,
+      borderRadius: 28,
 
-      height:
-        56,
+      height: 56,
 
-      justifyContent:
-        'center',
+      justifyContent: 'center',
 
-      marginBottom:
-        18,
+      marginBottom: 18,
 
-      width:
-        56,
+      width: 56,
     },
 
     stateTitle: {
       color:
-        NAVIENTY_NOW_COLORS
-          .text,
+        NAVIENTY_NOW_COLORS.text,
 
-      fontSize:
-        24,
+      fontSize: 24,
 
-      fontWeight:
-        '900',
+      fontWeight: '900',
 
-      textAlign:
-        'center',
+      textAlign: 'center',
     },
 
     stateDescription: {
@@ -917,110 +832,81 @@ const styles =
         NAVIENTY_NOW_COLORS
           .textSecondary,
 
-      fontSize:
-        14,
+      fontSize: 14,
 
-      fontWeight:
-        '600',
+      fontWeight: '600',
 
-      lineHeight:
-        23,
+      lineHeight: 23,
 
-      marginTop:
-        10,
+      marginTop: 10,
 
-      maxWidth:
-        380,
+      maxWidth: 380,
 
-      textAlign:
-        'center',
+      textAlign: 'center',
 
-      writingDirection:
-        'rtl',
+      writingDirection: 'rtl',
     },
 
     stateButton: {
-      alignItems:
-        'center',
+      alignItems: 'center',
 
       backgroundColor:
         NAVIENTY_NOW_COLORS
           .primary,
 
-      borderRadius:
-        17,
+      borderRadius: 17,
 
-      justifyContent:
-        'center',
+      justifyContent: 'center',
 
-      marginTop:
-        22,
+      marginTop: 22,
 
-      minHeight:
-        54,
+      minHeight: 54,
 
-      paddingHorizontal:
-        26,
+      paddingHorizontal: 26,
     },
 
     stateButtonPressed: {
-      opacity:
-        0.86,
+      opacity: 0.86,
     },
 
     stateButtonText: {
       color:
-        NAVIENTY_NOW_COLORS
-          .white,
+        NAVIENTY_NOW_COLORS.white,
 
-      fontSize:
-        15,
+      fontSize: 15,
 
-      fontWeight:
-        '900',
+      fontWeight: '900',
     },
 
     inlineError: {
-      alignSelf:
-        'center',
+      alignSelf: 'center',
 
       backgroundColor:
         '#FDECEC',
 
-      borderRadius:
-        999,
+      borderRadius: 999,
 
-      bottom:
-        112,
+      bottom: 112,
 
-      maxWidth:
-        420,
+      maxWidth: 420,
 
-      paddingHorizontal:
-        16,
+      paddingHorizontal: 16,
 
-      paddingVertical:
-        10,
+      paddingVertical: 10,
 
-      position:
-        'absolute',
+      position: 'absolute',
     },
 
     inlineErrorText: {
       color:
-        NAVIENTY_NOW_COLORS
-          .error,
+        NAVIENTY_NOW_COLORS.error,
 
-      fontSize:
-        12,
+      fontSize: 12,
 
-      fontWeight:
-        '800',
+      fontWeight: '800',
 
-      textAlign:
-        'center',
+      textAlign: 'center',
 
-      writingDirection:
-        'rtl',
+      writingDirection: 'rtl',
     },
   });

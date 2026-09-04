@@ -103,9 +103,7 @@ async function withTimeout<T>(
         (_resolve, reject) => {
           timeoutId = setTimeout(
             () => {
-              reject(
-                new Error(message),
-              );
+              reject(new Error(message));
             },
             timeoutMs,
           );
@@ -119,10 +117,12 @@ async function withTimeout<T>(
   }
 }
 
-void SplashScreen.preventAutoHideAsync().catch(() => {
-  // Safe during Fast Refresh / environments where the native splash
-  // may already be hidden.
-});
+void SplashScreen.preventAutoHideAsync().catch(
+  () => {
+    // Safe during Fast Refresh / environments where the native splash
+    // may already be hidden.
+  },
+);
 
 type AppBootstrapScreenProps = {
   isReady: boolean;
@@ -136,24 +136,17 @@ function AppBootstrapScreen({
   const { width: windowWidth } =
     useWindowDimensions();
 
-  const nativeSplashHiddenRef =
-    useRef(false);
-
-  const exitStartedRef =
-    useRef(false);
-
-  const finishedRef =
-    useRef(false);
+  const nativeSplashHiddenRef = useRef(false);
+  const exitStartedRef = useRef(false);
+  const finishedRef = useRef(false);
 
   const holdTimerRef =
-    useRef<
-      ReturnType<typeof setTimeout> | null
-    >(null);
+    useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    );
 
-  const [
-    introFinished,
-    setIntroFinished,
-  ] = useState(false);
+  const [introFinished, setIntroFinished] =
+    useState(false);
 
   const dotOpacity = useRef(
     new Animated.Value(0),
@@ -177,34 +170,22 @@ function AppBootstrapScreen({
 
   const logoWidth = Math.min(
     330,
-    Math.max(
-      235,
-      windowWidth * 0.7,
-    ),
+    Math.max(235, windowWidth * 0.7),
   );
 
   const logoHeight =
-    logoWidth /
-    BOOTSTRAP_LOGO_ASPECT_RATIO;
+    logoWidth / BOOTSTRAP_LOGO_ASPECT_RATIO;
 
   const hideNativeSplash =
     useCallback(() => {
-      if (
-        nativeSplashHiddenRef.current
-      ) {
+      if (nativeSplashHiddenRef.current) {
         return;
       }
 
       try {
         SplashScreen.hide();
-
-        nativeSplashHiddenRef.current =
-          true;
+        nativeSplashHiddenRef.current = true;
       } catch (error) {
-        /*
-         * Keep the ref false so onLayout can retry if Expo Go called
-         * this effect before its native splash controller was ready.
-         */
         console.warn(
           'Unable to hide native splash screen:',
           error,
@@ -222,123 +203,77 @@ function AppBootstrapScreen({
       onFinished();
     }, [onFinished]);
 
-  /*
-   * Do not rely only on onLayout to release the native splash.
-   * Expo Go/development clients can report splash layout differently
-   * from standalone builds, while this React bootstrap screen is already
-   * ready to cover the transition as soon as the effect runs.
-   */
   useEffect(() => {
     hideNativeSplash();
   }, [hideNativeSplash]);
 
-  /*
-   * Never allow an interrupted React Native animation to trap the app
-   * behind the bootstrap overlay. The normal branded animation still runs;
-   * this timer is only a last-resort release for Expo Go/Fast Refresh and
-   * reduced-motion or app-state interruptions.
-   */
   useEffect(() => {
     if (!isReady) {
       return;
     }
 
-    const fallbackTimer =
-      setTimeout(
-        finishBootstrap,
-        2500,
-      );
+    const fallbackTimer = setTimeout(
+      finishBootstrap,
+      2500,
+    );
 
     return () => {
-      clearTimeout(
-        fallbackTimer,
-      );
+      clearTimeout(fallbackTimer);
     };
-  }, [
-    finishBootstrap,
-    isReady,
-  ]);
+  }, [finishBootstrap, isReady]);
 
   useEffect(() => {
     revealWidth.setValue(0);
 
-    const introAnimation =
-      Animated.sequence([
-        Animated.delay(
-          DOT_START_DELAY_MS,
+    const introAnimation = Animated.sequence([
+      Animated.delay(DOT_START_DELAY_MS),
+
+      Animated.parallel([
+        Animated.timing(dotOpacity, {
+          toValue: 1,
+          duration: 90,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(dotTranslateY, {
+          toValue: 0,
+          duration: DOT_DROP_DURATION_MS,
+          easing: Easing.bezier(
+            0.22,
+            0.84,
+            0.31,
+            1,
+          ),
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(dotScale, {
+          toValue: 1,
+          duration: DOT_DROP_DURATION_MS,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+
+      Animated.timing(revealWidth, {
+        toValue: logoWidth,
+        duration: WORDMARK_REVEAL_DURATION_MS,
+        easing: Easing.bezier(
+          0.22,
+          0.72,
+          0.22,
+          1,
         ),
+        useNativeDriver: false,
+      }),
+    ]);
 
-        Animated.parallel([
-          Animated.timing(
-            dotOpacity,
-            {
-              toValue: 1,
-              duration: 90,
-              easing:
-                Easing.out(
-                  Easing.quad,
-                ),
-              useNativeDriver: true,
-            },
-          ),
-
-          Animated.timing(
-            dotTranslateY,
-            {
-              toValue: 0,
-              duration:
-                DOT_DROP_DURATION_MS,
-              easing:
-                Easing.bezier(
-                  0.22,
-                  0.84,
-                  0.31,
-                  1,
-                ),
-              useNativeDriver: true,
-            },
-          ),
-
-          Animated.timing(
-            dotScale,
-            {
-              toValue: 1,
-              duration:
-                DOT_DROP_DURATION_MS,
-              easing:
-                Easing.out(
-                  Easing.cubic,
-                ),
-              useNativeDriver: true,
-            },
-          ),
-        ]),
-
-        Animated.timing(
-          revealWidth,
-          {
-            toValue: logoWidth,
-            duration:
-              WORDMARK_REVEAL_DURATION_MS,
-            easing:
-              Easing.bezier(
-                0.22,
-                0.72,
-                0.22,
-                1,
-              ),
-            useNativeDriver: false,
-          },
-        ),
-      ]);
-
-    introAnimation.start(
-      ({ finished }) => {
-        if (finished) {
-          setIntroFinished(true);
-        }
-      },
-    );
+    introAnimation.start(({ finished }) => {
+      if (finished) {
+        setIntroFinished(true);
+      }
+    });
 
     return () => {
       introAnimation.stop();
@@ -362,37 +297,21 @@ function AppBootstrapScreen({
 
     exitStartedRef.current = true;
 
-    holdTimerRef.current =
-      setTimeout(() => {
-        Animated.timing(
-          screenOpacity,
-          {
-            toValue: 0,
-            duration:
-              EXIT_FADE_DURATION_MS,
-            easing:
-              Easing.inOut(
-                Easing.quad,
-              ),
-            useNativeDriver: true,
-          },
-        ).start(
-          () => {
-            finishBootstrap();
-          },
-        );
-      }, READY_HOLD_MS);
+    holdTimerRef.current = setTimeout(() => {
+      Animated.timing(screenOpacity, {
+        toValue: 0,
+        duration: EXIT_FADE_DURATION_MS,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }).start(() => {
+        finishBootstrap();
+      });
+    }, READY_HOLD_MS);
 
     return () => {
-      if (
-        holdTimerRef.current
-      ) {
-        clearTimeout(
-          holdTimerRef.current,
-        );
-
-        holdTimerRef.current =
-          null;
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
       }
     };
   }, [
@@ -409,22 +328,17 @@ function AppBootstrapScreen({
       style={[
         styles.bootstrapScreen,
         {
-          opacity:
-            screenOpacity,
+          opacity: screenOpacity,
         },
       ]}
-      onLayout={
-        hideNativeSplash
-      }
+      onLayout={hideNativeSplash}
     >
       <View
         style={[
           styles.logoStage,
           {
-            height:
-              logoHeight,
-            width:
-              logoWidth,
+            height: logoHeight,
+            width: logoWidth,
           },
         ]}
       >
@@ -433,24 +347,18 @@ function AppBootstrapScreen({
           style={[
             styles.wordmarkClip,
             {
-              height:
-                logoHeight,
-              width:
-                revealWidth,
+              height: logoHeight,
+              width: revealWidth,
             },
           ]}
         >
           <Image
             accessibilityIgnoresInvertColors
             resizeMode="contain"
-            source={
-              bootstrapFullLogo
-            }
+            source={bootstrapFullLogo}
             style={{
-              height:
-                logoHeight,
-              width:
-                logoWidth,
+              height: logoHeight,
+              width: logoWidth,
             }}
           />
         </Animated.View>
@@ -462,22 +370,17 @@ function AppBootstrapScreen({
           style={[
             styles.dotLayer,
             {
-              height:
-                logoHeight,
-              opacity:
-                dotOpacity,
+              height: logoHeight,
+              opacity: dotOpacity,
               transform: [
                 {
-                  translateY:
-                    dotTranslateY,
+                  translateY: dotTranslateY,
                 },
                 {
-                  scale:
-                    dotScale,
+                  scale: dotScale,
                 },
               ],
-              width:
-                logoWidth,
+              width: logoWidth,
             },
           ]}
         />
@@ -492,31 +395,18 @@ export function ErrorBoundary({
 }: ErrorBoundaryProps) {
   useEffect(() => {
     void logMobileClientError({
-      source:
-        'react_error_boundary',
+      source: 'react_error_boundary',
       error,
     });
   }, [error]);
 
   return (
-    <View
-      style={
-        styles.errorBoundaryScreen
-      }
-    >
-      <Text
-        style={
-          styles.errorBoundaryTitle
-        }
-      >
+    <View style={styles.errorBoundaryScreen}>
+      <Text style={styles.errorBoundaryTitle}>
         حدث خطأ غير متوقع
       </Text>
 
-      <Text
-        style={
-          styles.errorBoundaryMessage
-        }
-      >
+      <Text style={styles.errorBoundaryMessage}>
         لم نتمكن من عرض هذه الصفحة.
         حاول مرة أخرى، وإذا استمرت
         المشكلة تواصل مع الدعم.
@@ -533,11 +423,7 @@ export function ErrorBoundary({
             styles.errorBoundaryButtonPressed,
         ]}
       >
-        <Text
-          style={
-            styles.errorBoundaryButtonText
-          }
-        >
+        <Text style={styles.errorBoundaryButtonText}>
           إعادة المحاولة
         </Text>
       </Pressable>
@@ -546,33 +432,24 @@ export function ErrorBoundary({
 }
 
 export default function RootLayout() {
-  const cartHasHydrated =
-    useCartStore(
-      (state) =>
-        state.hasHydrated,
-    );
+  const cartHasHydrated = useCartStore(
+    (state) => state.hasHydrated,
+  );
 
-  const customerHasHydrated =
-    useCustomerStore(
-      (state) =>
-        state.hasHydrated,
-    );
+  const customerHasHydrated = useCustomerStore(
+    (state) => state.hasHydrated,
+  );
 
-  const ordersHasHydrated =
-    useOrdersStore(
-      (state) =>
-        state.hasHydrated,
-    );
+  const ordersHasHydrated = useOrdersStore(
+    (state) => state.hasHydrated,
+  );
 
   const [
     authBootstrapFinished,
     setAuthBootstrapFinished,
   ] = useState(false);
 
-  const [
-    launchGate,
-    setLaunchGate,
-  ] =
+  const [launchGate, setLaunchGate] =
     useState<AppLaunchGateResult | null>(
       __DEV__
         ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
@@ -589,13 +466,6 @@ export default function RootLayout() {
     setDevelopmentHydrationFallbackReached,
   ] = useState(false);
 
-  /*
-   * Authentication bootstrap.
-   *
-   * Supabase may be unavailable while testing
-   * locally, but the bootstrap is always marked
-   * as finished so development can continue.
-   */
   useEffect(() => {
     let cancelled = false;
 
@@ -613,9 +483,7 @@ export default function RootLayout() {
         );
       } finally {
         if (!cancelled) {
-          setAuthBootstrapFinished(
-            true,
-          );
+          setAuthBootstrapFinished(true);
         }
       }
     }
@@ -627,16 +495,6 @@ export default function RootLayout() {
     };
   }, []);
 
-  /*
-   * DEVELOPMENT-ONLY LAUNCH GATE BYPASS
-   *
-   * During local development / Expo Go testing,
-   * allow the app to render even when Supabase
-   * is temporarily unreachable.
-   *
-   * Production still evaluates the real launch gate only after auth
-   * bootstrap has resolved or reached its bounded timeout.
-   */
   useEffect(() => {
     if (__DEV__) {
       console.log(
@@ -645,17 +503,14 @@ export default function RootLayout() {
       return;
     }
 
-    if (
-      !authBootstrapFinished
-    ) {
+    if (!authBootstrapFinished) {
       return;
     }
 
     let cancelled = false;
 
     async function bootstrapLaunchGate() {
-      let result:
-        AppLaunchGateResult;
+      let result: AppLaunchGateResult;
 
       try {
         result = await withTimeout(
@@ -669,14 +524,11 @@ export default function RootLayout() {
           error,
         );
 
-        result =
-          LAUNCH_GATE_TIMEOUT_RESULT;
+        result = LAUNCH_GATE_TIMEOUT_RESULT;
       }
 
       if (!cancelled) {
-        setLaunchGate(
-          result,
-        );
+        setLaunchGate(result);
       }
     }
 
@@ -685,37 +537,25 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, [
-    authBootstrapFinished,
-  ]);
+  }, [authBootstrapFinished]);
 
   const refreshLaunchGate =
     useCallback(async () => {
-      if (
-        isRefreshingLaunchGate
-      ) {
+      if (isRefreshingLaunchGate) {
         return;
       }
 
-      setIsRefreshingLaunchGate(
-        true,
-      );
+      setIsRefreshingLaunchGate(true);
 
       try {
-        /*
-         * Keep development testing available
-         * even when Supabase cannot be reached.
-         */
         if (__DEV__) {
           setLaunchGate(
             DEVELOPMENT_ALLOWED_LAUNCH_GATE,
           );
-
           return;
         }
 
-        let result:
-          AppLaunchGateResult;
+        let result: AppLaunchGateResult;
 
         try {
           result = await withTimeout(
@@ -729,33 +569,20 @@ export default function RootLayout() {
             error,
           );
 
-          result =
-            LAUNCH_GATE_TIMEOUT_RESULT;
+          result = LAUNCH_GATE_TIMEOUT_RESULT;
         }
 
-        setLaunchGate(
-          result,
-        );
+        setLaunchGate(result);
       } finally {
-        setIsRefreshingLaunchGate(
-          false,
-        );
+        setIsRefreshingLaunchGate(false);
       }
-    }, [
-      isRefreshingLaunchGate,
-    ]);
+    }, [isRefreshingLaunchGate]);
 
   const appHasHydrated =
     cartHasHydrated &&
     customerHasHydrated &&
     ordersHasHydrated;
 
-  /*
-   * SecureStore can occasionally remain pending inside Expo Go while it is
-   * migrating development data. Never let that development-only condition
-   * trap the app on its branded bootstrap screen. Production still requires
-   * all persisted stores to finish hydration before rendering user data.
-   */
   useEffect(() => {
     if (
       !__DEV__ ||
@@ -765,23 +592,18 @@ export default function RootLayout() {
       return;
     }
 
-    const timeoutId = setTimeout(
-      () => {
-        console.warn(
-          '[Navienty] Development storage hydration timed out; continuing without blocking the UI.',
-          {
-            cartHasHydrated,
-            customerHasHydrated,
-            ordersHasHydrated,
-          },
-        );
+    const timeoutId = setTimeout(() => {
+      console.warn(
+        '[Navienty] Development storage hydration timed out; continuing without blocking the UI.',
+        {
+          cartHasHydrated,
+          customerHasHydrated,
+          ordersHasHydrated,
+        },
+      );
 
-        setDevelopmentHydrationFallbackReached(
-          true,
-        );
-      },
-      DEVELOPMENT_HYDRATION_TIMEOUT_MS,
-    );
+      setDevelopmentHydrationFallbackReached(true);
+    }, DEVELOPMENT_HYDRATION_TIMEOUT_MS);
 
     return () => {
       clearTimeout(timeoutId);
@@ -804,8 +626,7 @@ export default function RootLayout() {
 
   const startupHasResolved =
     storageBootstrapFinished &&
-    (__DEV__ ||
-      authBootstrapFinished) &&
+    (__DEV__ || authBootstrapFinished) &&
     launchGate !== null;
 
   useEffect(() => {
@@ -820,8 +641,7 @@ export default function RootLayout() {
         customerHasHydrated,
         ordersHasHydrated,
         authBootstrapFinished,
-        launchGateStatus:
-          launchGateStatus,
+        launchGateStatus,
         developmentHydrationFallbackReached,
         startupHasResolved,
       },
@@ -837,8 +657,7 @@ export default function RootLayout() {
   ]);
 
   const appIsAllowed =
-    launchGateStatus ===
-    'allowed';
+    launchGateStatus === 'allowed';
 
   const [
     showBootstrapScreen,
@@ -847,15 +666,11 @@ export default function RootLayout() {
 
   const finishBootstrap =
     useCallback(() => {
-      setShowBootstrapScreen(
-        false,
-      );
+      setShowBootstrapScreen(false);
     }, []);
 
   return (
-    <View
-      style={styles.root}
-    >
+    <View style={styles.root}>
       <StatusBar
         style={
           showBootstrapScreen
@@ -864,14 +679,11 @@ export default function RootLayout() {
         }
       />
 
-      {startupHasResolved &&
-      appIsAllowed ? (
+      {startupHasResolved && appIsAllowed ? (
         <>
           {Platform.OS !== 'web' && (
             <PushNotificationsBridge
-              enabled={
-                !showBootstrapScreen
-              }
+              enabled={!showBootstrapScreen}
             />
           )}
 
@@ -892,30 +704,80 @@ export default function RootLayout() {
             <Stack.Screen
               name="index"
               options={{
-                headerShown:
-                  false,
+                headerShown: false,
+              }}
+            />
+
+            {/*
+             * CART ENTRY GATE
+             *
+             * `/cart` is intentionally tiny. It only decides whether the
+             * customer should go to cart-details or cart-picker. Keeping the
+             * gate transparent and animation-free prevents an intermediate
+             * screen from flashing while also avoiding mounting the large
+             * Cart implementation when several carts exist.
+             */}
+            <Stack.Screen
+              name="cart"
+              options={{
+                headerShown: false,
+                presentation: 'transparentModal',
+                animation: 'none',
+                gestureEnabled: false,
+                contentStyle: {
+                  backgroundColor: 'transparent',
+                },
+              }}
+            />
+
+            {/*
+             * CART DETAILS
+             *
+             * This is the real Cart UI. It stays a normal native-stack card
+             * just like Restaurant, so the platform-native back swipe remains
+             * consistent across the Navienty Now experience.
+             */}
+            <Stack.Screen
+              name="cart-details"
+              options={{
+                headerShown: false,
+              }}
+            />
+
+            {/*
+             * MULTI-CART PICKER
+             *
+             * Only the chooser is transparent. The screen the customer was
+             * using before opening Cart therefore remains visible underneath
+             * the bottom sheet.
+             */}
+            <Stack.Screen
+              name="cart-picker"
+              options={{
+                headerShown: false,
+                presentation: 'transparentModal',
+                animation: 'fade',
+                gestureEnabled: false,
+                contentStyle: {
+                  backgroundColor: 'transparent',
+                },
               }}
             />
 
             <Stack.Screen
               name="location-picker"
               options={{
-                animation:
-                  'slide_from_right',
-                headerShown:
-                  false,
+                animation: 'slide_from_right',
+                headerShown: false,
               }}
             />
 
             <Stack.Screen
               name="promo/[id]"
               options={{
-                animation:
-                  'slide_from_right',
-                gestureEnabled:
-                  true,
-                headerShown:
-                  false,
+                animation: 'slide_from_right',
+                gestureEnabled: true,
+                headerShown: false,
               }}
             />
           </Stack>
@@ -927,9 +789,7 @@ export default function RootLayout() {
       !appIsAllowed ? (
         <AppLaunchBlockScreen
           gate={launchGate}
-          isRefreshing={
-            isRefreshingLaunchGate
-          }
+          isRefreshing={isRefreshingLaunchGate}
           onRefresh={() => {
             void refreshLaunchGate();
           }}
@@ -938,121 +798,98 @@ export default function RootLayout() {
 
       {showBootstrapScreen ? (
         <AppBootstrapScreen
-          isReady={
-            startupHasResolved
-          }
-          onFinished={
-            finishBootstrap
-          }
+          isReady={startupHasResolved}
+          onFinished={finishBootstrap}
         />
       ) : null}
     </View>
   );
 }
 
-const styles =
-  StyleSheet.create({
-    root: {
-      backgroundColor:
-        NAVIENTY_NOW_COLORS.primary,
-      flex: 1,
-    },
+const styles = StyleSheet.create({
+  root: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    flex: 1,
+  },
 
-    bootstrapScreen: {
-      position:
-        'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      top: 0,
-      alignItems:
-        'center',
-      backgroundColor:
-        NAVIENTY_NOW_COLORS.primary,
-      justifyContent:
-        'center',
-      paddingHorizontal:
-        24,
-      zIndex: 100,
-    },
+  bootstrapScreen: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    zIndex: 100,
+  },
 
-    logoStage: {
-      position:
-        'relative',
-    },
+  logoStage: {
+    position: 'relative',
+  },
 
-    wordmarkClip: {
-      left: 0,
-      overflow:
-        'hidden',
-      position:
-        'absolute',
-      top: 0,
-      zIndex: 1,
-    },
+  wordmarkClip: {
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 0,
+    zIndex: 1,
+  },
 
-    dotLayer: {
-      left: 0,
-      position:
-        'absolute',
-      top: 0,
-      zIndex: 2,
-    },
+  dotLayer: {
+    left: 0,
+    position: 'absolute',
+    top: 0,
+    zIndex: 2,
+  },
 
-    errorBoundaryScreen: {
-      alignItems:
-        'center',
-      backgroundColor:
-        NAVIENTY_NOW_COLORS.page,
-      flex: 1,
-      justifyContent:
-        'center',
-      paddingHorizontal:
-        28,
-    },
+  errorBoundaryScreen: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.page,
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
 
-    errorBoundaryTitle: {
-      color:
-        NAVIENTY_NOW_COLORS.textPrimary,
-      fontSize: 22,
-      fontWeight:
-        '800',
-      marginBottom: 10,
-      textAlign:
-        'center',
-    },
+  errorBoundaryTitle: {
+    color:
+      NAVIENTY_NOW_COLORS.textPrimary,
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
 
-    errorBoundaryMessage: {
-      color:
-        NAVIENTY_NOW_COLORS.textSecondary,
-      fontSize: 14,
-      lineHeight: 22,
-      marginBottom: 22,
-      textAlign:
-        'center',
-    },
+  errorBoundaryMessage: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 22,
+    textAlign: 'center',
+  },
 
-    errorBoundaryButton: {
-      alignItems:
-        'center',
-      backgroundColor:
-        NAVIENTY_NOW_COLORS.primary,
-      borderRadius: 14,
-      minWidth: 150,
-      paddingHorizontal:
-        22,
-      paddingVertical:
-        13,
-    },
+  errorBoundaryButton: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 14,
+    minWidth: 150,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+  },
 
-    errorBoundaryButtonPressed: {
-      opacity: 0.82,
-    },
+  errorBoundaryButtonPressed: {
+    opacity: 0.82,
+  },
 
-    errorBoundaryButtonText: {
-      color: '#FFFFFF',
-      fontSize: 14,
-      fontWeight:
-        '800',
-    },
-  });
+  errorBoundaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});

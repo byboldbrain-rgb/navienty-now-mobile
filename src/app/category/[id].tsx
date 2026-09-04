@@ -131,6 +131,47 @@ function StoreArtwork({
   );
 }
 
+function CategoryHeaderArtwork({
+  category,
+}: {
+  category: BootstrapCategory;
+}) {
+  const [imageFailed, setImageFailed] =
+    useState(false);
+
+  const imageUrl =
+    category.image_url?.trim() || null;
+
+  const canShowImage =
+    Boolean(imageUrl) &&
+    !imageFailed;
+
+  return (
+    <View style={styles.categoryArtwork}>
+      {canShowImage ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          accessibilityLabel={`صورة ${category.name_ar}`}
+          resizeMode="cover"
+          source={{
+            uri: imageUrl ?? '',
+          }}
+          style={
+            styles.categoryArtworkImage
+          }
+          onError={() => {
+            setImageFailed(true);
+          }}
+        />
+      ) : (
+        <Text style={styles.categoryIcon}>
+          {category.icon ?? '📦'}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 function GenericCategoryScreen({
   categorySlug,
 }: {
@@ -193,7 +234,8 @@ function GenericCategoryScreen({
           bootstrap.store_categories as
             BootstrapCategory[]
         ).find(
-          (item) => item.slug === categorySlug,
+          (item) =>
+            item.slug === categorySlug,
         ) ?? null;
 
       if (!loadedCategory) {
@@ -298,9 +340,10 @@ function GenericCategoryScreen({
           </Pressable>
 
           <View style={styles.headerContent}>
-            <Text style={styles.categoryIcon}>
-              {category.icon ?? '📦'}
-            </Text>
+            <CategoryHeaderArtwork
+              category={category}
+            />
+
             <Text style={styles.title}>
               {category.name_ar}
             </Text>
@@ -448,9 +491,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginTop: 10,
   },
+  categoryArtwork: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 48,
+    justifyContent: 'center',
+    marginBottom: 8,
+    overflow: 'hidden',
+    width: 48,
+  },
+  categoryArtworkImage: {
+    height: '100%',
+    width: '100%',
+  },
   categoryIcon: {
     fontSize: 38,
-    marginBottom: 8,
   },
   title: {
     color: '#FFFFFF',

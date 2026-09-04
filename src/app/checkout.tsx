@@ -704,12 +704,57 @@ function StoreCheckoutScreen() {
         SPIN_UNLOCK_SUBTOTAL_FALLBACK
       );
 
+  const spinExpirationTime =
+    checkoutSpin?.expiresAt
+      ? Date.parse(
+          checkoutSpin.expiresAt,
+        )
+      : NaN;
+
+  const spinHasExpired =
+    Number.isFinite(
+      spinExpirationTime,
+    ) &&
+    spinExpirationTime <= Date.now();
+
+  const nextOrderMinimum =
+    Math.max(
+      Number(
+        checkoutSpin?.minimumNextOrder ??
+          0,
+      ),
+      0,
+    );
+
+  const nextOrderMinimumReached =
+    Number(subtotal ?? 0) >=
+    nextOrderMinimum;
+
+  /**
+   * Future Spin rewards become redeemable only after Supabase promotes the
+   * reward to `available`, which happens after the source order is submitted.
+   * This prevents a "next order" reward from discounting its source order.
+   */
+  const spinIsRedeemableNextOrder =
+    !!checkoutSpin &&
+    checkoutSpin.rewardType ===
+      'next_order_discount' &&
+    checkoutSpin.rewardStatus ===
+      'available' &&
+    !spinHasExpired &&
+    nextOrderMinimumReached;
+
   const spinCanApplyToCurrentOrder =
     !!checkoutSpin &&
     spinBelongsToCurrentStore &&
     spinEventIsAvailable &&
-    spinIsImmediateReward &&
-    spinThresholdReached;
+    (
+      (
+        spinIsImmediateReward &&
+        spinThresholdReached
+      ) ||
+      spinIsRedeemableNextOrder
+    );
 
   /**
    * One reward per order.
@@ -775,8 +820,12 @@ function StoreCheckoutScreen() {
 
   const spinSubtotalDiscount =
     spinCanApplyToCurrentOrder &&
-    checkoutSpin?.rewardType ===
-      'current_order_discount'
+    (
+      checkoutSpin?.rewardType ===
+        'current_order_discount' ||
+      checkoutSpin?.rewardType ===
+        'next_order_discount'
+    )
       ? Math.min(
           checkoutSpin.rewardValue,
           discountedSubtotal,
@@ -816,12 +865,23 @@ function StoreCheckoutScreen() {
       'issued' &&
     checkoutSpin.rewardType ===
       'next_order_discount' &&
-    (
+    !spinIsRedeemableNextOrder &&
+    !spinHasExpired;
+
+  const futureSpinRewardMessage =
+    checkoutSpin?.rewardType ===
+        'next_order_discount' &&
       checkoutSpin.rewardStatus ===
-        null ||
-      checkoutSpin.rewardStatus ===
-        'available'
-    );
+        'available' &&
+      !nextOrderMinimumReached
+      ? `المكافأة متاحة. وصل قيمة المنتجات لـ${Math.ceil(
+          nextOrderMinimum,
+        )}ج أو أكتر علشان تتخصم تلقائيًا.`
+      : `محفوظة للطلب القادم${
+          checkoutSpin?.minimumNextOrder
+            ? ` عند طلب ${checkoutSpin.minimumNextOrder}ج أو أكتر`
+            : ''
+        }. لا تُخصم من الطلب اللي كسبتها فيه.`;
 
   /* -------------------------------- */
   /* ORDERS                           */
@@ -1748,6 +1808,18 @@ function StoreCheckoutScreen() {
               ?.code ??
             null,
 
+          /**
+           * Send the Spin event even when a next-order reward is still pending.
+           * Supabase uses the event id to either bind the source order or,
+           * when the reward is already available, redeem it atomically.
+           */
+          spinEventId:
+            checkoutSpin &&
+            spinBelongsToCurrentStore &&
+            spinEventIsAvailable
+              ? checkoutSpin.eventId
+              : null,
+
           items: items.map(
             (item) => ({
               productId:
@@ -2432,12 +2504,7 @@ function StoreCheckoutScreen() {
                     styles.spinFutureRewardText
                   }
                 >
-                  محفوظة للطلب القادم
-                  {checkoutSpin
-                    ?.minimumNextOrder
-                    ? ` عند طلب ${checkoutSpin.minimumNextOrder}ج أو أكتر`
-                    : ''}
-                  . لا تُخصم من هذا الطلب.
+                  {futureSpinRewardMessage}
                 </Text>
               </View>
             </View>

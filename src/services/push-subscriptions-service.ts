@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import { supabase } from '../lib/supabase';
@@ -12,6 +13,9 @@ export type RegisterPushSubscriptionInput = {
   appVersion?: string | null;
   platform?: SupportedPushPlatform;
 };
+
+const REMEMBERED_PUSH_TOKEN_STORAGE_KEY =
+  '@navienty-now/remembered-expo-push-token-v1';
 
 function normalizeNullableText(
   value: string | null | undefined,
@@ -44,6 +48,61 @@ function resolvePushPlatform(
   );
 }
 
+export async function getRememberedPushSubscriptionToken():
+  Promise<string | null> {
+  try {
+    const value =
+      await AsyncStorage.getItem(
+        REMEMBERED_PUSH_TOKEN_STORAGE_KEY,
+      );
+
+    return normalizeNullableText(value);
+  } catch {
+    return null;
+  }
+}
+
+async function rememberPushSubscriptionToken(
+  expoPushToken: string,
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      REMEMBERED_PUSH_TOKEN_STORAGE_KEY,
+      expoPushToken,
+    );
+  } catch (error) {
+    console.warn(
+      'Unable to persist the Expo push token locally:',
+      error,
+    );
+  }
+}
+
+async function forgetPushSubscriptionToken(
+  expoPushToken: string,
+): Promise<void> {
+  try {
+    const rememberedToken =
+      await getRememberedPushSubscriptionToken();
+
+    if (
+      rememberedToken !==
+      expoPushToken
+    ) {
+      return;
+    }
+
+    await AsyncStorage.removeItem(
+      REMEMBERED_PUSH_TOKEN_STORAGE_KEY,
+    );
+  } catch (error) {
+    console.warn(
+      'Unable to clear the remembered Expo push token:',
+      error,
+    );
+  }
+}
+
 export async function registerPushSubscription(
   input: RegisterPushSubscriptionInput,
 ): Promise<string> {
@@ -55,6 +114,9 @@ export async function registerPushSubscription(
       'Push token is required.',
     );
   }
+
+  const previousToken =
+    await getRememberedPushSubscriptionToken();
 
   const {
     data,
@@ -94,6 +156,32 @@ export async function registerPushSubscription(
     );
   }
 
+  await rememberPushSubscriptionToken(
+    expoPushToken,
+  );
+
+  /**
+   * If Expo changed the token for this installation, retire the previous
+   * token owned by the same authenticated user. The backend also handles
+   * DeviceNotRegistered receipts, but proactive cleanup avoids duplicate
+   * sends during a token rollover.
+   */
+  if (
+    previousToken &&
+    previousToken !== expoPushToken
+  ) {
+    try {
+      await disablePushSubscription(
+        previousToken,
+      );
+    } catch (error) {
+      console.warn(
+        'Unable to retire the previous Expo push token:',
+        error,
+      );
+    }
+  }
+
   return data;
 }
 
@@ -123,6 +211,16 @@ export async function disablePushSubscription(
       `Push subscription disable failed: ${error.message}`,
     );
   }
+
+  /**
+   * Clear the local installation marker whenever the owner-scoped RPC
+   * completed successfully. A false result can simply mean the row was
+   * already inactive or now belongs to a different auth identity; keeping the
+   * stale local marker would otherwise cause a disable RPC on every foreground.
+   */
+  await forgetPushSubscriptionToken(
+    normalizedToken,
+  );
 
   return data === true;
 }

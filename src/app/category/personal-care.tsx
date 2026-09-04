@@ -19,6 +19,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import CategoryCartDock, {
+  useCartDockScrollBehavior,
+} from '../../components/cart/category-cart-dock';
+import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import loadAppBootstrap from '../../services/bootstrap-service';
@@ -29,6 +33,10 @@ import {
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+  listStorefrontCategoryTiles,
+  type StorefrontCategoryTile,
+} from '../../services/storefront-category-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 
@@ -330,6 +338,7 @@ type CategoryDisplayItem = {
   label: string;
 
   imageSource: ImageSourcePropType | null;
+  imageUrl: string | null;
 
   /*
    * أول Section مطابق.
@@ -379,6 +388,32 @@ function findPersonalCareCategorySections(
       definition.label,
       ...(definition.sourceSlugs ?? []),
       ...definition.aliases,
+    ].map(normalizeCategoryValue),
+  );
+
+  return sections.filter((section) =>
+    [
+      section.slug,
+      section.name,
+      section.nameEn,
+    ].some((value) =>
+      acceptedValues.has(
+        normalizeCategoryValue(value),
+      ),
+    ),
+  );
+}
+
+function findPersonalCareStorefrontSections(
+  tile: StorefrontCategoryTile,
+  sections: CatalogSection[],
+): CatalogSection[] {
+  const acceptedValues = new Set(
+    [
+      tile.key,
+      tile.routeSlug,
+      tile.labelAr,
+      ...tile.sourceSlugs,
     ].map(normalizeCategoryValue),
   );
 
@@ -951,7 +986,15 @@ function CategoryVisual({
         },
       ]}
     >
-      {item.imageSource ? (
+      {item.imageUrl ? (
+        <Image
+          source={{
+            uri: item.imageUrl,
+          }}
+          style={styles.categoryImage}
+          resizeMode="cover"
+        />
+      ) : item.imageSource ? (
         <Image
           source={item.imageSource}
           style={styles.categoryImage}
@@ -1630,6 +1673,11 @@ function ClosedPersonalCareExperience({
 export default function PersonalCareScreen() {
   const router = useRouter();
 
+  const {
+    isScrollingDown: isCartDockScrollingDown,
+    onScroll: handleCartDockScroll,
+  } = useCartDockScrollBehavior();
+
   const { width: windowWidth } =
     useWindowDimensions();
 
@@ -1641,6 +1689,13 @@ export default function PersonalCareScreen() {
 
   const [catalog, setCatalog] =
     useState<StoreCatalog | null>(null);
+
+  const [
+    storefrontCategoryTiles,
+    setStorefrontCategoryTiles,
+  ] = useState<
+    StorefrontCategoryTile[] | null
+  >(null);
 
   const [currencyCode, setCurrencyCode] =
     useState('EGP');
@@ -1714,11 +1769,25 @@ export default function PersonalCareScreen() {
           ) ??
           personalCareStores[0];
 
-        const loadedCatalog =
-          await getStoreCatalog(
+        const [
+          loadedCatalog,
+          loadedStorefrontCategoryTiles,
+        ] = await Promise.all([
+          getStoreCatalog(
             selectedStore.id,
             serviceAreaId,
-          );
+          ),
+
+          listStorefrontCategoryTiles(
+            'personal-care',
+          ).catch((categoryError) => {
+            console.warn(
+              'Unable to load personal-care category configuration:',
+              categoryError,
+            );
+            return null;
+          }),
+        ]);
 
         if (
           loadRequestIdRef.current !==
@@ -1728,6 +1797,10 @@ export default function PersonalCareScreen() {
         }
 
         setCatalog(loadedCatalog);
+
+        setStorefrontCategoryTiles(
+          loadedStorefrontCategoryTiles,
+        );
 
         setCurrencyCode(
           bootstrap.settings
@@ -1743,6 +1816,10 @@ export default function PersonalCareScreen() {
         }
 
         setCatalog(null);
+
+        setStorefrontCategoryTiles(
+          null,
+        );
 
         setErrorMessage(
           error instanceof Error
@@ -1782,6 +1859,117 @@ export default function PersonalCareScreen() {
               section.parentId ===
               null,
           );
+
+    const hasOffers =
+      catalog.sections.some(
+        (section) =>
+          section.products.some(
+            (product) =>
+              product.compareAtPrice !==
+                null &&
+              product.compareAtPrice >
+                product.price,
+          ),
+      );
+
+    if (
+      storefrontCategoryTiles !== null
+    ) {
+      return storefrontCategoryTiles
+        .map(
+          (
+            tile,
+          ): CategoryDisplayItem | null => {
+            if (
+              tile.kind === 'offers' &&
+              !hasOffers
+            ) {
+              return null;
+            }
+
+            const matchingSections =
+              tile.kind === 'offers'
+                ? []
+                : findPersonalCareStorefrontSections(
+                    tile,
+                    rootSections,
+                  );
+
+            const section =
+              matchingSections[0] ??
+              null;
+
+            if (
+              tile.kind === 'catalog' &&
+              !section
+            ) {
+              return null;
+            }
+
+            if (
+              tile.kind === 'merged' &&
+              matchingSections.length ===
+                0
+            ) {
+              return null;
+            }
+
+            const matchedSourceSlugs =
+              matchingSections
+                .map(
+                  (matchedSection) =>
+                    matchedSection.slug,
+                )
+                .filter(Boolean);
+
+            const sourceSlugs =
+              tile.sourceSlugs.length >
+              0
+                ? tile.sourceSlugs
+                : matchedSourceSlugs.length >
+                    0
+                  ? matchedSourceSlugs
+                  : [tile.routeSlug];
+
+            return {
+              key: tile.key,
+
+              categoryKey:
+                tile.key,
+
+              slug:
+                tile.routeSlug,
+
+              label:
+                tile.labelAr,
+
+              imageSource:
+                PERSONAL_CARE_CATEGORY_IMAGES[
+                  tile.key
+                ] ??
+                PERSONAL_CARE_CATEGORY_IMAGES[
+                  section?.slug ?? ''
+                ] ??
+                null,
+
+              imageUrl:
+                tile.imageUrl ??
+                section?.imageUrl ??
+                null,
+
+              section,
+
+              sourceSlugs,
+            };
+          },
+        )
+        .filter(
+          (
+            item,
+          ): item is CategoryDisplayItem =>
+            item !== null,
+        );
+    }
 
     return PERSONAL_CARE_CATEGORIES.map(
       (definition) => {
@@ -1844,19 +2032,32 @@ export default function PersonalCareScreen() {
             ] ??
             null,
 
+          imageUrl: null,
+
           section,
 
           sourceSlugs,
         };
       },
     );
-  }, [catalog]);
+  }, [
+    catalog,
+    storefrontCategoryTiles,
+  ]);
 
   const categoryColumns = useMemo(
     () =>
       makeCategoryColumns(
         categories,
       ).reverse(),
+    [categories],
+  );
+
+  const searchSuggestions = useMemo(
+    () =>
+      categories.map(
+        (item) => item.label,
+      ),
     [categories],
   );
 
@@ -2072,10 +2273,17 @@ export default function PersonalCareScreen() {
             shouldShowCartBar &&
               styles.mainContentWithCart,
           ]}
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={
             false
           }
         >
+          <CategorySearchEntry
+            scope="personal-care"
+            suggestions={searchSuggestions}
+          />
+
           <View
             style={
               styles.categoriesSection
@@ -2210,61 +2418,20 @@ export default function PersonalCareScreen() {
           </View>
         </ScrollView>
 
-        {shouldShowCartBar && (
-          <View
-            pointerEvents="box-none"
-            style={
-              styles.cartBarFloatingWrapper
-            }
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`عرض السلة، ${currentStoreItemCount} منتجات، الإجمالي ${formatCartMoney(
-                currentStoreSubtotal,
-                currencyCode,
-              )}`}
-              style={({ pressed }) => [
-                styles.cartBar,
-                pressed &&
-                  styles.cartBarPressed,
-              ]}
-              onPress={openCart}
-            >
-              <View
-                style={
-                  styles.cartCountBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.cartCountText
-                  }
-                >
-                  {currentStoreItemCount}
-                </Text>
-              </View>
-
-              <View
-                style={
-                  styles.cartBarRight
-                }
-              >
-                <Text
-                  style={
-                    styles.cartBarText
-                  }
-                  numberOfLines={1}
-                >
-                  {formatCartMoney(
-                    currentStoreSubtotal,
-                    currencyCode,
-                  )}{' '}
-                  عرض السلة
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        )}
+        <CategoryCartDock
+          itemCount={
+            shouldShowCartBar
+              ? currentStoreItemCount
+              : 0
+          }
+          subtotal={currentStoreSubtotal}
+          minimumOrder={catalog.delivery.minimumOrder}
+          currencyCode={currencyCode}
+          accentColor="#00B956"
+          accentDarkColor="#009D49"
+          isScrollingDown={isCartDockScrollingDown}
+          onPress={openCart}
+        />
       </View>
     </SafeAreaView>
   );
@@ -2390,7 +2557,7 @@ const styles = StyleSheet.create({
   },
 
   mainContentWithCart: {
-    paddingBottom: 115,
+    paddingBottom: 180,
   },
 
   categoriesSection: {

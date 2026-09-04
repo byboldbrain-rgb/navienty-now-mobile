@@ -3,63 +3,70 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
 } from 'react';
 import {
-  ActivityIndicator,
-  Image,
-  type ImageSourcePropType,
-  Keyboard,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Image,
+    type ImageSourcePropType,
+    Keyboard,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { publicSupabase } from '../lib/supabase';
+import {
+    getSearchScopeForCategorySlug,
+    SEARCH_SCOPE_TABS,
+    SEARCH_SCOPES,
+    type SearchScopeKey,
+} from '../../config/search-scopes';
+
+import { publicSupabase } from '../../lib/supabase';
 
 import {
-  createAnalyticsCorrelationId,
-  sanitizeSearchQueryForAnalytics,
-  trackBehaviorEvent,
-} from '../services/behavioral-analytics-service';
-import getAppBootstrap from '../services/bootstrap-service';
+    createAnalyticsCorrelationId,
+    sanitizeSearchQueryForAnalytics,
+    trackBehaviorEvent,
+} from '../../services/behavioral-analytics-service';
+import getAppBootstrap from '../../services/bootstrap-service';
 import {
-  getStoreCatalog,
-  listStores,
-  type StoreCatalog,
-  type StoreSummary,
-} from '../services/catalog-service';
+    getStoreCatalog,
+    listStores,
+    type StoreCatalog,
+    type StoreSummary,
+} from '../../services/catalog-service';
 import {
-  type GlobalSearchResult,
-  type GlobalSearchServiceKey,
-  prepareGlobalSearchIndex,
-  searchGlobalCatalog,
-} from '../services/global-search-service';
+    type GlobalSearchResult,
+    type GlobalSearchServiceKey,
+    prepareGlobalSearchIndex,
+    searchGlobalCatalog,
+} from '../../services/global-search-service';
 import {
-  recordRecentlyViewed,
-} from '../services/recently-viewed-service';
+    recordRecentlyViewed,
+} from '../../services/recently-viewed-service';
 import {
-  setSearchAttribution,
-} from '../services/search-attribution-service';
+    setSearchAttribution,
+} from '../../services/search-attribution-service';
 import {
-  clearRecentSearches as clearRecentSearchHistory,
-  getRecentSearches,
-  saveRecentSearch as persistRecentSearch,
-} from '../services/search-history-service';
-import { useCustomerStore } from '../store/customer-store';
+    clearRecentSearches as clearRecentSearchHistory,
+    getRecentSearches,
+    saveRecentSearch as persistRecentSearch,
+} from '../../services/search-history-service';
+import { useCustomerStore } from '../../store/customer-store';
 import {
-  NAVIENTY_NOW_COLORS,
-  NAVIENTY_NOW_LAYOUT,
-} from '../theme/navienty-now-theme';
+    NAVIENTY_NOW_COLORS,
+    NAVIENTY_NOW_LAYOUT,
+} from '../../theme/navienty-now-theme';
 
 const MAX_RECENT_SEARCHES = 6;
 const SEARCH_DEBOUNCE_MS = 180;
@@ -74,11 +81,6 @@ type SearchGroups = {
   products: GlobalSearchResult[];
 };
 
-type SearchTabKey =
-  | 'restaurants'
-  | 'supermarket'
-  | 'bookstore'
-  | 'personal-care';
 
 type SearchCatalogSuggestion = {
   id: string;
@@ -96,27 +98,6 @@ type ActiveCategoryIdsByStore = Map<
   Set<string>
 >;
 
-const SEARCH_TABS: ReadonlyArray<{
-  key: SearchTabKey;
-  label: string;
-}> = [
-  {
-    key: 'restaurants',
-    label: 'المطاعم',
-  },
-  {
-    key: 'supermarket',
-    label: 'الماركت',
-  },
-  {
-    key: 'bookstore',
-    label: 'المكتبة',
-  },
-  {
-    key: 'personal-care',
-    label: 'العناية',
-  },
-];
 
 
 /*
@@ -132,49 +113,49 @@ const SUPERMARKET_CATEGORY_IMAGES: Readonly<
   Partial<Record<string, ImageSourcePropType>>
 > = {
   'fruit-veg': require(
-    '../../assets/images/supermarket-categories/fruit-veg.webp',
+    '../../../assets/images/supermarket-categories/fruit-veg.webp',
   ),
   bakery: require(
-    '../../assets/images/supermarket-categories/bakery.webp',
+    '../../../assets/images/supermarket-categories/bakery.webp',
   ),
   'poultry-meat-seafood': require(
-    '../../assets/images/supermarket-categories/poultry-meat-seafood.webp',
+    '../../../assets/images/supermarket-categories/poultry-meat-seafood.webp',
   ),
   'coffee-tea': require(
-    '../../assets/images/supermarket-categories/coffee-tea.webp',
+    '../../../assets/images/supermarket-categories/coffee-tea.webp',
   ),
   'cooking-baking': require(
-    '../../assets/images/supermarket-categories/cooking-baking.webp',
+    '../../../assets/images/supermarket-categories/cooking-baking.webp',
   ),
   'fresh-food': require(
-    '../../assets/images/supermarket-categories/fresh-food.webp',
+    '../../../assets/images/supermarket-categories/fresh-food.webp',
   ),
   'ready-to-eat': require(
-    '../../assets/images/supermarket-categories/ready-to-eat.webp',
+    '../../../assets/images/supermarket-categories/ready-to-eat.webp',
   ),
   'frozen-food': require(
-    '../../assets/images/supermarket-categories/frozen-food.webp',
+    '../../../assets/images/supermarket-categories/frozen-food.webp',
   ),
   'dairy-eggs': require(
-    '../../assets/images/supermarket-categories/dairy-eggs.webp',
+    '../../../assets/images/supermarket-categories/dairy-eggs.webp',
   ),
   'breakfast-food': require(
-    '../../assets/images/supermarket-categories/breakfast-food.webp',
+    '../../../assets/images/supermarket-categories/breakfast-food.webp',
   ),
   'canned-jarred': require(
-    '../../assets/images/supermarket-categories/canned-jarred.webp',
+    '../../../assets/images/supermarket-categories/canned-jarred.webp',
   ),
   'household-essentials': require(
-    '../../assets/images/supermarket-categories/household-essentials.webp',
+    '../../../assets/images/supermarket-categories/household-essentials.webp',
   ),
   beverages: require(
-    '../../assets/images/supermarket-categories/beverages.webp',
+    '../../../assets/images/supermarket-categories/beverages.webp',
   ),
   'snacks-chocolate': require(
-    '../../assets/images/supermarket-categories/snacks-chocolate.webp',
+    '../../../assets/images/supermarket-categories/snacks-chocolate.webp',
   ),
   condiments: require(
-    '../../assets/images/supermarket-categories/condiments.webp',
+    '../../../assets/images/supermarket-categories/condiments.webp',
   ),
 };
 
@@ -182,28 +163,28 @@ const BOOKSTORE_CATEGORY_IMAGES: Readonly<
   Partial<Record<string, ImageSourcePropType>>
 > = {
   'writing-tools': require(
-    '../../assets/images/bookstore-categories/writing-tools.webp',
+    '../../../assets/images/bookstore-categories/writing-tools.webp',
   ),
   'art-supplies': require(
-    '../../assets/images/bookstore-categories/art-supplies.webp',
+    '../../../assets/images/bookstore-categories/art-supplies.webp',
   ),
   notebooks: require(
-    '../../assets/images/bookstore-categories/notebooks.webp',
+    '../../../assets/images/bookstore-categories/notebooks.webp',
   ),
   'geometry-tools': require(
-    '../../assets/images/bookstore-categories/geometry-tools.webp',
+    '../../../assets/images/bookstore-categories/geometry-tools.webp',
   ),
   'printing-paper': require(
-    '../../assets/images/bookstore-categories/printing-paper.webp',
+    '../../../assets/images/bookstore-categories/printing-paper.webp',
   ),
   'cups-cans': require(
-    '../../assets/images/bookstore-categories/cups-cans.webp',
+    '../../../assets/images/bookstore-categories/cups-cans.webp',
   ),
   'pencil-cases-bags': require(
-    '../../assets/images/bookstore-categories/pencil-cases-bags.webp',
+    '../../../assets/images/bookstore-categories/pencil-cases-bags.webp',
   ),
   flowers: require(
-    '../../assets/images/bookstore-categories/flowers.webp',
+    '../../../assets/images/bookstore-categories/flowers.webp',
   ),
 };
 
@@ -211,25 +192,25 @@ const PERSONAL_CARE_CATEGORY_IMAGES: Readonly<
   Partial<Record<string, ImageSourcePropType>>
 > = {
   skincare: require(
-    '../../assets/images/personal-care-categories/face-care.webp',
+    '../../../assets/images/personal-care-categories/face-care.webp',
   ),
   cosmetics: require(
-    '../../assets/images/personal-care-categories/face-makeup.webp',
+    '../../../assets/images/personal-care-categories/face-makeup.webp',
   ),
   'hair-scalp-care': require(
-    '../../assets/images/personal-care-categories/hair-care.webp',
+    '../../../assets/images/personal-care-categories/hair-care.webp',
   ),
   'personal-care-hygiene': require(
-    '../../assets/images/personal-care-categories/body-care.webp',
+    '../../../assets/images/personal-care-categories/body-care.webp',
   ),
   'oral-dental-care': require(
-    '../../assets/images/personal-care-categories/dental-care.webp',
+    '../../../assets/images/personal-care-categories/dental-care.webp',
   ),
   'women-care': require(
-    '../../assets/images/personal-care-categories/women-care.webp',
+    '../../../assets/images/personal-care-categories/women-care.webp',
   ),
   'men-care': require(
-    '../../assets/images/personal-care-categories/men-care.webp',
+    '../../../assets/images/personal-care-categories/men-care.webp',
   ),
 };
 
@@ -295,7 +276,7 @@ function getLocalCatalogCategoryImage(
   sectionSlug: string | null | undefined,
 ): ImageSourcePropType | null {
   const tab =
-    getSearchTabForCategorySlug(
+    getSearchScopeForCategorySlug(
       storeCategorySlug,
     );
 
@@ -357,54 +338,6 @@ function normalizeCategorySlug(
 }
 
 
-function getSearchTabForCategorySlug(
-  value: string | null | undefined,
-): SearchTabKey | null {
-  const slug =
-    normalizeCategorySlug(value);
-
-  if (
-    slug === 'restaurants' ||
-    slug === 'restaurant' ||
-    slug === 'food'
-  ) {
-    return 'restaurants';
-  }
-
-  if (
-    slug === 'supermarket' ||
-    slug === 'supermarkets' ||
-    slug === 'market' ||
-    slug === 'grocery'
-  ) {
-    return 'supermarket';
-  }
-
-  if (
-    slug === 'bookstore' ||
-    slug === 'bookstores' ||
-    slug === 'book-store' ||
-    slug === 'library' ||
-    slug === 'books' ||
-    slug === 'stationery'
-  ) {
-    return 'bookstore';
-  }
-
-  if (
-    slug === 'personal-care' ||
-    slug === 'personalcare' ||
-    slug === 'beauty' ||
-    slug === 'beauty-care' ||
-    slug === 'health-beauty' ||
-    slug === 'care'
-  ) {
-    return 'personal-care';
-  }
-
-  return null;
-}
-
 function isSearchResultInActiveCategory(
   result: GlobalSearchResult,
   activeCategoryIdsByStore:
@@ -431,7 +364,7 @@ function isSearchResultInActiveCategory(
 
 function doesResultMatchSearchTab(
   result: GlobalSearchResult,
-  tab: SearchTabKey,
+  tab: SearchScopeKey,
   activeCategoryIdsByStore:
     ActiveCategoryIdsByStore,
 ) {
@@ -449,7 +382,7 @@ function doesResultMatchSearchTab(
   }
 
   return (
-    getSearchTabForCategorySlug(
+    getSearchScopeForCategorySlug(
       result.storeCategorySlug,
     ) === tab
   );
@@ -457,28 +390,13 @@ function doesResultMatchSearchTab(
 
 function doesSuggestionMatchSearchTab(
   suggestion: SearchCatalogSuggestion,
-  tab: SearchTabKey,
+  tab: SearchScopeKey,
 ) {
   return (
-    getSearchTabForCategorySlug(
+    getSearchScopeForCategorySlug(
       suggestion.storeCategorySlug,
     ) === tab
   );
-}
-
-function getDiscoveryTitle(
-  tab: SearchTabKey,
-) {
-  switch (tab) {
-    case 'restaurants':
-      return 'نفسك تطلب منين؟';
-    case 'supermarket':
-      return 'ناقصك إيه من الماركت؟';
-    case 'bookstore':
-      return 'محتاج إيه للمذاكرة؟';
-    case 'personal-care':
-      return 'روتينك ناقصه إيه؟';
-  }
 }
 
 async function loadActiveCatalogCategoryIds(
@@ -677,7 +595,7 @@ async function loadSearchCatalogSuggestions(
         name.toLocaleLowerCase('ar');
 
       const categoryGroup =
-        getSearchTabForCategorySlug(
+        getSearchScopeForCategorySlug(
           catalog.store.categorySlug,
         ) ??
         catalog.store.categorySlug;
@@ -1447,7 +1365,11 @@ function SearchResultRow({
   );
 }
 
-export default function SearchScreen() {
+export default function SearchScreen({
+  scope = null,
+}: {
+  scope?: SearchScopeKey | null;
+}) {
   const router = useRouter();
 
   const savedServiceAreaId =
@@ -1532,9 +1454,19 @@ export default function SearchScreen() {
   const [
     selectedTab,
     setSelectedTab,
-  ] = useState<SearchTabKey>(
-    'restaurants',
+  ] = useState<SearchScopeKey>(
+    SEARCH_SCOPE_TABS[0]?.key ??
+      'restaurants',
   );
+
+  const isScopedSearch =
+    scope !== null;
+
+  const activeSearchScope =
+    scope ?? selectedTab;
+
+  const activeScopeConfig =
+    SEARCH_SCOPES[activeSearchScope];
 
   const normalizedQuery =
     query.trim();
@@ -1546,13 +1478,13 @@ export default function SearchScreen() {
           (result) =>
             doesResultMatchSearchTab(
               result,
-              selectedTab,
+              activeSearchScope,
               activeCategoryIdsByStore,
             ),
         ),
       [
         results,
-        selectedTab,
+        activeSearchScope,
         activeCategoryIdsByStore,
       ],
     );
@@ -1573,12 +1505,12 @@ export default function SearchScreen() {
           (suggestion) =>
             doesSuggestionMatchSearchTab(
               suggestion,
-              selectedTab,
+              activeSearchScope,
             ),
         ),
       [
         catalogSuggestions,
-        selectedTab,
+        activeSearchScope,
       ],
     );
 
@@ -1616,7 +1548,7 @@ export default function SearchScreen() {
         availableStores
           .filter(
             (store) =>
-              getSearchTabForCategorySlug(
+              getSearchScopeForCategorySlug(
                 store.categorySlug,
               ) === 'restaurants',
           )
@@ -1659,15 +1591,14 @@ export default function SearchScreen() {
           placeholderSuggestions.length,
         )
     ]?.name ??
-      (selectedTab === 'restaurants'
-        ? 'بيتزا'
-        : 'منتج');
+      activeScopeConfig.placeholderFallback;
 
   const discoveryTitle =
-    getDiscoveryTitle(selectedTab);
+    activeScopeConfig.discoveryTitle;
 
   const hasDiscoveryItems =
-    selectedTab === 'restaurants'
+    activeScopeConfig.discoveryMode ===
+    'stores'
       ? restaurantStores.length > 0
       : discoverySuggestions.length > 0;
 
@@ -1675,9 +1606,7 @@ export default function SearchScreen() {
     normalizedQuery.length >= 2;
 
   const storeResultsTitle =
-    selectedTab === 'restaurants'
-      ? 'المطاعم'
-      : 'المتاجر';
+    activeScopeConfig.storeResultsTitle;
 
   useEffect(() => {
     let active = true;
@@ -1714,6 +1643,13 @@ export default function SearchScreen() {
 
         const loadedStores =
           await listStores({
+            ...(scope
+              ? {
+                  categorySlug:
+                    SEARCH_SCOPES[scope]
+                      .storeCategorySlug,
+                }
+              : {}),
             serviceAreaId:
               resolvedServiceAreaId ??
               undefined,
@@ -1781,6 +1717,7 @@ export default function SearchScreen() {
       clearTimeout(focusTimer);
     };
   }, [
+    scope,
     savedServiceAreaId,
   ]);
 
@@ -1857,8 +1794,20 @@ export default function SearchScreen() {
             currentSearchSessionIdRef.current =
               searchSessionId;
 
+            const scopedResults =
+              scope
+                ? response.results.filter(
+                    (result) =>
+                      result.kind !==
+                        'service' &&
+                      getSearchScopeForCategorySlug(
+                        result.storeCategorySlug,
+                      ) === scope,
+                  )
+                : response.results;
+
             setResults(
-              response.results,
+              scopedResults,
             );
 
             setFailedStoreCount(
@@ -1879,7 +1828,7 @@ export default function SearchScreen() {
                 query:
                   analyticsQuery,
                 result_count:
-                  response.results.length,
+                  scopedResults.length,
                 failed_store_count:
                   response.failedStoreCount,
                 indexed_store_count:
@@ -1888,7 +1837,7 @@ export default function SearchScreen() {
             });
 
             if (
-              response.results.length ===
+              scopedResults.length ===
               0
             ) {
               void trackBehaviorEvent({
@@ -1939,6 +1888,7 @@ export default function SearchScreen() {
     };
   }, [
     hasSearchQuery,
+    scope,
     normalizedQuery,
     serviceAreaId,
   ]);
@@ -2006,12 +1956,23 @@ export default function SearchScreen() {
     storeId: string,
     storeCategorySlug: string,
   ) {
-    const destinationTab =
-      getSearchTabForCategorySlug(
+    const destinationScope =
+      getSearchScopeForCategorySlug(
         storeCategorySlug,
       );
 
-    if (destinationTab === 'restaurants') {
+    const navigation =
+      destinationScope
+        ? SEARCH_SCOPES[
+            destinationScope
+          ].storeNavigation
+        : null;
+
+    if (
+      !navigation ||
+      navigation.kind ===
+        'store-detail'
+    ) {
       router.push({
         pathname: '/store/[id]',
         params: {
@@ -2021,43 +1982,10 @@ export default function SearchScreen() {
       return;
     }
 
-    if (destinationTab === 'supermarket') {
-      router.push({
-        pathname:
-          '/category/supermarket',
-        params: {
-          storeId,
-        },
-      });
-      return;
-    }
-
-    if (destinationTab === 'bookstore') {
-      router.push({
-        pathname:
-          '/category/bookstore',
-        params: {
-          storeId,
-        },
-      });
-      return;
-    }
-
-    if (destinationTab === 'personal-care') {
-      router.push({
-        pathname:
-          '/category/personal-care',
-        params: {
-          storeId,
-        },
-      });
-      return;
-    }
-
     router.push({
-      pathname: '/store/[id]',
+      pathname: navigation.pathname,
       params: {
-        id: storeId,
+        storeId,
       },
     });
   }
@@ -2070,10 +1998,13 @@ export default function SearchScreen() {
   function openDiscoveryCategory(
     item: SearchCatalogSuggestion,
   ) {
-    const destinationTab =
-      getSearchTabForCategorySlug(
+    const destinationScope =
+      getSearchScopeForCategorySlug(
         item.storeCategorySlug,
-      ) ?? selectedTab;
+      ) ?? activeSearchScope;
+
+    const scopeConfig =
+      SEARCH_SCOPES[destinationScope];
 
     const sectionSlug =
       item.sectionSlug.trim();
@@ -2082,53 +2013,30 @@ export default function SearchScreen() {
       return;
     }
 
-    if (destinationTab === 'supermarket') {
-      router.push({
-        pathname:
-          '/supermarket-category/[slug]',
-        params: {
-          slug: sectionSlug,
-          categoryKey: sectionSlug,
-          label: item.name,
-        },
-      });
-      return;
-    }
+    const navigation =
+      scopeConfig.categoryNavigation;
 
-    if (destinationTab === 'bookstore') {
-      router.push({
-        pathname:
-          '/bookstore-category/[slug]',
-        params: {
-          slug: sectionSlug,
-          categoryKey: sectionSlug,
-          label: item.name,
-        },
-      });
-      return;
-    }
-
-    if (destinationTab === 'personal-care') {
-      router.push({
-        pathname:
-          '/personal-care-category/[slug]',
-        params: {
-          slug: sectionSlug,
-          categoryKey: sectionSlug,
-          label: item.name,
-        },
-      });
-      return;
-    }
-
-    if (destinationTab === 'restaurants') {
+    if (
+      navigation.kind ===
+      'store-detail'
+    ) {
       router.push({
         pathname: '/store/[id]',
         params: {
           id: item.storeId,
         },
       });
+      return;
     }
+
+    router.push({
+      pathname: navigation.pathname,
+      params: {
+        slug: sectionSlug,
+        categoryKey: sectionSlug,
+        label: item.name,
+      },
+    });
   }
 
   function openCatalogSection(
@@ -2146,15 +2054,18 @@ export default function SearchScreen() {
           }
         >,
   ) {
-    const destinationTab =
-      getSearchTabForCategorySlug(
+    const destinationScope =
+      getSearchScopeForCategorySlug(
         result.storeCategorySlug,
       );
 
     const sectionSlug =
       result.sectionSlug.trim();
 
-    if (!sectionSlug) {
+    if (
+      !destinationScope ||
+      !sectionSlug
+    ) {
       openStore(
         result.storeId,
         result.storeCategorySlug,
@@ -2162,7 +2073,14 @@ export default function SearchScreen() {
       return;
     }
 
-    if (destinationTab === 'restaurants') {
+    const navigation =
+      SEARCH_SCOPES[destinationScope]
+        .categoryNavigation;
+
+    if (
+      navigation.kind ===
+      'store-detail'
+    ) {
       router.push({
         pathname: '/store/[id]',
         params: {
@@ -2177,49 +2095,14 @@ export default function SearchScreen() {
         ? result.title
         : result.categoryName;
 
-    if (destinationTab === 'supermarket') {
-      router.push({
-        pathname:
-          '/supermarket-category/[slug]',
-        params: {
-          slug: sectionSlug,
-          categoryKey: sectionSlug,
-          label,
-        },
-      });
-      return;
-    }
-
-    if (destinationTab === 'bookstore') {
-      router.push({
-        pathname:
-          '/bookstore-category/[slug]',
-        params: {
-          slug: sectionSlug,
-          categoryKey: sectionSlug,
-          label,
-        },
-      });
-      return;
-    }
-
-    if (destinationTab === 'personal-care') {
-      router.push({
-        pathname:
-          '/personal-care-category/[slug]',
-        params: {
-          slug: sectionSlug,
-          categoryKey: sectionSlug,
-          label,
-        },
-      });
-      return;
-    }
-
-    openStore(
-      result.storeId,
-      result.storeCategorySlug,
-    );
+    router.push({
+      pathname: navigation.pathname,
+      params: {
+        slug: sectionSlug,
+        categoryKey: sectionSlug,
+        label,
+      },
+    });
   }
 
   async function openResult(
@@ -2539,40 +2422,42 @@ export default function SearchScreen() {
         </View>
       </View>
 
-      <View style={styles.searchTabsBar}>
-        {SEARCH_TABS.map((tab) => {
-          const isActive =
-            selectedTab === tab.key;
+      {!isScopedSearch ? (
+        <View style={styles.searchTabsBar}>
+          {SEARCH_SCOPE_TABS.map((tab) => {
+            const isActive =
+              selectedTab === tab.key;
 
-          return (
-            <Pressable
-              key={tab.key}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.searchTab,
-                isActive &&
-                  styles.searchTabActive,
-                pressed &&
-                  styles.searchTabPressed,
-              ]}
-              onPress={() => {
-                setSelectedTab(tab.key);
-              }}
-            >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.searchTabText,
+            return (
+              <Pressable
+                key={tab.key}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.searchTab,
                   isActive &&
-                    styles.searchTabTextActive,
+                    styles.searchTabActive,
+                  pressed &&
+                    styles.searchTabPressed,
                 ]}
+                onPress={() => {
+                  setSelectedTab(tab.key);
+                }}
               >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.searchTabText,
+                    isActive &&
+                      styles.searchTabTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <ScrollView
         contentContainerStyle={
@@ -2600,7 +2485,8 @@ export default function SearchScreen() {
                 </Text>
 
                 {hasDiscoveryItems ? (
-                  selectedTab === 'restaurants' ? (
+                  activeScopeConfig.discoveryMode ===
+                  'stores' ? (
                     <RestaurantDiscoveryRail
                       stores={restaurantStores}
                       onPressStore={(store) => {

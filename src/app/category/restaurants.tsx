@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import CategorySearchEntry from '../../components/search/category-search-entry';
 import { RestaurantsScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap, {
   type AppBootstrap,
@@ -577,19 +578,12 @@ function StoreArtwork({
         </View>
       )}
 
-      <View
-        style={
-          styles.storeArtworkGradient
-        }
-      />
-
-
       <View style={styles.logoBadge}>
         {canShowLogo ? (
           <ExpoImage
             accessibilityLabel={`لوجو ${store.name}`}
             cachePolicy="memory-disk"
-            contentFit="cover"
+            contentFit="contain"
             priority={priority}
             source={logoUrl ?? ''}
             style={styles.logoImage}
@@ -840,6 +834,15 @@ export default function RestaurantsScreen() {
       [],
     );
 
+  const searchSuggestions =
+    useMemo(
+      () =>
+        stores.map(
+          (store) => store.name,
+        ),
+      [stores],
+    );
+
   const visibleStores =
     useMemo(() => {
       const selectedCuisines =
@@ -1075,6 +1078,11 @@ export default function RestaurantsScreen() {
         }
       >
         <View style={styles.container}>
+          <CategorySearchEntry
+            scope="restaurants"
+            suggestions={searchSuggestions}
+          />
+
           <ScrollView
             horizontal
             contentContainerStyle={
@@ -1284,22 +1292,6 @@ export default function RestaurantsScreen() {
                               styles.storeNameRowClosed,
                           ]}
                         >
-                          {store.isFeatured && (
-                            <View
-                              style={
-                                styles.proBadge
-                              }
-                            >
-                              <Text
-                                style={
-                                  styles.proBadgeText
-                                }
-                              >
-                                pro
-                              </Text>
-                            </View>
-                          )}
-
                           <Text
                             numberOfLines={
                               1
@@ -2444,15 +2436,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     direction: 'ltr',
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 132,
+    flexDirection: 'row-reverse',
+    gap: 14,
+    minHeight: 128,
     paddingVertical: 8,
     width: '100%',
   },
 
   storeRowClosed: {
-    direction: 'rtl',
     flexDirection: 'row-reverse',
   },
 
@@ -2462,12 +2453,12 @@ const styles = StyleSheet.create({
 
   storeArtwork: {
     backgroundColor: '#EFEFEF',
-    borderRadius: 22,
+    borderRadius: 21,
     flexShrink: 0,
-    height: 118,
+    height: 112,
     overflow: 'hidden',
     position: 'relative',
-    width: 138,
+    width: 132,
   },
 
   storeCoverImage: {
@@ -2489,8 +2480,7 @@ const styles = StyleSheet.create({
   },
 
   storeArtworkGradient: {
-    backgroundColor:
-      'rgba(0,0,0,0.08)',
+    backgroundColor: 'transparent',
     bottom: 0,
     left: 0,
     position: 'absolute',
@@ -2501,17 +2491,24 @@ const styles = StyleSheet.create({
   logoBadge: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor:
-      'rgba(0,0,0,0.06)',
-    borderRadius: 18,
+    borderColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 17,
     borderWidth: 1,
-    height: 52,
+    elevation: 3,
+    height: 50,
     justifyContent: 'center',
-    left: 8,
     overflow: 'hidden',
     position: 'absolute',
+    right: 8,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
     top: 8,
-    width: 52,
+    width: 50,
     zIndex: 4,
   },
 
@@ -2530,10 +2527,9 @@ const styles = StyleSheet.create({
 
   logoFallbackText: {
     color: '#66666C',
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 21,
+    fontWeight: '800',
   },
-
 
   closedOverlay: {
     alignItems: 'center',
@@ -2550,10 +2546,10 @@ const styles = StyleSheet.create({
 
   closedOverlayText: {
     color: '#FFFFFF',
-    fontSize: 26,
+    fontSize: 25,
     fontWeight: '900',
-    letterSpacing: -0.35,
-    lineHeight: 32,
+    letterSpacing: -0.2,
+    lineHeight: 31,
     textAlign: 'center',
     textShadowColor:
       'rgba(0,0,0,0.22)',
@@ -2565,11 +2561,13 @@ const styles = StyleSheet.create({
   },
 
   storeBody: {
+    alignItems: 'stretch',
     flex: 1,
     justifyContent: 'center',
-    minHeight: 108,
+    minHeight: 104,
     overflow: 'hidden',
-    paddingRight: 2,
+    paddingLeft: 2,
+    paddingRight: 0,
   },
 
   storeBodyClosed: {
@@ -2580,8 +2578,8 @@ const styles = StyleSheet.create({
 
   storeNameRow: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
+    flexDirection: 'row-reverse',
+    justifyContent: 'flex-start',
     width: '100%',
   },
 
@@ -2592,18 +2590,18 @@ const styles = StyleSheet.create({
   storeName: {
     color: '#202024',
     flex: 1,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.25,
-    lineHeight: 23,
-    textAlign: 'left',
-    writingDirection: 'auto',
+    fontSize: 19,
+    fontWeight: '700',
+    letterSpacing: 0,
+    lineHeight: 27,
+    textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   storeNameClosed: {
     color: '#202024',
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 19,
+    fontWeight: '700',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -2627,66 +2625,71 @@ const styles = StyleSheet.create({
 
   storeMetaRow: {
     alignItems: 'center',
-    flexDirection: 'row',
+    direction: 'ltr',
+    flexDirection: 'row-reverse',
+    gap: 5,
+    justifyContent: 'flex-start',
     marginTop: 7,
-    minHeight: 22,
+    minHeight: 24,
     width: '100%',
   },
 
   ratingStar: {
-    color: '#F4AF00',
+    color: '#F5A800',
     flexShrink: 0,
-    fontSize: 18,
-    lineHeight: 20,
-    marginRight: 5,
+    fontSize: 21,
+    lineHeight: 23,
   },
 
   ratingText: {
-    color: '#45454B',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-    textAlign: 'left',
+    color: '#2B2B2F',
+    fontSize: 16,
+    fontWeight: '500',
+    lineHeight: 23,
+    textAlign: 'right',
+    writingDirection: 'ltr',
   },
 
   newStoreText: {
-    color: '#77777D',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-    textAlign: 'left',
+    color: '#55555B',
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 23,
+    textAlign: 'right',
+    writingDirection: 'ltr',
   },
 
   closedStoreMetaRow: {
     alignItems: 'center',
+    direction: 'ltr',
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 5,
     justifyContent: 'flex-start',
-    marginTop: 8,
-    minHeight: 22,
+    marginTop: 7,
+    minHeight: 24,
     width: '100%',
   },
 
   closedRatingGroup: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    gap: 4,
+    gap: 5,
   },
 
   closedRatingStar: {
-    color: '#F4AF00',
-    fontSize: 18,
-    lineHeight: 20,
+    color: '#F5A800',
+    fontSize: 21,
+    lineHeight: 23,
   },
 
   closedMetaText: {
-    color: '#4D4D53',
-    fontSize: 13,
+    color: '#2B2B2F',
+    fontSize: 16,
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: 23,
     textAlign: 'right',
-    writingDirection: 'rtl',
+    writingDirection: 'ltr',
   },
 
   closedNoticeModal: {

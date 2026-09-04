@@ -28,7 +28,10 @@ module.exports = ({ config }) => {
           ? plugin[0]
           : plugin;
 
-        return name !== 'react-native-maps';
+        return (
+          name !== 'react-native-maps' &&
+          name !== 'expo-image'
+        );
       })
     : [];
 
@@ -46,11 +49,15 @@ module.exports = ({ config }) => {
 
   const mapsPlugin =
     Object.keys(mapsPluginOptions).length > 0
-      ? ['react-native-maps', mapsPluginOptions]
+      ? [
+          'react-native-maps',
+          mapsPluginOptions,
+        ]
       : 'react-native-maps';
 
   const productionAndroidPackage =
-    config.android?.package ?? 'com.navienty.now';
+    config.android?.package ??
+    'com.navienty.now';
 
   const productionIosBundleIdentifier =
     config.ios?.bundleIdentifier ??
@@ -61,9 +68,10 @@ module.exports = ({ config }) => {
       ? config.scheme
       : 'navientynow';
 
-  const localGoogleServicesFile = isDevelopment
-    ? './google-services.dev.json'
-    : './google-services.json';
+  const localGoogleServicesFile =
+    isDevelopment
+      ? './google-services.dev.json'
+      : './google-services.json';
 
   const googleServicesFile =
     process.env.GOOGLE_SERVICES_JSON?.trim() ||
@@ -105,7 +113,8 @@ module.exports = ({ config }) => {
     android.config = {
       ...(config.android?.config ?? {}),
       googleMaps: {
-        ...(config.android?.config?.googleMaps ?? {}),
+        ...(config.android?.config?.googleMaps ??
+          {}),
         apiKey: androidGoogleMapsApiKey,
       },
     };
@@ -113,18 +122,24 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+
     name: isDevelopment
       ? `${config.name ?? 'Navienty Now'} Dev`
       : config.name,
+
     scheme: isDevelopment
       ? `${productionScheme}-dev`
       : productionScheme,
+
     android,
     ios,
+
     plugins: [
       ...existingPlugins,
+      'expo-image',
       mapsPlugin,
     ],
+
     extra: {
       ...(config.extra ?? {}),
       appVariant,

@@ -23,6 +23,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import CategoryCartDock, {
+  useCartDockScrollBehavior,
+} from '../../components/cart/category-cart-dock';
 import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
@@ -35,6 +38,11 @@ import {
   listStores,
   type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+  findStorefrontCategoryTile,
+  getStorefrontTileCategoryImages,
+  listStorefrontCategoryTiles,
+} from '../../services/storefront-category-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 
@@ -1349,12 +1357,41 @@ function CategoryFilterVisual({
   definitionKey,
   categoryKey,
   isRoot = false,
+  remoteImageUrl,
 }: {
   section?: CatalogSection | null;
   definitionKey?: string | null;
   categoryKey?: string | null;
   isRoot?: boolean;
+  remoteImageUrl?: string | null;
 }) {
+  if (remoteImageUrl) {
+    return (
+      <Image
+        source={{
+          uri: remoteImageUrl,
+        }}
+        style={
+          styles.filterCategoryImage
+        }
+        resizeMode="cover"
+      />
+    );
+  }
+
+  if (section?.imageUrl) {
+    return (
+      <Image
+        source={{
+          uri: section.imageUrl,
+        }}
+        style={
+          styles.filterCategoryImage
+        }
+        resizeMode="cover"
+      />
+    );
+  }
   /*
    * 1) Prefer the exact bundled artwork for the section currently
    *    open on screen.
@@ -1430,20 +1467,6 @@ function CategoryFilterVisual({
    * 3) Remote image remains a fallback for any category that is not
    *    represented by a bundled local asset.
    */
-  if (section?.imageUrl) {
-    return (
-      <Image
-        source={{
-          uri: section.imageUrl,
-        }}
-        style={
-          styles.filterCategoryImage
-        }
-        resizeMode="cover"
-      />
-    );
-  }
-
   /*
    * 4) Final root fallback only. This should normally never be reached
    *    for the configured Personal Care categories because every one
@@ -1779,6 +1802,11 @@ function ProductCard({
 export default function PersonalCareCategoryScreen() {
   const router = useRouter();
 
+  const {
+    isScrollingDown: isCartDockScrollingDown,
+    onScroll: handleCartDockScroll,
+  } = useCartDockScrollBehavior();
+
   const offersTabsScrollRef =
     useRef<ScrollView | null>(
       null,
@@ -1925,6 +1953,22 @@ export default function PersonalCareCategoryScreen() {
       null,
     );
 
+  const [
+    rootCategoryImageUrl,
+    setRootCategoryImageUrl,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    categoryImageOverrides,
+    setCategoryImageOverrides,
+  ] =
+    useState<Record<string, string>>(
+      {},
+    );
+
   /* ==========================================================
    * CART
    * ==========================================================
@@ -1972,6 +2016,53 @@ export default function PersonalCareCategoryScreen() {
 
       const bootstrap =
         await getAppBootstrap();
+
+      let remoteRootImageUrl:
+        string | null =
+        null;
+
+      let remoteCategoryImages:
+        Record<string, string> =
+        {};
+
+      try {
+        const remoteTiles =
+          await listStorefrontCategoryTiles(
+            'personal-care',
+          );
+
+        const remoteTile =
+          findStorefrontCategoryTile(
+            remoteTiles,
+            [
+              passedCategoryKey,
+              sectionSlug,
+              fallbackCategory?.key,
+            ],
+          );
+
+        remoteRootImageUrl =
+          remoteTile?.imageUrl ??
+          null;
+
+        remoteCategoryImages =
+          getStorefrontTileCategoryImages(
+            remoteTile,
+          );
+      } catch {
+        /*
+         * Remote artwork configuration is optional.
+         * Catalog/local images remain the fallback.
+         */
+      }
+
+      setRootCategoryImageUrl(
+        remoteRootImageUrl,
+      );
+
+      setCategoryImageOverrides(
+        remoteCategoryImages,
+      );
 
       const serviceAreaId =
         savedServiceAreaId ??
@@ -2091,6 +2182,14 @@ export default function PersonalCareCategoryScreen() {
       setSearchQuery('');
     } catch (error) {
       setCatalog(null);
+
+      setRootCategoryImageUrl(
+        null,
+      );
+
+      setCategoryImageOverrides(
+        {},
+      );
 
       setSelectedSection(
         null,
@@ -3237,10 +3336,12 @@ export default function PersonalCareCategoryScreen() {
             {
               paddingBottom:
                 shouldShowNormalCartDock
-                  ? 145
+                  ? 180
                   : 30,
             },
           ]}
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={
             false
           }
@@ -3339,6 +3440,15 @@ export default function PersonalCareCategoryScreen() {
                             definitionKey={
                               item.definition?.key
                             }
+                            remoteImageUrl={
+                              categoryImageOverrides[
+                                normalizeSlug(
+                                  item.definition?.key ??
+                                  item.section?.slug,
+                                )
+                              ] ??
+                              null
+                            }
                           />
 
                           {item.section &&
@@ -3419,6 +3529,9 @@ export default function PersonalCareCategoryScreen() {
                         selectedSection?.slug
                       }
                       isRoot
+                      remoteImageUrl={
+                        rootCategoryImageUrl
+                      }
                     />
                   </View>
 
@@ -3590,91 +3703,20 @@ export default function PersonalCareCategoryScreen() {
          * NORMAL CATEGORY CART
          * =====================================================
          */}
-
-        {shouldShowNormalCartDock && (
-          <View
-            style={
-              styles.cartDock
-            }
-          >
-            <Text
-              style={
-                styles.cartMessage
-              }
-              numberOfLines={1}
-            >
-              {getCartMessage()}
-            </Text>
-
-            <View
-              style={
-                styles.progressTrack
-              }
-            >
-              <View
-                style={[
-                  styles.progressValue,
-
-                  {
-                    width: `${
-                      orderProgress *
-                      100
-                    }%`,
-                  },
-                ]}
-              />
-            </View>
-
-            <Pressable
-              style={({
-                pressed,
-              }) => [
-                styles.basketButton,
-
-                pressed &&
-                  styles.basketButtonPressed,
-              ]}
-              onPress={
-                openCart
-              }
-            >
-              <Text
-                style={
-                  styles.basketTotal
-                }
-              >
-                {formatMoney(
-                  currentStoreSubtotal,
-                  currencyCode,
-                )}
-              </Text>
-
-              <Text
-                style={
-                  styles.basketButtonTitle
-                }
-              >
-                عرض السلة
-              </Text>
-
-              <View
-                style={
-                  styles.basketCount
-                }
-              >
-                <Text
-                  style={
-                    styles.basketCountText
-                  }
-                >
-                  {
-                    currentStoreItemCount
-                  }
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        )}
+        <CategoryCartDock
+          itemCount={
+            shouldShowNormalCartDock
+              ? currentStoreItemCount
+              : 0
+          }
+          subtotal={currentStoreSubtotal}
+          minimumOrder={minimumOrder}
+          currencyCode={currencyCode}
+          accentColor={NAVIENTY_NOW_GREEN}
+          accentDarkColor={NAVIENTY_NOW_GREEN_DARK}
+          isScrollingDown={isCartDockScrollingDown}
+          onPress={openCart}
+        />
       </View>
     </SafeAreaView>
   );

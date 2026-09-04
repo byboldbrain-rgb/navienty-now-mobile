@@ -16,6 +16,7 @@ export type OrderIdempotencyInput = {
   landmark: string;
   notes: string;
   voucherCode?: string | null;
+  spinEventId?: string | null;
   items: OrderIdempotencyItem[];
 };
 
@@ -81,7 +82,7 @@ function hashFingerprintSource(
  * Produces a stable, non-PII fingerprint for one logical checkout request.
  *
  * The fingerprint deliberately ignores cart item ordering while preserving
- * product, variant, quantity, customer, delivery, payment, and voucher
+ * product, variant, quantity, customer, delivery, payment, voucher and Spin
  * semantics. It is used only to decide whether a retry should reuse the same
  * client_request_id; it is not an authentication or authorization token.
  */
@@ -135,6 +136,9 @@ export function getOrderRequestFingerprint(
       normalizeText(
         input.voucherCode,
       ).toUpperCase(),
+    spinEventId: normalizeNullableId(
+      input.spinEventId,
+    ),
     items: normalizedItems,
   });
 

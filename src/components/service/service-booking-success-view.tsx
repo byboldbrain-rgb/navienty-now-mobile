@@ -1,37 +1,37 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-    useFocusEffect,
-    useRouter,
+  useFocusEffect,
+  useRouter,
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-    Fragment,
-    useCallback,
-    useState,
+  Fragment,
+  useCallback,
+  useState,
 } from 'react';
 import {
-    Alert,
-    Image,
-    Linking,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  Alert,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-    buildWhatsAppUrl,
+  buildWhatsAppUrl,
 } from '../../services/promo-action-service';
 import {
-    getServiceBookingById,
-    submitServiceBookingForConfirmation,
-    type ServiceBooking,
-    type ServiceBookingStatus,
+  getServiceBookingById,
+  submitServiceBookingForConfirmation,
+  type ServiceBooking,
+  type ServiceBookingStatus,
 } from '../../services/service-bookings-service';
 import {
-    NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_COLORS,
 } from '../../theme/navienty-now-theme';
 import { OrderDetailsScreenSkeleton } from '../ui/loading-skeleton';
 
@@ -250,12 +250,16 @@ export default function ServiceBookingSuccess({
         setRefreshError(
           submissionError,
         );
+
+        return latestBooking;
       } catch (error) {
         setRefreshError(
           error instanceof Error
             ? error.message
             : 'تعذر تحديث حالة الحجز.',
         );
+
+        return null;
       } finally {
         if (!silent) {
           setIsLoading(false);
@@ -267,35 +271,77 @@ export default function ServiceBookingSuccess({
 
   useFocusEffect(
     useCallback(() => {
-      void refreshBooking();
+      let disposed = false;
+      let timer:
+        ReturnType<typeof setTimeout> | null =
+        null;
 
-      const timer = setInterval(() => {
-        void (async () => {
-          const latest =
-            await getServiceBookingById(
-              serviceBookingId,
-            );
+      function isTerminalStatus(
+        status:
+          | ServiceBookingStatus
+          | undefined,
+      ) {
+        return (
+          status === 'delivered' ||
+          status === 'cancelled'
+        );
+      }
 
-          if (
-            latest?.status === 'delivered' ||
-            latest?.status === 'cancelled'
-          ) {
-            setBooking(latest);
-            return;
-          }
-
+      async function pollBooking() {
+        const latest =
           await refreshBooking({
             silent: true,
           });
-        })();
-      }, POLL_INTERVAL_MS);
+
+        if (
+          disposed ||
+          isTerminalStatus(
+            latest?.status,
+          )
+        ) {
+          return;
+        }
+
+        timer = setTimeout(
+          () => {
+            void pollBooking();
+          },
+          POLL_INTERVAL_MS,
+        );
+      }
+
+      async function startTracking() {
+        const latest =
+          await refreshBooking();
+
+        if (
+          disposed ||
+          isTerminalStatus(
+            latest?.status,
+          )
+        ) {
+          return;
+        }
+
+        timer = setTimeout(
+          () => {
+            void pollBooking();
+          },
+          POLL_INTERVAL_MS,
+        );
+      }
+
+      void startTracking();
 
       return () => {
-        clearInterval(timer);
+        disposed = true;
+
+        if (timer) {
+          clearTimeout(timer);
+        }
       };
     }, [
       refreshBooking,
-      serviceBookingId,
     ]),
   );
 

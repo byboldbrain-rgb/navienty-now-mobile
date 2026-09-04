@@ -8,6 +8,8 @@ import {
   ensureAppSession,
 } from './anonymous-auth-service';
 import {
+  disablePushSubscription,
+  getRememberedPushSubscriptionToken,
   registerPushSubscription,
 } from './push-subscriptions-service';
 
@@ -243,6 +245,36 @@ export async function ensureOrderNotificationChannel() {
   await ensureNotificationChannels();
 }
 
+/**
+ * Best-effort reconciliation for a push token that this installation
+ * registered previously but can no longer use because OS permission is off.
+ *
+ * The server RPC is owner-scoped by auth.uid(). We intentionally keep this
+ * cleanup best-effort: notification permission should still resolve as denied
+ * even if the network is temporarily unavailable.
+ */
+async function disableRememberedPushSubscription() {
+  const rememberedToken =
+    await getRememberedPushSubscriptionToken();
+
+  if (!rememberedToken) {
+    return;
+  }
+
+  try {
+    await ensureAppSession();
+
+    await disablePushSubscription(
+      rememberedToken,
+    );
+  } catch (error) {
+    console.warn(
+      'Unable to disable remembered push subscription:',
+      error,
+    );
+  }
+}
+
 async function registerPushNotificationsInternal(
   options: PushRegistrationOptions,
 ): Promise<PushRegistrationResult> {
@@ -290,6 +322,8 @@ async function registerPushNotificationsInternal(
       .toLowerCase() !==
     'granted'
   ) {
+    await disableRememberedPushSubscription();
+
     return {
       status:
         'permission-not-granted',

@@ -126,6 +126,15 @@ export type CreateWhatsAppOrderInput = {
 
   voucherCode?: string | null;
 
+  /**
+   * Optional Spin event associated with this checkout.
+   *
+   * The server decides whether this event is the source of a pending
+   * next-order reward or an already-available reward being redeemed.
+   * The client must never decide or persist consumption by itself.
+   */
+  spinEventId?: string | null;
+
   items: Array<{
     productId: string;
     variantId?: string | null;

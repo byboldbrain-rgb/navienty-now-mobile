@@ -23,6 +23,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import CategoryCartDock, {
+  useCartDockScrollBehavior,
+} from '../../components/cart/category-cart-dock';
 import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   getBookstoreCategoryImage,
@@ -38,6 +41,11 @@ import {
   listStores,
   type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+  findStorefrontCategoryTile,
+  getStorefrontTileCategoryImages,
+  listStorefrontCategoryTiles,
+} from '../../services/storefront-category-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 
@@ -1258,10 +1266,39 @@ function getVirtualSubcategoryProducts(
 function CategoryFilterVisual({
   section,
   fallbackKey,
+  remoteImageUrl,
 }: {
   section: CatalogSection;
   fallbackKey?: string;
+  remoteImageUrl?: string | null;
 }) {
+  if (remoteImageUrl) {
+    return (
+      <Image
+        source={{
+          uri: remoteImageUrl,
+        }}
+        style={
+          styles.filterCategoryImage
+        }
+        resizeMode="cover"
+      />
+    );
+  }
+
+  if (section.imageUrl) {
+    return (
+      <Image
+        source={{
+          uri: section.imageUrl,
+        }}
+        style={
+          styles.filterCategoryImage
+        }
+        resizeMode="cover"
+      />
+    );
+  }
   const normalizedSectionSlug =
     normalizeSlug(section.slug);
 
@@ -1394,20 +1431,6 @@ function CategoryFilterVisual({
     );
   }
 
-  if (section.imageUrl) {
-    return (
-      <Image
-        source={{
-          uri: section.imageUrl,
-        }}
-        style={
-          styles.filterCategoryImage
-        }
-        resizeMode="cover"
-      />
-    );
-  }
-
   return (
     <View
       style={
@@ -1419,9 +1442,22 @@ function CategoryFilterVisual({
 
 function VirtualCategoryFilterVisual({
   subcategory,
+  remoteImageUrl,
 }: {
   subcategory: BookstoreVirtualSubcategory;
+  remoteImageUrl?: string | null;
 }) {
+  if (remoteImageUrl) {
+    return (
+      <Image
+        source={{
+          uri: remoteImageUrl,
+        }}
+        style={styles.filterCategoryImage}
+        resizeMode="cover"
+      />
+    );
+  }
   const localSubcategoryImage =
     BOOKSTORE_SUBCATEGORY_IMAGES[
       normalizeSlug(subcategory.key)
@@ -1755,6 +1791,11 @@ function ProductCard({
 export default function BookstoreCategoryScreen() {
   const router = useRouter();
 
+  const {
+    isScrollingDown: isCartDockScrollingDown,
+    onScroll: handleCartDockScroll,
+  } = useCartDockScrollBehavior();
+
   const offersTabsScrollRef =
     useRef<ScrollView | null>(
       null,
@@ -1901,6 +1942,22 @@ export default function BookstoreCategoryScreen() {
       null,
     );
 
+  const [
+    rootCategoryImageUrl,
+    setRootCategoryImageUrl,
+  ] =
+    useState<string | null>(
+      null,
+    );
+
+  const [
+    categoryImageOverrides,
+    setCategoryImageOverrides,
+  ] =
+    useState<Record<string, string>>(
+      {},
+    );
+
   /* ==========================================================
    * CART
    * ==========================================================
@@ -1948,6 +2005,53 @@ export default function BookstoreCategoryScreen() {
 
       const bootstrap =
         await getAppBootstrap();
+
+      let remoteRootImageUrl:
+        string | null =
+        null;
+
+      let remoteCategoryImages:
+        Record<string, string> =
+        {};
+
+      try {
+        const remoteTiles =
+          await listStorefrontCategoryTiles(
+            'bookstore',
+          );
+
+        const remoteTile =
+          findStorefrontCategoryTile(
+            remoteTiles,
+            [
+              passedCategoryKey,
+              sectionSlug,
+              fallbackCategory?.key,
+            ],
+          );
+
+        remoteRootImageUrl =
+          remoteTile?.imageUrl ??
+          null;
+
+        remoteCategoryImages =
+          getStorefrontTileCategoryImages(
+            remoteTile,
+          );
+      } catch {
+        /*
+         * Remote artwork configuration is optional.
+         * Catalog/local images remain the fallback.
+         */
+      }
+
+      setRootCategoryImageUrl(
+        remoteRootImageUrl,
+      );
+
+      setCategoryImageOverrides(
+        remoteCategoryImages,
+      );
 
       const serviceAreaId =
         savedServiceAreaId ??
@@ -2067,6 +2171,14 @@ export default function BookstoreCategoryScreen() {
       setSearchQuery('');
     } catch (error) {
       setCatalog(null);
+
+      setRootCategoryImageUrl(
+        null,
+      );
+
+      setCategoryImageOverrides(
+        {},
+      );
 
       setSelectedSection(
         null,
@@ -3211,10 +3323,12 @@ export default function BookstoreCategoryScreen() {
             {
               paddingBottom:
                 shouldShowNormalCartDock
-                  ? 145
+                  ? 180
                   : 30,
             },
           ]}
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={
             false
           }
@@ -3389,6 +3503,14 @@ export default function BookstoreCategoryScreen() {
                             subcategory={
                               subcategory
                             }
+                            remoteImageUrl={
+                              categoryImageOverrides[
+                                normalizeSlug(
+                                  subcategory.key,
+                                )
+                              ] ??
+                              null
+                            }
                           />
                         </View>
 
@@ -3449,13 +3571,21 @@ export default function BookstoreCategoryScreen() {
                           categoryKey ||
                           fallbackCategory?.key
                         }
+                        remoteImageUrl={
+                          rootCategoryImageUrl
+                        }
                       />
                     ) : fallbackCategory ? (
                       <Image
                         source={
-                          BOOKSTORE_ROOT_CATEGORY_IMAGES[
-                            fallbackCategory.key
-                          ]
+                          rootCategoryImageUrl
+                            ? {
+                                uri:
+                                  rootCategoryImageUrl,
+                              }
+                            : BOOKSTORE_ROOT_CATEGORY_IMAGES[
+                                fallbackCategory.key
+                              ]
                         }
                         style={
                           styles.filterCategoryImage
@@ -3633,91 +3763,20 @@ export default function BookstoreCategoryScreen() {
          * NORMAL CATEGORY CART
          * =====================================================
          */}
-
-        {shouldShowNormalCartDock && (
-          <View
-            style={
-              styles.cartDock
-            }
-          >
-            <Text
-              style={
-                styles.cartMessage
-              }
-              numberOfLines={1}
-            >
-              {getCartMessage()}
-            </Text>
-
-            <View
-              style={
-                styles.progressTrack
-              }
-            >
-              <View
-                style={[
-                  styles.progressValue,
-
-                  {
-                    width: `${
-                      orderProgress *
-                      100
-                    }%`,
-                  },
-                ]}
-              />
-            </View>
-
-            <Pressable
-              style={({
-                pressed,
-              }) => [
-                styles.basketButton,
-
-                pressed &&
-                  styles.basketButtonPressed,
-              ]}
-              onPress={
-                openCart
-              }
-            >
-              <Text
-                style={
-                  styles.basketTotal
-                }
-              >
-                {formatMoney(
-                  currentStoreSubtotal,
-                  currencyCode,
-                )}
-              </Text>
-
-              <Text
-                style={
-                  styles.basketButtonTitle
-                }
-              >
-                عرض السلة
-              </Text>
-
-              <View
-                style={
-                  styles.basketCount
-                }
-              >
-                <Text
-                  style={
-                    styles.basketCountText
-                  }
-                >
-                  {
-                    currentStoreItemCount
-                  }
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        )}
+        <CategoryCartDock
+          itemCount={
+            shouldShowNormalCartDock
+              ? currentStoreItemCount
+              : 0
+          }
+          subtotal={currentStoreSubtotal}
+          minimumOrder={minimumOrder}
+          currencyCode={currencyCode}
+          accentColor={NAVIENTY_NOW_GREEN}
+          accentDarkColor={NAVIENTY_NOW_GREEN_DARK}
+          isScrollingDown={isCartDockScrollingDown}
+          onPress={openCart}
+        />
       </View>
     </SafeAreaView>
   );
