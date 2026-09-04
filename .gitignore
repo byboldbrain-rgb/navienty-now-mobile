@@ -52,3 +52,6 @@ example
 # Firebase app configuration - local only
 google-services.json
 google-services.dev.json
+
+# Supabase CLI local state
+/supabase/.temp/
