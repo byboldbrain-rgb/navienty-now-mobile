@@ -411,6 +411,19 @@ export async function markServiceBookingWhatsAppOpened(
   );
 }
 
+/**
+ * Compatibility name used by the checkout/success flow. Submitting a service
+ * booking for confirmation is the same verified state transition as marking
+ * its WhatsApp handoff opened: awaiting-whatsapp-send -> waiting-confirmation.
+ */
+export async function submitServiceBookingForConfirmation(
+  bookingId: string,
+): Promise<ServiceBooking> {
+  return markServiceBookingWhatsAppOpened(
+    bookingId,
+  );
+}
+
 export async function cancelServiceBookingAfterOpenFailure(
   bookingId: string,
   reason: string,
