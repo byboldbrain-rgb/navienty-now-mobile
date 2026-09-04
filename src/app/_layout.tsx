@@ -59,11 +59,11 @@ const bootstrapDot = require(
 
 const BOOTSTRAP_LOGO_ASPECT_RATIO = 1385 / 565;
 
-const DOT_START_DELAY_MS = 70;
-const DOT_DROP_DURATION_MS = 330;
-const WORDMARK_REVEAL_DURATION_MS = 420;
-const READY_HOLD_MS = 150;
-const EXIT_FADE_DURATION_MS = 260;
+const DOT_START_DELAY_MS = 45;
+const DOT_DROP_DURATION_MS = 250;
+const WORDMARK_REVEAL_DURATION_MS = 320;
+const READY_HOLD_MS = 90;
+const EXIT_FADE_DURATION_MS = 190;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 8000;
 const LAUNCH_GATE_TIMEOUT_MS = 10000;
 const DEVELOPMENT_HYDRATION_TIMEOUT_MS = 6000;
@@ -771,8 +771,17 @@ export default function RootLayout() {
     launchGateStatus === 'allowed';
 
   const finishBootstrap = useCallback(() => {
+    recordStartupTimingOnce(
+      'root-layout-to-bootstrap-hidden',
+      Date.now() - rootLayoutStartedAt,
+      {
+        productionLikeDiagnostics:
+          PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED,
+      },
+    );
+
     setShowBootstrapScreen(false);
-  }, []);
+  }, [rootLayoutStartedAt]);
 
   return (
     <View style={styles.root}>
