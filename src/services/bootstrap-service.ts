@@ -59,8 +59,8 @@ export type StoreCategory = {
   slug: string;
   name_ar: string;
   name_en: string;
-  subtitle_ar: string | null;
-  subtitle_en: string | null;
+  subtitle_ar?: string | null;
+  subtitle_en?: string | null;
   icon: string | null;
   image_url: string | null;
 };
@@ -74,18 +74,18 @@ export type PaymentMethod = {
   subtitle_en: string | null;
   icon: string | null;
   icon_url: string | null;
-  instructions_ar: string | null;
-  instructions_en: string | null;
-  processing_fee_enabled: boolean;
-  processing_fee_type: string | null;
-  processing_fee_percentage: number | null;
-  processing_fee_fixed_amount: number | null;
-  processing_fee_min_amount: number | null;
-  processing_fee_max_amount: number | null;
-  processing_fee_charge_customer: boolean;
-  processing_fee_label_ar: string | null;
-  processing_fee_label_en: string | null;
-  requires_payment_proof: boolean;
+  instructions_ar?: string | null;
+  instructions_en?: string | null;
+  processing_fee_enabled?: boolean | null;
+  processing_fee_type?: string | null;
+  processing_fee_percentage?: number | string | null;
+  processing_fee_fixed_amount?: number | string | null;
+  processing_fee_min_amount?: number | string | null;
+  processing_fee_max_amount?: number | string | null;
+  processing_fee_charge_customer?: boolean | null;
+  processing_fee_label_ar?: string | null;
+  processing_fee_label_en?: string | null;
+  requires_payment_proof?: boolean | null;
 };
 
 export type AppBootstrap = {
@@ -174,8 +174,6 @@ async function getBookstoreCategory():
     slug: data.slug,
     name_ar: data.name_ar,
     name_en: data.name_en,
-    subtitle_ar: null,
-    subtitle_en: null,
     icon: data.icon,
     image_url: null,
   };
@@ -274,8 +272,6 @@ async function loadAppBootstrap():
       slug: 'bookstores',
       name_ar: 'المكتبات',
       name_en: 'Bookstores',
-      subtitle_ar: null,
-      subtitle_en: null,
       icon: 'bookstore',
       image_url: null,
     };
