@@ -129,17 +129,25 @@ async function readAttribution(): Promise<RememberedAttribution | null> {
       stored,
     ) as Partial<RememberedAttribution>;
 
+    const parsedOutboxId =
+      typeof parsed.outboxId === 'string'
+        ? parsed.outboxId
+        : null;
+
+    const parsedCampaignId =
+      typeof parsed.campaignId === 'string'
+        ? parsed.campaignId.trim()
+        : '';
+
+    const parsedOpenedAt =
+      parsed.openedAt;
+
     if (
-      !isUuid(
-        typeof parsed.outboxId === 'string'
-          ? parsed.outboxId
-          : null,
-      ) ||
-      typeof parsed.campaignId !== 'string' ||
-      !parsed.campaignId.trim() ||
+      !isUuid(parsedOutboxId) ||
+      !parsedCampaignId ||
       parsed.category !== 'offers' ||
-      typeof parsed.openedAt !== 'number' ||
-      !Number.isFinite(parsed.openedAt)
+      typeof parsedOpenedAt !== 'number' ||
+      !Number.isFinite(parsedOpenedAt)
     ) {
       await AsyncStorage.removeItem(
         NOTIFICATION_ATTRIBUTION_STORAGE_KEY,
@@ -148,7 +156,7 @@ async function readAttribution(): Promise<RememberedAttribution | null> {
     }
 
     if (
-      Date.now() - parsed.openedAt >
+      Date.now() - parsedOpenedAt >
       ATTRIBUTION_WINDOW_MS
     ) {
       await AsyncStorage.removeItem(
@@ -158,11 +166,10 @@ async function readAttribution(): Promise<RememberedAttribution | null> {
     }
 
     return {
-      outboxId: parsed.outboxId,
-      campaignId:
-        parsed.campaignId.trim(),
+      outboxId: parsedOutboxId,
+      campaignId: parsedCampaignId,
       category: 'offers',
-      openedAt: parsed.openedAt,
+      openedAt: parsedOpenedAt,
     };
   } catch {
     await AsyncStorage.removeItem(
