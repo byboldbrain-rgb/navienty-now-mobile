@@ -68,30 +68,14 @@ const EXIT_FADE_DURATION_MS = 190;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 8000;
 const LAUNCH_GATE_TIMEOUT_MS = 10000;
 const DEVELOPMENT_HYDRATION_TIMEOUT_MS = 6000;
-const DEVELOPMENT_FORCED_OFFLINE_RETRY_DELAY_MS = 650;
 
 const PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED =
   process.env.EXPO_PUBLIC_STARTUP_DIAGNOSTICS ===
   '1';
 
-const DEVELOPMENT_FORCE_OFFLINE_SCREEN_ENABLED =
-  __DEV__ &&
-  process.env.EXPO_PUBLIC_FORCE_OFFLINE_SCREEN ===
-    '1';
-
 const DEVELOPMENT_ALLOWED_LAUNCH_GATE:
   AppLaunchGateResult = {
     status: 'allowed',
-    currentVersion: null,
-    minimumVersion: null,
-    messageAr: null,
-    updateUrl: null,
-    supportWhatsapp: null,
-  };
-
-const DEVELOPMENT_FORCED_OFFLINE_LAUNCH_GATE:
-  AppLaunchGateResult = {
-    status: 'error',
     currentVersion: null,
     minimumVersion: null,
     messageAr: null,
@@ -481,12 +465,10 @@ export default function RootLayout() {
 
   const [launchGate, setLaunchGate] =
     useState<AppLaunchGateResult | null>(
-      DEVELOPMENT_FORCE_OFFLINE_SCREEN_ENABLED
-        ? DEVELOPMENT_FORCED_OFFLINE_LAUNCH_GATE
-        : __DEV__ &&
-            !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
-          ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
-          : null,
+      __DEV__ &&
+      !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
+        ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
+        : null,
     );
 
   const [
@@ -540,16 +522,6 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (DEVELOPMENT_FORCE_OFFLINE_SCREEN_ENABLED) {
-      console.log(
-        '[Navienty] Development forced offline launch screen enabled.',
-      );
-      setLaunchGate(
-        DEVELOPMENT_FORCED_OFFLINE_LAUNCH_GATE,
-      );
-      return;
-    }
-
     if (
       __DEV__ &&
       !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
@@ -601,20 +573,6 @@ export default function RootLayout() {
       setIsRefreshingLaunchGate(true);
 
       try {
-        if (DEVELOPMENT_FORCE_OFFLINE_SCREEN_ENABLED) {
-          await new Promise<void>((resolve) => {
-            setTimeout(
-              resolve,
-              DEVELOPMENT_FORCED_OFFLINE_RETRY_DELAY_MS,
-            );
-          });
-
-          setLaunchGate(
-            DEVELOPMENT_FORCED_OFFLINE_LAUNCH_GATE,
-          );
-          return;
-        }
-
         if (
           __DEV__ &&
           !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
