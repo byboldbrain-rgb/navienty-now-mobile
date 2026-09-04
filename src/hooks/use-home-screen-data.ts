@@ -15,6 +15,13 @@ import {
   listStores,
   type StoreSummary,
 } from '../services/catalog-service';
+import {
+  createHomeStoreIdsKey,
+  readCachedHomeStores,
+  readCachedHomeSuggestions,
+  writeCachedHomeStores,
+  writeCachedHomeSuggestions,
+} from '../services/home-public-cache-service';
 import { loadHomeSearchSuggestionNames } from '../services/home-search-suggestions-service';
 import {
   listStorefrontCategoryTiles,
@@ -36,6 +43,7 @@ type StoresSnapshot = {
 
 type SuggestionsSnapshot = {
   locationKey: string;
+  storeIdsKey: string;
   items: string[];
 };
 
@@ -204,6 +212,8 @@ export function useHomeScreenData(
   const storesRequestIdRef = useRef(0);
   const suggestionsRequestIdRef =
     useRef(0);
+  const activeStoreIdsKeyRef =
+    useRef('');
   const savedServiceAreaIdRef =
     useRef(savedServiceAreaId);
 
@@ -244,6 +254,7 @@ export function useHomeScreenData(
     setSuggestionsSnapshot,
   ] = useState<SuggestionsSnapshot>({
     locationKey: '',
+    storeIdsKey: '',
     items: [],
   });
 
@@ -262,6 +273,10 @@ export function useHomeScreenData(
    * render. Category tiles are optional remote configuration and load on their
    * own path below, so a slow tile query cannot hold the entire screen behind
    * the loading skeleton.
+   *
+   * The launch gate evaluates maintenance/min-version separately before Home
+   * mounts. The persistent cache below never stores or participates in those
+   * gate decisions.
    */
   const reloadBootstrap = useCallback(
     async () => {
@@ -419,6 +434,13 @@ export function useHomeScreenData(
   const effectiveCityId =
     effectiveLocation?.cityId ?? null;
 
+  /*
+   * Public Home data uses stale-while-revalidate semantics after the launch
+   * gate has already allowed the app. A short-lived, location-scoped snapshot
+   * can paint stores immediately after a process restart, then listStores()
+   * always revalidates it from Supabase. Network errors keep a valid cached
+   * snapshot instead of replacing it with an empty rail.
+   */
   useEffect(() => {
     const requestId =
       storesRequestIdRef.current + 1;
@@ -426,8 +448,15 @@ export function useHomeScreenData(
       requestId;
 
     if (!locationKey) {
+      activeStoreIdsKeyRef.current = '';
+
       setStoresSnapshot({
         locationKey: '',
+        items: [],
+      });
+      setSuggestionsSnapshot({
+        locationKey: '',
+        storeIdsKey: '',
         items: [],
       });
       return;
@@ -436,6 +465,62 @@ export function useHomeScreenData(
     let cancelled = false;
 
     async function loadHomeStores() {
+      let hydratedFromCache = false;
+
+      const cachedStores =
+        await readCachedHomeStores(
+          locationKey,
+        );
+
+      if (
+        cachedStores &&
+        !cancelled &&
+        isMountedRef.current &&
+        storesRequestIdRef.current ===
+          requestId
+      ) {
+        hydratedFromCache = true;
+
+        const cachedStoreIdsKey =
+          createHomeStoreIdsKey(
+            cachedStores,
+          );
+
+        activeStoreIdsKeyRef.current =
+          cachedStoreIdsKey;
+
+        setStoresSnapshot({
+          locationKey,
+          items: cachedStores,
+        });
+
+        if (cachedStoreIdsKey) {
+          void readCachedHomeSuggestions(
+            locationKey,
+            cachedStoreIdsKey,
+          ).then((cachedSuggestions) => {
+            if (
+              !cachedSuggestions ||
+              cancelled ||
+              !isMountedRef.current ||
+              storesRequestIdRef.current !==
+                requestId ||
+              activeStoreIdsKeyRef.current !==
+                cachedStoreIdsKey
+            ) {
+              return;
+            }
+
+            setSuggestionsSnapshot({
+              locationKey,
+              storeIdsKey:
+                cachedStoreIdsKey,
+              items: cachedSuggestions,
+            });
+          });
+        }
+      }
+
       try {
         const loadedStores =
           await listStores({
@@ -452,10 +537,23 @@ export function useHomeScreenData(
           return;
         }
 
+        const loadedStoreIdsKey =
+          createHomeStoreIdsKey(
+            loadedStores,
+          );
+
+        activeStoreIdsKeyRef.current =
+          loadedStoreIdsKey;
+
         setStoresSnapshot({
           locationKey,
           items: loadedStores,
         });
+
+        void writeCachedHomeStores(
+          locationKey,
+          loadedStores,
+        );
       } catch (error) {
         if (
           cancelled ||
@@ -466,10 +564,19 @@ export function useHomeScreenData(
           return;
         }
 
-        setStoresSnapshot({
-          locationKey,
-          items: [],
-        });
+        if (!hydratedFromCache) {
+          activeStoreIdsKeyRef.current = '';
+
+          setStoresSnapshot({
+            locationKey,
+            items: [],
+          });
+          setSuggestionsSnapshot({
+            locationKey,
+            storeIdsKey: '',
+            items: [],
+          });
+        }
 
         console.warn(
           'Unable to load Home stores.',
@@ -499,15 +606,25 @@ export function useHomeScreenData(
       ? storesSnapshot.items
       : EMPTY_STORES;
 
+  const storeIdsKey =
+    createHomeStoreIdsKey(stores);
+
+  /*
+   * Suggestions are keyed by the exact ordered store IDs. Hydrated suggestions
+   * can paint immediately, while one revalidation runs for that store set.
+   * A fresh StoreSummary array with the same IDs does not trigger a duplicate
+   * catalog-category request.
+   */
   useEffect(() => {
     const requestId =
       suggestionsRequestIdRef.current + 1;
     suggestionsRequestIdRef.current =
       requestId;
 
-    if (stores.length === 0) {
+    if (!storeIdsKey) {
       setSuggestionsSnapshot({
         locationKey,
+        storeIdsKey: '',
         items: [],
       });
       return;
@@ -519,9 +636,7 @@ export function useHomeScreenData(
       try {
         const suggestions =
           await loadHomeSearchSuggestionNames(
-            stores.map(
-              (store) => store.id,
-            ),
+            storeIdsKey.split('|'),
           );
 
         if (
@@ -535,8 +650,15 @@ export function useHomeScreenData(
 
         setSuggestionsSnapshot({
           locationKey,
+          storeIdsKey,
           items: suggestions,
         });
+
+        void writeCachedHomeSuggestions(
+          locationKey,
+          storeIdsKey,
+          suggestions,
+        );
       } catch (error) {
         if (
           cancelled ||
@@ -547,10 +669,24 @@ export function useHomeScreenData(
           return;
         }
 
-        setSuggestionsSnapshot({
-          locationKey,
-          items: [],
-        });
+        setSuggestionsSnapshot(
+          (currentSnapshot) => {
+            if (
+              currentSnapshot.locationKey ===
+                locationKey &&
+              currentSnapshot.storeIdsKey ===
+                storeIdsKey
+            ) {
+              return currentSnapshot;
+            }
+
+            return {
+              locationKey,
+              storeIdsKey,
+              items: [],
+            };
+          },
+        );
 
         if (__DEV__) {
           console.warn(
@@ -566,11 +702,13 @@ export function useHomeScreenData(
     return () => {
       cancelled = true;
     };
-  }, [locationKey, stores]);
+  }, [locationKey, storeIdsKey]);
 
   const homeSearchSuggestions =
     suggestionsSnapshot.locationKey ===
-    locationKey
+      locationKey &&
+    suggestionsSnapshot.storeIdsKey ===
+      storeIdsKey
       ? suggestionsSnapshot.items
       : EMPTY_SUGGESTIONS;
 
