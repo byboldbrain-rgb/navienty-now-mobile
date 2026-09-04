@@ -11,8 +11,11 @@
     "ios": {
       "bundleIdentifier": "com.navienty.now",
       "icon": "./assets/images/icon.png",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMotionUsageDescription": "يستخدم Navienty Now بيانات الحركة لتحسين دقة تحديد موقعك أثناء اختيار عنوان التوصيل."
       }
     },
 
@@ -43,6 +46,8 @@
     "plugins": [
       "expo-router",
 
+      "expo-apple-authentication",
+
       [
         "expo-splash-screen",
         {
@@ -58,18 +63,34 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا."
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationWhenInUsePermission": "اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل تلقائيًا.",
+          "motionUsagePermission": "يستخدم Navienty Now بيانات الحركة لتحسين دقة تحديد موقعك أثناء اختيار عنوان التوصيل.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false,
+          "isAndroidMotionActivityEnabled": false
         }
       ],
 
       [
         "expo-notifications",
         {
-          "defaultChannel": "orders"
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#00B14F",
+          "defaultChannel": "general",
+          "enableBackgroundRemoteNotifications": false
         }
       ],
 
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
 
       "expo-font"
     ],

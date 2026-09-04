@@ -1,9 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import {
+  useEffect,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,11 +23,15 @@ import { AccountScreenSkeleton } from '../components/ui/loading-skeleton';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { supabase } from '../lib/supabase';
 import {
+  cancelMyAccountDeletionRequest,
+  getMyAccountDeletionRequest,
+  requestAccountDeletion,
+  type AccountDeletionRequest,
+} from '../services/account-deletion-service';
+import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
-import {
-  isNotificationTestBuild,
-} from '../services/push-notifications-service';
+import getAppBootstrap from '../services/bootstrap-service';
 import { useCustomerStore } from '../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -34,6 +43,40 @@ const PAGE_HORIZONTAL_PADDING = 16;
 const FIELD_BACKGROUND = '#F8F8F8';
 const FIELD_BORDER = '#E8E8E8';
 const CARD_BORDER = '#ECECEC';
+
+function formatDeletionDate(
+  value: string,
+): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString(
+    'ar-EG',
+    {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    },
+  );
+}
+
+function normalizeLegalUrl(
+  value: string | null | undefined,
+): string | null {
+  const normalized = value?.trim();
+
+  if (
+    !normalized ||
+    !/^https:\/\//i.test(normalized)
+  ) {
+    return null;
+  }
+
+  return normalized;
+}
 
 type ProfileFieldProps = {
   label: string;
@@ -182,8 +225,275 @@ export default function AccountScreen() {
     null,
   );
 
+  const [
+    deletionRequest,
+    setDeletionRequest,
+  ] = useState<AccountDeletionRequest | null>(
+    null,
+  );
+
+  const [
+    isLoadingDeletionRequest,
+    setIsLoadingDeletionRequest,
+  ] = useState(false);
+
+  const [
+    isSubmittingDeletionRequest,
+    setIsSubmittingDeletionRequest,
+  ] = useState(false);
+
+  const [
+    isCancellingDeletionRequest,
+    setIsCancellingDeletionRequest,
+  ] = useState(false);
+
+  const [
+    privacyUrl,
+    setPrivacyUrl,
+  ] = useState<string | null>(null);
+
+  const [
+    termsUrl,
+    setTermsUrl,
+  ] = useState<string | null>(null);
+
   const isPermanentAccount =
     authState.status === 'signedIn';
+
+  const hasCustomerSession =
+    isPermanentAccount ||
+    authState.status === 'anonymous';
+
+  const authUserId =
+    hasCustomerSession
+      ? authState.session.user.id
+      : null;
+
+  const hasActiveDeletionRequest =
+    deletionRequest?.status === 'pending' ||
+    deletionRequest?.status === 'processing';
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLegalLinks() {
+      try {
+        const bootstrap =
+          await getAppBootstrap();
+
+        if (cancelled) {
+          return;
+        }
+
+        setPrivacyUrl(
+          normalizeLegalUrl(
+            bootstrap.settings.privacy_url,
+          ),
+        );
+        setTermsUrl(
+          normalizeLegalUrl(
+            bootstrap.settings.terms_url,
+          ),
+        );
+      } catch (error) {
+        console.warn(
+          'Unable to load legal document links.',
+          error,
+        );
+      }
+    }
+
+    void loadLegalLinks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!authUserId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadDeletionRequest() {
+      try {
+        setIsLoadingDeletionRequest(true);
+
+        const request =
+          await getMyAccountDeletionRequest();
+
+        if (!cancelled) {
+          setDeletionRequest(request);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : 'تعذر تحميل حالة طلب حذف الحساب.',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDeletionRequest(false);
+        }
+      }
+    }
+
+    void loadDeletionRequest();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId]);
+
+  async function openLegalDocument(
+    title: string,
+    url: string | null,
+  ) {
+    if (!url) {
+      Alert.alert(
+        title,
+        'الرابط غير متاح حاليًا. تواصل مع دعم Navienty Now للحصول على نسخة.',
+      );
+      return;
+    }
+
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      Alert.alert(
+        `تعذر فتح ${title}`,
+        error instanceof Error
+          ? error.message
+          : 'حاول مرة أخرى.',
+      );
+    }
+  }
+
+  async function submitAccountDeletionRequest() {
+    if (
+      !hasCustomerSession ||
+      isSubmittingDeletionRequest ||
+      hasActiveDeletionRequest
+    ) {
+      return;
+    }
+
+    try {
+      setIsSubmittingDeletionRequest(true);
+      setErrorMessage(null);
+
+      const request =
+        await requestAccountDeletion();
+
+      setDeletionRequest(request);
+
+      Alert.alert(
+        'تم تسجيل طلب الحذف',
+        `موعد الإكمال المستهدف: ${formatDeletionDate(
+          request.targetCompletionAt,
+        )}.`,
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إرسال طلب حذف الحساب.',
+      );
+    } finally {
+      setIsSubmittingDeletionRequest(false);
+    }
+  }
+
+  function confirmAccountDeletionRequest() {
+    if (
+      !hasCustomerSession ||
+      isSubmittingDeletionRequest ||
+      hasActiveDeletionRequest
+    ) {
+      return;
+    }
+
+    Alert.alert(
+      'حذف الحساب والبيانات',
+      'سيتم حذف الحساب والبيانات الشخصية المرتبطة به، بما في ذلك حساب الضيف. قد نحتفظ فقط بالسجلات التي يلزم الاحتفاظ بها قانونيًا أو محاسبيًا بعد إزالة البيانات التي تعرّف بك. يمكنك إلغاء الطلب قبل بدء المعالجة.',
+      [
+        {
+          text: 'رجوع',
+          style: 'cancel',
+        },
+        {
+          text: 'طلب حذف الحساب',
+          style: 'destructive',
+          onPress: () => {
+            void submitAccountDeletionRequest();
+          },
+        },
+      ],
+    );
+  }
+
+  async function cancelDeletionRequest() {
+    if (
+      deletionRequest?.status !== 'pending' ||
+      isCancellingDeletionRequest
+    ) {
+      return;
+    }
+
+    try {
+      setIsCancellingDeletionRequest(true);
+      setErrorMessage(null);
+
+      const cancelled =
+        await cancelMyAccountDeletionRequest();
+
+      if (!cancelled) {
+        throw new Error(
+          'تعذر إلغاء الطلب لأنه بدأ المعالجة بالفعل.',
+        );
+      }
+
+      setDeletionRequest({
+        ...deletionRequest,
+        status: 'cancelled',
+        cancelledAt:
+          new Date().toISOString(),
+      });
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'تعذر إلغاء طلب حذف الحساب.',
+      );
+    } finally {
+      setIsCancellingDeletionRequest(false);
+    }
+  }
+
+  function confirmCancelDeletionRequest() {
+    Alert.alert(
+      'إلغاء طلب الحذف',
+      'هل تريد الاحتفاظ بحسابك وإلغاء طلب الحذف؟',
+      [
+        {
+          text: 'رجوع',
+          style: 'cancel',
+        },
+        {
+          text: 'إلغاء طلب الحذف',
+          onPress: () => {
+            void cancelDeletionRequest();
+          },
+        },
+      ],
+    );
+  }
 
   async function signOutPermanentAccount() {
     if (
@@ -287,12 +597,7 @@ export default function AccountScreen() {
               حسابي
             </Text>
 
-            <Text
-              style={styles.pageSubtitle}
-            >
-              بياناتك المستخدمة في
-              الطلب والتوصيل
-            </Text>
+
           </View>
 
           {/* ======================================= */}
@@ -314,35 +619,10 @@ export default function AccountScreen() {
                   بيانات التوصيل
                 </Text>
 
-                <Text
-                  style={
-                    styles.formHeadingDescription
-                  }
-                >
-                  هنستخدم البيانات دي
-                  تلقائيًا مع طلباتك
-                </Text>
+
               </View>
 
-              <View
-                style={styles.savedBadge}
-              >
-                <Ionicons
-                  color={
-                    NAVIENTY_NOW_COLORS.primary
-                  }
-                  name="checkmark"
-                  size={12}
-                />
 
-                <Text
-                  style={
-                    styles.savedBadgeText
-                  }
-                >
-                  حفظ تلقائي
-                </Text>
-              </View>
             </View>
 
             <View
@@ -383,88 +663,25 @@ export default function AccountScreen() {
                 }
               />
 
-              <ProfileField
-                icon="navigate-outline"
-                label="علامة مميزة"
-                placeholder="مثال: بجوار البوابة الرئيسية"
-                value={landmark}
-                onChangeText={
-                  setLandmark
-                }
-              />
+
             </View>
 
-            <View
-              style={styles.autoSaveHint}
-            >
-              <Ionicons
-                color="#727276"
-                name="information-circle-outline"
-                size={16}
-              />
 
-              <Text
-                style={
-                  styles.autoSaveHintText
-                }
-              >
-                أي تعديل بتعمله هنا
-                هيتحفظ تلقائيًا ويظهر في
-                صفحة إتمام الطلب.
-              </Text>
-            </View>
           </View>
 
-          {isNotificationTestBuild() && (
-            <Pressable
-              accessibilityLabel="اختبار الإشعارات"
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.notificationDevCard,
-                pressed &&
-                  styles.notificationDevCardPressed,
-              ]}
-              onPress={() => {
-                router.push('/notification-test');
-              }}
-            >
-              <View
-                style={styles.notificationDevIcon}
-              >
-                <Ionicons
-                  color={
-                    NAVIENTY_NOW_COLORS.primary
-                  }
-                  name="notifications-outline"
-                  size={19}
-                />
-              </View>
 
-              <View
-                style={styles.notificationDevCopy}
-              >
-                <Text
-                  style={styles.notificationDevTitle}
-                >
-                  اختبار الإشعارات
-                </Text>
 
-                <Text
-                  style={
-                    styles.notificationDevDescription
-                  }
-                >
-                  أدوات اختبار Local وRemote Push
-                </Text>
-              </View>
+          {/* ======================================= */}
+          {/* PRIVACY AND TERMS                       */}
+          {/* ======================================= */}
 
-              <Ionicons
-                color="#9A9A9E"
-                name="chevron-back"
-                size={17}
-              />
-            </Pressable>
-          )}
+
+
+          {/* ======================================= */}
+          {/* ACCOUNT DELETION                        */}
+          {/* ======================================= */}
+
+
 
           {/* ======================================= */}
           {/* ERROR                                   */}
@@ -978,6 +1195,243 @@ const styles = StyleSheet.create({
 
     textAlign: 'right',
     writingDirection: 'rtl',
+  },
+
+  /* ========================================================= */
+  /* PRIVACY AND ACCOUNT DELETION                              */
+  /* ========================================================= */
+
+  legalCard: {
+    backgroundColor: '#F8FBFA',
+    borderColor: '#DDEBE5',
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 16,
+    padding: 15,
+  },
+
+  legalHeadingRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+  },
+
+  legalIcon: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+    borderRadius: 14,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+
+  legalHeadingCopy: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 11,
+  },
+
+  legalTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  legalDescription: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 10,
+    lineHeight: 16,
+    marginTop: 3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  legalLinks: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5ECE9',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 13,
+    overflow: 'hidden',
+  },
+
+  legalLink: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: 13,
+  },
+
+  legalLinkPressed: {
+    opacity: 0.65,
+  },
+
+  legalLinkText: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  legalLinkDivider: {
+    backgroundColor: '#EAEFED',
+    height: StyleSheet.hairlineWidth,
+  },
+
+  deletionCard: {
+    backgroundColor: '#FFF8F8',
+    borderColor: '#EBCACA',
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 16,
+    padding: 15,
+  },
+
+  deletionHeadingRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+  },
+
+  deletionIcon: {
+    alignItems: 'center',
+    backgroundColor: '#FDE8E8',
+    borderRadius: 14,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+
+  deletionHeadingCopy: {
+    alignItems: 'flex-end',
+    flex: 1,
+    marginRight: 11,
+  },
+
+  deletionTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  deletionDescription: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 10,
+    lineHeight: 17,
+    marginTop: 4,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  anonymousDeletionNote: {
+    alignItems: 'center',
+    backgroundColor: '#FFF9E8',
+    borderColor: '#F0DDAA',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    marginTop: 12,
+    padding: 10,
+  },
+
+  anonymousDeletionNoteText: {
+    color: '#806724',
+    flex: 1,
+    fontSize: 9,
+    lineHeight: 15,
+    marginRight: 6,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  deletionLoadingRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+
+  deletionLoadingText: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 10,
+  },
+
+  deletionStatusBox: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#EEDDDD',
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 14,
+    padding: 13,
+  },
+
+  deletionStatusTitle: {
+    color: NAVIENTY_NOW_COLORS.text,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  deletionStatusText: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 10,
+    lineHeight: 17,
+    marginTop: 5,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  deleteAccountButton: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.error,
+    borderRadius: 14,
+    justifyContent: 'center',
+    marginTop: 15,
+    minHeight: 48,
+    paddingHorizontal: 16,
+  },
+
+  deleteAccountButtonPressed: {
+    opacity: 0.82,
+  },
+
+  deleteAccountButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  cancelDeletionButton: {
+    alignItems: 'center',
+    borderColor: '#D8C7C7',
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 11,
+    minHeight: 42,
+  },
+
+  cancelDeletionButtonText: {
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  deletionButtonDisabled: {
+    opacity: 0.55,
   },
 
   /* ========================================================= */

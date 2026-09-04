@@ -34,9 +34,9 @@ test('a second different restaurant cart is blocked', () => {
       items: [{ id: 'burger' }],
     },
     {
-      storeId: 'pharmacy-a',
-      categorySlug: 'pharmacy',
-      items: [{ id: 'medicine' }],
+      storeId: 'bookstore-a',
+      categorySlug: 'bookstores',
+      items: [{ id: 'notebook' }],
     },
   ];
 
@@ -76,8 +76,8 @@ test('same restaurant and non-restaurant carts remain allowed', () => {
   assert.equal(
     hasDifferentRestaurantCart(
       carts,
-      'pharmacy-b',
-      'pharmacy',
+      'bookstore-b',
+      'bookstores',
     ),
     false,
   );

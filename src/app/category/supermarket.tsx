@@ -1427,39 +1427,43 @@ function FeaturedProductCard({
       </Text>
 
       <View
-        style={
-          styles.featuredCurrentPriceWrap
-        }
+        style={styles.featuredPriceRow}
       >
-        <Text
+        <View
           style={
-            styles.featuredCurrentPrice
+            styles.featuredCurrentPriceWrap
           }
-          numberOfLines={1}
         >
-          {formatMoney(
-            product.price,
-            currencyCode,
-          )}
-        </Text>
-      </View>
-
-      {product.compareAtPrice !==
-        null &&
-        product.compareAtPrice >
-          product.price && (
           <Text
             style={
-              styles.featuredOldPrice
+              styles.featuredCurrentPrice
             }
             numberOfLines={1}
           >
             {formatMoney(
-              product.compareAtPrice,
+              product.price,
               currencyCode,
             )}
           </Text>
-        )}
+        </View>
+
+        {product.compareAtPrice !==
+          null &&
+          product.compareAtPrice >
+            product.price && (
+            <Text
+              style={
+                styles.featuredOldPrice
+              }
+              numberOfLines={1}
+            >
+              {formatMoney(
+                product.compareAtPrice,
+                currencyCode,
+              )}
+            </Text>
+          )}
+      </View>
     </View>
   );
 }
@@ -1473,6 +1477,9 @@ export default function SupermarketScreen() {
   const categoryScrollX = useRef(
     new Animated.Value(0),
   ).current;
+
+  const categoryScrollRef =
+    useRef<ScrollView | null>(null);
 
   const [
     categoryViewportWidth,
@@ -1528,17 +1535,17 @@ export default function SupermarketScreen() {
   const cartStore =
     useCartStore();
 
-  const cartItems =
-    cartStore.items;
-
   const addItem =
     cartStore.addItem;
 
-  const increaseItem =
-    cartStore.increaseItem;
+  const increaseStoreItem =
+    cartStore.increaseStoreItem;
 
-  const decreaseItem =
-    cartStore.decreaseItem;
+  const decreaseStoreItem =
+    cartStore.decreaseStoreItem;
+
+  const setActiveCart =
+    cartStore.setActiveCart;
 
   async function loadSupermarket() {
     try {
@@ -1677,7 +1684,7 @@ export default function SupermarketScreen() {
       () =>
         makeCategoryColumns(
           categories,
-        ),
+        ).reverse(),
       [categories],
     );
 
@@ -1914,6 +1921,18 @@ export default function SupermarketScreen() {
   const delivery =
     catalog.delivery;
 
+  /*
+   * IMPORTANT:
+   *
+   * cart-store is multi-cart now. Reading cartStore.items uses the
+   * legacy active-cart snapshot, which can point at another store.
+   * The supermarket screen must always read its own cart directly.
+   */
+  const cartItems =
+    cartStore.carts[
+      currentStore.id
+    ]?.items ?? [];
+
   const isStoreClosed =
     currentStore.isManuallyClosed ||
     !isStoreOpenByBusinessHours(
@@ -2000,6 +2019,9 @@ export default function SupermarketScreen() {
         icon:
           currentStore.icon,
 
+        categorySlug:
+          'supermarket',
+
         deliveryFee:
           delivery.deliveryFee,
 
@@ -2040,7 +2062,8 @@ export default function SupermarketScreen() {
       );
 
     if (existingItem) {
-      increaseItem(
+      increaseStoreItem(
+        currentStore.id,
         product.id,
       );
 
@@ -2066,7 +2089,8 @@ export default function SupermarketScreen() {
       return;
     }
 
-    decreaseItem(
+    decreaseStoreItem(
+      currentStore.id,
       productId,
     );
   }
@@ -2194,6 +2218,10 @@ export default function SupermarketScreen() {
 
             <Animated.ScrollView
               horizontal
+              key="supermarket-categories-offers-first"
+              ref={
+                categoryScrollRef
+              }
               showsHorizontalScrollIndicator={
                 false
               }
@@ -2202,6 +2230,9 @@ export default function SupermarketScreen() {
               }
               contentContainerStyle={
                 styles.categoriesRail
+              }
+              style={
+                styles.categoriesScroll
               }
               onLayout={(
                 event,
@@ -2216,6 +2247,16 @@ export default function SupermarketScreen() {
               ) => {
                 setCategoryContentWidth(
                   width,
+                );
+
+                requestAnimationFrame(
+                  () => {
+                    categoryScrollRef.current?.scrollToEnd(
+                      {
+                        animated: false,
+                      },
+                    );
+                  },
                 );
               }}
               onScroll={Animated.event(
@@ -2332,6 +2373,7 @@ export default function SupermarketScreen() {
                 ]}
               >
                 <View
+                  pointerEvents="none"
                   style={
                     styles.promotionBannerFrame
                   }
@@ -2362,6 +2404,7 @@ export default function SupermarketScreen() {
                   0 && (
                   <ScrollView
                     horizontal
+                    nestedScrollEnabled
                     showsHorizontalScrollIndicator={
                       false
                     }
@@ -2446,6 +2489,10 @@ export default function SupermarketScreen() {
                   styles.cartBarPressed,
               ]}
               onPress={() => {
+                setActiveCart(
+                  currentStore.id,
+                );
+
                 router.push(
                   '/cart',
                 );
@@ -2683,7 +2730,18 @@ const styles =
         16,
     },
 
+    categoriesScroll: {
+      direction:
+        'ltr',
+    },
+
     categoriesRail: {
+      direction:
+        'ltr',
+
+      flexDirection:
+        'row',
+
       gap: 7,
 
       paddingHorizontal:
@@ -2851,8 +2909,14 @@ const styles =
       overflow:
         'hidden',
 
+      position:
+        'relative',
+
       width:
         '100%',
+
+      zIndex:
+        1,
     },
 
     promotionBanner: {
@@ -2863,8 +2927,17 @@ const styles =
     },
 
     promotionProductsScroll: {
+      elevation:
+        10,
+
       overflow:
         'visible',
+
+      position:
+        'relative',
+
+      zIndex:
+        10,
     },
 
     promotionProductsRail: {
@@ -3165,22 +3238,19 @@ const styles =
         '#202020',
 
       fontSize:
-        10.5,
+        12.5,
 
       fontWeight:
-        '400',
+        '500',
 
       letterSpacing:
         -0.15,
 
       lineHeight:
-        12.5,
+        15,
 
       marginTop:
-        7,
-
-      minHeight:
-        25,
+        6,
 
       textAlign:
         'left',
@@ -3188,6 +3258,24 @@ const styles =
       writingDirection:
         'ltr',
     },
+
+    featuredPriceRow: {
+      alignItems:
+        'center',
+
+      alignSelf:
+        'flex-start',
+
+      flexDirection:
+        'row',
+
+      gap:
+        4,
+
+      marginTop:
+        1,
+    },
+
 
     featuredCurrentPriceWrap: {
       alignSelf:
@@ -3198,9 +3286,6 @@ const styles =
 
       borderBottomWidth:
         2,
-
-      marginTop:
-        3,
     },
 
 
@@ -3226,9 +3311,6 @@ const styles =
 
 
     featuredOldPrice: {
-      alignSelf:
-        'flex-start',
-
       color:
         '#858585',
 
@@ -3237,9 +3319,6 @@ const styles =
 
       lineHeight:
         11,
-
-      marginTop:
-        1,
 
       textAlign:
         'left',

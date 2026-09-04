@@ -103,7 +103,6 @@ type RawOrderDetails = {
     quantity: number;
     unit_price: NumericValue;
     line_total: NumericValue;
-    requires_prescription: boolean;
     is_age_restricted: boolean;
   }>;
 
@@ -218,9 +217,6 @@ function mapOrder(
     icon: item.icon ?? '📦',
     imageUrl: item.image_url,
     quantity: item.quantity,
-
-    requiresPrescription:
-      item.requires_prescription,
 
     isAgeRestricted:
       item.is_age_restricted,
@@ -645,14 +641,6 @@ function getErrorMessage(
       'أحد المنتجات لم يعد متاحًا. ارجع إلى المتجر وحدّث السلة.',
     ],
     [
-      'prescription_required',
-      'هذا الطلب يحتوي على دواء يحتاج روشتة. ارفع الروشتة من صفحة إتمام الطلب ثم حاول مرة أخرى.',
-    ],
-    [
-      'prescription_approval_required',
-      'الروشتة ما زالت تحتاج مراجعة الصيدلية قبل تأكيد الطلب.',
-    ],
-    [
       'product_variant_required',
       'يجب اختيار نوع أو حجم المنتج قبل إتمام الطلب.',
     ],
@@ -926,6 +914,42 @@ export async function confirmWhatsAppOrderSent(
   if (!data) {
     throw new Error(
       'لم ترجع قاعدة البيانات تفاصيل الطلب بعد التأكيد.',
+    );
+  }
+
+  return mapOrder(
+    data as unknown as RawOrderDetails,
+  );
+}
+
+/**
+ * Completes the customer handoff inside Navienty Now.
+ *
+ * Unlike confirmWhatsAppOrderSent, this RPC does not record or imply that a
+ * WhatsApp message was opened or sent. The server operation is owner-scoped
+ * and idempotent so a customer can safely retry after a network interruption.
+ */
+export async function submitOrderForConfirmation(
+  accessToken: string,
+): Promise<Order> {
+  const { data, error } =
+    await supabase.rpc(
+      'submit_order_for_confirmation',
+      {
+        p_access_token:
+          accessToken,
+      },
+    );
+
+  if (error) {
+    throw new Error(
+      getErrorMessage(error),
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      'لم ترجع قاعدة البيانات تفاصيل الطلب بعد الإرسال.',
     );
   }
 

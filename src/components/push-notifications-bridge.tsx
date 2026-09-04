@@ -3,6 +3,7 @@ import {
   router,
   useGlobalSearchParams,
   usePathname,
+  type Href,
 } from 'expo-router';
 import { useEffect } from 'react';
 
@@ -31,21 +32,63 @@ type NotificationData =
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const SLUG_PATTERN =
+  /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * Exact local screens that a server-owned notification is allowed to open.
+ *
+ * This is intentionally an allow-list rather than permitting arbitrary
+ * URLs. A malformed/spoofed push notification therefore cannot turn the
+ * bridge into an unrestricted browser/deep-link launcher.
+ */
+const SAFE_EXACT_NOTIFICATION_PATHS =
+  new Set<string>([
+    '/',
+    '/search',
+    '/cart',
+    '/orders',
+    '/account',
+
+    '/category/restaurants',
+    '/category/supermarket',
+    '/category/bookstore',
+    '/category/personal-care',
+    '/category/laundry',
+    '/category/request-anything',
+  ]);
+
+const SAFE_SLUG_ROUTE_PREFIXES = [
+  '/supermarket-category/',
+  '/bookstore-category/',
+  '/personal-care-category/',
+] as const;
+
+const SAFE_UUID_ROUTE_PREFIXES = [
+  '/store/',
+  '/promo/',
+] as const;
+
 function getSingleParam(
   value:
     | string
     | string[]
     | undefined,
 ): string | null {
-  const rawValue = Array.isArray(value)
-    ? value[0]
-    : value;
+  const rawValue =
+    Array.isArray(value)
+      ? value[0]
+      : value;
 
-  if (typeof rawValue !== 'string') {
+  if (
+    typeof rawValue !==
+    'string'
+  ) {
     return null;
   }
 
-  const normalized = rawValue.trim();
+  const normalized =
+    rawValue.trim();
 
   return normalized || null;
 }
@@ -56,63 +99,346 @@ function getStringValue(
 ): string | null {
   const value = data[key];
 
-  if (typeof value !== 'string') {
+  if (
+    typeof value !==
+    'string'
+  ) {
     return null;
   }
 
-  const normalized = value.trim();
+  const normalized =
+    value.trim();
 
   return normalized || null;
 }
 
-function isUuid(value: string | null) {
+function isUuid(
+  value: string | null,
+) {
   return (
     value !== null &&
     UUID_PATTERN.test(value)
   );
 }
 
-function redirectFromNotification(
-  notification: Notifications.Notification,
+function isSafeSlug(
+  value: string | null,
+) {
+  return (
+    value !== null &&
+    value.length <= 120 &&
+    SLUG_PATTERN.test(value)
+  );
+}
+
+function getRouteSegment(
+  pathname: string,
+  prefix: string,
+): string | null {
+  if (
+    !pathname.startsWith(prefix)
+  ) {
+    return null;
+  }
+
+  const segment =
+    pathname.slice(
+      prefix.length,
+    );
+
+  if (
+    !segment ||
+    segment.includes('/')
+  ) {
+    return null;
+  }
+
+  return segment;
+}
+
+function splitLocalUrl(
+  rawUrl: string,
+): {
+  pathname: string;
+  query: string;
+} | null {
+  const value =
+    rawUrl.trim();
+
+  /**
+   * Only app-local paths are accepted.
+   *
+   * Reject:
+   * - https://...
+   * - navientynow://...
+   * - //example.com
+   * - backslash based path tricks
+   * - fragments
+   */
+  if (
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    value.includes('\\') ||
+    value.includes('#')
+  ) {
+    return null;
+  }
+
+  const questionMarkIndex =
+    value.indexOf('?');
+
+  if (
+    questionMarkIndex < 0
+  ) {
+    return {
+      pathname: value,
+      query: '',
+    };
+  }
+
+  return {
+    pathname:
+      value.slice(
+        0,
+        questionMarkIndex,
+      ),
+
+    query:
+      value.slice(
+        questionMarkIndex + 1,
+      ),
+  };
+}
+
+function isSafeOrderSuccessQuery(
+  query: string,
 ): boolean {
+  if (!query) {
+    return false;
+  }
+
+  try {
+    const searchParams =
+      new URLSearchParams(query);
+
+    const keys =
+      Array.from(
+        searchParams.keys(),
+      );
+
+    /**
+     * A push notification may target exactly one order OR exactly one
+     * service booking.
+     */
+    if (keys.length !== 1) {
+      return false;
+    }
+
+    const key = keys[0];
+
+    if (key === 'id') {
+      return isUuid(
+        searchParams.get('id'),
+      );
+    }
+
+    if (
+      key ===
+      'serviceBookingId'
+    ) {
+      return isUuid(
+        searchParams.get(
+          'serviceBookingId',
+        ),
+      );
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate a local notification URL against screens that exist in the
+ * released Navienty Now client.
+ *
+ * This lets the future Admin/backend send:
+ *
+ * {
+ *   "type": "navigation",
+ *   "url": "/cart"
+ * }
+ *
+ * without making the mobile client accept arbitrary external URLs.
+ */
+function normalizeSafeNotificationUrl(
+  rawUrl: string | null,
+): string | null {
+  if (!rawUrl) {
+    return null;
+  }
+
+  const parsed =
+    splitLocalUrl(rawUrl);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const {
+    pathname,
+    query,
+  } = parsed;
+
+  /**
+   * Simple exact screens currently do not need notification-controlled
+   * query parameters.
+   */
+  if (
+    SAFE_EXACT_NOTIFICATION_PATHS
+      .has(pathname)
+  ) {
+    return query
+      ? null
+      : pathname;
+  }
+
+  if (
+    pathname ===
+    '/order-success'
+  ) {
+    return isSafeOrderSuccessQuery(
+      query,
+    )
+      ? rawUrl.trim()
+      : null;
+  }
+
+  if (query) {
+    return null;
+  }
+
+  for (
+    const prefix of
+      SAFE_UUID_ROUTE_PREFIXES
+  ) {
+    const id =
+      getRouteSegment(
+        pathname,
+        prefix,
+      );
+
+    if (isUuid(id)) {
+      return pathname;
+    }
+  }
+
+  for (
+    const prefix of
+      SAFE_SLUG_ROUTE_PREFIXES
+  ) {
+    const slug =
+      getRouteSegment(
+        pathname,
+        prefix,
+      );
+
+    if (isSafeSlug(slug)) {
+      return pathname;
+    }
+  }
+
+  return null;
+}
+
+function buildOrderTrackingUrl(
+  orderId: string,
+) {
+  return (
+    '/order-success?id=' +
+    encodeURIComponent(
+      orderId,
+    )
+  );
+}
+
+function buildServiceBookingTrackingUrl(
+  serviceBookingId: string,
+) {
+  return (
+    '/order-success?serviceBookingId=' +
+    encodeURIComponent(
+      serviceBookingId,
+    )
+  );
+}
+
+/**
+ * Convert a push payload into a validated local application URL.
+ *
+ * Existing order/service notifications remain supported.
+ *
+ * Future campaigns can use the generic contract:
+ *
+ * {
+ *   type: "navigation",
+ *   url: "/category/supermarket"
+ * }
+ *
+ * `route` is also accepted as an alias for `url` so the future Admin does
+ * not force another mobile release if it uses that field name.
+ */
+function resolveNotificationUrl(
+  notification:
+    Notifications.Notification,
+): string | null {
   const rawData =
-    notification.request.content.data;
+    notification.request
+      .content.data;
 
   if (
     !rawData ||
-    typeof rawData !== 'object'
+    typeof rawData !==
+      'object'
   ) {
-    return false;
+    return null;
   }
 
   const data =
     rawData as NotificationData;
 
-  const type = getStringValue(
-    data,
-    'type',
-  );
-
-  if (type === 'order_status') {
-    const orderId = getStringValue(
+  const type =
+    getStringValue(
       data,
-      'orderId',
+      'type',
     );
 
-    if (!isUuid(orderId)) {
-      return false;
+  /**
+   * Backward compatibility:
+   * existing production order notifications.
+   */
+  if (
+    type ===
+    'order_status'
+  ) {
+    const orderId =
+      getStringValue(
+        data,
+        'orderId',
+      );
+
+    if (isUuid(orderId)) {
+      return buildOrderTrackingUrl(
+        orderId!,
+      );
     }
-
-    router.push({
-      pathname: '/order-success',
-      params: {
-        id: orderId!,
-      },
-    });
-
-    return true;
   }
 
+  /**
+   * Backward compatibility:
+   * existing laundry/service-booking notifications.
+   */
   if (
     type ===
     'service_booking_status'
@@ -123,45 +449,79 @@ function redirectFromNotification(
         'serviceBookingId',
       );
 
-    if (!isUuid(serviceBookingId)) {
-      return false;
+    if (
+      isUuid(
+        serviceBookingId,
+      )
+    ) {
+      return buildServiceBookingTrackingUrl(
+        serviceBookingId!,
+      );
     }
-
-    router.push({
-      pathname: '/order-success',
-      params: {
-        serviceBookingId:
-          serviceBookingId!,
-      },
-    });
-
-    return true;
   }
 
   /**
-   * Deliberately ignore arbitrary `url` values even if a notification
-   * contains one. Navigation is derived only from server-owned event types
-   * and validated UUIDs, so a malformed/spoofed notification cannot turn
-   * this observer into an unrestricted deep-link launcher.
+   * Generic future notification contract.
+   *
+   * We deliberately allow navigation only after the URL passes the strict
+   * local route allow-list above.
    */
-  return false;
+  const requestedUrl =
+    getStringValue(
+      data,
+      'url',
+    ) ??
+    getStringValue(
+      data,
+      'route',
+    );
+
+  return normalizeSafeNotificationUrl(
+    requestedUrl,
+  );
+}
+
+function redirectFromNotification(
+  notification:
+    Notifications.Notification,
+): boolean {
+  const targetUrl =
+    resolveNotificationUrl(
+      notification,
+    );
+
+  if (!targetUrl) {
+    return false;
+  }
+
+  router.push(
+    targetUrl as Href,
+  );
+
+  return true;
 }
 
 export default function PushNotificationsBridge({
   enabled,
 }: PushNotificationsBridgeProps) {
-  const pathname = usePathname();
+  const pathname =
+    usePathname();
 
   const params =
     useGlobalSearchParams<{
-      id?: string | string[];
+      id?:
+        | string
+        | string[];
+
       serviceBookingId?:
         | string
         | string[];
     }>();
 
   const currentOrderId =
-    getSingleParam(params.id);
+    getSingleParam(
+      params.id,
+    );
 
   const currentServiceBookingId =
     getSingleParam(
@@ -169,18 +529,28 @@ export default function PushNotificationsBridge({
     );
 
   const isTrackingCustomerOrder =
-    pathname === '/order-success' &&
+    pathname ===
+      '/order-success' &&
     (
       isUuid(currentOrderId) ||
-      isUuid(currentServiceBookingId)
+      isUuid(
+        currentServiceBookingId,
+      )
     );
 
   const autoRegistrationEnabled =
     shouldAutoRegisterPushNotifications();
 
   /**
-   * Notification response routing is safe to keep enabled in every native
-   * build. It does not request permission or fetch/register a push token.
+   * Notification response routing stays enabled in every native build.
+   *
+   * It does not request notification permission and does not register a
+   * push token by itself.
+   *
+   * Handles:
+   * - app already open
+   * - background app
+   * - cold start after tapping a notification
    */
   useEffect(() => {
     if (!enabled) {
@@ -188,24 +558,36 @@ export default function PushNotificationsBridge({
     }
 
     const lastResponse =
-      Notifications.getLastNotificationResponse();
+      Notifications
+        .getLastNotificationResponse();
 
-    if (lastResponse?.notification) {
+    if (
+      lastResponse?.notification
+    ) {
       redirectFromNotification(
         lastResponse.notification,
       );
 
-      Notifications.clearLastNotificationResponse();
+      /**
+       * Never replay the same notification navigation during a later React
+       * remount/application launch.
+       */
+      Notifications
+        .clearLastNotificationResponse();
     }
 
     const responseSubscription =
-      Notifications.addNotificationResponseReceivedListener(
-        (response) => {
-          redirectFromNotification(
-            response.notification,
-          );
-        },
-      );
+      Notifications
+        .addNotificationResponseReceivedListener(
+          (response) => {
+            redirectFromNotification(
+              response.notification,
+            );
+
+            Notifications
+              .clearLastNotificationResponse();
+          },
+        );
 
     return () => {
       responseSubscription.remove();
@@ -213,10 +595,10 @@ export default function PushNotificationsBridge({
   }, [enabled]);
 
   /**
-   * Production and normal development builds silently refresh an existing
-   * push registration on launch and after auth/token changes. Internal test
-   * builds can disable this whole path so the app opens before any FCM/Expo
-   * token call; manual notification diagnostics still remain available.
+   * Silently register/refresh an existing permission and push token.
+   *
+   * This path NEVER opens the operating-system notification permission
+   * dialog.
    */
   useEffect(() => {
     if (
@@ -245,44 +627,74 @@ export default function PushNotificationsBridge({
 
     void registerExistingPermission();
 
+    /**
+     * Expo can rotate the underlying APNs/FCM device token while the app is
+     * running. Re-register immediately so the Expo token stored in Supabase
+     * always represents the current installation.
+     */
     const tokenSubscription =
-      Notifications.addPushTokenListener(
-        (devicePushToken) => {
-          void registerPushNotifications({
-            requestPermission: false,
-            devicePushToken,
-          }).catch((error) => {
-            if (!disposed) {
-              console.warn(
-                'Unable to refresh rolled push token:',
-                error,
-              );
-            }
-          });
-        },
-      );
+      Notifications
+        .addPushTokenListener(
+          (devicePushToken) => {
+            void registerPushNotifications({
+              requestPermission:
+                false,
 
+              devicePushToken,
+            }).catch(
+              (error) => {
+                if (!disposed) {
+                  console.warn(
+                    'Unable to refresh rolled push token:',
+                    error,
+                  );
+                }
+              },
+            );
+          },
+        );
+
+    /**
+     * Push subscriptions are owned by auth.uid().
+     *
+     * Re-register after EVERY auth transition, including SIGNED_OUT.
+     *
+     * On SIGNED_OUT, registerPushNotifications() will call
+     * ensureAppSession() once notification permission already exists,
+     * creating/restoring the anonymous Navienty identity and moving the
+     * device token away from the previous permanent user.
+     *
+     * This prevents the common account-switching problem where a phone can
+     * remain attached to the previous customer's push subscription.
+     */
     const {
       data: authListener,
     } =
-      supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          if (!session || disposed) {
-            return;
-          }
-
-          setTimeout(() => {
-            if (!disposed) {
-              void registerExistingPermission();
+      supabase.auth
+        .onAuthStateChange(
+          () => {
+            if (disposed) {
+              return;
             }
-          }, 0);
-        },
-      );
+
+            /**
+             * Do not call another Supabase Auth operation synchronously from
+             * inside onAuthStateChange. Queue it after the current auth event
+             * has finished.
+             */
+            setTimeout(() => {
+              if (!disposed) {
+                void registerExistingPermission();
+              }
+            }, 0);
+          },
+        );
 
     return () => {
       disposed = true;
 
       tokenSubscription.remove();
+
       authListener.subscription
         .unsubscribe();
     };
@@ -291,6 +703,13 @@ export default function PushNotificationsBridge({
     autoRegistrationEnabled,
   ]);
 
+  /**
+   * Contextual notification permission request.
+   *
+   * Navienty Now does not ask for push permission immediately on first app
+   * launch. The request happens once the customer reaches a real order or
+   * service-booking tracking screen where notifications provide clear value.
+   */
   useEffect(() => {
     if (
       !enabled ||
@@ -300,12 +719,6 @@ export default function PushNotificationsBridge({
       return;
     }
 
-    /**
-     * Ask for notification permission only when the customer has a real
-     * order/service booking to track. Internal test builds intentionally
-     * keep this manual so a native push-token failure cannot happen at app
-     * startup or during navigation before diagnostics are opened.
-     */
     void registerPushNotifications({
       requestPermission: true,
     }).catch((error) => {

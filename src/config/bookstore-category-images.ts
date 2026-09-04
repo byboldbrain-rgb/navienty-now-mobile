@@ -67,25 +67,8 @@ export const BOOKSTORE_CATEGORY_IMAGES: Record<
   'printing-paper-drawing-paper': null, // ورق رسم
 
   // ملفات وتنظيم الأوراق
-  'files-organization': null,
-  'files-organization-plastic-files': null, // ملفات بلاستيك
-  'files-organization-clip-files': null, // ملفات كبس
-  'files-organization-ring-binders': null, // ملفات Ring Binder
-  'files-organization-clear-books': null, // Clear Books
-  'files-organization-folders': null, // دوسيهات
-  'files-organization-document-wallets': null, // Document Wallets
-  'files-organization-sheet-protectors': null, // Sheet Protectors
-  'files-organization-dividers': null, // Dividers
 
   // مستلزمات المذاكرة
-  'study-supplies': null,
-  'study-supplies-sticky-notes': null, // Sticky Notes
-  'study-supplies-index-tabs': null, // Index Tabs
-  'study-supplies-flash-cards': null, // Flash Cards
-  'study-supplies-page-markers': null, // Page Markers
-  'study-supplies-memo-pads': null, // Memo Pads
-  'study-supplies-bookmarks': null, // Bookmarks
-  'study-supplies-study-planners': null, // Study Planners
 
   // مساطر وأدوات هندسية
   'geometry-tools': null,
@@ -125,36 +108,10 @@ export const BOOKSTORE_CATEGORY_IMAGES: Record<
   'engineering-architecture-architecture-sheets': null, // Architecture Sheets
 
   // قص ولصق وتثبيت
-  'cutting-gluing-fastening': null,
-  'cutting-gluing-fastening-scissors': null, // مقصات
-  'cutting-gluing-fastening-cutters': null, // Cutters
-  'cutting-gluing-fastening-glue-sticks': null, // Glue Stick
-  'cutting-gluing-fastening-glue': null, // Glue
-  'cutting-gluing-fastening-double-face-tape': null, // Double-Face Tape
-  'cutting-gluing-fastening-sellotape': null, // Sellotape
-  'cutting-gluing-fastening-masking-tape': null, // Masking Tape
-  'cutting-gluing-fastening-staplers': null, // Staplers
-  'cutting-gluing-fastening-staples': null, // Staples
-  'cutting-gluing-fastening-paper-clips': null, // Paper Clips
-  'cutting-gluing-fastening-binder-clips': null, // Binder Clips
 
-  // آلات حاسبة
-  'calculators': null,
-  'calculators-basic-calculators': null, // حاسبات عادية
-  'calculators-scientific-calculators': null, // Scientific Calculators
-  'calculators-engineering-calculators': null, // Engineering Calculators
-  'calculators-financial-calculators': null, // Financial Calculators
 
-  // أدوات المكتب والمكتب الدراسي
-  'desk-office-tools': null,
-  'desk-office-tools-pen-holders': null, // Pen Holders
-  'desk-office-tools-desk-organizers': null, // Desk Organizers
-  'desk-office-tools-staplers': null, // Staplers
-  'desk-office-tools-punchers': null, // Punchers
-  'desk-office-tools-clipboards': null, // Clipboards
-  'desk-office-tools-letter-trays': null, // Letter Trays
-  'desk-office-tools-desk-pads': null, // Desk Pads
-  'desk-office-tools-book-stands': null, // Book Stands
+
+
 
   // مقالم وشنط
   'pencil-cases-bags': null,

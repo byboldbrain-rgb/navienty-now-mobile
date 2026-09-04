@@ -1,0 +1,76 @@
+name: Monitor iOS build 4 TestFlight submission
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/app-store-launch-readiness
+    paths:
+      - .github/workflows/eas-ios-submit-build-4.yml
+
+permissions:
+  contents: read
+
+jobs:
+  monitor_submission:
+    name: Monitor build 4 TestFlight submission
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.head_commit.message == 'Monitor iOS build 4 TestFlight submission'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_SUBMISSION_ID: 7acdf17a-1dab-4fac-b354-8d6eb9d3c790
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Wait for TestFlight submission
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          for attempt in $(seq 1 170); do
+            if eas submit:view "$EAS_SUBMISSION_ID" --platform ios --json > submission.json 2> submission.err; then
+              cat submission.err
+              status="$(jq -r '.status // empty' submission.json)"
+              normalized_status="$(tr '[:upper:]_' '[:lower:]-' <<<"$status" | tr -d '[:space:]')"
+              echo "EAS submission status: $status"
+
+              case "$normalized_status" in
+                finished)
+                  cat submission.json
+                  exit 0
+                  ;;
+                errored|canceled)
+                  cat submission.json
+                  exit 1
+                  ;;
+              esac
+            else
+              cat submission.err
+              echo "Submission status is not available yet; retrying."
+            fi
+
+            sleep 30
+          done
+
+          echo "Timed out waiting for the TestFlight submission."
+          exit 1

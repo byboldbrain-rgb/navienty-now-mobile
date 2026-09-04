@@ -227,9 +227,8 @@ async function openHomeBannerAction({
 }
 
 export {
-    buildWhatsAppUrl,
-    canOpenHomeBanner,
-    hasHomeBannerAction,
-    openHomeBannerAction
+  buildWhatsAppUrl,
+  canOpenHomeBanner,
+  hasHomeBannerAction,
+  openHomeBannerAction
 };
-

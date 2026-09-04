@@ -1,0 +1,228 @@
+name: EAS iOS release readiness audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/app-store-launch-readiness
+    paths:
+      - .github/workflows/eas-ios-release-readiness-audit.yml
+      - eas.json
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit EAS iOS release state
+    runs-on: ubuntu-latest
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Require Expo access token
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN is not configured as a GitHub Actions repository secret."
+            exit 1
+          fi
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Verify Expo account and project
+        shell: bash
+        run: |
+          eas whoami
+          eas project:info
+
+      - name: Check required production environment variables
+        id: production_env
+        shell: bash
+        run: |
+          set -u
+          missing=0
+
+          for key in \
+            EXPO_PUBLIC_SUPABASE_URL \
+            EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            GOOGLE_MAPS_IOS_API_KEY
+          do
+            if eas env:get production \
+              --variable-name "$key" \
+              --scope project \
+              --format short \
+              --non-interactive \
+              >"${RUNNER_TEMP}/${key}.out" \
+              2>"${RUNNER_TEMP}/${key}.err"
+            then
+              echo "$key=present"
+            else
+              echo "$key=missing"
+              missing=$((missing + 1))
+            fi
+          done
+
+          echo "missing_count=$missing" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect existing iOS builds
+        shell: bash
+        run: |
+          eas build:list \
+            --platform ios \
+            --limit 20 \
+            --json \
+            --non-interactive \
+            > "${RUNNER_TEMP}/ios-builds.json"
+
+          jq '[.[] | {
+            id,
+            status,
+            distribution,
+            buildProfile,
+            appVersion,
+            appBuildVersion,
+            createdAt,
+            completedAt
+          }]' "${RUNNER_TEMP}/ios-builds.json"
+
+      - name: Inspect existing iOS submissions
+        shell: bash
+        run: |
+          eas submit:list \
+            --platform ios \
+            --limit 20 \
+            --json \
+            --non-interactive \
+            > "${RUNNER_TEMP}/ios-submissions.json"
+
+          jq '[.[] | {
+            id,
+            status,
+            createdAt,
+            completedAt
+          }]' "${RUNNER_TEMP}/ios-submissions.json"
+
+      - name: Check App Store Connect project link
+        id: asc_link
+        shell: bash
+        run: |
+          set +e
+          eas integrations:asc:status \
+            --json \
+            --non-interactive \
+            > "${RUNNER_TEMP}/asc-status.json" \
+            2> "${RUNNER_TEMP}/asc-status.err"
+          exit_code=$?
+          set -e
+
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          if [ "$exit_code" -eq 0 ]; then
+            status="$(jq -r '.status // "unknown"' "${RUNNER_TEMP}/asc-status.json")"
+            asc_app_id="$(jq -r '.appStoreConnectApp.ascAppIdentifier // "none"' "${RUNNER_TEMP}/asc-status.json")"
+            bundle_id="$(jq -r '.appStoreConnectApp.bundleIdentifier // "none"' "${RUNNER_TEMP}/asc-status.json")"
+
+            echo "status=$status" >> "$GITHUB_OUTPUT"
+            echo "asc_app_id=$asc_app_id" >> "$GITHUB_OUTPUT"
+            echo "bundle_id=$bundle_id" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect project link status: $status"
+            echo "App Store Connect app ID: $asc_app_id"
+            echo "App Store Connect bundle ID: $bundle_id"
+          else
+            echo "status=unavailable" >> "$GITHUB_OUTPUT"
+            echo "asc_app_id=none" >> "$GITHUB_OUTPUT"
+            echo "bundle_id=none" >> "$GITHUB_OUTPUT"
+            echo "App Store Connect project link status: unavailable"
+          fi
+
+      - name: Check App Store and TestFlight visibility
+        id: store_status
+        shell: bash
+        run: |
+          set +e
+          eas submit:status \
+            --platform ios \
+            --profile production \
+            --json \
+            --non-interactive \
+            > "${RUNNER_TEMP}/store-status.json" \
+            2> "${RUNNER_TEMP}/store-status.err"
+          exit_code=$?
+          set -e
+
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          if [ "$exit_code" -eq 0 ]; then
+            echo "reason=available" >> "$GITHUB_OUTPUT"
+            echo "App Store/TestFlight status: available"
+          elif grep -qiE 'API key|Apple login|credentials' "${RUNNER_TEMP}/store-status.err"; then
+            echo "reason=asc-api-key-unavailable" >> "$GITHUB_OUTPUT"
+            echo "App Store/TestFlight status: ASC API key unavailable"
+          else
+            echo "reason=unavailable" >> "$GITHUB_OUTPUT"
+            echo "App Store/TestFlight status: unavailable"
+          fi
+
+      - name: Check remote iOS build number
+        id: build_number
+        shell: bash
+        run: |
+          set +e
+          eas build:version:get \
+            --platform ios \
+            --profile production \
+            --json \
+            --non-interactive \
+            > "${RUNNER_TEMP}/ios-build-version.json" \
+            2> "${RUNNER_TEMP}/ios-build-version.err"
+          exit_code=$?
+          set -e
+
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          if [ "$exit_code" -eq 0 ]; then
+            build_number="$(jq -r '.buildNumber // "not-configured"' "${RUNNER_TEMP}/ios-build-version.json")"
+            echo "build_number=$build_number" >> "$GITHUB_OUTPUT"
+            echo "Remote iOS build number: $build_number"
+          else
+            echo "build_number=unavailable" >> "$GITHUB_OUTPUT"
+            echo "Remote iOS build number: unavailable"
+          fi
+
+      - name: Summarize readiness audit
+        shell: bash
+        env:
+          MISSING_ENV_COUNT: ${{ steps.production_env.outputs.missing_count }}
+          ASC_LINK_EXIT: ${{ steps.asc_link.outputs.exit_code }}
+          ASC_LINK_STATUS: ${{ steps.asc_link.outputs.status }}
+          ASC_APP_ID: ${{ steps.asc_link.outputs.asc_app_id }}
+          ASC_BUNDLE_ID: ${{ steps.asc_link.outputs.bundle_id }}
+          STORE_STATUS_EXIT: ${{ steps.store_status.outputs.exit_code }}
+          STORE_STATUS_REASON: ${{ steps.store_status.outputs.reason }}
+          BUILD_NUMBER_EXIT: ${{ steps.build_number.outputs.exit_code }}
+          IOS_BUILD_NUMBER: ${{ steps.build_number.outputs.build_number }}
+        run: |
+          echo "Required production environment variables missing: ${MISSING_ENV_COUNT}"
+          echo "App Store Connect project link command exit: ${ASC_LINK_EXIT}"
+          echo "App Store Connect project link status: ${ASC_LINK_STATUS}"
+          echo "App Store Connect app ID: ${ASC_APP_ID}"
+          echo "App Store Connect bundle ID: ${ASC_BUNDLE_ID}"
+          echo "App Store/TestFlight status command exit: ${STORE_STATUS_EXIT}"
+          echo "App Store/TestFlight status reason: ${STORE_STATUS_REASON}"
+          echo "Remote iOS build number command exit: ${BUILD_NUMBER_EXIT}"
+          echo "Remote iOS build number: ${IOS_BUILD_NUMBER}"

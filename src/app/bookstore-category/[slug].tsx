@@ -50,9 +50,11 @@ const PAGE_MAX_WIDTH = 560;
 const HORIZONTAL_PADDING = 16;
 const PRODUCT_GAP = 10;
 
-const OFFERS_CATEGORY_IMAGE = require(
-  '../../../assets/images/supermarket-categories/offers.webp',
-);
+const NAVIENTY_NOW_GREEN =
+  '#00B14F';
+
+const NAVIENTY_NOW_GREEN_DARK =
+  '#009245';
 
 type ProductFilterKey =
   | 'all'
@@ -118,6 +120,12 @@ const BOOKSTORE_ROOT_CATEGORY_IMAGES: Partial<
   ),
   'pencil-cases-bags': require(
     '../../../assets/images/bookstore-categories/pencil-cases-bags.webp',
+  ),
+  'cups-cans': require(
+    '../../../assets/images/bookstore-categories/cups-cans.webp',
+  ),
+  flowers: require(
+    '../../../assets/images/bookstore-categories/flowers.webp',
   ),
 };
 
@@ -223,7 +231,370 @@ const BOOKSTORE_SUBCATEGORY_IMAGES: Record<
   'pencil-cases-bags-laptop-university-bags': require(
     '../../../assets/images/bookstore-subcategories/laptop-and-university-bags.webp',
   ),
+
+  /* أكواب ومعلبات */
+  'cups-cans-bottles': require(
+    '../../../assets/images/bookstore-subcategories/bottles.webp',
+  ),
+  'cups-cans-mugs': require(
+    '../../../assets/images/bookstore-subcategories/mugs.webp',
+  ),
+  'cups-cans-boxes': require(
+    '../../../assets/images/bookstore-subcategories/boxes.webp',
+  ),
+
+  /* ورد */
+  'flowers-red': require(
+    '../../../assets/images/bookstore-subcategories/red-flowers.webp',
+  ),
+  'flowers-white': require(
+    '../../../assets/images/bookstore-subcategories/white-flowers.webp',
+  ),
+  'flowers-mixed': require(
+    '../../../assets/images/bookstore-subcategories/mixed-flowers.webp',
+  ),
+  'flowers-wrapping': require(
+    '../../../assets/images/bookstore-subcategories/wrapping.webp',
+  ),
 };
+
+type BookstoreVirtualSubcategory = {
+  key: string;
+  label: string;
+  aliases: readonly string[];
+  productKeywords: readonly string[];
+  icon: string;
+};
+
+type BookstoreFallbackCategory = {
+  key: string;
+  label: string;
+  aliases: readonly string[];
+  productKeywords: readonly string[];
+  virtualSubcategories?: readonly BookstoreVirtualSubcategory[];
+};
+
+/**
+ * Categories that may be shown by bookstore.tsx before a matching
+ * root CatalogSection is added to the store catalog.
+ *
+ * If a matching section exists under a different slug or as a nested
+ * section, the resolver below will still find it. If it does not exist
+ * yet, the page remains usable and shows matching products (or the
+ * regular empty state) instead of the "category unavailable" screen.
+ */
+const BOOKSTORE_FALLBACK_CATEGORIES:
+  readonly BookstoreFallbackCategory[] = [
+    {
+      key: 'cups-cans',
+      label: 'أكواب ومعلبات',
+      aliases: [
+        'cups-cans',
+        'cups-and-cans',
+        'mugs-cans',
+        'mugs-and-cans',
+        'drinkware',
+        'cups',
+        'mugs',
+        'أكواب ومعلبات',
+        'اكواب ومعلبات',
+        'أكواب',
+        'اكواب',
+        'مجات',
+        'معلبات',
+      ],
+      productKeywords: [
+        'cup',
+        'cups',
+        'mug',
+        'mugs',
+        'tumbler',
+        'drinkware',
+        'bottle',
+        'bottles',
+        'box',
+        'boxes',
+        'container',
+        'containers',
+        'canned',
+        'cans',
+        'tin',
+        'tins',
+        'كوب',
+        'أكواب',
+        'اكواب',
+        'مج',
+        'مجات',
+        'زجاجة',
+        'زجاجات',
+        'قارورة',
+        'قوارير',
+        'علبة',
+        'علب',
+        'معلبات',
+      ],
+      virtualSubcategories: [
+        {
+          key: 'cups-cans-bottles',
+          label: 'زجاجة',
+          aliases: [
+            'bottle',
+            'bottles',
+            'water-bottle',
+            'water-bottles',
+            'flask',
+            'flasks',
+            'زجاجة',
+            'زجاجات',
+            'قارورة',
+            'قوارير',
+          ],
+          productKeywords: [
+            'bottle',
+            'bottles',
+            'water bottle',
+            'water-bottle',
+            'flask',
+            'زجاجة',
+            'زجاجات',
+            'قارورة',
+            'قوارير',
+          ],
+          icon: '🧴',
+        },
+        {
+          key: 'cups-cans-mugs',
+          label: 'مج',
+          aliases: [
+            'mug',
+            'mugs',
+            'coffee-mug',
+            'coffee-mugs',
+            'مج',
+            'مجات',
+          ],
+          productKeywords: [
+            'mug',
+            'mugs',
+            'coffee mug',
+            'coffee-mug',
+            'مج',
+            'مجات',
+          ],
+          icon: '☕',
+        },
+        {
+          key: 'cups-cans-boxes',
+          label: 'علب',
+          aliases: [
+            'box',
+            'boxes',
+            'container',
+            'containers',
+            'can',
+            'cans',
+            'tin',
+            'tins',
+            'علبة',
+            'علب',
+            'معلبات',
+          ],
+          productKeywords: [
+            'box',
+            'boxes',
+            'container',
+            'containers',
+            'can',
+            'cans',
+            'tin',
+            'tins',
+            'علبة',
+            'علب',
+            'معلبات',
+          ],
+          icon: '📦',
+        },
+      ],
+    },
+    {
+      key: 'pencil-cases-bags',
+      label: 'مقالم وشنط',
+      aliases: [
+        'pencil-cases-bags',
+        'pencil-cases-and-bags',
+        'pencil-cases',
+        'school-bags',
+        'bags',
+        'مقالم وشنط',
+        'المقالم والشنط',
+        'مقالم',
+        'شنط',
+        'حقائب',
+      ],
+      productKeywords: [
+        'pencil-case',
+        'pencil-cases',
+        'pen-pouch',
+        'school-bag',
+        'university-bag',
+        'laptop-bag',
+        'مقلمة',
+        'مقالم',
+        'شنطة',
+        'شنط',
+        'حقيبة',
+        'حقائب',
+      ],
+    },
+    {
+      key: 'flowers',
+      label: 'ورد',
+      aliases: [
+        'flowers',
+        'flower',
+        'roses',
+        'rose',
+        'bouquets',
+        'ورد',
+        'ورود',
+        'زهور',
+        'بوكيهات',
+      ],
+      productKeywords: [
+        'flower',
+        'flowers',
+        'rose',
+        'roses',
+        'bouquet',
+        'bouquets',
+        'red rose',
+        'red roses',
+        'white rose',
+        'white roses',
+        'mixed flowers',
+        'mixed bouquet',
+        'ورد',
+        'ورود',
+        'زهور',
+        'بوكيه',
+        'بوكيهات',
+        'ورد احمر',
+        'ورد أحمر',
+        'ورد ابيض',
+        'ورد أبيض',
+        'ورد مشكل',
+        'تغليف',
+        'تغليف ورد',
+        'تغليف هدايا',
+        'wrapping',
+        'flower wrapping',
+        'gift wrapping',
+      ],
+      virtualSubcategories: [
+        {
+          key: 'flowers-red',
+          label: 'ورد احمر',
+          aliases: [
+            'red-flower',
+            'red-flowers',
+            'red-rose',
+            'red-roses',
+            'ورد احمر',
+            'ورد أحمر',
+            'ورود حمراء',
+          ],
+          productKeywords: [
+            'red flower',
+            'red flowers',
+            'red rose',
+            'red roses',
+            'ورد احمر',
+            'ورد أحمر',
+            'ورود حمراء',
+          ],
+          icon: '🌹',
+        },
+        {
+          key: 'flowers-white',
+          label: 'ورد ابيض',
+          aliases: [
+            'white-flower',
+            'white-flowers',
+            'white-rose',
+            'white-roses',
+            'ورد ابيض',
+            'ورد أبيض',
+            'ورود بيضاء',
+          ],
+          productKeywords: [
+            'white flower',
+            'white flowers',
+            'white rose',
+            'white roses',
+            'ورد ابيض',
+            'ورد أبيض',
+            'ورود بيضاء',
+          ],
+          icon: '🤍',
+        },
+        {
+          key: 'flowers-mixed',
+          label: 'ورد مشكل',
+          aliases: [
+            'mixed-flower',
+            'mixed-flowers',
+            'mixed-bouquet',
+            'mixed-bouquets',
+            'assorted-flowers',
+            'ورد مشكل',
+            'ورود مشكلة',
+            'بوكيه مشكل',
+          ],
+          productKeywords: [
+            'mixed flower',
+            'mixed flowers',
+            'mixed bouquet',
+            'mixed bouquets',
+            'assorted flowers',
+            'ورد مشكل',
+            'ورود مشكلة',
+            'بوكيه مشكل',
+          ],
+          icon: '💐',
+        },
+        {
+          key: 'flowers-wrapping',
+          label: 'التغليف',
+          aliases: [
+            'wrapping',
+            'flower-wrapping',
+            'gift-wrapping',
+            'bouquet-wrapping',
+            'packaging',
+            'تغليف',
+            'التغليف',
+            'تغليف ورد',
+            'تغليف الورود',
+            'تغليف هدايا',
+          ],
+          productKeywords: [
+            'wrapping',
+            'flower wrapping',
+            'gift wrapping',
+            'bouquet wrapping',
+            'packaging',
+            'wrap',
+            'تغليف',
+            'التغليف',
+            'تغليف ورد',
+            'تغليف الورود',
+            'تغليف هدايا',
+          ],
+          icon: '🎁',
+        },
+      ],
+    },
+  ];
 
 /* ============================================================
  * HELPERS
@@ -260,6 +631,99 @@ function normalizeSlug(
     .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function normalizeCategoryMatchValue(
+  value: string | null | undefined,
+) {
+  return (value ?? '')
+    .trim()
+    .toLocaleLowerCase('ar')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/&/g, 'and')
+    .replace(
+      /[^a-z0-9\u0600-\u06ff]+/g,
+      '-',
+    )
+    .replace(/^-+|-+$/g, '');
+}
+
+function categoryValuesMatch(
+  firstValue: string,
+  secondValue: string,
+) {
+  if (
+    !firstValue ||
+    !secondValue
+  ) {
+    return false;
+  }
+
+  if (firstValue === secondValue) {
+    return true;
+  }
+
+  return (
+    firstValue.startsWith(
+      `${secondValue}-`,
+    ) ||
+    firstValue.endsWith(
+      `-${secondValue}`,
+    ) ||
+    firstValue.includes(
+      `-${secondValue}-`,
+    ) ||
+    secondValue.startsWith(
+      `${firstValue}-`,
+    ) ||
+    secondValue.endsWith(
+      `-${firstValue}`,
+    ) ||
+    secondValue.includes(
+      `-${firstValue}-`,
+    )
+  );
+}
+
+function getBookstoreFallbackCategory(
+  sectionSlug: string,
+  categoryKey: string | undefined,
+  label: string | undefined,
+) {
+  const requestedValues = [
+    sectionSlug,
+    categoryKey,
+    label,
+  ]
+    .map(normalizeCategoryMatchValue)
+    .filter(Boolean);
+
+  return (
+    BOOKSTORE_FALLBACK_CATEGORIES.find(
+      (definition) => {
+        const acceptedValues = [
+          definition.key,
+          definition.label,
+          ...definition.aliases,
+        ].map(
+          normalizeCategoryMatchValue,
+        );
+
+        return requestedValues.some(
+          (requestedValue) =>
+            acceptedValues.some(
+              (acceptedValue) =>
+                categoryValuesMatch(
+                  requestedValue,
+                  acceptedValue,
+                ),
+            ),
+        );
+      },
+    ) ?? null
+  );
 }
 
 function getProductImage(
@@ -529,6 +993,263 @@ function findCatalogSectionByCategoryKey(
   );
 }
 
+function findCatalogSectionByRouteParams(
+  catalog: StoreCatalog,
+  sectionSlug: string,
+  categoryKey: string | undefined,
+  label: string | undefined,
+) {
+  const sectionBySlug =
+    findCatalogSectionBySlug(
+      catalog,
+      sectionSlug,
+    );
+
+  /*
+   * Child-category routes keep the root categoryKey for artwork,
+   * so the requested slug must always take priority.
+   */
+  if (sectionBySlug) {
+    return sectionBySlug;
+  }
+
+  const sectionByCategoryKey =
+    findCatalogSectionByCategoryKey(
+      catalog,
+      categoryKey,
+    );
+
+  if (sectionByCategoryKey) {
+    return sectionByCategoryKey;
+  }
+
+  const fallbackCategory =
+    getBookstoreFallbackCategory(
+      sectionSlug,
+      categoryKey,
+      label,
+    );
+
+  const requestedValues = [
+    sectionSlug,
+    categoryKey,
+    label,
+    fallbackCategory?.key,
+    fallbackCategory?.label,
+    ...(fallbackCategory?.aliases ?? []),
+  ]
+    .map(normalizeCategoryMatchValue)
+    .filter(Boolean);
+
+  if (requestedValues.length === 0) {
+    return null;
+  }
+
+  const uniqueSections =
+    new Map<string, CatalogSection>();
+
+  for (
+    const section of [
+      ...catalog.sections,
+      ...catalog.categoryTree,
+    ]
+  ) {
+    uniqueSections.set(
+      section.id,
+      section,
+    );
+  }
+
+  const sections = Array.from(
+    uniqueSections.values(),
+  ).sort((first, second) => {
+    const firstIsRoot =
+      first.parentId === null ||
+      first.depth === 0;
+    const secondIsRoot =
+      second.parentId === null ||
+      second.depth === 0;
+
+    return Number(secondIsRoot) -
+      Number(firstIsRoot);
+  });
+
+  const getSectionValues = (
+    section: CatalogSection,
+  ) =>
+    [
+      section.slug,
+      section.name,
+      section.nameEn,
+    ]
+      .map(normalizeCategoryMatchValue)
+      .filter(Boolean);
+
+  const exactSection = sections.find(
+    (section) =>
+      getSectionValues(section).some(
+        (sectionValue) =>
+          requestedValues.includes(
+            sectionValue,
+          ),
+      ),
+  );
+
+  if (exactSection) {
+    return exactSection;
+  }
+
+  return (
+    sections.find((section) =>
+      getSectionValues(section).some(
+        (sectionValue) =>
+          requestedValues.some(
+            (requestedValue) =>
+              categoryValuesMatch(
+                sectionValue,
+                requestedValue,
+              ),
+          ),
+      ),
+    ) ?? null
+  );
+}
+
+function getFallbackCategoryProducts(
+  catalog: StoreCatalog,
+  category: BookstoreFallbackCategory,
+) {
+  const categoryValues = [
+    category.key,
+    category.label,
+    ...category.aliases,
+  ]
+    .map(normalizeCategoryMatchValue)
+    .filter(Boolean);
+
+  const productKeywords =
+    category.productKeywords
+      .map(normalizeCategoryMatchValue)
+      .filter(Boolean);
+
+  const products: CatalogProduct[] = [];
+
+  for (const section of catalog.sections) {
+    const sectionValues = [
+      section.slug,
+      section.name,
+      section.nameEn,
+    ]
+      .map(normalizeCategoryMatchValue)
+      .filter(Boolean);
+
+    const sectionMatches =
+      sectionValues.some(
+        (sectionValue) =>
+          categoryValues.some(
+            (categoryValue) =>
+              categoryValuesMatch(
+                sectionValue,
+                categoryValue,
+              ),
+          ),
+      );
+
+    if (sectionMatches) {
+      products.push(
+        ...getCatalogSectionProducts(
+          section,
+          true,
+        ),
+      );
+      continue;
+    }
+
+    for (const product of section.products) {
+      const searchableProductValue =
+        normalizeCategoryMatchValue(
+          [
+            product.name,
+            product.nameEn,
+            product.description,
+            product.descriptionEn,
+            product.sku,
+            product.unitLabelAr,
+            product.unitLabelEn,
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
+
+      if (
+        productKeywords.some(
+          (keyword) =>
+            categoryValuesMatch(
+              searchableProductValue,
+              keyword,
+            ),
+        )
+      ) {
+        products.push(product);
+      }
+    }
+  }
+
+  return deduplicateProducts(products);
+}
+
+
+function getProductsMatchingKeywords(
+  products: CatalogProduct[],
+  keywords: readonly string[],
+) {
+  const normalizedKeywords = keywords
+    .map(normalizeCategoryMatchValue)
+    .filter(Boolean);
+
+  if (normalizedKeywords.length === 0) {
+    return [];
+  }
+
+  return products.filter((product) => {
+    const searchableProductValue =
+      normalizeCategoryMatchValue(
+        [
+          product.name,
+          product.nameEn,
+          product.description,
+          product.descriptionEn,
+          product.sku,
+          product.barcode,
+          product.unitLabelAr,
+          product.unitLabelEn,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      );
+
+    return normalizedKeywords.some(
+      (keyword) =>
+        categoryValuesMatch(
+          searchableProductValue,
+          keyword,
+        ),
+    );
+  });
+}
+
+function getVirtualSubcategoryProducts(
+  baseProducts: CatalogProduct[],
+  subcategory: BookstoreVirtualSubcategory,
+) {
+  return deduplicateProducts(
+    getProductsMatchingKeywords(
+      baseProducts,
+      subcategory.productKeywords,
+    ),
+  );
+}
+
 /* ============================================================
  * CATEGORY VISUAL
  * ============================================================
@@ -682,6 +1403,35 @@ function CategoryFilterVisual({
         style={
           styles.filterCategoryImage
         }
+        resizeMode="cover"
+      />
+    );
+  }
+
+  return (
+    <View
+      style={
+        styles.filterImagePlaceholder
+      }
+    />
+  );
+}
+
+function VirtualCategoryFilterVisual({
+  subcategory,
+}: {
+  subcategory: BookstoreVirtualSubcategory;
+}) {
+  const localSubcategoryImage =
+    BOOKSTORE_SUBCATEGORY_IMAGES[
+      normalizeSlug(subcategory.key)
+    ];
+
+  if (localSubcategoryImage) {
+    return (
+      <Image
+        source={localSubcategoryImage}
+        style={styles.filterCategoryImage}
         resizeMode="cover"
       />
     );
@@ -1083,6 +1833,13 @@ export default function BookstoreCategoryScreen() {
     normalizeSlug(sectionSlug) ===
     'offers';
 
+  const fallbackCategory =
+    getBookstoreFallbackCategory(
+      sectionSlug,
+      passedCategoryKey,
+      passedLabel,
+    );
+
   /* ==========================================================
    * STATE
    * ==========================================================
@@ -1273,12 +2030,17 @@ export default function BookstoreCategoryScreen() {
       }
 
       const section =
-        findCatalogSectionBySlug(
+        findCatalogSectionByRouteParams(
           loadedCatalog,
           sectionSlug,
+          passedCategoryKey,
+          passedLabel,
         );
 
-      if (!section) {
+      if (
+        !section &&
+        !fallbackCategory
+      ) {
         throw new Error(
           'لم يتم العثور على فئة المكتبة المطلوبة.',
         );
@@ -1331,6 +2093,8 @@ export default function BookstoreCategoryScreen() {
   }, [
     requestedStoreId,
     sectionSlug,
+    passedCategoryKey,
+    passedLabel,
     savedServiceAreaId,
   ]);
 
@@ -1370,6 +2134,58 @@ export default function BookstoreCategoryScreen() {
       );
     }, [selectedSection]);
 
+  const virtualSubcategories =
+    useMemo(() => {
+      const configured =
+        fallbackCategory
+          ?.virtualSubcategories ??
+        [];
+
+      if (configured.length === 0) {
+        return [];
+      }
+
+      const realChildValues =
+        new Set(
+          childCategories.flatMap(
+            (child) =>
+              [
+                child.slug,
+                child.name,
+                child.nameEn,
+              ]
+                .map(
+                  normalizeCategoryMatchValue,
+                )
+                .filter(Boolean),
+          ),
+        );
+
+      return configured.filter(
+        (subcategory) => {
+          const acceptedValues = [
+            subcategory.key,
+            subcategory.label,
+            ...subcategory.aliases,
+          ]
+            .map(
+              normalizeCategoryMatchValue,
+            )
+            .filter(Boolean);
+
+          return !acceptedValues.some(
+            (value) =>
+              realChildValues.has(
+                value,
+              ),
+          );
+        },
+      );
+    }, [
+      childCategories,
+      fallbackCategory?.key,
+    ]);
+
   /*
    * We render the normal filter rail using a regular row instead of
    * row-reverse. To keep the Arabic visual order:
@@ -1387,6 +2203,14 @@ export default function BookstoreCategoryScreen() {
       [childCategories],
     );
 
+  const virtualSubcategoriesForDisplay =
+    useMemo(
+      () => [
+        ...virtualSubcategories,
+      ].reverse(),
+      [virtualSubcategories],
+    );
+
   /*
    * Reset the normal subcategory rail whenever the actual category
    * changes. This is important because Expo Router can reuse the same
@@ -1398,7 +2222,8 @@ export default function BookstoreCategoryScreen() {
   useEffect(() => {
     if (
       isOffersPage ||
-      !selectedSection
+      (!selectedSection &&
+        !fallbackCategory)
     ) {
       return;
     }
@@ -1426,6 +2251,7 @@ export default function BookstoreCategoryScreen() {
   }, [
     isOffersPage,
     selectedSection?.id,
+    fallbackCategory?.key,
   ]);
 
   /* ==========================================================
@@ -1519,23 +2345,18 @@ export default function BookstoreCategoryScreen() {
        * =====================================
        */
       else if (selectedSection) {
+        const baseCategoryProducts =
+          getCatalogSectionProducts(
+            selectedSection,
+            true,
+          );
+
         if (
           selectedFilterKey ===
           'all'
         ) {
           products =
-            getCatalogSectionProducts(
-              selectedSection,
-              true,
-            );
-        } else if (
-          selectedFilterKey ===
-          'offers'
-        ) {
-          products =
-            getCatalogSectionOffers(
-              selectedSection,
-            );
+            baseCategoryProducts;
         } else {
           const selectedChild =
             childCategories.find(
@@ -1549,6 +2370,62 @@ export default function BookstoreCategoryScreen() {
               getCatalogSectionProducts(
                 selectedChild,
                 true,
+              );
+          } else {
+            const selectedVirtualSubcategory =
+              virtualSubcategories.find(
+                (subcategory) =>
+                  subcategory.key ===
+                  selectedFilterKey,
+              );
+
+            if (
+              selectedVirtualSubcategory
+            ) {
+              products =
+                getVirtualSubcategoryProducts(
+                  baseCategoryProducts,
+                  selectedVirtualSubcategory,
+                );
+            }
+          }
+        }
+      }
+
+      /*
+       * A newly added UI category can be opened before its root
+       * CatalogSection is created. In that case, collect matching
+       * products from the existing catalog instead of failing the
+       * whole route.
+       */
+      else if (fallbackCategory) {
+        const baseFallbackProducts =
+          getFallbackCategoryProducts(
+            catalog,
+            fallbackCategory,
+          );
+
+        if (
+          selectedFilterKey ===
+          'all'
+        ) {
+          products =
+            baseFallbackProducts;
+        } else {
+          const selectedVirtualSubcategory =
+            virtualSubcategories.find(
+              (subcategory) =>
+                subcategory.key ===
+                selectedFilterKey,
+            );
+
+          if (
+            selectedVirtualSubcategory
+          ) {
+            products =
+              getVirtualSubcategoryProducts(
+                baseFallbackProducts,
+                selectedVirtualSubcategory,
               );
           }
         }
@@ -1611,7 +2488,9 @@ export default function BookstoreCategoryScreen() {
       searchQuery,
       selectedSection,
       childCategories,
+      virtualSubcategories,
       offerCategoryTabs,
+      fallbackCategory?.key,
     ]);
 
   /* ==========================================================
@@ -1634,7 +2513,8 @@ export default function BookstoreCategoryScreen() {
     !catalog ||
     errorMessage ||
     (!isOffersPage &&
-      !selectedSection)
+      !selectedSection &&
+      !fallbackCategory)
   ) {
     return (
       <SafeAreaView
@@ -1810,6 +2690,7 @@ export default function BookstoreCategoryScreen() {
     isOffersPage
       ? 'العروض'
       : selectedSection?.name ||
+        fallbackCategory?.label ||
         passedLabel ||
         '';
 
@@ -2022,13 +2903,6 @@ export default function BookstoreCategoryScreen() {
       }
 
       return 'لا توجد عروض متاحة حالياً.';
-    }
-
-    if (
-      selectedFilterKey ===
-      'offers'
-    ) {
-      return 'لا توجد عروض حالياً داخل هذه الفئة.';
     }
 
     if (
@@ -2352,7 +3226,8 @@ export default function BookstoreCategoryScreen() {
            */}
 
           {!isOffersPage &&
-            selectedSection && (
+            (selectedSection ||
+              fallbackCategory) && (
             <>
               <ScrollView
                 ref={
@@ -2478,60 +3353,64 @@ export default function BookstoreCategoryScreen() {
                   },
                 )}
 
-
-                {/* OFFERS
-                 *
-                 * In the underlying LTR row, OFFERS is placed immediately
-                 * before ALL. Since the rail opens at the right edge, the
-                 * visible Arabic order becomes: الكل → العروض → Subcategories.
-                 */}
-
-                <Pressable
-                  style={
-                    styles.filterItem
-                  }
-                  onPress={() => {
-                    setSelectedFilterKey(
-                      'offers',
-                    );
-
-                    setSearchQuery(
-                      '',
-                    );
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.filterImageCircle,
-
+                {virtualSubcategoriesForDisplay.map(
+                  (subcategory) => {
+                    const isSelected =
                       selectedFilterKey ===
-                        'offers' &&
-                        styles.filterImageCircleSelected,
-                    ]}
-                  >
-                    <Image
-                      source={
-                        OFFERS_CATEGORY_IMAGE
-                      }
-                      style={
-                        styles.filterCategoryImage
-                      }
-                      resizeMode="cover"
-                    />
-                  </View>
+                      subcategory.key;
 
-                  <Text
-                    style={[
-                      styles.filterLabel,
+                    return (
+                      <Pressable
+                        key={
+                          subcategory.key
+                        }
+                        style={
+                          styles.filterItem
+                        }
+                        onPress={() => {
+                          setSelectedFilterKey(
+                            subcategory.key,
+                          );
 
-                      selectedFilterKey ===
-                        'offers' &&
-                        styles.filterLabelSelected,
-                    ]}
-                  >
-                    العروض
-                  </Text>
-                </Pressable>
+                          setSearchQuery(
+                            '',
+                          );
+                        }}
+                      >
+                        <View
+                          style={[
+                            styles.filterImageCircle,
+
+                            isSelected &&
+                              styles.filterImageCircleSelected,
+                          ]}
+                        >
+                          <VirtualCategoryFilterVisual
+                            subcategory={
+                              subcategory
+                            }
+                          />
+                        </View>
+
+                        <Text
+                          style={[
+                            styles.filterLabel,
+
+                            isSelected &&
+                              styles.filterLabelSelected,
+                          ]}
+                          numberOfLines={
+                            2
+                          }
+                        >
+                          {
+                            subcategory.label
+                          }
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
 
 
                 {/* ALL — rightmost / selected by default */}
@@ -2559,15 +3438,31 @@ export default function BookstoreCategoryScreen() {
                         styles.filterImageCircleSelected,
                     ]}
                   >
-                    <CategoryFilterVisual
-                      section={
-                        categoryImageSection ??
-                        selectedSection
-                      }
-                      fallbackKey={
-                        categoryKey
-                      }
-                    />
+                    {categoryImageSection ??
+                    selectedSection ? (
+                      <CategoryFilterVisual
+                        section={
+                          categoryImageSection ??
+                          selectedSection!
+                        }
+                        fallbackKey={
+                          categoryKey ||
+                          fallbackCategory?.key
+                        }
+                      />
+                    ) : fallbackCategory ? (
+                      <Image
+                        source={
+                          BOOKSTORE_ROOT_CATEGORY_IMAGES[
+                            fallbackCategory.key
+                          ]
+                        }
+                        style={
+                          styles.filterCategoryImage
+                        }
+                        resizeMode="cover"
+                      />
+                    ) : null}
                   </View>
 
                   <Text
@@ -3393,7 +4288,7 @@ const styles =
         'center',
 
       backgroundColor:
-        '#F8F8F8',
+        '#FFFFFF',
 
       borderColor:
         '#E1E1E1',
@@ -3406,7 +4301,7 @@ const styles =
         'center',
 
       overflow:
-        'visible',
+        'hidden',
 
       position:
         'relative',
@@ -3416,7 +4311,7 @@ const styles =
 
     offersProductImageBox: {
       backgroundColor:
-        '#F8F8F8',
+        '#FFFFFF',
 
       borderColor:
         '#DEDEDE',
@@ -3424,10 +4319,14 @@ const styles =
       borderRadius: 20,
     },
 
+    /*
+     * Book covers keep their full aspect ratio, but now live inside
+     * the same white product shell used across the catalog.
+     */
     productImage: {
-      height: '82%',
+      height: '88%',
 
-      width: '82%',
+      width: '88%',
     },
 
     productFallback: {
@@ -3580,7 +4479,7 @@ const styles =
 
     addButtonText: {
       color:
-        '#F05A00',
+        NAVIENTY_NOW_GREEN,
 
       fontSize: 31,
 
@@ -3667,7 +4566,7 @@ const styles =
 
     quantityActionText: {
       color:
-        '#F05A00',
+        NAVIENTY_NOW_GREEN,
 
       fontSize: 19,
 
@@ -3996,7 +4895,7 @@ const styles =
         'center',
 
       backgroundColor:
-        '#F45A00',
+        NAVIENTY_NOW_GREEN,
 
       borderRadius: 28,
 
@@ -4052,7 +4951,7 @@ const styles =
         'center',
 
       backgroundColor:
-        'rgba(0,0,0,0.12)',
+        NAVIENTY_NOW_GREEN_DARK,
 
       borderRadius: 21,
 

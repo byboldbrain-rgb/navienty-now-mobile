@@ -16,6 +16,10 @@ import {
 } from 'react-native';
 
 import { StoreListScreenSkeleton } from '../../components/ui/loading-skeleton';
+import {
+  isV1PublicCategorySlug,
+  V1_UNAVAILABLE_CATEGORY_MESSAGE,
+} from '../../config/v1-release-scope';
 import getAppBootstrap, {
   type AppBootstrap,
 } from '../../services/bootstrap-service';
@@ -26,7 +30,6 @@ import {
 } from '../../services/catalog-service';
 import { useCustomerStore } from '../../store/customer-store';
 import BookstoreScreen from './bookstore';
-import PharmacyScreen from './pharmacy';
 import RestaurantsScreen from './restaurants';
 
 type BootstrapCategory =
@@ -52,10 +55,6 @@ export default function CategoryRouteScreen() {
 
   if (rawId === 'restaurants') {
     return <RestaurantsScreen />;
-  }
-
-  if (rawId === 'pharmacy') {
-    return <PharmacyScreen />;
   }
 
   if (rawId && BOOKSTORE_ALIASES.has(rawId)) {
@@ -130,11 +129,18 @@ function GenericCategoryScreen({
     useState<string | null>(null);
 
   async function loadCategoryData() {
-    if (!categorySlug) {
+    if (
+      !categorySlug ||
+      !isV1PublicCategorySlug(
+        categorySlug,
+      )
+    ) {
       setCategory(null);
       setStores([]);
       setErrorMessage(
-        'لم يتم تحديد القسم المطلوب.',
+        categorySlug
+          ? V1_UNAVAILABLE_CATEGORY_MESSAGE
+          : 'لم يتم تحديد القسم المطلوب.',
       );
       setIsLoading(false);
       return;

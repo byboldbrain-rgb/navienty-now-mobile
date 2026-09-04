@@ -51,6 +51,9 @@ jobs:
       - name: Validate image assets
         run: node scripts/validate-image-assets.mjs
 
+      - name: Validate v1 public scope
+        run: npm run validate:v1-scope
+
       - name: Validate release config
         run: node scripts/validate-release-config.mjs
 
@@ -108,14 +111,16 @@ jobs:
           build_id="$(jq -r 'if type == "array" then .[0].id else .id end' eas-android-rc-build.json)"
           artifact_url="$(jq -r 'if type == "array" then (. [0].artifacts.buildUrl // .[0].artifacts.applicationArchiveUrl // "") else (.artifacts.buildUrl // .artifacts.applicationArchiveUrl // "") end' eas-android-rc-build.json)"
           dashboard_url="https://expo.dev/accounts/navientynows-team/projects/navienty-now/builds/${build_id}"
-          gh pr comment 2 --body "### Android RC after native Maps fix
-- Source commit: \`${GITHUB_SHA}\`
-- EAS Build ID: \`${build_id}\`
-- Status: **FINISHED**
-- Install APK: ${artifact_url}
-- Dashboard: ${dashboard_url}
-
-This build includes EAS-injected Google Maps native configuration and the in-app Checkout handoff fix. Physical Android smoke testing is still required."
+          body="$(printf '%s\n' \
+            '### Android RC after native Maps fix' \
+            "- Source commit: \`${GITHUB_SHA}\`" \
+            "- EAS Build ID: \`${build_id}\`" \
+            '- Status: **FINISHED**' \
+            "- Install APK: ${artifact_url}" \
+            "- Dashboard: ${dashboard_url}" \
+            '' \
+            'This build includes EAS-injected Google Maps native configuration and the in-app Checkout handoff fix. Physical Android smoke testing is still required.')"
+          gh pr comment 2 --body "$body"
 
       - name: Publish Android RC failure to PR
         if: failure()
@@ -123,8 +128,10 @@ This build includes EAS-injected Google Maps native configuration and the in-app
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh pr comment 2 --body "### Android RC after native Maps fix — FAILED
-- Source commit: \`${GITHUB_SHA}\`
-- GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-
-The new APK was not approved for physical testing. Check the Google Maps EAS environment gate and the failed RC step before retrying."
+          body="$(printf '%s\n' \
+            '### Android RC after native Maps fix — FAILED' \
+            "- Source commit: \`${GITHUB_SHA}\`" \
+            "- GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '' \
+            'The new APK was not approved for physical testing. Check the Google Maps EAS environment gate and the failed RC step before retrying.')"
+          gh pr comment 2 --body "$body"

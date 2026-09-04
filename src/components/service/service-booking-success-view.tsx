@@ -26,6 +26,7 @@ import {
 } from '../../services/promo-action-service';
 import {
     getServiceBookingById,
+    submitServiceBookingForConfirmation,
     type ServiceBooking,
     type ServiceBookingStatus,
 } from '../../services/service-bookings-service';
@@ -111,7 +112,7 @@ function getStatusCopy(
       return {
         title: 'جاري تسجيل الحجز',
         description:
-          'تم حفظ حجزك وجاري تسجيل تأكيد واتساب.',
+          'تم حفظ حجزك وسيحاول التطبيق إرساله للمراجعة تلقائيًا.',
       };
     case 'waiting-confirmation':
       return {
@@ -213,7 +214,7 @@ export default function ServiceBookingSuccess({
           setIsLoading(true);
         }
 
-        const latestBooking =
+        let latestBooking =
           await getServiceBookingById(
             serviceBookingId,
           );
@@ -225,8 +226,30 @@ export default function ServiceBookingSuccess({
           return;
         }
 
+        let submissionError:
+          string | null = null;
+
+        if (
+          latestBooking.status ===
+          'awaiting-whatsapp-send'
+        ) {
+          try {
+            latestBooking =
+              await submitServiceBookingForConfirmation(
+                latestBooking.id,
+              );
+          } catch (error) {
+            submissionError =
+              error instanceof Error
+                ? error.message
+                : 'تعذر إرسال الحجز للمراجعة.';
+          }
+        }
+
         setBooking(latestBooking);
-        setRefreshError(null);
+        setRefreshError(
+          submissionError,
+        );
       } catch (error) {
         setRefreshError(
           error instanceof Error

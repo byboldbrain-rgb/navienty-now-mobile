@@ -38,18 +38,14 @@ import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
-const CATEGORY_ROWS = 3;
-const CATEGORY_COLUMNS_PER_VIEW = 3;
+const CATEGORY_COLUMNS_PER_ROW = 4;
 const CATEGORY_HORIZONTAL_PADDING = 16;
 const CATEGORY_COLUMN_GAP = 7;
-const CATEGORY_MIN_COLUMN_WIDTH = 85;
-const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
-const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
 
 /**
  * Local bookstore category artwork.
  *
- * Put your PNG images inside:
+ * Put your category images inside:
  * assets/images/bookstore-categories/
  *
  * Keep each filename exactly the same as its category slug below.
@@ -86,13 +82,134 @@ const BOOKSTORE_CATEGORY_IMAGES: Partial<
   'pencil-cases-bags': require(
     '../../../assets/images/bookstore-categories/pencil-cases-bags.webp',
   ),
+  'cups-cans': require(
+    '../../../assets/images/bookstore-categories/cups-cans.webp',
+  ),
+  flowers: require(
+    '../../../assets/images/bookstore-categories/flowers.webp',
+  ),
 };
+
+type BookstoreCategoryDefinition = {
+  key: string;
+  label: string;
+  aliases: string[];
+};
+
+/**
+ * The exact order shown in the bookstore category rail.
+ * The first item is positioned at the far-right edge.
+ */
+const BOOKSTORE_CATEGORIES: BookstoreCategoryDefinition[] = [
+  {
+    key: 'writing-tools',
+    label: 'أدوات الكتابة',
+    aliases: [
+      'writing-tools',
+      'pens-writing-tools',
+      'pens-and-writing-tools',
+      'أدوات الكتابة',
+      'ادوات الكتابة',
+      'أقلام وادوات كتابة',
+      'اقلام وادوات كتابة',
+    ],
+  },
+  {
+    key: 'art-supplies',
+    label: 'رسم وفنون',
+    aliases: [
+      'art-supplies',
+      'drawing-art',
+      'drawing-and-art',
+      'art-drawing',
+      'رسم وفنون',
+      'الرسم والفنون',
+    ],
+  },
+  {
+    key: 'notebooks',
+    label: 'كراسات ونوت بوك',
+    aliases: [
+      'notebooks',
+      'notebooks-copybooks',
+      'notebooks-and-copybooks',
+      'copybooks-notebooks',
+      'كراسات ونوت بوك',
+      'الكراسات والنوت بوك',
+    ],
+  },
+  {
+    key: 'geometry-tools',
+    label: 'أدوات هندسية',
+    aliases: [
+      'geometry-tools',
+      'geometric-tools',
+      'engineering-tools',
+      'geometry-and-engineering-tools',
+      'أدوات هندسية',
+      'ادوات هندسية',
+      'الأدوات الهندسية',
+    ],
+  },
+  {
+    key: 'printing-paper',
+    label: 'طباعة أوراق',
+    aliases: [
+      'printing-paper',
+      'paper-printing',
+      'printing-and-paper',
+      'printing-papers',
+      'طباعة أوراق',
+      'طباعة اوراق',
+      'الطباعة والأوراق',
+    ],
+  },
+  {
+    key: 'cups-cans',
+    label: 'أكواب ومعلبات',
+    aliases: [
+      'cups-cans',
+      'cups-and-cans',
+      'mugs-cans',
+      'mugs-and-cans',
+      'cups',
+      'mugs',
+      'أكواب ومعلبات',
+      'اكواب ومعلبات',
+    ],
+  },
+  {
+    key: 'pencil-cases-bags',
+    label: 'مقالم وشنط',
+    aliases: [
+      'pencil-cases-bags',
+      'pencil-cases-and-bags',
+      'pencil-cases',
+      'school-bags',
+      'مقالم وشنط',
+      'المقالم والشنط',
+    ],
+  },
+  {
+    key: 'flowers',
+    label: 'ورد',
+    aliases: [
+      'flowers',
+      'flower',
+      'roses',
+      'rose',
+      'ورد',
+      'زهور',
+    ],
+  },
+];
 
 type CategoryDisplayItem = {
   key: string;
+  slug: string;
   label: string;
   imageSource: ImageSourcePropType | null;
-  section: CatalogSection;
+  section: CatalogSection | null;
 };
 
 type ResolvedPromotionBanner =
@@ -182,36 +299,152 @@ function formatCartMoney(
 function makeCategoryColumns(
   categories: CategoryDisplayItem[],
 ) {
+  const rowCount = Math.ceil(
+    categories.length /
+      CATEGORY_COLUMNS_PER_ROW,
+  );
   const columns: CategoryDisplayItem[][] = [];
 
   for (
-    let index = 0;
-    index < categories.length;
-    index += CATEGORY_ROWS
+    let columnIndex = 0;
+    columnIndex < CATEGORY_COLUMNS_PER_ROW;
+    columnIndex += 1
   ) {
-    columns.push(
-      categories.slice(
-        index,
-        index + CATEGORY_ROWS,
-      ),
-    );
+    const column: CategoryDisplayItem[] = [];
+
+    for (
+      let rowIndex = 0;
+      rowIndex < rowCount;
+      rowIndex += 1
+    ) {
+      const item =
+        categories[
+          rowIndex *
+            CATEGORY_COLUMNS_PER_ROW +
+            columnIndex
+        ];
+
+      if (item) {
+        column.push(item);
+      }
+    }
+
+    if (column.length > 0) {
+      columns.push(column);
+    }
   }
 
   return columns;
 }
 
+function normalizeCategoryValue(
+  value: string | null | undefined,
+) {
+  return (value ?? '')
+    .trim()
+    .toLocaleLowerCase('ar')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/&/g, 'and')
+    .replace(
+      /[^a-z0-9\u0600-\u06ff]+/g,
+      '-',
+    )
+    .replace(/^-+|-+$/g, '');
+}
+
+function findBookstoreCategorySection(
+  definition: BookstoreCategoryDefinition,
+  sections: CatalogSection[],
+) {
+  const acceptedValues = new Set(
+    [
+      definition.key,
+      definition.label,
+      ...definition.aliases,
+    ].map(normalizeCategoryValue),
+  );
+
+  return (
+    sections.find((section) =>
+      [
+        section.slug,
+        section.name,
+        section.nameEn,
+      ].some((value) =>
+        acceptedValues.has(
+          normalizeCategoryValue(value),
+        ),
+      ),
+    ) ?? null
+  );
+}
+
 function getBookstoreCategoryFallbackIcon(
-  section: CatalogSection,
+  item: CategoryDisplayItem,
 ) {
   const searchableValue = [
-    section.slug,
-    section.name,
-    section.nameEn ?? '',
+    item.key,
+    item.slug,
+    item.label,
+    item.section?.slug ?? '',
+    item.section?.name ?? '',
+    item.section?.nameEn ?? '',
   ]
     .join(' ')
     .toLowerCase();
 
   const rules: Array<[string[], string]> = [
+    [
+      [
+        'flower',
+        'flowers',
+        'rose',
+        'roses',
+        'ورد',
+        'زهور',
+      ],
+      '💐',
+    ],
+    [
+      [
+        'cup',
+        'cups',
+        'mug',
+        'mugs',
+        'can',
+        'cans',
+        'كوب',
+        'أكواب',
+        'اكواب',
+        'معلبات',
+      ],
+      '☕',
+    ],
+    [
+      [
+        'pencil-case',
+        'pencil-cases',
+        'school-bag',
+        'school-bags',
+        'مقلمة',
+        'مقالم',
+        'شنطة',
+        'شنط',
+      ],
+      '🎒',
+    ],
+    [
+      [
+        'geometry',
+        'geometric',
+        'engineering-tools',
+        'هندسية',
+        'هندسيه',
+      ],
+      '📐',
+    ],
     [
       [
         'book',
@@ -1128,11 +1361,24 @@ function ClosedBookstoreExperience({
 
 function CategoryVisual({
   item,
+  size,
 }: {
   item: CategoryDisplayItem;
+  size: number;
 }) {
   return (
-    <View style={styles.categoryImageBox}>
+    <View
+      style={[
+        styles.categoryImageBox,
+        {
+          borderRadius: Math.round(
+            size * 0.16,
+          ),
+          height: size,
+          width: size,
+        },
+      ]}
+    >
       {item.imageSource ? (
         <Image
           source={item.imageSource}
@@ -1142,7 +1388,7 @@ function CategoryVisual({
       ) : (
         <Text style={styles.categoryFallbackIcon}>
           {getBookstoreCategoryFallbackIcon(
-            item.section,
+            item,
           )}
         </Text>
       )}
@@ -1298,19 +1544,8 @@ export default function BookstoreScreen() {
   const { width: windowWidth } =
     useWindowDimensions();
 
-  const categoryScrollX = useRef(
-    new Animated.Value(0),
-  ).current;
-
-  const [
-    categoryViewportWidth,
-    setCategoryViewportWidth,
-  ] = useState(0);
-
-  const [
-    categoryContentWidth,
-    setCategoryContentWidth,
-  ] = useState(0);
+  const categoryScrollRef =
+    useRef<ScrollView | null>(null);
 
   const [catalog, setCatalog] =
     useState<StoreCatalog | null>(null);
@@ -1447,61 +1682,43 @@ export default function BookstoreScreen() {
               section.parentId === null,
           );
 
-    return [...rootSections]
-      .filter((section) =>
-        Boolean(
-          BOOKSTORE_CATEGORY_IMAGES[
-            section.slug
-          ],
-        ),
-      )
-      .sort((first, second) => {
-        if (
-          first.sortOrder !== second.sortOrder
-        ) {
-          return first.sortOrder - second.sortOrder;
-        }
+    return BOOKSTORE_CATEGORIES.map(
+      (definition) => {
+        const section =
+          findBookstoreCategorySection(
+            definition,
+            rootSections,
+          );
 
-        return first.name.localeCompare(
-          second.name,
-          'ar',
-        );
-      })
-      .map((section) => ({
-        key: section.id,
-        label: section.name,
-        imageSource:
-          BOOKSTORE_CATEGORY_IMAGES[
-            section.slug
-          ] ?? null,
-        section,
-      }));
+        return {
+          key:
+            section?.id ??
+            definition.key,
+          slug:
+            section?.slug ??
+            definition.key,
+          label: definition.label,
+          imageSource:
+            BOOKSTORE_CATEGORY_IMAGES[
+              definition.key
+            ] ??
+            BOOKSTORE_CATEGORY_IMAGES[
+              section?.slug ?? ''
+            ] ??
+            null,
+          section,
+        };
+      },
+    );
   }, [catalog]);
 
   const categoryColumns = useMemo(
-    () => makeCategoryColumns(categories),
+    () =>
+      makeCategoryColumns(
+        categories,
+      ).reverse(),
     [categories],
   );
-
-  const categoryMaxScroll = Math.max(
-    categoryContentWidth -
-      categoryViewportWidth,
-    1,
-  );
-
-  const categoryIndicatorTravel =
-    CATEGORY_INDICATOR_TRACK_WIDTH -
-    CATEGORY_INDICATOR_THUMB_WIDTH;
-
-  const categoryIndicatorTranslateX =
-    categoryScrollX.interpolate({
-      inputRange: [0, categoryMaxScroll],
-      outputRange: [
-        0,
-        categoryIndicatorTravel,
-      ],
-      extrapolate: 'clamp',
-    });
 
   const catalogProductsById = useMemo(() => {
     const productsById =
@@ -1556,33 +1773,19 @@ export default function BookstoreScreen() {
     560,
   );
 
-  /*
-   * Spread the visible category columns across the full page width.
-   * With the current 9 categories we have 3 columns × 3 rows,
-   * so the three columns fill the viewport instead of collecting
-   * on one side and leaving a large empty area.
-   *
-   * If more categories are added later, every viewport still shows
-   * three evenly spaced columns and horizontal scrolling keeps working.
-   */
-  const categoryColumnsPerViewport = Math.min(
-    CATEGORY_COLUMNS_PER_VIEW,
-    Math.max(categoryColumns.length, 1),
-  );
-
   const categoryColumnWidth = Math.max(
-    CATEGORY_MIN_COLUMN_WIDTH,
-    (
-      pageWidth -
+    1,
+    (pageWidth -
       CATEGORY_HORIZONTAL_PADDING * 2 -
       CATEGORY_COLUMN_GAP *
-        (categoryColumnsPerViewport - 1)
-    ) / categoryColumnsPerViewport,
+        (CATEGORY_COLUMNS_PER_ROW - 1)) /
+      CATEGORY_COLUMNS_PER_ROW,
   );
 
-  const hasCategoryHorizontalScroll =
-    categoryContentWidth >
-    categoryViewportWidth + 1;
+  const categoryImageSize = Math.max(
+    54,
+    Math.min(80, categoryColumnWidth - 5),
+  );
 
   const featuredCardWidth = Math.min(
     116,
@@ -1693,7 +1896,7 @@ export default function BookstoreScreen() {
     router.push({
       pathname: '/bookstore-category/[slug]',
       params: {
-        slug: item.section.slug,
+        slug: item.slug,
         storeId: currentStore.id,
         categoryKey: item.key,
         label: item.label,
@@ -1876,101 +2079,75 @@ export default function BookstoreScreen() {
             </Text>
 
             {categoryColumns.length > 0 ? (
-              <>
-                <Animated.ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  scrollEventThrottle={16}
-                  contentContainerStyle={
-                    styles.categoriesRail
-                  }
-                  onLayout={(event) => {
-                    setCategoryViewportWidth(
-                      event.nativeEvent.layout.width,
-                    );
-                  }}
-                  onContentSizeChange={(width) => {
-                    setCategoryContentWidth(width);
-                  }}
-                  onScroll={Animated.event(
-                    [
+              <ScrollView
+                horizontal
+                key="bookstore-categories-supermarket-style"
+                ref={categoryScrollRef}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={
+                  styles.categoriesRail
+                }
+                style={styles.categoriesScroll}
+                onContentSizeChange={() => {
+                  requestAnimationFrame(() => {
+                    categoryScrollRef.current?.scrollToEnd(
                       {
-                        nativeEvent: {
-                          contentOffset: {
-                            x: categoryScrollX,
-                          },
-                        },
+                        animated: false,
                       },
-                    ],
-                    { useNativeDriver: true },
-                  )}
-                >
-                  {categoryColumns.map(
-                    (column, columnIndex) => (
-                      <View
-                        key={`bookstore-category-column-${columnIndex}`}
-                        style={[
-                          styles.categoryColumn,
-                          {
-                            width:
-                              categoryColumnWidth,
-                          },
-                        ]}
-                      >
-                        {column.map((item) => (
-                          <Pressable
-                            key={item.key}
-                            style={({ pressed }) => [
-                              styles.categoryItem,
-                              pressed &&
-                                styles.categoryItemPressed,
-                            ]}
-                            onPress={() =>
-                              openCategory(item)
-                            }
-                          >
-                            <CategoryVisual
-                              item={item}
-                            />
-                            <Text
-                              style={
-                                styles.categoryLabel
-                              }
-                              numberOfLines={2}
-                            >
-                              {item.label}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    ),
-                  )}
-                </Animated.ScrollView>
-
-                {hasCategoryHorizontalScroll ? (
-                  <View
-                    style={styles.categoryPagination}
-                  >
-                    <Animated.View
+                    );
+                  });
+                }}
+              >
+                {categoryColumns.map(
+                  (column, columnIndex) => (
+                    <View
+                      key={`bookstore-category-column-${columnIndex}`}
                       style={[
-                        styles.categoryPaginationActive,
+                        styles.categoryColumn,
                         {
-                          transform: [
-                            {
-                              translateX:
-                                categoryIndicatorTranslateX,
-                            },
-                          ],
+                          width:
+                            categoryColumnWidth,
                         },
                       ]}
-                    />
-                  </View>
-                ) : (
-                  <View
-                    style={styles.categoryPaginationSpacer}
-                  />
+                    >
+                      {column.map((item) => (
+                        <Pressable
+                          key={item.key}
+                          style={({ pressed }) => [
+                            styles.categoryItem,
+                            {
+                              width:
+                                categoryColumnWidth,
+                            },
+                            pressed &&
+                              styles.categoryItemPressed,
+                          ]}
+                          onPress={() =>
+                            openCategory(item)
+                          }
+                        >
+                          <CategoryVisual
+                            item={item}
+                            size={categoryImageSize}
+                          />
+                          <Text
+                            style={[
+                              styles.categoryLabel,
+                              {
+                                width:
+                                  categoryColumnWidth,
+                              },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {item.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ),
                 )}
-              </>
+              </ScrollView>
             ) : (
               <View style={styles.emptyCategories}>
                 <Text
@@ -2196,6 +2373,7 @@ const styles = StyleSheet.create({
   },
   categoriesSection: {
     backgroundColor: '#FFFFFF',
+    paddingBottom: 22,
     paddingTop: 1,
   },
   categoriesTitle: {
@@ -2206,8 +2384,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     paddingHorizontal: 16,
   },
+  categoriesScroll: {
+    direction: 'ltr',
+  },
   categoriesRail: {
+    direction: 'ltr',
+    flexDirection: 'row',
+    flexGrow: 1,
     gap: CATEGORY_COLUMN_GAP,
+    justifyContent: 'flex-end',
     paddingHorizontal:
       CATEGORY_HORIZONTAL_PADDING,
   },
@@ -2217,7 +2402,6 @@ const styles = StyleSheet.create({
   },
   categoryItem: {
     alignItems: 'center',
-    width: 85,
   },
   categoryItemPressed: {
     opacity: 0.68,
@@ -2226,11 +2410,8 @@ const styles = StyleSheet.create({
   categoryImageBox: {
     alignItems: 'center',
     backgroundColor: '#F5F5F5',
-    borderRadius: 13,
-    height: 80,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 80,
   },
   categoryImage: {
     height: '100%',
@@ -2249,32 +2430,6 @@ const styles = StyleSheet.create({
     minHeight: 36,
     textAlign: 'center',
     writingDirection: 'rtl',
-    width: 85,
-  },
-  categoryPagination: {
-    alignSelf: 'center',
-    backgroundColor: '#E6E6E6',
-    borderRadius: 3,
-    height: 5,
-    marginBottom: 22,
-    marginTop: 18,
-    overflow: 'hidden',
-    position: 'relative',
-    width: CATEGORY_INDICATOR_TRACK_WIDTH,
-  },
-  categoryPaginationActive: {
-    backgroundColor: '#151515',
-    borderRadius: 3,
-    height: 5,
-    left: 0,
-    position: 'absolute',
-    top: 0,
-    width: CATEGORY_INDICATOR_THUMB_WIDTH,
-  },
-  categoryPaginationSpacer: {
-    height: 5,
-    marginBottom: 22,
-    marginTop: 18,
   },
   emptyCategories: {
     alignItems: 'center',

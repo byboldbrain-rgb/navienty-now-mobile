@@ -1,9 +1,13 @@
+import {
+  isV1PublicCategorySlug,
+  V1_UNAVAILABLE_CATEGORY_MESSAGE,
+} from '../config/v1-release-scope';
 import { publicSupabase } from '../lib/supabase';
 
 export type StoreCategorySlug =
   | 'restaurants'
   | 'supermarket'
-  | 'pharmacy'
+  | 'personal-care'
   | 'bookstore'
   | 'bookstores';
 
@@ -94,7 +98,7 @@ export type StoreSummary = {
   slug: string;
 
   categoryId: string;
-  categorySlug: StoreCategorySlug;
+  categorySlug: string;
   categoryName: string;
   categorySubtitle: string;
 
@@ -165,11 +169,6 @@ export type CatalogProduct = {
    */
   catalogCategoryId: string;
 
-  productType:
-    | 'food'
-    | 'grocery'
-    | 'pharmacy';
-
   name: string;
   nameEn: string | null;
 
@@ -199,7 +198,6 @@ export type CatalogProduct = {
     | string
     | null;
 
-  requiresPrescription: boolean;
   isAgeRestricted: boolean;
 
   variants: ProductVariant[];
@@ -274,7 +272,7 @@ export type StoreDetails = {
   slug: string;
 
   categoryId: string;
-  categorySlug: StoreCategorySlug;
+  categorySlug: string;
   categoryName: string;
   categorySubtitle: string;
 
@@ -429,8 +427,7 @@ type RawStoreSummary = {
 
   category_id: string;
 
-  category_slug:
-    StoreCategorySlug;
+  category_slug: string;
 
   category_name_ar: string;
 
@@ -530,11 +527,6 @@ type RawCatalogProduct = {
   id: string;
   slug: string;
 
-  product_type:
-    | 'food'
-    | 'grocery'
-    | 'pharmacy';
-
   name_ar: string;
 
   name_en:
@@ -578,8 +570,6 @@ type RawCatalogProduct = {
   image_url:
     | string
     | null;
-
-  requires_prescription: boolean;
 
   is_age_restricted: boolean;
 
@@ -647,8 +637,7 @@ type RawStoreCatalog = {
 
     category_id: string;
 
-    category_slug:
-      StoreCategorySlug;
+    category_slug: string;
 
     category_name_ar: string;
 
@@ -927,9 +916,6 @@ function mapCatalogProduct(
 
     catalogCategoryId,
 
-    productType:
-      product.product_type,
-
     name:
       product.name_ar,
 
@@ -971,9 +957,6 @@ function mapCatalogProduct(
 
     imageUrl:
       product.image_url,
-
-    requiresPrescription:
-      product.requires_prescription,
 
     isAgeRestricted:
       product.is_age_restricted,
@@ -1789,11 +1772,25 @@ function filterStoresByCategory(
       ),
     );
 
-  return stores.filter((store) =>
-    categoryAliases.has(
-      normalizeSlug(
+  return stores.filter(
+    (store) =>
+      isV1PublicCategorySlug(
         store.categorySlug,
+      ) &&
+      categoryAliases.has(
+        normalizeSlug(
+          store.categorySlug,
+        ),
       ),
+  );
+}
+
+function filterV1PublicStores(
+  stores: StoreSummary[],
+): StoreSummary[] {
+  return stores.filter((store) =>
+    isV1PublicCategorySlug(
+      store.categorySlug,
     ),
   );
 }
@@ -1858,8 +1855,10 @@ async function loadStoresFromSupabase(
     primaryRows.length > 0 ||
     !options.categorySlug
   ) {
-    return primaryRows.map(
-      mapStoreSummary,
+    return filterV1PublicStores(
+      primaryRows.map(
+        mapStoreSummary,
+      ),
     );
   }
 
@@ -1918,10 +1917,12 @@ async function loadStoresFromSupabase(
   }
 
   const fallbackStores =
-    (
-      fallbackResult.data as RawStoreSummary[]
-    ).map(
-      mapStoreSummary,
+    filterV1PublicStores(
+      (
+        fallbackResult.data as RawStoreSummary[]
+      ).map(
+        mapStoreSummary,
+      ),
     );
 
   writeTimedCache(
@@ -1946,6 +1947,15 @@ export async function listStores(
       StoreCategorySlug;
   } = {},
 ): Promise<StoreSummary[]> {
+  if (
+    options.categorySlug &&
+    !isV1PublicCategorySlug(
+      options.categorySlug,
+    )
+  ) {
+    return [];
+  }
+
   const cacheKey =
     getStoreListCacheKey(options);
 
@@ -2242,6 +2252,20 @@ export async function getStoreCatalog(
     );
 
   if (cachedCatalog) {
+    if (
+      !isV1PublicCategorySlug(
+        cachedCatalog.store.categorySlug,
+      )
+    ) {
+      storeCatalogCache.delete(
+        cacheKey,
+      );
+
+      throw new Error(
+        V1_UNAVAILABLE_CATEGORY_MESSAGE,
+      );
+    }
+
     return cachedCatalog;
   }
 
@@ -2259,6 +2283,16 @@ export async function getStoreCatalog(
       normalizedStoreId,
       normalizedServiceAreaId,
     ).then((catalog) => {
+      if (
+        !isV1PublicCategorySlug(
+          catalog.store.categorySlug,
+        )
+      ) {
+        throw new Error(
+          V1_UNAVAILABLE_CATEGORY_MESSAGE,
+        );
+      }
+
       writeTimedCache(
         storeCatalogCache,
         cacheKey,

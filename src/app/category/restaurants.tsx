@@ -1,644 +1,58 @@
-import { Image as ExpoImage } from 'expo-image';
-import { useRouter } from 'expo-router';
 import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
+import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import {
-  Animated,
+  FlatList,
   Image,
-  type ImageSourcePropType,
   Modal,
-  PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
+  type ListRenderItemInfo,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RestaurantsScreenSkeleton } from '../../components/ui/loading-skeleton';
-import getAppBootstrap, {
-  type AppBootstrap,
-} from '../../services/bootstrap-service';
+import { CuisinesModal } from '../../features/restaurants/cuisines-modal';
+import { RestaurantCard } from '../../features/restaurants/restaurant-card';
 import {
-  listStores,
-  type StoreSummary,
-} from '../../services/catalog-service';
+  type CuisineItem,
+  type CuisineKey,
+  getCuisineKeyFromRouteParam,
+  getVisibleRestaurants,
+  PREVIEW_CUISINES,
+  VIEW_ALL_CUISINE,
+} from '../../features/restaurants/restaurants-domain';
+import { useRestaurantsData } from '../../features/restaurants/use-restaurants-data';
+import type { StoreSummary } from '../../services/catalog-service';
 import { useCustomerStore } from '../../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
   NAVIENTY_NOW_LAYOUT,
 } from '../../theme/navienty-now-theme';
 
-type BootstrapCategory =
-  AppBootstrap['store_categories'][number] & {
-    subtitle_ar?: string | null;
-  };
-
-type CuisineItem = {
-  key: string;
-  label: string;
-  image: ImageSourcePropType;
-  keywords: string[];
-};
-
-/**
- * ÙŠØ¯Ø¹Ù… Ø£Ø³Ù…Ø§Ø¡ Ø§Ù„Ø­Ù‚ÙˆÙ„ Ø§Ù„Ù…Ø®ØªÙ„ÙØ© Ø§Ù„ØªÙŠ Ù‚Ø¯ ØªØ£ØªÙŠ
- * Ù…Ù† catalog-service Ø£Ùˆ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª.
- */
-type StoreRatingFields = {
-  averageRating?: number | null;
-  average_rating?: number | null;
-
-  ratingCount?: number | null;
-  ratingsCount?: number | null;
-  reviewCount?: number | null;
-  reviewsCount?: number | null;
-  totalRatings?: number | null;
-  totalReviews?: number | null;
-
-  rating_count?: number | null;
-  ratings_count?: number | null;
-  review_count?: number | null;
-  reviews_count?: number | null;
-  total_ratings?: number | null;
-  total_reviews?: number | null;
-
-  hasRatings?: boolean | null;
-  hasReviews?: boolean | null;
-  has_ratings?: boolean | null;
-  has_reviews?: boolean | null;
-};
-
-type StoreVisualFields = {
-  logoUrl?: string | null;
-  logo_url?: string | null;
-  coverImageUrl?: string | null;
-  cover_image_url?: string | null;
-};
-
-type StoreRatingInfo = {
-  hasRatings: boolean;
-  rating: number | null;
-};
-
-const RESTAURANTS_SLUG = 'restaurants';
-
-const CUISINES: CuisineItem[] = [
-  {
-    key: 'arabic',
-    label: 'Ø£ÙƒÙ„ Ø¹Ø±Ø¨ÙŠ',
-    image: require('../../assets/cuisines/arabic.webp'),
-    keywords: [
-      'Ø¹Ø±Ø¨ÙŠ',
-      'Ø´Ø§Ù…ÙŠ',
-      'Ø³ÙˆØ±ÙŠ',
-      'Ù„Ø¨Ù†Ø§Ù†ÙŠ',
-    ],
-  },
-  {
-    key: 'arabic-sweets',
-    label: 'Ø­Ù„ÙˆÙŠØ§Øª Ø´Ø±Ù‚ÙŠØ©',
-    image: require('../../assets/cuisines/arabic-sweets.webp'),
-    keywords: [
-      'Ø­Ù„ÙˆÙŠØ§Øª Ø´Ø±Ù‚ÙŠØ©',
-      'Ø¨Ù‚Ù„Ø§ÙˆØ©',
-      'ÙƒÙ†Ø§ÙØ©',
-    ],
-  },
-  {
-    key: 'bakery',
-    label: 'Ù…Ø®Ø¨ÙˆØ²Ø§Øª',
-    image: require('../../assets/cuisines/bakery.webp'),
-    keywords: [
-      'Ù…Ø®Ø¨ÙˆØ²Ø§Øª',
-      'Ù…Ø®Ø¨Ø²',
-      'Ø¨Ø§ØªÙŠÙ‡',
-      'ÙƒØ±ÙˆØ§Ø³ÙˆÙ†',
-    ],
-  },
-  {
-    key: 'beverages',
-    label: 'Ù…Ø´Ø±ÙˆØ¨Ø§Øª',
-    image: require('../../assets/cuisines/beverages.webp'),
-    keywords: [
-      'Ù…Ø´Ø±ÙˆØ¨Ø§Øª',
-      'Ø¹ØµÙŠØ±',
-      'ÙƒÙˆÙƒØªÙŠÙ„',
-    ],
-  },
-  {
-    key: 'breakfast',
-    label: 'ÙØ·Ø§Ø±',
-    image: require('../../assets/cuisines/breakfast.webp'),
-    keywords: [
-      'ÙØ·Ø§Ø±',
-      'Ø¥ÙØ·Ø§Ø±',
-      'Ø¨ÙŠØ¶',
-    ],
-  },
-  {
-    key: 'burgers',
-    label: 'Ø¨Ø±Ø¬Ø±',
-    image: require('../../assets/cuisines/burgers.webp'),
-    keywords: [
-      'Ø¨Ø±Ø¬Ø±',
-      'burger',
-    ],
-  },
-  {
-    key: 'cakes',
-    label: 'ÙƒÙŠÙƒ',
-    image: require('../../assets/cuisines/cakes.webp'),
-    keywords: [
-      'ÙƒÙŠÙƒ',
-      'ØªÙˆØ±ØªØ©',
-      'cake',
-    ],
-  },
-  {
-    key: 'chicken',
-    label: 'ÙØ±Ø§Ø®',
-    image: require('../../assets/cuisines/chicken.webp'),
-    keywords: [
-      'ÙØ±Ø§Ø®',
-      'Ø¯Ø¬Ø§Ø¬',
-      'chicken',
-    ],
-  },
-  {
-    key: 'chocolate',
-    label: 'Ø´ÙˆÙƒÙˆÙ„Ø§ØªØ©',
-    image: require('../../assets/cuisines/chocolate.webp'),
-    keywords: [
-      'Ø´ÙˆÙƒÙˆÙ„Ø§ØªØ©',
-      'chocolate',
-    ],
-  },
-  {
-    key: 'coffee',
-    label: 'Ù‚Ù‡ÙˆØ© ÙˆØ´Ø§ÙŠ',
-    image: require('../../assets/cuisines/coffee.webp'),
-    keywords: [
-      'Ù‚Ù‡ÙˆØ©',
-      'Ø´Ø§ÙŠ',
-      'ÙƒØ§ÙÙŠÙ‡',
-      'coffee',
-    ],
-  },
-  {
-    key: 'crepes',
-    label: 'ÙƒØ±ÙŠØ¨',
-    image: require('../../assets/cuisines/crepes.webp'),
-    keywords: [
-      'ÙƒØ±ÙŠØ¨',
-      'crepe',
-    ],
-  },
-  {
-    key: 'desserts',
-    label: 'Ø­Ù„ÙˆÙŠØ§Øª',
-    image: require('../../assets/cuisines/desserts.webp'),
-    keywords: [
-      'Ø­Ù„ÙˆÙŠØ§Øª',
-      'Ø¯ÙŠØ³Ø±Øª',
-      'dessert',
-    ],
-  },
-  {
-    key: 'egyptian',
-    label: 'Ø£ÙƒÙ„ Ù…ØµØ±ÙŠ',
-    image: require('../../assets/cuisines/egyptian.webp'),
-    keywords: [
-      'Ù…ØµØ±ÙŠ',
-      'Ø·ÙˆØ§Ø¬Ù†',
-      'Ù…Ø­Ø´ÙŠ',
-    ],
-  },
-  {
-    key: 'fast-food',
-    label: 'ÙˆØ¬Ø¨Ø§Øª Ø³Ø±ÙŠØ¹Ø©',
-    image: require('../../assets/cuisines/fast-food.webp'),
-    keywords: [
-      'ÙˆØ¬Ø¨Ø§Øª Ø³Ø±ÙŠØ¹Ø©',
-      'fast food',
-    ],
-  },
-  {
-    key: 'foul-falafel',
-    label: 'ÙÙˆÙ„ ÙˆØ·Ø¹Ù…ÙŠØ©',
-    image: require('../../assets/cuisines/foul-falafel.webp'),
-    keywords: [
-      'ÙÙˆÙ„',
-      'Ø·Ø¹Ù…ÙŠØ©',
-      'ÙÙ„Ø§ÙÙ„',
-    ],
-  },
-  {
-    key: 'fried-chicken',
-    label: 'ÙØ±Ø§Ø® Ù…Ù‚Ù„ÙŠØ©',
-    image: require('../../assets/cuisines/fried-chicken.webp'),
-    keywords: [
-      'ÙØ±Ø§Ø® Ù…Ù‚Ù„ÙŠØ©',
-      'Ø¨Ø±ÙˆØ³Øª',
-      'fried chicken',
-    ],
-  },
-  {
-    key: 'grills',
-    label: 'Ù…Ø´ÙˆÙŠØ§Øª',
-    image: require('../../assets/cuisines/grills.webp'),
-    keywords: [
-      'Ù…Ø´ÙˆÙŠØ§Øª',
-      'ÙƒØ¨Ø§Ø¨',
-      'ÙƒÙØªØ©',
-      'grill',
-    ],
-  },
-  {
-    key: 'healthy',
-    label: 'Ø£ÙƒÙ„ ØµØ­ÙŠ',
-    image: require('../../assets/cuisines/healthy.webp'),
-    keywords: [
-      'ØµØ­ÙŠ',
-      'Ø¯Ø§ÙŠØª',
-      'Ø³Ù„Ø·Ø©',
-      'healthy',
-    ],
-  },
-  {
-    key: 'koshary',
-    label: 'ÙƒØ´Ø±ÙŠ',
-    image: require('../../assets/cuisines/koshary.webp'),
-    keywords: [
-      'ÙƒØ´Ø±ÙŠ',
-      'koshary',
-    ],
-  },
-  {
-    key: 'pasta',
-    label: 'Ù…ÙƒØ±ÙˆÙ†Ø©',
-    image: require('../../assets/cuisines/pasta.webp'),
-    keywords: [
-      'Ù…ÙƒØ±ÙˆÙ†Ø©',
-      'Ø¨Ø§Ø³ØªØ§',
-      'pasta',
-    ],
-  },
-  {
-    key: 'pies',
-    label: 'ÙØ·ÙŠØ±',
-    image: require('../../assets/cuisines/pies.webp'),
-    keywords: [
-      'ÙØ·ÙŠØ±',
-      'ÙØ·Ø§Ø¦Ø±',
-      'pie',
-    ],
-  },
-  {
-    key: 'pizza',
-    label: 'Ø¨ÙŠØªØ²Ø§',
-    image: require('../../assets/cuisines/pizza.webp'),
-    keywords: [
-      'Ø¨ÙŠØªØ²Ø§',
-      'pizza',
-    ],
-  },
-  {
-    key: 'sandwiches',
-    label: 'Ø³Ø§Ù†Ø¯ÙˆØªØ´Ø§Øª',
-    image: require('../../assets/cuisines/sandwiches.webp'),
-    keywords: [
-      'Ø³Ø§Ù†Ø¯ÙˆØªØ´',
-      'Ø³Ù†Ø¯ÙˆØªØ´',
-      'sandwich',
-    ],
-  },
-  {
-    key: 'seafood',
-    label: 'Ù…Ø£ÙƒÙˆÙ„Ø§Øª Ø¨Ø­Ø±ÙŠØ©',
-    image: require('../../assets/cuisines/seafood.webp'),
-    keywords: [
-      'Ø³Ù…Ùƒ',
-      'Ø³ÙŠ ÙÙˆØ¯',
-      'Ù…Ø£ÙƒÙˆÙ„Ø§Øª Ø¨Ø­Ø±ÙŠØ©',
-      'seafood',
-    ],
-  },
-  {
-    key: 'shawarma',
-    label: 'Ø´Ø§ÙˆØ±Ù…Ø§',
-    image: require('../../assets/cuisines/shawarma.webp'),
-    keywords: [
-      'Ø´Ø§ÙˆØ±Ù…Ø§',
-      'shawarma',
-    ],
-  },
-];
-
-const PREVIEW_CUISINE_KEYS = [
-  'grills',
-  'desserts',
-  'sandwiches',
-  'crepes',
-  'pizza',
-];
-
-function getStoreSearchText(
-  store: StoreSummary,
-): string {
-  return [
-    store.name,
-    store.description,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLocaleLowerCase('ar');
-}
-
-function getFirstValidNumber(
-  values: Array<
-    number | null | undefined
-  >,
-): number | null {
-  for (const value of values) {
-    if (
-      typeof value === 'number' &&
-      Number.isFinite(value)
-    ) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function getStoreRatingInfo(
-  store: StoreSummary,
-): StoreRatingInfo {
-  const ratingStore =
-    store as StoreSummary &
-      StoreRatingFields;
-
-  const ratingCount =
-    getFirstValidNumber([
-      ratingStore.ratingCount,
-      ratingStore.ratingsCount,
-      ratingStore.reviewCount,
-      ratingStore.reviewsCount,
-      ratingStore.totalRatings,
-      ratingStore.totalReviews,
-
-      ratingStore.rating_count,
-      ratingStore.ratings_count,
-      ratingStore.review_count,
-      ratingStore.reviews_count,
-      ratingStore.total_ratings,
-      ratingStore.total_reviews,
-    ]);
-
-  const rating =
-    getFirstValidNumber([
-      ratingStore.averageRating,
-      ratingStore.average_rating,
-      store.rating,
-    ]);
-
-  const hasExplicitRatingsFlag =
-    ratingStore.hasRatings === true ||
-    ratingStore.hasReviews === true ||
-    ratingStore.has_ratings === true ||
-    ratingStore.has_reviews === true;
-
-  const hasRealRating =
-    rating !== null &&
-    rating > 0 &&
-    rating <= 5 &&
-    (
-      hasExplicitRatingsFlag ||
-      (
-        ratingCount !== null &&
-        ratingCount > 0
-      )
-    );
-
-  if (!hasRealRating) {
-    return {
-      hasRatings: false,
-      rating: null,
-    };
-  }
-
-  return {
-    hasRatings: true,
-    rating,
-  };
-}
-
-function getStoreLogoUrl(
-  store: StoreSummary,
-): string | null {
-  const storeVisual =
-    store as StoreSummary &
-      StoreVisualFields;
-
-  return (
-    storeVisual.logoUrl ??
-    storeVisual.logo_url ??
-    null
-  );
-}
-
-function getStoreCoverUrl(
-  store: StoreSummary,
-): string | null {
-  const storeVisual =
-    store as StoreSummary &
-      StoreVisualFields;
-
-  return (
-    storeVisual.coverImageUrl ??
-    storeVisual.cover_image_url ??
-    null
-  );
-}
-
-function getStoreInitial(
-  store: StoreSummary,
-): string {
-  const source =
-    (store.name || '').trim();
-
-  if (!source) {
-    return 'â€¢';
-  }
-
-  return source.charAt(0);
-}
-
-function prefetchRestaurantImages(
-  stores: StoreSummary[],
-) {
-  const urls = Array.from(
-    new Set(
-      stores
-        .slice(0, 6)
-        .flatMap((store) => [
-          getStoreCoverUrl(store),
-          getStoreLogoUrl(store),
-        ])
-        .filter(
-          (url): url is string =>
-            Boolean(url),
-        ),
-    ),
-  );
-
-  if (urls.length === 0) {
-    return;
-  }
-
-  void ExpoImage.prefetch(
-    urls,
-    'memory-disk',
-  );
-}
-
-function StoreArtwork({
-  priority = 'normal',
-  store,
-}: {
-  priority?: 'high' | 'normal' | 'low';
-  store: StoreSummary;
-}) {
-  const [
-    coverFailed,
-    setCoverFailed,
-  ] = useState(false);
-
-  const [
-    logoFailed,
-    setLogoFailed,
-  ] = useState(false);
-
-  const coverUrl =
-    getStoreCoverUrl(store);
-
-  const logoUrl =
-    getStoreLogoUrl(store);
-
-  const canShowCover =
-    Boolean(coverUrl) &&
-    !coverFailed;
-
-  const canShowLogo =
-    Boolean(logoUrl) &&
-    !logoFailed;
-
-  return (
-    <View style={styles.storeArtwork}>
-      {canShowCover ? (
-        <ExpoImage
-          accessibilityLabel={`ØµÙˆØ±Ø© Ø§Ù„ØºÙ„Ø§Ù Ø§Ù„Ø®Ø§ØµØ© Ø¨Ù€ ${store.name}`}
-          cachePolicy="memory-disk"
-          contentFit="cover"
-          priority={priority}
-          source={coverUrl ?? ''}
-          style={
-            styles.storeCoverImage
-          }
-          transition={120}
-          onError={() => {
-            setCoverFailed(true);
-          }}
-        />
-      ) : (
-        <View
-          style={
-            styles.storeCoverFallback
-          }
-        >
-          <Text
-            style={
-              styles.storeCoverFallbackText
-            }
-          >
-            {getStoreInitial(store)}
-          </Text>
-        </View>
-      )}
-
-      <View
-        style={
-          styles.storeArtworkGradient
-        }
-      />
-
-
-      <View style={styles.logoBadge}>
-        {canShowLogo ? (
-          <ExpoImage
-            accessibilityLabel={`Ù„ÙˆØ¬Ùˆ ${store.name}`}
-            cachePolicy="memory-disk"
-            contentFit="cover"
-            priority={priority}
-            source={logoUrl ?? ''}
-            style={styles.logoImage}
-            transition={100}
-            onError={() => {
-              setLogoFailed(true);
-            }}
-          />
-        ) : (
-          <View
-            style={styles.logoFallback}
-          >
-            <Text
-              style={
-                styles.logoFallbackText
-              }
-            >
-              {getStoreInitial(store)}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {store.isManuallyClosed && (
-        <View
-          style={styles.closedOverlay}
-        >
-          <Text
-            style={
-              styles.closedOverlayText
-            }
-          >
-            Ù…ØºÙ„Ù‚
-          </Text>
-        </View>
-      )}
-    </View>
-  );
-}
+const NAVIGATION_PRESS_GUARD_MS = 700;
 
 function BackArrowIcon() {
   return (
     <View style={styles.backArrowCanvas}>
       <View style={styles.backArrowStem} />
-
       <View
         style={[
           styles.backArrowDiagonal,
           styles.backArrowTop,
         ]}
       />
-
       <View
         style={[
           styles.backArrowDiagonal,
@@ -649,698 +63,51 @@ function BackArrowIcon() {
   );
 }
 
-export default function RestaurantsScreen() {
-  const router = useRouter();
-
-  const savedServiceAreaId =
-    useCustomerStore(
-      (state) =>
-        state.locationServiceAreaId,
-    );
-
-  const [, setCategory] =
-    useState<BootstrapCategory | null>(
-      null,
-    );
-
-  const [stores, setStores] =
-    useState<StoreSummary[]>([]);
-
-  const [
-    selectedCuisineKeys,
-    setSelectedCuisineKeys,
-  ] = useState<string[]>([]);
-
-  const [
-    draftCuisineKeys,
-    setDraftCuisineKeys,
-  ] = useState<string[]>([]);
-
-  const [
-    isCuisinesModalVisible,
-    setIsCuisinesModalVisible,
-  ] = useState(false);
-
-  const [
-    closedStoreNotice,
-    setClosedStoreNotice,
-  ] = useState<StoreSummary | null>(
-    null,
-  );
-
-  const [
-    isLoading,
-    setIsLoading,
-  ] = useState(true);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] = useState<string | null>(null);
-
-  async function loadRestaurants() {
-    try {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      const [
-        bootstrap,
-        loadedStores,
-      ] = await Promise.all([
-        getAppBootstrap(),
-        listStores({
-          categorySlug:
-            RESTAURANTS_SLUG,
-          serviceAreaId:
-            savedServiceAreaId ??
-            undefined,
-        }),
-      ]);
-
-      const loadedCategory =
-        (
-          bootstrap.store_categories as
-            BootstrapCategory[]
-        ).find(
-          (item) =>
-            item.slug ===
-            RESTAURANTS_SLUG,
-        ) ?? null;
-
-      prefetchRestaurantImages(
-        loadedStores,
-      );
-
-      setCategory(loadedCategory);
-      setStores(loadedStores);
-    } catch (error) {
-      setCategory(null);
-      setStores([]);
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'ØªØ¹Ø°Ø± ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ù…Ø·Ø§Ø¹Ù….',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadRestaurants();
-  }, [savedServiceAreaId]);
-
-  const previewCuisines =
-    useMemo(
-      () =>
-        PREVIEW_CUISINE_KEYS.map(
-          (key) =>
-            CUISINES.find(
-              (cuisine) =>
-                cuisine.key === key,
-            ),
-        ).filter(
-          (
-            cuisine,
-          ): cuisine is CuisineItem =>
-            Boolean(cuisine),
-        ),
-      [],
-    );
-
-  const visibleStores =
-    useMemo(() => {
-      const selectedCuisines =
-        CUISINES.filter(
-          (cuisine) =>
-            selectedCuisineKeys.includes(
-              cuisine.key,
-            ),
-        );
-
-      const filtered =
-        stores.filter(
-          (store) => {
-            if (
-              selectedCuisines.length >
-              0
-            ) {
-              const storeSearchText =
-                getStoreSearchText(
-                  store,
-                );
-
-              const matchesCuisine =
-                selectedCuisines.some(
-                  (cuisine) =>
-                    cuisine.keywords.some(
-                      (keyword) =>
-                        storeSearchText.includes(
-                          keyword.toLocaleLowerCase(
-                            'ar',
-                          ),
-                        ),
-                    ),
-                );
-
-              if (!matchesCuisine) {
-                return false;
-              }
-            }
-
-            return true;
-          },
-        );
-
-      return [...filtered].sort(
-        (first, second) => {
-          if (
-            first.isManuallyClosed !==
-            second.isManuallyClosed
-          ) {
-            return first.isManuallyClosed
-              ? 1
-              : -1;
-          }
-
-          if (
-            first.isFeatured !==
-            second.isFeatured
-          ) {
-            return first.isFeatured
-              ? -1
-              : 1;
-          }
-
-          return first.name.localeCompare(
-            second.name,
-            'ar',
-          );
-        },
-      );
-    }, [
-      selectedCuisineKeys,
-      stores,
-    ]);
-
-  function toggleSelectedCuisine(
-    cuisineKey: string,
-  ) {
-    setSelectedCuisineKeys(
-      (currentCuisineKeys) => {
-        const isAlreadySelected =
-          currentCuisineKeys.includes(
-            cuisineKey,
-          );
-
-        if (isAlreadySelected) {
-          return [];
-        }
-
-        return [cuisineKey];
-      },
-    );
-  }
-
-  function openCuisinesModal() {
-    setDraftCuisineKeys(
-      selectedCuisineKeys,
-    );
-
-    setIsCuisinesModalVisible(
-      true,
-    );
-  }
-
-  function closeCuisinesModal() {
-    setIsCuisinesModalVisible(
-      false,
-    );
-  }
-
-  function toggleDraftCuisine(
-    cuisineKey: string,
-  ) {
-    setDraftCuisineKeys(
-      (currentCuisineKeys) => {
-        const isAlreadySelected =
-          currentCuisineKeys.includes(
-            cuisineKey,
-          );
-
-        if (isAlreadySelected) {
-          return [];
-        }
-
-        return [cuisineKey];
-      },
-    );
-  }
-
-  function applyCuisineFilters() {
-    setSelectedCuisineKeys(
-      draftCuisineKeys,
-    );
-
-    setIsCuisinesModalVisible(
-      false,
-    );
-  }
-
-  function resetCuisineFilters() {
-    setDraftCuisineKeys([]);
-  }
-
-  function resetAllFilters() {
-    setSelectedCuisineKeys([]);
-  }
-
-  const hasActiveFilters =
-    selectedCuisineKeys.length >
-    0;
-
-  if (isLoading) {
-    return <RestaurantsScreenSkeleton />;
-  }
-
-  if (errorMessage) {
-    return (
-      <View style={styles.stateScreen}>
-        <Text style={styles.stateIcon}>
-          ğŸ½ï¸
-        </Text>
-
-        <Text style={styles.stateTitle}>
-          ØªØ¹Ø°Ø± ÙØªØ­ Ø§Ù„Ù…Ø·Ø§Ø¹Ù…
-        </Text>
-
-        <Text
-          style={
-            styles.stateDescription
-          }
-        >
-          {errorMessage}
-        </Text>
-
-        <Pressable
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.retryButton,
-            pressed &&
-              styles.pressed,
-          ]}
-          onPress={() => {
-            void loadRestaurants();
-          }}
-        >
-          <Text
-            style={
-              styles.retryButtonText
-            }
-          >
-            Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
-
+function CuisinePreviewItem({
+  active,
+  cuisine,
+  onPress,
+}: {
+  active: boolean;
+  cuisine: Pick<CuisineItem, 'image' | 'label'>;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.screen}>
-      <View style={styles.topHeader}>
-        <Pressable
-          accessibilityLabel="Ø§Ù„Ø¹ÙˆØ¯Ø©"
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed &&
-              styles.headerButtonPressed,
-          ]}
-          onPress={() =>
-            router.back()
-          }
-        >
-          <BackArrowIcon />
-        </Pressable>
+    <Pressable
+      accessibilityLabel={cuisine.label}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [
+        styles.cuisinePreviewItem,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.cuisinePreviewImage,
+          active && styles.cuisinePreviewImageActive,
+        ]}
+      >
+        <Image
+          accessibilityIgnoresInvertColors
+          accessibilityLabel={`ØµÙˆØ±Ø© ${cuisine.label}`}
+          resizeMode="cover"
+          source={cuisine.image}
+          style={styles.cuisinePreviewPhoto}
+        />
       </View>
 
-      <ScrollView
-        contentContainerStyle={
-          styles.pageContent
-        }
-        showsVerticalScrollIndicator={
-          false
-        }
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.cuisinePreviewLabel,
+          active && styles.cuisinePreviewLabelActive,
+        ]}
       >
-        <View style={styles.container}>
-          <ScrollView
-            horizontal
-            contentContainerStyle={
-              styles.cuisinesPreviewContent
-            }
-            showsHorizontalScrollIndicator={
-              false
-            }
-            style={
-              styles.cuisinesPreview
-            }
-          >
-            {previewCuisines.map(
-              (cuisine) => (
-                <CuisinePreviewItem
-                  key={cuisine.key}
-                  active={selectedCuisineKeys.includes(
-                    cuisine.key,
-                  )}
-                  cuisine={cuisine}
-                  onPress={() =>
-                    toggleSelectedCuisine(
-                      cuisine.key,
-                    )
-                  }
-                />
-              ),
-            )}
-
-            <CuisinePreviewItem
-              active={false}
-              cuisine={{
-                key: 'view-all',
-                label: 'Ø¹Ø±Ø¶ Ø§Ù„ÙƒÙ„',
-                image: require('../../assets/cuisines/view-all.webp'),
-                keywords: [],
-              }}
-              onPress={
-                openCuisinesModal
-              }
-            />
-          </ScrollView>
-
-          {hasActiveFilters && (
-            <View
-              style={
-                styles.clearFiltersRow
-              }
-            >
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.clearFiltersButton,
-                  pressed &&
-                    styles.pressed,
-                ]}
-                onPress={
-                  resetAllFilters
-                }
-              >
-                <Text
-                  style={
-                    styles.clearFiltersText
-                  }
-                >
-                  Ù…Ø³Ø­ Ø§Ù„ÙÙ„Ø§ØªØ±
-                </Text>
-              </Pressable>
-            </View>
-          )}
-
-          {visibleStores.length ===
-          0 ? (
-            <View
-              style={styles.emptyCard}
-            >
-              <Text
-                style={
-                  styles.emptyIcon
-                }
-              >
-                ğŸ”
-              </Text>
-
-              <Text
-                style={
-                  styles.emptyTitle
-                }
-              >
-                Ù„Ø§ ØªÙˆØ¬Ø¯ Ù†ØªØ§Ø¦Ø¬
-              </Text>
-
-              <Text
-                style={
-                  styles.emptyDescription
-                }
-              >
-                Ø¬Ø±Ù‘Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø·Ø¨Ø® Ù…Ø®ØªÙ„Ù Ø£Ùˆ
-                Ø¥Ø²Ø§Ù„Ø© Ø¨Ø¹Ø¶ Ø§Ù„ÙÙ„Ø§ØªØ±.
-              </Text>
-
-              {hasActiveFilters && (
-                <Pressable
-                  accessibilityRole="button"
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.emptyResetButton,
-                    pressed &&
-                      styles.pressed,
-                  ]}
-                  onPress={
-                    resetAllFilters
-                  }
-                >
-                  <Text
-                    style={
-                      styles.emptyResetButtonText
-                    }
-                  >
-                    Ø¹Ø±Ø¶ ÙƒÙ„ Ø§Ù„Ù…Ø·Ø§Ø¹Ù…
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          ) : (
-            <View
-              style={
-                styles.storesList
-              }
-            >
-              {visibleStores.map(
-                (store, storeIndex) => {
-                  const ratingInfo =
-                    getStoreRatingInfo(
-                      store,
-                    );
-
-                  return (
-                    <Pressable
-                      key={store.id}
-                      accessibilityLabel={
-                        store.isManuallyClosed
-                          ? `${store.name} Ù…ØºÙ„Ù‚`
-                          : `ÙØªØ­ ${store.name}`
-                      }
-                      accessibilityRole="button"
-                      style={({
-                        pressed,
-                      }) => [
-                        styles.storeRow,
-                        store.isManuallyClosed &&
-                          styles.storeRowClosed,
-                        pressed &&
-                          styles.storeRowPressed,
-                      ]}
-                      onPress={() => {
-                        if (
-                          store.isManuallyClosed
-                        ) {
-                          setClosedStoreNotice(
-                            store,
-                          );
-                          return;
-                        }
-
-                        router.push({
-                          pathname:
-                            '/store/[id]',
-                          params: {
-                            id: store.id,
-                          },
-                        });
-                      }}
-                    >
-                      <StoreArtwork
-                        priority={
-                          storeIndex < 4
-                            ? 'high'
-                            : 'normal'
-                        }
-                        store={store}
-                      />
-
-                      <View
-                        style={[
-                          styles.storeBody,
-                          store.isManuallyClosed &&
-                            styles.storeBodyClosed,
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.storeNameRow,
-                            store.isManuallyClosed &&
-                              styles.storeNameRowClosed,
-                          ]}
-                        >
-                          {store.isFeatured && (
-                            <View
-                              style={
-                                styles.proBadge
-                              }
-                            >
-                              <Text
-                                style={
-                                  styles.proBadgeText
-                                }
-                              >
-                                pro
-                              </Text>
-                            </View>
-                          )}
-
-                          <Text
-                            numberOfLines={
-                              1
-                            }
-                            style={[
-                              styles.storeName,
-                              store.isManuallyClosed &&
-                                styles.storeNameClosed,
-                            ]}
-                          >
-                            {store.name}
-                          </Text>
-                        </View>
-
-                        {store.isManuallyClosed ? (
-                          <View
-                            style={
-                              styles.closedStoreMetaRow
-                            }
-                          >
-                            {ratingInfo.hasRatings &&
-                            ratingInfo.rating !==
-                              null ? (
-                              <View
-                                style={
-                                  styles.closedRatingGroup
-                                }
-                              >
-                                <Text
-                                  style={
-                                    styles.closedRatingStar
-                                  }
-                                >
-                                  â˜…
-                                </Text>
-
-                                <Text
-                                  style={
-                                    styles.closedMetaText
-                                  }
-                                >
-                                  {ratingInfo.rating.toFixed(
-                                    1,
-                                  )}
-                                </Text>
-                              </View>
-                            ) : (
-                              <Text
-                                style={
-                                  styles.closedMetaText
-                                }
-                              >
-                                New
-                              </Text>
-                            )}
-                          </View>
-                        ) : (
-                          <View
-                            style={
-                              styles.storeMetaRow
-                            }
-                          >
-                            {ratingInfo.hasRatings &&
-                            ratingInfo.rating !==
-                              null ? (
-                              <>
-                                <Text
-                                  style={
-                                    styles.ratingStar
-                                  }
-                                >
-                                  â˜…
-                                </Text>
-
-                                <Text
-                                  style={
-                                    styles.ratingText
-                                  }
-                                >
-                                  {ratingInfo.rating.toFixed(
-                                    1,
-                                  )}
-                                </Text>
-                              </>
-                            ) : (
-                              <Text
-                                style={
-                                  styles.newStoreText
-                                }
-                              >
-                                New
-                              </Text>
-                            )}
-                          </View>
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                },
-              )}
-            </View>
-          )}
-        </View>
-      </ScrollView>
-
-      <ClosedStoreNotice
-        store={closedStoreNotice}
-        onClose={() =>
-          setClosedStoreNotice(null)
-        }
-      />
-
-      <CuisinesModal
-        draftCuisineKeys={
-          draftCuisineKeys
-        }
-        visible={
-          isCuisinesModalVisible
-        }
-        onApply={
-          applyCuisineFilters
-        }
-        onClose={
-          closeCuisinesModal
-        }
-        onReset={
-          resetCuisineFilters
-        }
-        onToggleCuisine={
-          toggleDraftCuisine
-        }
-      />
-    </View>
+        {cuisine.label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1351,6 +118,8 @@ function ClosedStoreNotice({
   onClose: () => void;
   store: StoreSummary | null;
 }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Modal
       animationType="fade"
@@ -1359,23 +128,22 @@ function ClosedStoreNotice({
       visible={Boolean(store)}
       onRequestClose={onClose}
     >
-      <View
-        style={
-          styles.closedNoticeModal
-        }
-      >
+      <View style={styles.closedNoticeModal}>
         <Pressable
           accessibilityLabel="Ø¥ØºÙ„Ø§Ù‚ Ø§Ù„ØªÙ†Ø¨ÙŠÙ‡"
-          style={
-            styles.closedNoticeBackdrop
-          }
+          accessibilityRole="button"
+          style={styles.closedNoticeBackdrop}
           onPress={onClose}
         />
 
         <View
-          style={
-            styles.closedNoticeCard
-          }
+          accessibilityViewIsModal
+          style={[
+            styles.closedNoticeCard,
+            {
+              marginBottom: Math.max(18, insets.bottom + 8),
+            },
+          ]}
         >
           <Pressable
             accessibilityLabel="Ø¥ØºÙ„Ø§Ù‚"
@@ -1383,55 +151,24 @@ function ClosedStoreNotice({
             hitSlop={10}
             style={({ pressed }) => [
               styles.closedNoticeCloseButton,
-              pressed &&
-                styles.closedNoticePressed,
+              pressed && styles.closedNoticePressed,
             ]}
             onPress={onClose}
           >
-            <Text
-              style={
-                styles.closedNoticeCloseText
-              }
-            >
-              Ã—
-            </Text>
+            <Text style={styles.closedNoticeCloseText}>Ã—</Text>
           </Pressable>
 
-          <View
-            style={
-              styles.closedNoticeContent
-            }
-          >
+          <View style={styles.closedNoticeContent}>
             <Text
               numberOfLines={2}
-              style={
-                styles.closedNoticeTitle
-              }
+              style={styles.closedNoticeTitle}
             >
               {store?.name ?? 'Ø§Ù„Ù…Ø·Ø¹Ù…'} Ù…ØºÙ„Ù‚ Ø­Ø§Ù„ÙŠØ§Ù‹
             </Text>
-
-            <Text
-              style={
-                styles.closedNoticeDescription
-              }
-            >
-              Ø¨Ø¥Ù…ÙƒØ§Ù†Ùƒ Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø£ØµÙ†Ø§Ù Ø¥Ù„Ù‰ Ø³Ù„ØªÙƒ ÙˆØªÙ†ÙÙŠØ° Ø§Ù„Ø·Ù„Ø¨ Ø¹Ù†Ø¯ ØªÙˆÙØ± Ø§Ù„Ù…Ø·Ø¹Ù….
-            </Text>
           </View>
 
-          <View
-            style={
-              styles.closedNoticeWarningIcon
-            }
-          >
-            <Text
-              style={
-                styles.closedNoticeWarningText
-              }
-            >
-              !
-            </Text>
+          <View style={styles.closedNoticeWarningIcon}>
+            <Text style={styles.closedNoticeWarningText}>!</Text>
           </View>
         </View>
       </View>
@@ -1439,1552 +176,202 @@ function ClosedStoreNotice({
   );
 }
 
-function CuisinePreviewItem({
-  active,
-  cuisine,
-  onPress,
-}: {
-  active: boolean;
-  cuisine: CuisineItem;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.cuisinePreviewItem,
-        pressed &&
-          styles.pressed,
-      ]}
-      onPress={onPress}
-    >
-      <View
-        style={[
-          styles.cuisinePreviewImage,
-          active &&
-            styles.cuisinePreviewImageActive,
-        ]}
-      >
-        <Image
-          accessibilityIgnoresInvertColors
-          accessibilityLabel={`ØµÙˆØ±Ø© ${cuisine.label}`}
-          resizeMode="cover"
-          source={cuisine.image}
-          style={
-            styles.cuisinePreviewPhoto
-          }
-        />
-      </View>
+export default function RestaurantsScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{
+    cuisine?: string | string[];
+  }>();
 
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.cuisinePreviewLabel,
-          active &&
-            styles.cuisinePreviewLabelActive,
-        ]}
-      >
-        {cuisine.label}
-      </Text>
-    </Pressable>
+  const requestedCuisineKey = getCuisineKeyFromRouteParam(
+    params.cuisine,
   );
-}
 
-function CuisinesModal({
-  draftCuisineKeys,
-  onApply,
-  onClose,
-  onReset,
-  onToggleCuisine,
-  visible,
-}: {
-  draftCuisineKeys: string[];
-  onApply: () => void;
-  onClose: () => void;
-  onReset: () => void;
-  onToggleCuisine: (
-    cuisineKey: string,
-  ) => void;
-  visible: boolean;
-}) {
-  const { height: windowHeight } =
-    useWindowDimensions();
+  const cuisinesPreviewScrollRef = useRef<ScrollView | null>(null);
+  const navigationGuardRef = useRef(0);
 
-  const insets =
-    useSafeAreaInsets();
+  const savedServiceAreaId = useCustomerStore(
+    (state) => state.locationServiceAreaId,
+  );
 
-  /*
-   * iOS already has the footer in the correct visual position.
-   * On Android the Modal can sit much closer to the system
-   * navigation area, so lift only the Android footer by the
-   * device's real bottom safe-area + a small optical gap.
-   */
-  const sheetFooterBottomPadding =
-    Platform.OS === 'android'
-      ? Math.max(
-          48,
-          insets.bottom + 24,
-        )
-      : 30;
+  const {
+    stores,
+    isLoading,
+    errorMessage,
+    reload,
+  } = useRestaurantsData(savedServiceAreaId);
 
-  const cuisinesGridBottomPadding =
-    Platform.OS === 'android'
-      ? 130 +
-        Math.max(
-          18,
-          sheetFooterBottomPadding - 30,
-        )
-      : 130;
-
-  const viewResultsButtonHeight =
-    Platform.OS === 'android'
-      ? 54
-      : 62;
-
-  const viewResultsButtonFontSize =
-    Platform.OS === 'android'
-      ? 16
-      : 18;
-
-  const sheetTranslateY =
-    useRef(
-      new Animated.Value(
-        windowHeight,
-      ),
-    ).current;
-
-  const isClosingRef =
-    useRef(false);
-
-  const cuisineScrollOffsetRef =
-    useRef(0);
+  const [selectedCuisineKey, setSelectedCuisineKey] =
+    useState<CuisineKey | null>(null);
+  const [draftCuisineKey, setDraftCuisineKey] =
+    useState<CuisineKey | null>(null);
+  const [isCuisinesModalVisible, setIsCuisinesModalVisible] =
+    useState(false);
+  const [closedStoreNotice, setClosedStoreNotice] =
+    useState<StoreSummary | null>(null);
 
   useEffect(() => {
-    if (!visible) {
+    if (!requestedCuisineKey) {
       return;
     }
 
-    isClosingRef.current = false;
+    setSelectedCuisineKey(requestedCuisineKey);
+    setDraftCuisineKey(requestedCuisineKey);
+  }, [requestedCuisineKey]);
 
-    sheetTranslateY.stopAnimation();
+  const visibleStores = useMemo(
+    () => getVisibleRestaurants(stores, selectedCuisineKey),
+    [selectedCuisineKey, stores],
+  );
 
-    sheetTranslateY.setValue(
-      windowHeight,
-    );
+  const hasActiveFilters = selectedCuisineKey !== null;
 
-    Animated.spring(
-      sheetTranslateY,
-      {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 24,
-        stiffness: 240,
-        mass: 0.85,
-      },
-    ).start();
-  }, [
-    sheetTranslateY,
-    visible,
-    windowHeight,
-  ]);
-
-  function animateSheetBack() {
-    Animated.spring(
-      sheetTranslateY,
-      {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 22,
-        stiffness: 260,
-        mass: 0.8,
-      },
-    ).start();
-  }
-
-  function requestClose() {
-    if (isClosingRef.current) {
-      return;
-    }
-
-    isClosingRef.current = true;
-
-    sheetTranslateY.stopAnimation();
-
-    Animated.timing(
-      sheetTranslateY,
-      {
-        toValue: windowHeight,
-        duration: 220,
-        useNativeDriver: true,
-      },
-    ).start(() => {
-      isClosingRef.current = false;
-      onClose();
-    });
-  }
-
-  function requestApply() {
-    if (isClosingRef.current) {
-      return;
-    }
-
-    isClosingRef.current = true;
-
-    sheetTranslateY.stopAnimation();
-
-    Animated.timing(
-      sheetTranslateY,
-      {
-        toValue: windowHeight,
-        duration: 220,
-        useNativeDriver: true,
-      },
-    ).start(() => {
-      isClosingRef.current = false;
-      onApply();
-    });
-  }
-
-  const sheetPanResponder =
-    useMemo(
-      () =>
-        PanResponder.create({
-          onStartShouldSetPanResponder:
-            () => false,
-
-          onStartShouldSetPanResponderCapture:
-            () => false,
-
-          onMoveShouldSetPanResponder:
-            (
-              _event,
-              gestureState,
-            ) => {
-              const isAtTop =
-                cuisineScrollOffsetRef.current <=
-                1;
-
-              const isMovingDown =
-                gestureState.dy >
-                (Platform.OS === 'android'
-                  ? 2
-                  : 4);
-
-              const isMostlyVertical =
-                Math.abs(
-                  gestureState.dy,
-                ) >
-                Math.abs(
-                  gestureState.dx,
-                );
-
-              return (
-                isAtTop &&
-                isMovingDown &&
-                isMostlyVertical
-              );
-            },
-
-          onMoveShouldSetPanResponderCapture:
-            (
-              _event,
-              gestureState,
-            ) => {
-              const isAtTop =
-                cuisineScrollOffsetRef.current <=
-                1;
-
-              const isMovingDown =
-                gestureState.dy >
-                (Platform.OS === 'android'
-                  ? 2
-                  : 4);
-
-              const isMostlyVertical =
-                Math.abs(
-                  gestureState.dy,
-                ) >
-                Math.abs(
-                  gestureState.dx,
-                );
-
-              return (
-                isAtTop &&
-                isMovingDown &&
-                isMostlyVertical
-              );
-            },
-
-          onPanResponderGrant: () => {
-            sheetTranslateY.stopAnimation();
-          },
-
-          onPanResponderMove: (
-            _event,
-            gestureState,
-          ) => {
-            sheetTranslateY.setValue(
-              Math.min(
-                windowHeight,
-                Math.max(
-                  0,
-                  gestureState.dy,
-                ),
-              ),
-            );
-          },
-
-          onPanResponderRelease: (
-            _event,
-            gestureState,
-          ) => {
-            const shouldClose =
-              gestureState.dy >
-                (Platform.OS === 'android'
-                  ? 82
-                  : 110) ||
-              (
-                gestureState.dy > 20 &&
-                gestureState.vy >
-                  (Platform.OS === 'android'
-                    ? 0.68
-                    : 0.9)
-              );
-
-            if (shouldClose) {
-              requestClose();
-              return;
-            }
-
-            animateSheetBack();
-          },
-
-          onPanResponderTerminate:
-            () => {
-              animateSheetBack();
-            },
-
-          onPanResponderTerminationRequest:
-            () => false,
-
-          onShouldBlockNativeResponder:
-            () => true,
-        }),
-      [
-        sheetTranslateY,
-        windowHeight,
-      ],
-    );
-
-  /*
-   * Android fix:
-   *
-   * The native ScrollView can claim the gesture before the parent sheet.
-   * The visible handle therefore owns the touch immediately on Android.
-   * This guarantees that dragging from the grey handle always moves the
-   * complete sheet down.
-   */
-  const handlePanResponder =
-    useMemo(
-      () =>
-        PanResponder.create({
-          onStartShouldSetPanResponder:
-            () =>
-              Platform.OS === 'android',
-
-          onStartShouldSetPanResponderCapture:
-            () =>
-              Platform.OS === 'android',
-
-          onMoveShouldSetPanResponder:
-            (
-              _event,
-              gestureState,
-            ) => {
-              const isMovingDown =
-                gestureState.dy > 1;
-
-              const isMostlyVertical =
-                Math.abs(
-                  gestureState.dy,
-                ) >
-                Math.abs(
-                  gestureState.dx,
-                );
-
-              return (
-                isMovingDown &&
-                isMostlyVertical
-              );
-            },
-
-          onMoveShouldSetPanResponderCapture:
-            (
-              _event,
-              gestureState,
-            ) => {
-              const isMovingDown =
-                gestureState.dy > 1;
-
-              const isMostlyVertical =
-                Math.abs(
-                  gestureState.dy,
-                ) >
-                Math.abs(
-                  gestureState.dx,
-                );
-
-              return (
-                isMovingDown &&
-                isMostlyVertical
-              );
-            },
-
-          onPanResponderGrant: () => {
-            sheetTranslateY.stopAnimation();
-          },
-
-          onPanResponderMove: (
-            _event,
-            gestureState,
-          ) => {
-            const nextTranslateY =
-              Math.min(
-                windowHeight,
-                Math.max(
-                  0,
-                  gestureState.dy,
-                ),
-              );
-
-            sheetTranslateY.setValue(
-              nextTranslateY,
-            );
-          },
-
-          onPanResponderRelease: (
-            _event,
-            gestureState,
-          ) => {
-            const shouldClose =
-              gestureState.dy >
-                (Platform.OS === 'android'
-                  ? 64
-                  : 100) ||
-              (
-                gestureState.dy > 16 &&
-                gestureState.vy >
-                  (Platform.OS === 'android'
-                    ? 0.55
-                    : 0.85)
-              );
-
-            if (shouldClose) {
-              requestClose();
-              return;
-            }
-
-            animateSheetBack();
-          },
-
-          onPanResponderTerminate:
-            () => {
-              animateSheetBack();
-            },
-
-          onPanResponderTerminationRequest:
-            () => false,
-
-          onShouldBlockNativeResponder:
-            () => true,
-        }),
-      [
-        sheetTranslateY,
-        windowHeight,
-      ],
-    );
-
-  return (
-    <Modal
-      animationType="none"
-      statusBarTranslucent
-      transparent
-      visible={visible}
-      onRequestClose={
-        requestClose
+  const handleRestaurantPress = useCallback(
+    (store: StoreSummary) => {
+      if (store.isManuallyClosed) {
+        setClosedStoreNotice(store);
+        return;
       }
-    >
-      <View
-        style={
-          styles.modalBackdrop
+
+      const now = Date.now();
+      if (now - navigationGuardRef.current < NAVIGATION_PRESS_GUARD_MS) {
+        return;
+      }
+
+      navigationGuardRef.current = now;
+
+      router.push({
+        pathname: '/store/[id]',
+        params: {
+          id: store.id,
+        },
+      });
+    },
+    [router],
+  );
+
+  const renderRestaurant = useCallback(
+    ({ item, index }: ListRenderItemInfo<StoreSummary>) => (
+      <View style={styles.storeListItem}>
+        <RestaurantCard
+          priority={index < 4 ? 'high' : 'normal'}
+          store={item}
+          onPress={handleRestaurantPress}
+        />
+      </View>
+    ),
+    [handleRestaurantPress],
+  );
+
+  const openCuisinesModal = useCallback(() => {
+    setDraftCuisineKey(selectedCuisineKey);
+    setIsCuisinesModalVisible(true);
+  }, [selectedCuisineKey]);
+
+  const closeCuisinesModal = useCallback(() => {
+    setIsCuisinesModalVisible(false);
+  }, []);
+
+  const toggleSelectedCuisine = useCallback(
+    (cuisineKey: CuisineKey) => {
+      setSelectedCuisineKey((currentCuisineKey) =>
+        currentCuisineKey === cuisineKey ? null : cuisineKey,
+      );
+    },
+    [],
+  );
+
+  const toggleDraftCuisine = useCallback(
+    (cuisineKey: CuisineKey) => {
+      setDraftCuisineKey((currentCuisineKey) =>
+        currentCuisineKey === cuisineKey ? null : cuisineKey,
+      );
+    },
+    [],
+  );
+
+  const applyCuisineFilters = useCallback(() => {
+    setSelectedCuisineKey(draftCuisineKey);
+    setIsCuisinesModalVisible(false);
+  }, [draftCuisineKey]);
+
+  const resetCuisineFilters = useCallback(() => {
+    setDraftCuisineKey(null);
+  }, []);
+
+  const resetAllFilters = useCallback(() => {
+    setSelectedCuisineKey(null);
+  }, []);
+
+  const listHeader = (
+    <View style={styles.container}>
+      <ScrollView
+        horizontal
+        contentContainerStyle={styles.cuisinesPreviewContent}
+        key="restaurants-cuisines-exact-order"
+        ref={cuisinesPreviewScrollRef}
+        showsHorizontalScrollIndicator={false}
+        style={styles.cuisinesPreview}
+        onContentSizeChange={() =>
+          cuisinesPreviewScrollRef.current?.scrollToEnd({
+            animated: false,
+          })
         }
       >
-        <Pressable
-          accessibilityLabel="Ø¥ØºÙ„Ø§Ù‚ Ù‚Ø§Ø¦Ù…Ø© Ø§Ù„Ù…Ø·Ø§Ø¨Ø®"
-          style={
-            styles.modalBackdropPressable
-          }
-          onPress={
-            requestClose
-          }
+        {PREVIEW_CUISINES.map((cuisine) => (
+          <CuisinePreviewItem
+            key={cuisine.key}
+            active={selectedCuisineKey === cuisine.key}
+            cuisine={cuisine}
+            onPress={() => toggleSelectedCuisine(cuisine.key)}
+          />
+        ))}
+
+        <CuisinePreviewItem
+          active={false}
+          cuisine={VIEW_ALL_CUISINE}
+          onPress={openCuisinesModal}
         />
+      </ScrollView>
 
-        <Animated.View
-          style={[
-            styles.cuisinesSheet,
-            {
-              transform: [
-                {
-                  translateY:
-                    sheetTranslateY,
-                },
-              ],
-            },
-          ]}
-          {...sheetPanResponder.panHandlers}
-        >
-          <View
-            style={
-              styles.sheetDragArea
-            }
-          >
-            <View
-              collapsable={false}
-              style={
-                styles.sheetHandleTouchArea
-              }
-              {...handlePanResponder.panHandlers}
-            >
-              <View
-                style={
-                  styles.sheetHandle
-                }
-              />
-            </View>
-
-            <View
-              style={
-                styles.sheetHeader
-              }
-            >
-              <Pressable
-                accessibilityLabel="Ø¥ØºÙ„Ø§Ù‚"
-                accessibilityRole="button"
-                hitSlop={8}
-                style={({
-                  pressed,
-                }) => [
-                  styles.sheetCircleButton,
-                  pressed &&
-                    styles.pressed,
-                ]}
-                onPress={
-                  requestClose
-                }
-              >
-                <Text
-                  style={
-                    styles.sheetCloseIcon
-                  }
-                >
-                  Ã—
-                </Text>
-              </Pressable>
-
-              <Text
-                style={
-                  styles.sheetTitle
-                }
-              >
-                Ø§Ù„Ù…Ø·Ø§Ø¨Ø®
-              </Text>
-
-              <Pressable
-                accessibilityRole="button"
-                style={({
-                  pressed,
-                }) => [
-                  styles.resetCuisineButton,
-                  pressed &&
-                    styles.pressed,
-                ]}
-                onPress={onReset}
-              >
-                <Text
-                  style={
-                    styles.resetCuisineButtonText
-                  }
-                >
-                  Ø¥Ø¹Ø§Ø¯Ø©
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <ScrollView
-            contentContainerStyle={[
-              styles.cuisinesGrid,
-              {
-                paddingBottom:
-                  cuisinesGridBottomPadding,
-              },
+      {hasActiveFilters && (
+        <View style={styles.clearFiltersRow}>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.clearFiltersButton,
+              pressed && styles.pressed,
             ]}
-            showsVerticalScrollIndicator={
-              false
-            }
-            bounces={
-              Platform.OS === 'ios'
-            }
-            nestedScrollEnabled
-            overScrollMode="never"
-            scrollEventThrottle={16}
-            onScroll={(event) => {
-              cuisineScrollOffsetRef.current =
-                Math.max(
-                  0,
-                  event.nativeEvent.contentOffset
-                    .y,
-                );
-            }}
+            onPress={resetAllFilters}
           >
-            {CUISINES.map(
-              (cuisine) => {
-                const active =
-                  draftCuisineKeys.includes(
-                    cuisine.key,
-                  );
+            <Text style={styles.clearFiltersText}>Ø…Ø³Ø­ Ø§Ù„ÙÙ„Ø§ØªØ±</Text>
+          </Pressable>
+        </View>
+      )}
 
-                return (
-                  <Pressable
-                    key={
-                      cuisine.key
-                    }
-                    accessibilityRole="button"
-                    style={({
-                      pressed,
-                    }) => [
-                      styles.cuisineGridItem,
-                      pressed &&
-                        styles.pressed,
-                    ]}
-                    onPress={() =>
-                      onToggleCuisine(
-                        cuisine.key,
-                      )
-                    }
-                  >
-                    <View
-                      style={[
-                        styles.cuisineGridImage,
-                        active &&
-                          styles.cuisineGridImageActive,
-                      ]}
-                    >
-                      <Image
-                        accessibilityIgnoresInvertColors
-                        accessibilityLabel={`ØµÙˆØ±Ø© ${cuisine.label}`}
-                        resizeMode="cover"
-                        source={
-                          cuisine.image
-                        }
-                        style={
-                          styles.cuisineGridPhoto
-                        }
-                      />
-
-                    </View>
-
-                    <Text
-                      numberOfLines={
-                        1
-                      }
-                      style={[
-                        styles.cuisineGridLabel,
-                        active &&
-                          styles.cuisineGridLabelActive,
-                      ]}
-                    >
-                      {cuisine.label}
-                    </Text>
-                  </Pressable>
-                );
-              },
-            )}
-          </ScrollView>
-
-          <View
-            style={[
-              styles.sheetFooter,
-              {
-                paddingBottom:
-                  sheetFooterBottomPadding,
-              },
-            ]}
-          >
-            <Pressable
-              accessibilityRole="button"
-              style={({
-                pressed,
-              }) => [
-                styles.viewResultsButton,
-                {
-                  minHeight:
-                    viewResultsButtonHeight,
-                },
-                pressed &&
-                  styles.pressed,
-              ]}
-              onPress={
-                requestApply
-              }
-            >
-              <Text
-                style={[
-                  styles.viewResultsButtonText,
-                  {
-                    fontSize:
-                      viewResultsButtonFontSize,
-                  },
-                ]}
-              >
-                Ø¹Ø±Ø¶ Ø§Ù„Ù†ØªØ§Ø¦Ø¬
-              </Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-      </View>
-    </Modal>
+      {visibleStores.length > 0 && (
+        <View style={styles.storesListTopSpacer} />
+      )}
+    </View>
   );
-}
 
-const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-  },
-
-  topHeader: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#ECECEF',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 100,
-    paddingBottom: 14,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 34,
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    zIndex: 10,
-  },
-
-  backButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 46,
-    justifyContent: 'center',
-    width: 46,
-  },
-
-  headerButtonPressed: {
-    backgroundColor: '#F7F7F7',
-    transform: [
-      {
-        scale: 0.97,
-      },
-    ],
-  },
-
-  backArrowCanvas: {
-    height: 23,
-    position: 'relative',
-    width: 24,
-  },
-
-  backArrowStem: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 3,
-    position: 'absolute',
-    top: 10.3,
-    width: 19,
-  },
-
-  backArrowDiagonal: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 2,
-    position: 'absolute',
-    width: 10,
-  },
-
-  backArrowTop: {
-    top: 7,
-    transform: [
-      {
-        rotate: '-42deg',
-      },
-    ],
-  },
-
-  backArrowBottom: {
-    top: 14,
-    transform: [
-      {
-        rotate: '42deg',
-      },
-    ],
-  },
-
-  pageContent: {
-    flexGrow: 1,
-    paddingBottom: 42,
-  },
-
-  container: {
-    alignSelf: 'center',
-    maxWidth:
-      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
-    width: '100%',
-  },
-
-  cuisinesPreview: {
-    backgroundColor: '#FFFFFF',
-  },
-
-  cuisinesPreviewContent: {
-    gap: 16,
-    paddingBottom: 13,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 18,
-  },
-
-  cuisinePreviewItem: {
-    alignItems: 'center',
-    width: 84,
-  },
-
-  cuisinePreviewImage: {
-    alignItems: 'center',
-    backgroundColor: '#F6F4F1',
-    borderColor: '#F1F1F2',
-    borderRadius: 39,
-    borderWidth: 1,
-    height: 78,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: '#111111',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    width: 78,
-  },
-
-  cuisinePreviewImageActive: {
-    backgroundColor: '#EAF8F0',
-    borderColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderWidth: 2,
-  },
-
-  cuisinePreviewPhoto: {
-    borderRadius: 39,
-    height: '100%',
-    width: '100%',
-  },
-
-  cuisinePreviewLabel: {
-    color: '#6B6B70',
-    fontSize: 12,
-    marginTop: 8,
-    maxWidth: 84,
-    textAlign: 'center',
-  },
-
-  cuisinePreviewLabelActive: {
-    color:
-      NAVIENTY_NOW_COLORS.primary,
-    fontWeight: '900',
-  },
-
-  clearFiltersRow: {
-    alignItems: 'flex-start',
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 18,
-  },
-
-  clearFiltersButton: {
-    justifyContent: 'center',
-    minHeight: 36,
-  },
-
-  clearFiltersText: {
-    color:
-      NAVIENTY_NOW_COLORS.primary,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-
-  storesList: {
-    paddingBottom: 8,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 12,
-  },
-
-  storeRow: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    direction: 'ltr',
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 132,
-    paddingVertical: 8,
-    width: '100%',
-  },
-
-  storeRowClosed: {
-    direction: 'rtl',
-    flexDirection: 'row-reverse',
-  },
-
-  storeRowPressed: {
-    opacity: 0.76,
-  },
-
-  storeArtwork: {
-    backgroundColor: '#EFEFEF',
-    borderRadius: 22,
-    flexShrink: 0,
-    height: 118,
-    overflow: 'hidden',
-    position: 'relative',
-    width: 138,
-  },
-
-  storeCoverImage: {
-    height: '100%',
-    width: '100%',
-  },
-
-  storeCoverFallback: {
-    alignItems: 'center',
-    backgroundColor: '#ECECEC',
-    flex: 1,
-    justifyContent: 'center',
-  },
-
-  storeCoverFallbackText: {
-    color: '#8B8B92',
-    fontSize: 34,
-    fontWeight: '900',
-  },
-
-  storeArtworkGradient: {
-    backgroundColor:
-      'rgba(0,0,0,0.08)',
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-
-  logoBadge: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor:
-      'rgba(0,0,0,0.06)',
-    borderRadius: 18,
-    borderWidth: 1,
-    height: 52,
-    justifyContent: 'center',
-    left: 8,
-    overflow: 'hidden',
-    position: 'absolute',
-    top: 8,
-    width: 52,
-    zIndex: 4,
-  },
-
-  logoImage: {
-    height: '100%',
-    width: '100%',
-  },
-
-  logoFallback: {
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    flex: 1,
-    justifyContent: 'center',
-    width: '100%',
-  },
-
-  logoFallbackText: {
-    color: '#66666C',
-    fontSize: 22,
-    fontWeight: '900',
-  },
-
-
-  closedOverlay: {
-    alignItems: 'center',
-    backgroundColor:
-      'rgba(18,18,20,0.66)',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 6,
-  },
-
-  closedOverlayText: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '900',
-    letterSpacing: -0.35,
-    lineHeight: 32,
-    textAlign: 'center',
-    textShadowColor:
-      'rgba(0,0,0,0.22)',
-    textShadowOffset: {
-      height: 1,
-      width: 0,
-    },
-    textShadowRadius: 3,
-  },
-
-  storeBody: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 108,
-    overflow: 'hidden',
-    paddingRight: 2,
-  },
-
-  storeBodyClosed: {
-    alignItems: 'stretch',
-    paddingLeft: 2,
-    paddingRight: 0,
-  },
-
-  storeNameRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    width: '100%',
-  },
-
-  storeNameRowClosed: {
-    flexDirection: 'row-reverse',
-  },
-
-  storeName: {
-    color: '#202024',
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.25,
-    lineHeight: 23,
-    textAlign: 'left',
-    writingDirection: 'auto',
-  },
-
-  storeNameClosed: {
-    color: '#202024',
-    fontSize: 18,
-    fontWeight: '900',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  proBadge: {
-    alignItems: 'center',
-    backgroundColor: '#8A23CF',
-    borderRadius: 2,
-    flexShrink: 0,
-    height: 17,
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-
-  proBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '900',
-    lineHeight: 12,
-  },
-
-  storeMetaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    marginTop: 7,
-    minHeight: 22,
-    width: '100%',
-  },
-
-  ratingStar: {
-    color: '#F4AF00',
-    flexShrink: 0,
-    fontSize: 18,
-    lineHeight: 20,
-    marginRight: 5,
-  },
-
-  ratingText: {
-    color: '#45454B',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-    textAlign: 'left',
-  },
-
-  newStoreText: {
-    color: '#77777D',
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-    textAlign: 'left',
-  },
-
-  closedStoreMetaRow: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    gap: 5,
-    justifyContent: 'flex-start',
-    marginTop: 8,
-    minHeight: 22,
-    width: '100%',
-  },
-
-  closedRatingGroup: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    gap: 4,
-  },
-
-  closedRatingStar: {
-    color: '#F4AF00',
-    fontSize: 18,
-    lineHeight: 20,
-  },
-
-  closedMetaText: {
-    color: '#4D4D53',
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 20,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  closedNoticeModal: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-
-  closedNoticeBackdrop: {
-    backgroundColor:
-      'rgba(18,18,20,0.28)',
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-
-  closedNoticeCard: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: '#FFF4D8',
-    borderRadius: 24,
-    flexDirection: 'row',
-    marginBottom: 18,
-    marginHorizontal: 16,
-    maxWidth:
-      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
-    minHeight: 106,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 4,
-      width: 0,
-    },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    width: '92%',
-  },
-
-  closedNoticeCloseButton: {
-    alignItems: 'center',
-    flexShrink: 0,
-    height: 34,
-    justifyContent: 'center',
-    width: 34,
-  },
-
-  closedNoticeCloseText: {
-    color: '#262626',
-    fontSize: 34,
-    fontWeight: '300',
-    lineHeight: 34,
-  },
-
-  closedNoticeContent: {
-    flex: 1,
-    paddingHorizontal: 10,
-  },
-
-  closedNoticeTitle: {
-    color: '#252525',
-    fontSize: 15,
-    fontWeight: '900',
-    lineHeight: 21,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  closedNoticeDescription: {
-    color: '#343434',
-    fontSize: 12,
-    fontWeight: '500',
-    lineHeight: 19,
-    marginTop: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  closedNoticeWarningIcon: {
-    alignItems: 'center',
-    flexShrink: 0,
-    height: 38,
-    justifyContent: 'center',
-    marginLeft: 2,
-    width: 38,
-  },
-
-  closedNoticeWarningText: {
-    color: '#9A6A00',
-    fontSize: 31,
-    fontWeight: '900',
-    lineHeight: 34,
-  },
-
-  closedNoticePressed: {
-    opacity: 0.55,
-  },
-
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: '#FAFAFB',
-    borderColor: '#ECECEF',
-    borderRadius: 22,
-    borderWidth: 1,
-    marginHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    marginTop: 20,
-    padding: 28,
-  },
-
-  emptyIcon: {
-    fontSize: 42,
-  },
-
-  emptyTitle: {
-    color: '#202024',
-    fontSize: 17,
-    fontWeight: '900',
-    marginTop: 12,
-  },
-
-  emptyDescription: {
-    color: '#7A7A81',
-    fontSize: 12,
-    lineHeight: 20,
-    marginTop: 7,
-    textAlign: 'center',
-  },
-
-  emptyResetButton: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 999,
-    marginTop: 18,
-    paddingHorizontal: 19,
-    paddingVertical: 11,
-  },
-
-  emptyResetButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '900',
-  },
-
-  modalBackdrop: {
-    backgroundColor:
-      'rgba(18,18,20,0.34)',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-
-  modalBackdropPressable: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-
-  cuisinesSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    height: '90%',
-    overflow: 'hidden',
-    paddingTop: 0,
-  },
-
-  /*
-   * Ø§Ù„Ø¬Ø²Ø¡ Ø¯Ù‡ ÙƒÙ„Ù‡ Ù‚Ø§Ø¨Ù„ Ù„Ù„Ø³Ø­Ø¨ Ù„Ø£Ø³ÙÙ„:
-   * Ø§Ù„Ù€ handle + Ø§Ù„Ø¹Ù†ÙˆØ§Ù† + Ø£Ø²Ø±Ø§Ø± Ø§Ù„Ù‡ÙŠØ¯Ø±.
-   */
-  sheetDragArea: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-  },
-
-  /*
-   * Ø²ÙˆØ¯Ù†Ø§ Ù…Ø³Ø§Ø­Ø© Ø§Ù„Ù„Ù…Ø³ Ø­ÙˆÙ„ Ø§Ù„Ù€ handle
-   * Ø¹Ù„Ø´Ø§Ù† Ø§Ù„Ø³Ø­Ø¨ ÙŠØ¨Ù‚Ù‰ Ø£Ø³Ù‡Ù„.
-   */
-  sheetHandleTouchArea: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight:
-      Platform.OS === 'android'
-        ? 44
-        : 28,
-    paddingTop: 7,
-  },
-
-  sheetHandle: {
-    alignSelf: 'center',
-    backgroundColor: '#E4E4E7',
-    borderRadius: 999,
-    height: 5,
-    width: 74,
-  },
-
-  sheetHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent:
-      'space-between',
-    paddingBottom: 8,
-    paddingHorizontal: 24,
-    paddingTop: 3,
-  },
-
-  sheetCircleButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E3E3E6',
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-
-  sheetCloseIcon: {
-    color: '#151518',
-    fontSize: 26,
-    fontWeight: '300',
-    lineHeight: 28,
-  },
-
-  sheetTitle: {
-    color: '#18181B',
-    fontSize: 18,
-    fontWeight: '900',
-  },
-
-  resetCuisineButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E3E3E6',
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-
-  resetCuisineButtonText: {
-    color: '#1C1C1F',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-
-  cuisinesGrid: {
-    flexDirection: 'row-reverse',
-    flexWrap: 'wrap',
-    paddingBottom: 130,
-    paddingHorizontal: 14,
-    paddingTop: 15,
-  },
-
-  cuisineGridItem: {
-    alignItems: 'center',
-    marginBottom: 22,
-    width: '25%',
-  },
-
-  cuisineGridImage: {
-    alignItems: 'center',
-    backgroundColor: '#F4F2EF',
-    borderColor: '#EEEEF0',
-    borderRadius: 41,
-    borderWidth: 1,
-    height: 82,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-    shadowColor: '#111111',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.09,
-    shadowRadius: 5,
-    width: 82,
-  },
-
-  cuisineGridImageActive: {
-    backgroundColor: '#EAF8F0',
-    borderColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderWidth: 2,
-  },
-
-  cuisineGridPhoto: {
-    borderRadius: 41,
-    height: '100%',
-    width: '100%',
-  },
-
-
-
-  cuisineGridLabel: {
-    color: '#6B6B70',
-    fontSize: 11,
-    marginTop: 8,
-    maxWidth: 88,
-    textAlign: 'center',
-  },
-
-  cuisineGridLabelActive: {
-    color:
-      NAVIENTY_NOW_COLORS.primary,
-    fontWeight: '900',
-  },
-
-  sheetFooter: {
-    backgroundColor: '#FFFFFF',
-    borderTopColor: '#EEEEF0',
-    borderTopWidth: 1,
-    bottom: 0,
-    left: 0,
-    paddingHorizontal: 25,
-    paddingTop: 20,
-    position: 'absolute',
-    right: 0,
-  },
-
-  viewResultsButton: {
-    alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 999,
-    justifyContent: 'center',
-  },
-
-  viewResultsButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-  },
-
-  stateScreen: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-  },
-
-  stateIcon: {
-    fontSize: 52,
-  },
-
-  stateTitle: {
-    color: '#17171A',
-    fontSize: 21,
-    fontWeight: '900',
-    marginTop: 17,
-    textAlign: 'center',
-  },
-
-  stateDescription: {
-    color: '#73737A',
-    fontSize: 13,
-    lineHeight: 21,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-
-  retryButton: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 15,
-    marginTop: 22,
-    paddingHorizontal: 24,
-    paddingVertical: 13,
-  },
-
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-
-  pressed: {
-    opacity: 0.76,
-    transform: [
-      {
-        scale: 0.985,
-      },
-    ],
-  },
-});
+  const listEmpty = (
+    <View style={styles.container}>
+      <View style={styles.emptyCard}>
+        <Text style={styles.emptyIcon}>ğŸ”</Text>
+        <Text style={styles.emptyTitle}>Ù„Ø§ ØªÙˆØ¬Ø¯ Ù†ØªØ§Ø¦Ø¯</Text>
+        <Text style={styles.emptyDescription}>
+          Ø¬Ø±Ø¬Ø¨ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø·ØªØ® Ù…Ø®ØªÙ„Ù Ø£Ù‰ Ø§Ø²Ø§Ù„Ø© Ø¨Ø¹Ø¶ Ø§Ù„ÙÙ„Ø§ØªØ±.
+        </Text>
+
+        {hasActiveFilters && (
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.emptyResetButton,
+              pressed && styles.pressed,
+            ]}
+            onPress={resetAllFilters}
+          >
+            <Text style={styles.emptyResetButtonText}>
+              Ø¹Ø±Ø¶ ÙƒÙ„ Ø§Ù„Ù…Ø·Ø§Ø¹Ù…(€€€€€€€€€€€€ğ½Q•áĞø(€€€€€€€€€€ğ½AÉ•ÍÍ…‰±”ø(€€€€€€€€¥ô(€€€€€€ğ½Y¥•Üø(€€€€ğ½Y¥•Üø(€€¤ì((€¥˜€¡¥Í1½…‘¥¹œ¤ì(€€€É•ÑÕÉ¸€ñI•ÍÑ…ÕÉ…¹ÑÍMÉ••¹M­•±•Ñ½¸€¼øì(€ô((€¥˜€¡•ÉÉ½É5•ÍÍ…”¤ì(€€€É•ÑÕÉ¸€ (€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹ÍÑ…Ñ•MÉ••¹ôø(€€€€€€€€ñQ•áĞÍÑå±”õíÍÑå±•Ì¹ÍÑ…Ñ•%½¹ôûÂ~6,÷¾â<ğ½Q•áĞø(€€€€€€€€ñQ•áĞÍÑå±”õíÍÑå±•Ì¹ÍÑ…Ñ•Q¥Ñ±•ôûb«bçbŸbÇbŸfƒfb«b´ƒbŸffbßbŸbçfğ½Q•áĞø(€€€€€€€€ñQ•áĞÍÑå±”õíÍÑå±•Ì¹ÍÑ…Ñ••ÍÉ¥ÁÑ¥½¹ôùí•ÉÉ½É5•ÍÍ…•ôğ½Q•áĞø((€€€€€€€€ñAÉ•ÍÍ…‰±”(€€€€€€€€€…•ÍÍ¥‰¥±¥ÑåI½±”ô‰‰ÕÑÑ½¸ˆ(€€€€€€€€€ÍÑå±”õì¡ìÁÉ•ÍÍ•ô¤€ôøl(€€€€€€€€€€€ÍÑå±•Ì¹É•ÑÉå	ÕÑÑ½¸°(€€€€€€€€€€€ÁÉ•ÍÍ•€˜˜ÍÑå±•Ì¹ÁÉ•ÍÍ•°(€€€€€€€€€uô(€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøì(€€€€€€€€€€€Ù½¥É•±½… ¤ì(€€€€€€€€€õô(€€€€€€€€ø(€€€€€€€€€€ñQ•áĞÍÑå±”õíÍÑå±•Ì¹É•ÑÉå	ÕÑÑ½¹Q•áÑôûb—bçbŸb¿b¤ƒbŸffb·bŸf#fb¤ğ½Q•áĞø(€€€€€€€€ğ½AÉ•ÍÍ…‰±”ø(€€€€€€ğ½Y¥•Üø(€€€€¤ì(€ô((€É•ÑÕÉ¸€ (€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹ÍÉ••¹ôø(€€€€€€ñY¥•Ü(€€€€€€€ÍÑå±”õíl(€€€€€€€€€ÍÑå±•Ì¹Ñ½Á!•…‘•È°(€€€€€€€€€ì(€€€€€€€€€€€µ¥¹!•¥¡Ğè5…Ñ ¹µ…à ÄÀÀ°¥¹Í•ÑÌ¹Ñ½À€¬€ÜØ¤°(€€€€€€€€€€€Á…‘‘¥¹Q½Àè5…Ñ ¹µ…à ÌĞ°¥¹Í•ÑÌ¹Ñ½À€¬€ÄÀ¤°(€€€€€€€€€ô°(€€€€€€€uô(€€€€€€ø(€€€€€€€€ñAÉ•ÍÍ…‰±”(€€€€€€€€€…•ÍÍ¥‰¥±¥Ñå1…‰•°ô‹bŸfbçf#b¿b¤ˆ(€€€€€€€€€…•ÍÍ¥‰¥±¥ÑåI½±”ô‰‰ÕÑÑ½¸ˆ(€€€€€€€€€ÍÑå±”õì¡ìÁÉ•ÍÍ•ô¤€ôøl(€€€€€€€€€€€ÍÑå±•Ì¹‰…­	ÕÑÑ½¸°(€€€€€€€€€€€ÁÉ•ÍÍ•€˜˜ÍÑå±•Ì¹¡•…‘•É	ÕÑÑ½¹AÉ•ÍÍ•°(€€€€€€€€€uô(€€€€€€€€€½¹AÉ•ÍÌõì ¤€ôøÉ½ÕÑ•È¹‰…¬ ¥ô(€€€€€€€€ø(€€€€€€€€€€ñ	…­ÉÉ½İ%½¸€¼ø(€€€€€€€€ğ½AÉ•ÍÍ…‰±”ø(€€€€€€ğ½Y¥•Üø((€€€€€€ñ±…Ñ1¥ÍĞ(€€€€€€€½¹Ñ•¹Ñ½¹Ñ…¥¹•ÉMÑå±”õíÍÑå±•Ì¹Á…•½¹Ñ•¹Ñô(€€€€€€€‘…Ñ„õíÙ¥Í¥‰±•MÑ½É•Íô(€€€€€€€¥¹¥Ñ¥…±9ÕµQ½I•¹‘•ÈõìÙô(€€€€€€€­•åáÑÉ…Ñ½Èõì¡ÍÑ½É”¤€ôøÍÑ½É”¹¥‘ô(€€€€€€€1¥ÍÑµÁÑå½µÁ½¹•¹Ğõí±¥ÍÑµÁÑåô(€€€€€€€1¥ÍÑ½½Ñ•É½µÁ½¹•¹Ğõì(€€€€€€€€€Ù¥Í¥‰±•MÑ½É•Ì¹±•¹Ñ €ø€À€ü€ (€€€€€€€€€€€€ñY¥•ÜÍÑå±”õíÍÑå±•Ì¹ÍÑ½É•Í1¥ÍÑ	½ÑÑ½µMÁ…•Éô€¼ø(€€€€€€€€€€¤€è¹Õ±°(€€€€€€€ô(€€€€€€€1¥ÍÑ!•…‘•É½µÁ½¹•¹Ğõí±¥ÍÑ!•…‘•Éô(€€€€€€€µ…áQ½I•¹‘•ÉA•É	…Ñ õìáô(€€€€€€€É•¹‘•É%Ñ•´õíÉ•¹‘•ÉI•ÍÑ…ÕÉ…¹Ñô(€€€€€€€Í¡½İÍY•ÉÑ¥…±MÉ½±±%¹‘¥…Ñ½Èõí™…±Í•ô(€€€€€€€İ¥¹‘½İM¥é”õìİô(€€€€€€¼ø((€€€€€€ñ±½Í•‘MÑ½É•9½Ñ¥”(€€€€€€€ÍÑ½É”õí±½Í•‘MÑ½É•9½Ñ¥•ô(€€€€€€€½¹±½Í”õì ¤€ôøÍ•Ñ±½Í•‘MÑ½É•9½Ñ¥”¡¹Õ±°¥ô(€€€€€€¼ø((€€€€€€ñÕ¥Í¥¹•Í5½‘…°(€€€€€€€‘É…™ÑÕ¥Í¥¹•-•äõí‘É…™ÑÕ¥Í¥¹•-•åô(€€€€€€€Ù¥Í¥‰±”õí¥ÍÕ¥Í¥¹•Í5½‘…±Y¥Í¥‰±•ô(€€€€€€€½¹ÁÁ±äõí…ÁÁ±åÕ¥Í¥¹•¥±Ñ•ÉÍô(€€€€€€€½¹±½Í”õí±½Í•Õ¥Í¥¹•Í5½‘…±ô(€€€€€€€½¹I•Í•ĞõíÉ•Í•ÑÕ¥Í¥¹•¥±Ñ•ÉÍô(€€€€€€€½¹Q½±•Õ¥Í¥¹”õíÑ½±•É…™ÑÕ¥Í¥¹•ô(€€€€€€¼ø(€€€€ğ½Y¥•Üø(€€¤ì)ô()½¹ÍĞÍÑå±•Ì€ôMÑå±•M¡••Ğ¹É•…Ñ”¡ì(€ÍÉ••¸èì(€€€‰…­É½Õ¹‘½±½Èè€œœ°(€€€™±•àè€Ä°(€ô°((€Ñ½Á!•…‘•Èèì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€‰…­É½Õ¹‘½±½Èè€œœ°(€€€‰½É‘•É	½ÑÑ½µ½±½Èè€œœ°(€€€‰½É‘•É	½ÑÑ½µ]¥‘Ñ è€Ä°(€€€™±•á¥É•Ñ¥½¸è€É½Üœ°(€€€…Àè€ÄĞ°(€€€Á…‘‘¥¹	½ÑÑ½´è€ÄĞ°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è9Y%9Qe}9=]}1e=UP¹Á…•ÕÑÑ•È°(€€€Í¡…‘½İ½±½Èè€œŒÀÀÀÀÀÀœ°(€€€Í¡…‘½İ=™™Í•Ğèì(€€€€€¡•¥¡Ğè€È°(€€€€€İ¥‘Ñ è€À°(€€€ô°(€€€Í¡…‘½İ=Á…¥Ñäè€À¸ÀÔ°(€€€Í¡…‘½İI…‘¥ÕÌè€Ø°(€€€é%¹‘•àè€ÄÀ°(€ô°((€‰…­	ÕÑÑ½¸èì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€‰…­É½Õ¹‘½±½Èè€œœ°(€€€‰½É‘•É½±½Èè€œÅÅÄœ°(€€€‰½É‘•ÉI…‘¥ÕÌè€ÈĞ°(€€€‰½É‘•É]¥‘Ñ è€Ä°(€€€¡•¥¡Ğè€ĞØ°(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€•¹Ñ•Èœ°(€€€İ¥‘Ñ è€ĞØ°(€ô°((€¡•…‘•É	ÕÑÑ½¹AÉ•ÍÍ•èì(€€€‰…­É½Õ¹‘½±½Èè€œİİÜœ°(€€€ÑÉ…¹Í™½É´èmìÍ…±”è€À¸äÜõt°(€ô°((€‰…­ÉÉ½İ…¹Ù…Ìèì(€€€¡•¥¡Ğè€ÈÌ°(€€€Á½Í¥Ñ¥½¸è€É•±…Ñ¥Ù”œ°(€€€İ¥‘Ñ è€ÈĞ°(€ô°((€‰…­ÉÉ½İMÑ•´èì(€€€‰…­É½Õ¹‘½±½Èè€œŒÈĞÈĞÈĞœ°(€€€‰½É‘•ÉI…‘¥ÕÌè€È°(€€€¡•¥¡Ğè€È¸È°(€€€±•™Ğè€Ì°(€€€Á½Í¥Ñ¥½¸è€…‰Í½±ÕÑ”œ°(€€€Ñ½Àè€ÄÀ¸Ì°(€€€İ¥‘Ñ è€Ää°(€ô°((€‰…­ÉÉ½İ¥…½¹…°èì(€€€‰…­É½Õ¹‘½±½Èè€œŒÈĞÈĞÈĞœ°(€€€‰½É‘•ÉI…‘¥ÕÌè€È°(€€€¡•¥¡Ğè€È¸È°(€€€±•™Ğè€È°(€€€Á½Í¥Ñ¥½¸è€…‰Í½±ÕÑ”œ°(€€€İ¥‘Ñ è€ÄÀ°(€ô°((€‰…­ÉÉ½İQ½Àèì(€€€Ñ½Àè€Ü°(€€€ÑÉ…¹Í™½É´èmìÉ½Ñ…Ñ”è€œ´ĞÉ‘•œœõt°(€ô°((€‰…­ÉÉ½İ	½ÑÑ½´èì(€€€Ñ½Àè€ÄĞ°(€€€ÑÉ…¹Í™½É´èmìÉ½Ñ…Ñ”è€œĞÉ‘•œœõt°(€ô°((€Á…•½¹Ñ•¹Ğèì(€€€™±•áÉ½Üè€Ä°(€€€Á…‘‘¥¹	½ÑÑ½´è€ĞÈ°(€ô°((€½¹Ñ…¥¹•Èèì(€€€…±¥¹M•±˜è€•¹Ñ•Èœ°(€€€µ…á]¥‘Ñ è9Y%9Qe}9=]}1e=UP¹½¹Ñ•¹Ñ5…á]¥‘Ñ °(€€€İ¥‘Ñ è€œÄÀÀ”œ°(€ô°((€Õ¥Í¥¹•ÍAÉ•Ù¥•Üèì(€€€‰…­É½Õ¹‘½±½Èè€œœ°(€€€‘¥É•Ñ¥½¸è€±ÑÈœ°(€ô°((€Õ¥Í¥¹•ÍAÉ•Ù¥•İ½¹Ñ•¹Ğèì(€€€‘¥É•Ñ¥½¸è€±ÑÈœ°(€€€™±•á¥É•Ñ¥½¸è€É½ÜµÉ•Ù•ÉÍ”œ°(€€€…Àè€ÄØ°(€€€Á…‘‘¥¹	½ÑÑ½´è€ÄÌ°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è9Y%9Qe}9=]}1e=UP¹Á…•ÕÑÑ•È°(€€€Á…‘‘¥¹Q½Àè€Äà°(€ô°((€Õ¥Í¥¹•AÉ•Ù¥•İ%Ñ•´èì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€İ¥‘Ñ è€àĞ°(€ô°((€Õ¥Í¥¹•AÉ•Ù¥•İ%µ…”èì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€‰…­É½Õ¹‘½±½Èè€œÙÑÄœ°(€€€‰½É‘•É½±½Èè€œÅÅÈœ°(€€€‰½É‘•ÉI…‘¥ÕÌè€Ìä°(€€€‰½É‘•É]¥‘Ñ è€Ä°(€€€¡•¥¡Ğè€Üà°(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€•¹Ñ•Èœ°(€€€½Ù•É™±½Üè€¡¥‘‘•¸œ°(€€€Í¡…‘½İ½±½Èè€œŒÄÄÄÄÄÄœ°(€€€Í¡…‘½İ=™™Í•Ğèì(€€€€€¡•¥¡Ğè€È°(€€€€€İ¥‘Ñ è€À°(€€€ô°(€€€Í¡…‘½İ=Á…¥Ñäè€À¸Àà°(€€€Í¡…‘½İI…‘¥ÕÌè€Ô°(€€€İ¥‘Ñ è€Üà°(€ô°((€Õ¥Í¥¹•AÉ•Ù¥•İ%µ…•Ñ¥Ù”èì(€€€‰…­É½Õ¹‘½±½Èè€œáÀœ°(€€€‰½É‘•É½±½Èè9Y%9Qe}9=]}=1=IL¹ÁÉ¥µ…Éä°(€€€‰½É‘•É]¥‘Ñ è€È°(€ô°((€Õ¥Í¥¹•AÉ•Ù¥•İA¡½Ñ¼èì(€€€‰½É‘•ÉI…‘¥ÕÌè€Ìä°(€€€¡•¥¡Ğè€œÄÀÀ”œ°(€€€İ¥‘Ñ è€œÄÀÀ”œ°(€ô°((€Õ¥Í¥¹•AÉ•Ù¥•İ1…‰•°èì(€€€½±½Èè€œŒÙÙÜÀœ°(€€€™½¹ÑM¥é”è€ÄÈ°(€€€µ…É¥¹Q½Àè€à°(€€€µ…á]¥‘Ñ è€àĞ°(€€€Ñ•áÑ±¥¸è€•¹Ñ•Èœ°(€ô°((€Õ¥Í¥¹•AÉ•Ù¥•İ1…‰•±Ñ¥Ù”èì(€€€½±½Èè9Y%9Qe}9=]}=1=IL¹ÁÉ¥µ…Éä°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€ô°((€±•…É¥±Ñ•ÉÍI½Üèì(€€€…±¥¹%Ñ•µÌè€™±•àµÍÑ…ÉĞœ°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è9Y%9Qe}9=]}1e=UP¹Á…•ÕÑÑ•È°(€€€Á…‘‘¥¹Q½Àè€Äà°(€ô°((€±•…É¥±Ñ•ÉÍ	ÕÑÑ½¸èì(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€•¹Ñ•Èœ°(€€€µ¥¹!•¥¡Ğè€ÌØ°(€ô°((€±•…É¥±Ñ•ÉÍQ•áĞèì(€€€½±½Èè9Y%9Qe}9=]}=1=IL¹ÁÉ¥µ…Éä°(€€€™½¹ÑM¥é”è€ÄÈ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€ô°((€ÍÑ½É•Í1¥ÍÑQ½ÁMÁ…•Èèì(€€€¡•¥¡Ğè€ÄÈ°(€ô°((€ÍÑ½É•Í1¥ÍÑ	½ÑÑ½µMÁ…•Èèì(€€€¡•¥¡Ğè€à°(€ô°((€ÍÑ½É•1¥ÍÑ%Ñ•´èì(€€€…±¥¹M•±˜è€•¹Ñ•Èœ°(€€€µ…á]¥‘Ñ è9Y%9Qe}9=]}1e=UP¹½¹Ñ•¹Ñ5…á]¥‘Ñ °(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è9Y%9Qe}9=]}1e=UP¹Á…•ÕÑÑ•È°(€€€İ¥‘Ñ è€œÄÀÀ”œ°(€ô°((€±½Í•‘9½Ñ¥•5½‘…°èì(€€€™±•àè€Ä°(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€™±•àµ•¹œ°(€ô°((€±½Í•‘9½Ñ¥•	…­‘É½Àèì(€€€‰…­É½Õ¹‘½±½Èè€É‰„ Äà°Äà°ÈÀ°À¸Èà¤œ°(€€€‰½ÑÑ½´è€À°(€€€±•™Ğè€À°(€€€Á½Í¥Ñ¥½¸è€…‰Í½±ÕÑ”œ°(€€€É¥¡Ğè€À°(€€€Ñ½Àè€À°(€ô°((€±½Í•‘9½Ñ¥•…Éèì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€…±¥¹M•±˜è€•¹Ñ•Èœ°(€€€‰…­É½Õ¹‘½±½Èè€œÑàœ°(€€€‰½É‘•ÉI…‘¥ÕÌè€ÈĞ°(€€€™±•á¥É•Ñ¥½¸è€É½Üœ°(€€€µ…É¥¹!½É¥é½¹Ñ…°è€ÄØ°(€€€µ…á]¥‘Ñ è9Y%9Qe}9=]}1e=UP¹½¹Ñ•¹Ñ5…á]¥‘Ñ °(€€€µ¥¹!•¥¡Ğè€ÄÀØ°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄØ°(€€€Á…‘‘¥¹Y•ÉÑ¥…°è€ÄÔ°(€€€Í¡…‘½İ½±½Èè€œŒÀÀÀÀÀÀœ°(€€€Í¡…‘½İ=™™Í•Ğèì(€€€€€¡•¥¡Ğè€Ğ°(€€€€€İ¥‘Ñ è€À°(€€€ô°(€€€Í¡…‘½İ=Á…¥Ñäè€À¸ÄØ°(€€€Í¡…‘½İI…‘¥ÕÌè€ÄÈ°(€€€İ¥‘Ñ è€œäÈ”œ°(€ô°((€±½Í•‘9½Ñ¥•±½Í•	ÕÑÑ½¸èì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€™±•áM¡É¥¹¬è€À°(€€€¡•¥¡Ğè€ÌĞ°(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€•¹Ñ•Èœ°(€€€İ¥‘Ñ è€ÌĞ°(€ô°((€±½Í•‘9½Ñ¥•±½Í•Q•áĞèì(€€€½±½Èè€œŒÈØÈØÈØœ°(€€€™½¹ÑM¥é”è€ÌĞ°(€€€™½¹Ñ]•¥¡Ğè€œÌÀÀœ°(€€€±¥¹•!•¥¡Ğè€ÌĞ°(€ô°((€±½Í•‘9½Ñ¥•½¹Ñ•¹Ğèì(€€€™±•àè€Ä°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÄÀ°(€ô°((€±½Í•‘9½Ñ¥•Q¥Ñ±”èì(€€€½±½Èè€œŒÈÔÈÔÈÔœ°(€€€™½¹ÑM¥é”è€ÄÔ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€€€±¥¹•!•¥¡Ğè€ÈÄ°(€€€Ñ•áÑ±¥¸è€É¥¡Ğœ°(€€€İÉ¥Ñ¥¹¥É•Ñ¥½¸è€ÉÑ°œ°(€ô°((€±½Í•‘9½Ñ¥•]…É¹¥¹%½¸èì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€™±•áM¡É¥¹¬è€À°(€€€¡•¥¡Ğè€Ìà°(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€•¹Ñ•Èœ°(€€€µ…É¥¹1•™Ğè€È°(€€€İ¥‘Ñ è€Ìà°(€ô°((€±½Í•‘9½Ñ¥•]…É¹¥¹Q•áĞèì(€€€½±½Èè€œŒåÙÀÀœ°(€€€™½¹ÑM¥é”è€ÌÄ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€€€±¥¹•!•¥¡Ğè€ÌĞ°(€ô°((€±½Í•‘9½Ñ¥•AÉ•ÍÍ•èì(€€€½Á…¥Ñäè€À¸ÔÔ°(€ô°((€•µÁÑå…Éèì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€‰…­É½Õ¹‘½±½Èè€œœ°(€€€‰½É‘•É½±½Èè€œœ°(€€€‰½É‘•ÉI…‘¥ÕÌè€ÈÈ°(€€€‰½É‘•É]¥‘Ñ è€Ä°(€€€µ…É¥¹!½É¥é½¹Ñ…°è9Y%9Qe}9=]}1e=UP¹Á…•ÕÑÑ•È°(€€€µ…É¥¹Q½Àè€ÈÀ°(€€€Á…‘‘¥¹œè€Èà°(€ô°((€•µÁÑå%½¸èì(€€€™½¹ÑM¥é”è€ĞÈ°(€ô°((€•µÁÑåQ¥Ñ±”èì(€€€½±½Èè€œŒÈÀÈÀÈĞœ°(€€€™½¹ÑM¥é”è€ÄÜ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€€€µ…É¥¹Q½Àè€ÄÈ°(€ô°((€•µÁÑå•ÍÉ¥ÁÑ¥½¸èì(€€€½±½Èè€œŒİİàÄœ°(€€€™½¹ÑM¥é”è€ÄÈ°(€€€±¥¹•!•¥¡Ğè€ÈÀ°(€€€µ…É¥¹Q½Àè€Ü°(€€€Ñ•áÑ±¥¸è€•¹Ñ•Èœ°(€ô°((€•µÁÑåI•Í•Ñ	ÕÑÑ½¸èì(€€€‰…­É½Õ¹‘½±½Èè9Y%9Qe}9=]}=1=IL¹ÁÉ¥µ…Éä°(€€€‰½É‘•ÉI…‘¥ÕÌè€äää°(€€€µ…É¥¹Q½Àè€Äà°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è€Ää°(€€€Á…‘‘¥¹Y•ÉÑ¥…°è€ÄÄ°(€ô°((€•µÁÑåI•Í•Ñ	ÕÑÑ½¹Q•áĞèì(€€€½±½Èè€œœ°(€€€™½¹ÑM¥é”è€ÄÈ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€ô°((€ÍÑ…Ñ•MÉ••¸èì(€€€…±¥¹%Ñ•µÌè€•¹Ñ•Èœ°(€€€‰…­É½Õ¹‘½±½Èè€œœ°(€€€™±•àè€Ä°(€€€©ÕÍÑ¥™å½¹Ñ•¹Ğè€•¹Ñ•Èœ°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è€Èà°(€ô°((€ÍÑ…Ñ•%½¸èì(€€€™½¹ÑM¥é”è€ÔÈ°(€ô°((€ÍÑ…Ñ•Q¥Ñ±”èì(€€€½±½Èè€œŒÄÜÄÜÅœ°(€€€™½¹ÑM¥é”è€ÈÄ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€€€µ…É¥¹Q½Àè€ÄÜ°(€€€Ñ•áÑ±¥¸è€•¹Ñ•Èœ°(€ô°((€ÍÑ…Ñ••ÍÉ¥ÁÑ¥½¸èì(€€€½±½Èè€œŒÜÌÜÌİœ°(€€€™½¹ÑM¥é”è€ÄÌ°(€€€±¥¹•!•¥¡Ğè€ÈÄ°(€€€µ…É¥¹Q½Àè€à°(€€€Ñ•áÑ±¥¸è€•¹Ñ•Èœ°(€ô°((€É•ÑÉå	ÕÑÑ½¸èì(€€€‰…­É½Õ¹‘½±½Èè9Y%9Qe}9=]}=1=IL¹ÁÉ¥µ…Éä°(€€€‰½É‘•ÉI…‘¥ÕÌè€ÄÔ°(€€€µ…É¥¹Q½Àè€ÈÈ°(€€€Á…‘‘¥¹!½É¥é½¹Ñ…°è€ÈĞ°(€€€Á…‘‘¥¹Y•ÉÑ¥…°è€ÄÌ°(€ô°((€É•ÑÉå	ÕÑÑ½¹Q•áĞèì(€€€½±½Èè€œœ°(€€€™½¹ÑM¥é”è€ÄĞ°(€€€™½¹Ñ]•¥¡Ğè€œäÀÀœ°(€ô°((€ÁÉ•ÍÍ•èì(€€€½Á…¥Ñäè€À¸ÜØ°(€€€ÑÉ…¹Í™½É´èmìÍ…±”è€À¸äàÔõt°(€ô°)ô¤ì(

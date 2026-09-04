@@ -17,10 +17,10 @@ import {
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from 'react-native';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
-import { OrdersScreenSkeleton } from '../components/ui/loading-skeleton';
 import { useAuthSession } from '../hooks/use-auth-session';
 import {
   listStores,
@@ -63,6 +63,21 @@ type StoreImageMap = Record<
   string,
   string | null
 >;
+
+const BRAND_GREEN = '#00B85C';
+const BRAND_GREEN_SOFT = '#EAFBF2';
+
+/*
+ * Local artwork for service-style stores that do not have
+ * a normal Store record/logo coming from listStores().
+ *
+ * These are the same official category assets used on Home,
+ * so Orders never falls back to the empty image placeholder
+ * for these three services.
+ */
+const personalCareStoreImage = require('../assets/icons/categories/personal-care.webp');
+const laundryStoreImage = require('../assets/icons/categories/laundry.webp');
+const requestAnythingStoreImage = require('../assets/icons/categories/request-anything.webp');
 
 const statusPresentation: Record<
   OrderStatus,
@@ -239,6 +254,48 @@ function getStoreId(
   );
 }
 
+function normalizeStoreName(
+  value: string,
+): string {
+  return value
+    .trim()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ');
+}
+
+function getLocalStoreImageSource(
+  storeName: string,
+): ImageSourcePropType | null {
+  const normalizedName =
+    normalizeStoreName(storeName);
+
+  if (
+    normalizedName === 'العنايه' ||
+    normalizedName === 'العنايه الشخصيه'
+  ) {
+    return personalCareStoreImage;
+  }
+
+  if (
+    normalizedName === 'الغسيل والكي' ||
+    normalizedName === 'الغسيل والمكواه' ||
+    normalizedName === 'غسيل وكي'
+  ) {
+    return laundryStoreImage;
+  }
+
+  if (
+    normalizedName === 'اطلب اي حاجه' ||
+    normalizedName === 'اي حاجه'
+  ) {
+    return requestAnythingStoreImage;
+  }
+
+  return null;
+}
+
 function getOrderEmbeddedImageUrl(
   order: Order,
 ): string | null {
@@ -273,6 +330,96 @@ function getOrderEmbeddedImageUrl(
   return null;
 }
 
+/*
+ * شاشة تحميل جديدة بدل الـSkeleton القديم.
+ *
+ * التصميم Minimal ومبني على:
+ * - خلفية بيضاء
+ * - أخضر Navienty Now
+ * - عنصر مركزي بسيط
+ * - بدون Cards وهمية أو ازدحام بصري
+ */
+function OrdersLoadingSplash() {
+  return (
+    <View
+      style={
+        styles.loadingScreen
+      }
+    >
+      <View
+        pointerEvents="none"
+        style={
+          styles.loadingGlowTop
+        }
+      />
+
+      <View
+        pointerEvents="none"
+        style={
+          styles.loadingGlowBottom
+        }
+      />
+
+      <View
+        style={
+          styles.loadingContent
+        }
+      >
+        <View
+          style={
+            styles.loadingMarkOuter
+          }
+        >
+          <View
+            style={
+              styles.loadingMarkMiddle
+            }
+          >
+            <View
+              style={
+                styles.loadingMarkInner
+              }
+            >
+              <Ionicons
+                name="receipt-outline"
+                size={29}
+                color={BRAND_GREEN}
+              />
+            </View>
+          </View>
+        </View>
+
+        <Text
+          style={
+            styles.loadingTitle
+          }
+        >
+          طلباتك
+        </Text>
+
+        <Text
+          style={
+            styles.loadingDescription
+          }
+        >
+          بنجهز آخر تحديث لطلباتك
+        </Text>
+
+        <View
+          style={
+            styles.loadingIndicatorContainer
+          }
+        >
+          <ActivityIndicator
+            size="small"
+            color={BRAND_GREEN}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function StoreImage({
   order,
   storeImageUrl,
@@ -280,6 +427,11 @@ function StoreImage({
   order: Order;
   storeImageUrl?: string | null;
 }) {
+  const localStoreImage =
+    getLocalStoreImageSource(
+      order.storeName,
+    );
+
   const embeddedImageUrl =
     getOrderEmbeddedImageUrl(
       order,
@@ -298,9 +450,12 @@ function StoreImage({
     setHasImageError(
       false,
     );
-  }, [imageUrl]);
+  }, [
+    imageUrl,
+    order.storeName,
+  ]);
 
-  const shouldShowImage =
+  const shouldShowRemoteImage =
     Boolean(imageUrl) &&
     !hasImageError;
 
@@ -310,7 +465,17 @@ function StoreImage({
         styles.storeImageContainer
       }
     >
-      {shouldShowImage ? (
+      {localStoreImage ? (
+        <Image
+          source={
+            localStoreImage
+          }
+          resizeMode="contain"
+          style={
+            styles.storeImage
+          }
+        />
+      ) : shouldShowRemoteImage ? (
         <Image
           source={{
             uri: imageUrl!,
@@ -512,7 +677,7 @@ function OrderRatingFooter({
         {isLoadingRating ? (
           <ActivityIndicator
             size="small"
-            color="#00B85C"
+            color={BRAND_GREEN}
           />
         ) : (
           <>
@@ -579,9 +744,9 @@ function OrderRatingFooter({
                   isLoadingRating
                 }
                 hitSlop={5}
-                style={( {
+                style={({
                   pressed,
-                } ) => [
+                }) => [
                   styles.ratingStarButton,
 
                   star > 1 &&
@@ -664,9 +829,9 @@ function OrderCard({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`فتح تفاصيل الطلب ${order.orderCode}`}
-        style={( {
+        style={({
           pressed,
-        } ) => [
+        }) => [
           styles.orderCardMain,
 
           pressed &&
@@ -817,9 +982,9 @@ function OrderCard({
                 accessibilityRole="button"
                 accessibilityLabel="اطلب مجددًا"
                 hitSlop={8}
-                style={( {
+                style={({
                   pressed,
-                } ) => [
+                }) => [
                   styles.reorderButton,
 
                   pressed &&
@@ -1051,8 +1216,6 @@ export default function OrdersScreen() {
     );
 
   /*
-   * الحل الأساسي لمشكلة الصور:
-   *
    * Order لا يحتوي حاليًا على logoUrl،
    * لذلك نجلب المتاجر من listStores
    * ونكوّن Map:
@@ -1193,7 +1356,7 @@ export default function OrdersScreen() {
     });
   }
 
-  const shouldShowInitialSkeleton =
+  const shouldShowInitialSplash =
     !hasHydrated ||
     authState.status ===
       'loading' ||
@@ -1204,11 +1367,15 @@ export default function OrdersScreen() {
       !pendingOrder
     );
 
+  /*
+   * تم استبدال OrdersScreenSkeleton
+   * بالـSplash الجديد.
+   */
   if (
-    shouldShowInitialSkeleton
+    shouldShowInitialSplash
   ) {
     return (
-      <OrdersScreenSkeleton />
+      <OrdersLoadingSplash />
     );
   }
 
@@ -1384,9 +1551,9 @@ export default function OrdersScreen() {
 
                 <Pressable
                   accessibilityRole="button"
-                  style={( {
+                  style={({
                     pressed,
-                  } ) => [
+                  }) => [
                     styles.pendingButton,
 
                     pressed &&
@@ -1445,9 +1612,9 @@ export default function OrdersScreen() {
 
               <Pressable
                 accessibilityRole="button"
-                style={( {
+                style={({
                   pressed,
-                } ) => [
+                }) => [
                   styles.shopButton,
 
                   pressed &&
@@ -1535,6 +1702,191 @@ const styles =
       flex: 1,
       backgroundColor:
         '#FFFFFF',
+    },
+
+    /*
+     * NEW LOADING SPLASH
+     */
+
+    loadingScreen: {
+      flex: 1,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+    },
+
+    loadingGlowTop: {
+      position:
+        'absolute',
+
+      width: 330,
+
+      height: 330,
+
+      borderRadius: 165,
+
+      top: -185,
+
+      right: -120,
+
+      backgroundColor:
+        '#F0FFF6',
+    },
+
+    loadingGlowBottom: {
+      position:
+        'absolute',
+
+      width: 280,
+
+      height: 280,
+
+      borderRadius: 140,
+
+      bottom: -180,
+
+      left: -130,
+
+      backgroundColor:
+        '#F6FFF9',
+    },
+
+    loadingContent: {
+      width: '100%',
+
+      maxWidth: 380,
+
+      paddingHorizontal: 32,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    loadingMarkOuter: {
+      width: 104,
+
+      height: 104,
+
+      borderRadius: 52,
+
+      backgroundColor:
+        '#F5FFF9',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    loadingMarkMiddle: {
+      width: 82,
+
+      height: 82,
+
+      borderRadius: 41,
+
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+    },
+
+    loadingMarkInner: {
+      width: 58,
+
+      height: 58,
+
+      borderRadius: 29,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
+
+      borderWidth: 1,
+
+      borderColor:
+        '#DDF5E8',
+    },
+
+    loadingTitle: {
+      marginTop: 22,
+
+      color:
+        '#1C1C1C',
+
+      fontSize: 20,
+
+      lineHeight: 28,
+
+      fontWeight:
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    loadingDescription: {
+      marginTop: 6,
+
+      color:
+        '#818181',
+
+      fontSize: 11.5,
+
+      lineHeight: 18,
+
+      fontWeight:
+        '500',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    loadingIndicatorContainer: {
+      marginTop: 24,
+
+      width: 34,
+
+      height: 34,
+
+      borderRadius: 17,
+
+      backgroundColor:
+        '#F7FBF9',
+
+      alignItems:
+        'center',
+
+      justifyContent:
+        'center',
     },
 
     pageContent: {

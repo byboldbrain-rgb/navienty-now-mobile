@@ -6,7 +6,6 @@ import {
   getOrderByToken,
 } from '../services/order-service';
 import { useOrdersStore } from '../store/orders-store';
-import PushNotificationsBridge from './push-notifications-bridge';
 
 type OrderUpdatePayload = {
   order_id?: unknown;
@@ -350,13 +349,5 @@ export default function OrderRealtimeBridge() {
     };
   }, []);
 
-  /**
-   * Both customer-runtime bridges share the same root lifecycle: they mount
-   * only after auth/bootstrap succeeds and the launch gate allows the app.
-   */
-  return (
-    <PushNotificationsBridge
-      enabled
-    />
-  );
+  return null;
 }

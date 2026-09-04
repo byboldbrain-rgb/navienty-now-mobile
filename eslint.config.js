@@ -19,4 +19,15 @@ module.exports = defineConfig([
       'react-hooks/set-state-in-effect': 'warn',
     },
   },
+  {
+    files: ['supabase/functions/**/*.ts'],
+    rules: {
+      /**
+       * Supabase Edge Functions use Deno-native `jsr:` and `npm:` module
+       * specifiers. They are resolved by the Edge runtime, while the Node
+       * resolver used by Expo ESLint cannot resolve those protocols.
+       */
+      'import/no-unresolved': 'off',
+    },
+  },
 ]);

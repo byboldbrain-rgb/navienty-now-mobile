@@ -11,7 +11,6 @@ export type VoucherDiscountType =
 export type VoucherCategorySlug =
   | 'restaurants'
   | 'supermarket'
-  | 'pharmacy'
   | 'bookstores';
 
 export type VoucherQuote = {
@@ -108,7 +107,6 @@ function mapCategorySlugs(
   >([
     'restaurants',
     'supermarket',
-    'pharmacy',
     'bookstores',
   ]);
 

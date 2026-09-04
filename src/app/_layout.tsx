@@ -14,6 +14,7 @@ import {
   Animated,
   Easing,
   Image,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -866,11 +867,13 @@ export default function RootLayout() {
       {startupHasResolved &&
       appIsAllowed ? (
         <>
-          <PushNotificationsBridge
-            enabled={
-              !showBootstrapScreen
-            }
-          />
+          {Platform.OS !== 'web' && (
+            <PushNotificationsBridge
+              enabled={
+                !showBootstrapScreen
+              }
+            />
+          )}
 
           <OrderRealtimeBridge />
 

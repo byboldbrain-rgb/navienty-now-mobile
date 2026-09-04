@@ -31,6 +31,9 @@ jobs:
       - name: Validate image assets
         run: node scripts/validate-image-assets.mjs
 
+      - name: Validate v1 public scope
+        run: npm run validate:v1-scope
+
       - name: Validate release config
         run: node scripts/validate-release-config.mjs
 
@@ -39,6 +42,15 @@ jobs:
 
       - name: Validate native maps config
         run: node scripts/validate-native-maps-config.mjs
+
+      - name: Validate notification lifecycle
+        run: node scripts/validate-notification-lifecycle.mjs
+
+      - name: Validate App Store account controls
+        run: node scripts/validate-app-store-account-controls.mjs
+
+      - name: Validate social authentication parity
+        run: node scripts/validate-social-auth-parity.mjs
 
       - name: Production dependency audit policy
         run: npm run audit:prod

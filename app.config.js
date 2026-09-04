@@ -1,3 +1,5 @@
+const { existsSync } = require('node:fs');
+
 const androidGoogleMapsApiKey =
   process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim();
 
@@ -16,6 +18,33 @@ const pushAutoRegister =
   'false';
 
 module.exports = ({ config }) => {
+  const existingPlugins = Array.isArray(config.plugins)
+    ? config.plugins.filter((plugin) => {
+        const name = Array.isArray(plugin)
+          ? plugin[0]
+          : plugin;
+
+        return name !== 'react-native-maps';
+      })
+    : [];
+
+  const mapsPluginOptions = {};
+
+  if (androidGoogleMapsApiKey) {
+    mapsPluginOptions.androidGoogleMapsApiKey =
+      androidGoogleMapsApiKey;
+  }
+
+  if (iosGoogleMapsApiKey) {
+    mapsPluginOptions.iosGoogleMapsApiKey =
+      iosGoogleMapsApiKey;
+  }
+
+  const mapsPlugin =
+    Object.keys(mapsPluginOptions).length > 0
+      ? ['react-native-maps', mapsPluginOptions]
+      : 'react-native-maps';
+
   const productionAndroidPackage =
     config.android?.package ?? 'com.navienty.now';
 
@@ -28,14 +57,36 @@ module.exports = ({ config }) => {
       ? config.scheme
       : 'navientynow';
 
+  const localGoogleServicesFile = isDevelopment
+    ? './google-services.dev.json'
+    : './google-services.json';
+
+  const googleServicesFile =
+    process.env.GOOGLE_SERVICES_JSON?.trim() ||
+    (existsSync(localGoogleServicesFile)
+      ? localGoogleServicesFile
+      : null);
+
+  if (
+    process.env.EAS_BUILD === 'true' &&
+    process.env.EAS_BUILD_PLATFORM === 'android' &&
+    !googleServicesFile
+  ) {
+    throw new Error(
+      'GOOGLE_SERVICES_JSON must be configured as an EAS secret file for Android builds.',
+    );
+  }
+
   const android = {
     ...config.android,
     package: isDevelopment
       ? `${productionAndroidPackage}.dev`
       : productionAndroidPackage,
-    googleServicesFile: isDevelopment
-      ? './google-services.dev.json'
-      : './google-services.json',
+    ...(googleServicesFile
+      ? {
+          googleServicesFile,
+        }
+      : {}),
   };
 
   const ios = {
@@ -55,13 +106,6 @@ module.exports = ({ config }) => {
     };
   }
 
-  if (iosGoogleMapsApiKey) {
-    ios.config = {
-      ...(config.ios?.config ?? {}),
-      googleMapsApiKey: iosGoogleMapsApiKey,
-    };
-  }
-
   return {
     ...config,
     name: isDevelopment
@@ -72,6 +116,10 @@ module.exports = ({ config }) => {
       : productionScheme,
     android,
     ios,
+    plugins: [
+      ...existingPlugins,
+      mapsPlugin,
+    ],
     extra: {
       ...(config.extra ?? {}),
       appVariant,

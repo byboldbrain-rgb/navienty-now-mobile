@@ -258,6 +258,39 @@ export async function markServiceBookingWhatsAppOpened(
   );
 }
 
+/**
+ * Submits a saved service booking without requiring an external messaging
+ * app. The database RPC is owner-scoped and idempotent for safe retries.
+ */
+export async function submitServiceBookingForConfirmation(
+  bookingId: string,
+): Promise<ServiceBooking> {
+  const { data, error } =
+    await supabase.rpc(
+      'submit_service_booking_for_confirmation',
+      {
+        p_booking_id:
+          bookingId.trim(),
+      },
+    );
+
+  if (error) {
+    throw new Error(
+      `Supabase service booking submission failed: ${error.message}`,
+    );
+  }
+
+  if (!data) {
+    throw new Error(
+      'Supabase service booking submission returned no data.',
+    );
+  }
+
+  return mapServiceBooking(
+    data as ServiceBookingRow,
+  );
+}
+
 export async function cancelServiceBookingAfterOpenFailure(
   bookingId: string,
   reason: string,

@@ -30,7 +30,6 @@ export type OrderItem = {
   imageUrl: string | null;
   quantity: number;
 
-  requiresPrescription: boolean;
   isAgeRestricted: boolean;
 };
 

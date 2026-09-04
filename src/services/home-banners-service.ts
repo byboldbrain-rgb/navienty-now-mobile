@@ -1,14 +1,43 @@
+import {
+  isV1PublicPromotion,
+} from '../config/v1-release-scope';
 import { publicSupabase } from '../lib/supabase';
 import {
   type PromoActionPayload,
   type PromoActionType,
   type PromoCampaignContent,
   type PromoCampaignTheme,
-  type PromoImageFit,
   type PromoImageBlockAction,
+  type PromoImageFit,
   type PromoPresentationType,
   type PromoSectionStyle,
 } from '../types/promo-campaign';
+
+/**
+ * Local Home-only context type.
+ *
+ * We intentionally define this here instead of importing PromoHomeContext
+ * from ../types/promo-campaign because the current promo-campaign.ts in the
+ * release branch does not export that type yet.
+ */
+export type HomeBannerContext =
+  | 'all'
+  | 'morning'
+  | 'midday'
+  | 'evening'
+  | 'late_night'
+  | 'month_end';
+
+/**
+ * Extend the shared promo content only for Home banners.
+ *
+ * This keeps homeContext available to the Home screen without forcing the
+ * shared PromoCampaignContent type to know about Home-specific targeting.
+ */
+export type HomeBannerContent =
+  PromoCampaignContent & {
+    homeContext?: HomeBannerContext;
+  };
 
 export type HomeBannerAudience =
   | 'all'
@@ -18,8 +47,7 @@ export type HomeBannerAudience =
 export type HomeBannerPlacement =
   | 'main'
   | 'exclusive_offers'
-  | 'supermarket'
-  | 'pharmacy';
+  | 'supermarket';
 
 export type HomeBannerImage = {
   id: string;
@@ -40,7 +68,7 @@ export type HomeBanner = {
   actionType: PromoActionType;
   actionPayload: PromoActionPayload;
   templateKey: string;
-  content: PromoCampaignContent;
+  content: HomeBannerContent;
   theme: PromoCampaignTheme;
   serviceAreaIds: string[];
   servicePackageId: string | null;
@@ -163,6 +191,19 @@ function normalizeImageFit(
     : undefined;
 }
 
+function normalizeHomeContext(
+  value: unknown,
+): HomeBannerContext {
+  return value === 'morning' ||
+    value === 'midday' ||
+    value === 'evening' ||
+    value === 'late_night' ||
+    value === 'month_end' ||
+    value === 'all'
+    ? value
+    : 'all';
+}
+
 function normalizeSectionStyle(
   value: unknown,
 ): PromoSectionStyle | undefined {
@@ -199,7 +240,7 @@ function normalizeActionPayload(
 
 function normalizeContent(
   value: unknown,
-): PromoCampaignContent {
+): HomeBannerContent {
   if (!isRecord(value)) {
     return {};
   }
@@ -419,6 +460,13 @@ function normalizeContent(
 
   return {
     imageBlocks,
+    homeContext:
+      normalizeHomeContext(
+        getString(
+          value,
+          'home_context',
+        ),
+      ),
     brandLabel:
       getString(value, 'brand_label'),
     badge: getString(value, 'badge'),
@@ -678,6 +726,7 @@ async function listHomeBanners(
     .filter(
       (banner) =>
         banner.image_url.trim().length > 0 &&
+        isV1PublicPromotion(banner) &&
         isBannerCurrentlyVisible(
           banner,
           currentTime,
@@ -728,6 +777,7 @@ async function getHomeBannerById(
 
   if (
     !banner.image_url.trim() ||
+    !isV1PublicPromotion(banner) ||
     !isBannerCurrentlyVisible(
       banner,
       Date.now(),

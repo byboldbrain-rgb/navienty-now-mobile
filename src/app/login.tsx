@@ -2,8 +2,10 @@ import {
   FontAwesome,
   Ionicons,
 } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import * as Crypto from 'expo-crypto';
 import {
   useLocalSearchParams,
   useRouter,
@@ -61,10 +63,10 @@ const AUTH_BORDER = '#747474';
 
 /**
  * ============================================================
- * TALABAT REFERENCE SYSTEM
+ * RESPONSIVE LAYOUT REFERENCE
  * ============================================================
  *
- * Reference screenshot:
+ * Original design canvas:
  *
  * Width = 591
  * Height = 1280
@@ -84,8 +86,8 @@ const AUTH_BORDER = '#747474';
 const REFERENCE_WIDTH = 591;
 
 /**
- * Approximate reference dimensions,
- * measured from the supplied Talabat screenshot.
+ * Approximate design dimensions, measured from the supplied
+ * Navienty authentication artwork and layout reference.
  *
  * These values are then scaled according
  * to the current screen width.
@@ -213,6 +215,38 @@ function getSingleParam(
     : value;
 }
 
+function bytesToHex(
+  bytes: Uint8Array,
+): string {
+  return Array.from(
+    bytes,
+    (byte) =>
+      byte
+        .toString(16)
+        .padStart(2, '0'),
+  ).join('');
+}
+
+function getErrorCode(
+  error: unknown,
+): string | null {
+  if (
+    typeof error !==
+      'object' ||
+    error === null ||
+    !('code' in error)
+  ) {
+    return null;
+  }
+
+  const { code } = error;
+
+  return typeof code ===
+    'string'
+    ? code
+    : null;
+}
+
 /**
  * ============================================================
  * HERO WAVE
@@ -245,8 +279,8 @@ function HeroWave({
         width={width}
       >
         {/*
-         * Very subtle organic transition,
-         * intentionally close to the Talabat reference.
+         * Very subtle organic transition matching the
+         * Navienty authentication artwork.
          *
          * It should NOT look like a big wave.
          */}
@@ -307,7 +341,7 @@ type ProviderButtonProps = {
   loading?: boolean;
 
   /**
-   * Current Talabat-reference scale.
+   * Current design-canvas scale.
    */
   scale: number;
 
@@ -480,6 +514,83 @@ function ProviderButton({
         </View>
       </View>
     </Pressable>
+  );
+}
+
+type NativeAppleProviderButtonProps = {
+  disabled: boolean;
+  loading: boolean;
+  scale: number;
+  onPress: () => void;
+};
+
+function NativeAppleProviderButton({
+  disabled,
+  loading,
+  scale,
+  onPress,
+}: NativeAppleProviderButtonProps) {
+  const height =
+    REF.providerHeight *
+    scale;
+
+  return (
+    <View
+      pointerEvents={
+        disabled
+          ? 'none'
+          : 'auto'
+      }
+      style={[
+        styles.nativeAppleButtonContainer,
+        {
+          height,
+          marginBottom:
+            REF.providerGap *
+            scale,
+          opacity:
+            disabled
+              ? 0.5
+              : 1,
+        },
+      ]}
+    >
+      <AppleAuthentication.AppleAuthenticationButton
+        buttonStyle={
+          AppleAuthentication
+            .AppleAuthenticationButtonStyle
+            .WHITE_OUTLINE
+        }
+        buttonType={
+          AppleAuthentication
+            .AppleAuthenticationButtonType
+            .CONTINUE
+        }
+        cornerRadius={
+          height / 2
+        }
+        style={
+          styles.nativeAppleButton
+        }
+        onPress={onPress}
+      />
+
+      {loading && (
+        <View
+          pointerEvents="none"
+          style={
+            styles.nativeAppleLoadingOverlay
+          }
+        >
+          <ActivityIndicator
+            color={
+              NAVIENTY_NOW_COLORS.text
+            }
+            size="small"
+          />
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -929,6 +1040,158 @@ export default function LoginScreen() {
         provider,
       );
 
+      if (
+        provider ===
+          'apple' &&
+        Platform.OS ===
+          'ios'
+      ) {
+        const rawNonce =
+          bytesToHex(
+            await Crypto
+              .getRandomBytesAsync(
+                32,
+              ),
+          );
+
+        const hashedNonce =
+          await Crypto
+            .digestStringAsync(
+              Crypto
+                .CryptoDigestAlgorithm
+                .SHA256,
+              rawNonce,
+            );
+
+        const credential =
+          await AppleAuthentication
+            .signInAsync({
+              nonce:
+                hashedNonce,
+              requestedScopes: [
+                AppleAuthentication
+                  .AppleAuthenticationScope
+                  .FULL_NAME,
+                AppleAuthentication
+                  .AppleAuthenticationScope
+                  .EMAIL,
+              ],
+            });
+
+        if (
+          !credential
+            .identityToken
+        ) {
+          throw new Error(
+            'لم يتم استلام رمز تسجيل الدخول من Apple.',
+          );
+        }
+
+        const appleCredentials = {
+          nonce:
+            rawNonce,
+          provider:
+            'apple' as const,
+          token:
+            credential
+              .identityToken,
+        };
+
+        const {
+          error:
+            appleAuthError,
+        } =
+          authState.status ===
+          'anonymous'
+            ? await supabase.auth
+                .linkIdentity(
+                  appleCredentials,
+                )
+            : await supabase.auth
+                .signInWithIdToken(
+                  appleCredentials,
+                );
+
+        if (appleAuthError) {
+          throw appleAuthError;
+        }
+
+        if (
+          credential.fullName
+        ) {
+          const fullName =
+            AppleAuthentication
+              .formatFullName(
+                credential
+                  .fullName,
+              )
+              .trim();
+
+          const metadata:
+            Record<
+              string,
+              string
+            > = {};
+
+          if (fullName) {
+            metadata.full_name =
+              fullName;
+          }
+
+          if (
+            credential
+              .fullName
+              .givenName
+          ) {
+            metadata.given_name =
+              credential
+                .fullName
+                .givenName;
+          }
+
+          if (
+            credential
+              .fullName
+              .familyName
+          ) {
+            metadata.family_name =
+              credential
+                .fullName
+                .familyName;
+          }
+
+          if (
+            Object.keys(
+              metadata,
+            ).length > 0
+          ) {
+            const {
+              error:
+                metadataError,
+            } =
+              await supabase.auth
+                .updateUser({
+                  data:
+                    metadata,
+                });
+
+            if (
+              metadataError &&
+              __DEV__
+            ) {
+              console.warn(
+                '[Navienty] Apple name metadata could not be saved.',
+                metadataError,
+              );
+            }
+          }
+        }
+
+        redirectAfterLogin();
+
+        return;
+      }
+
       const {
         data,
         error,
@@ -986,6 +1249,15 @@ export default function LoginScreen() {
         redirectAfterLogin();
       }
     } catch (error) {
+      if (
+        getErrorCode(
+          error,
+        ) ===
+        'ERR_REQUEST_CANCELED'
+      ) {
+        return;
+      }
+
       setFormMessage({
         type:
           'error',
@@ -1584,25 +1856,46 @@ export default function LoginScreen() {
                   }}
                 />
 
-                <ProviderButton
-                  disabled={
-                    anythingIsLoading
-                  }
-                  label="إستمرار عبر Apple"
-                  loading={
-                    socialProvider ===
-                    'apple'
-                  }
-                  provider="apple"
-                  scale={
-                    landingScale
-                  }
-                  onPress={() => {
-                    void signInWithSocialProvider(
-                      'apple',
-                    );
-                  }}
-                />
+                {Platform.OS ===
+                'ios' ? (
+                  <NativeAppleProviderButton
+                    disabled={
+                      anythingIsLoading
+                    }
+                    loading={
+                      socialProvider ===
+                      'apple'
+                    }
+                    scale={
+                      landingScale
+                    }
+                    onPress={() => {
+                      void signInWithSocialProvider(
+                        'apple',
+                      );
+                    }}
+                  />
+                ) : (
+                  <ProviderButton
+                    disabled={
+                      anythingIsLoading
+                    }
+                    label="إستمرار عبر Apple"
+                    loading={
+                      socialProvider ===
+                      'apple'
+                    }
+                    provider="apple"
+                    scale={
+                      landingScale
+                    }
+                    onPress={() => {
+                      void signInWithSocialProvider(
+                        'apple',
+                      );
+                    }}
+                  />
+                )}
 
                 <ProviderButton
                   disabled={
@@ -2389,6 +2682,48 @@ const styles =
     providerButtonDisabled: {
       opacity:
         0.5,
+    },
+
+    nativeAppleButtonContainer: {
+      position:
+        'relative',
+
+      width:
+        '100%',
+    },
+
+    nativeAppleButton: {
+      height:
+        '100%',
+
+      width:
+        '100%',
+    },
+
+    nativeAppleLoadingOverlay: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        'rgba(255, 255, 255, 0.88)',
+
+      bottom:
+        1,
+
+      justifyContent:
+        'center',
+
+      left:
+        1,
+
+      position:
+        'absolute',
+
+      right:
+        1,
+
+      top:
+        1,
     },
 
     providerButtonContent: {
