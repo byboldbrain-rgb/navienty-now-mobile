@@ -8,12 +8,17 @@ import {
     getMyOrders,
     getOrderByToken,
 } from '../services/order-service';
+import { useOrderRealtimeHealthStore } from '../store/order-realtime-health-store';
 import {
     type Order,
     useOrdersStore,
 } from '../store/orders-store';
 
-const HOME_ORDER_POLL_INTERVAL_MS = 8000;
+const HOME_ORDER_FALLBACK_POLL_INTERVAL_MS =
+  8000;
+
+const HOME_ORDER_REALTIME_WATCHDOG_INTERVAL_MS =
+  45_000;
 
 type UseHomeOrdersSyncInput = {
   currentUserId: string | null;
@@ -139,6 +144,16 @@ export function useHomeOrdersSync({
     Promise<void> | null
   >(null);
 
+  const realtimeIsSubscribed =
+    useOrderRealtimeHealthStore(
+      (state) =>
+        !!currentUserId &&
+        state.userId ===
+          currentUserId &&
+        state.status ===
+          'subscribed',
+    );
+
   /*
    * Refresh the complete order history whenever Home becomes focused for the
    * current identity. The result is ignored after blur/user-change so a slow
@@ -206,13 +221,15 @@ export function useHomeOrdersSync({
   );
 
   /*
-   * Poll active orders while Home is focused, but serialize requests. The old
-   * implementation could start another Promise.allSettled every 8 seconds even
-   * when the previous network round had not completed, creating duplicate
-   * traffic and allowing out-of-order responses to race each other.
+   * Realtime is the primary active-order update path. While its private
+   * channel is subscribed, keep only a low-frequency 45-second watchdog so a
+   * missed broadcast can still self-heal. If realtime is connecting, closed,
+   * timed out, or errored, automatically return to the previous 8-second
+   * polling cadence.
    *
-   * The first poll also waits for the full-history sync above, so an older
-   * history response cannot replace a newer per-order status update.
+   * The focus-level getMyOrders() above is already authoritative, so there is
+   * no second immediate per-order refresh on focus. This avoids the previous
+   * duplicate network round while preserving the same eventual consistency.
    */
   useFocusEffect(
     useCallback(() => {
@@ -226,6 +243,11 @@ export function useHomeOrdersSync({
 
       let active = true;
       let refreshInFlight = false;
+
+      const pollIntervalMs =
+        realtimeIsSubscribed
+          ? HOME_ORDER_REALTIME_WATCHDOG_INTERVAL_MS
+          : HOME_ORDER_FALLBACK_POLL_INTERVAL_MS;
 
       const runRefresh = async () => {
         if (refreshInFlight) {
@@ -261,11 +283,9 @@ export function useHomeOrdersSync({
         }
       };
 
-      void runRefresh();
-
       const timer = setInterval(() => {
         void runRefresh();
-      }, HOME_ORDER_POLL_INTERVAL_MS);
+      }, pollIntervalMs);
 
       return () => {
         active = false;
@@ -275,6 +295,7 @@ export function useHomeOrdersSync({
       currentUserId,
       hasActiveOrders,
       hasHydrated,
+      realtimeIsSubscribed,
     ]),
   );
 }
