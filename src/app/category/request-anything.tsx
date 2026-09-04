@@ -26,6 +26,13 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import {
+  getLegacyRequestAnythingCartConfiguration,
+  type RequestAnythingCartConfiguration,
+} from '../../domain/request-anything-cart-config';
+import {
+  getRequestAnythingCartConfiguration,
+} from '../../services/request-anything-cart-config-service';
+import {
   findStorefrontCategoryTile,
   getStorefrontTileScreenImages,
   listStorefrontCategoryTiles,
@@ -64,15 +71,6 @@ const REQUEST_ANYTHING_CATEGORY_ALIASES =
 
 const REQUEST_MAX_LENGTH =
   500;
-
-const REQUEST_ANYTHING_INTERNAL_STORE_ID =
-  '4ebd8b80-8288-4c9b-980a-f15b5274e78b';
-
-const REQUEST_ANYTHING_INTERNAL_PRODUCT_ID =
-  'b260c5e5-e6cb-462b-b025-627d7bb2cff2';
-
-const REQUEST_ANYTHING_DELIVERY_FEE =
-  25;
 
 function buildRequestAnythingCartDescription(
   requestText: string,
@@ -190,6 +188,14 @@ export default function RequestAnythingScreen() {
     );
 
   const [
+    cartConfiguration,
+    setCartConfiguration,
+  ] =
+    useState<RequestAnythingCartConfiguration>(
+      getLegacyRequestAnythingCartConfiguration,
+    );
+
+  const [
     isLoading,
     setIsLoading,
   ] =
@@ -279,6 +285,12 @@ export default function RequestAnythingScreen() {
           const bootstrap =
             await getAppBootstrap();
 
+          const cartConfigurationPromise =
+            getRequestAnythingCartConfiguration(
+              bootstrap.settings
+                .default_service_area_id,
+            );
+
           let remoteScreenImages:
             Record<string, string> =
             {};
@@ -307,6 +319,10 @@ export default function RequestAnythingScreen() {
              * Bundled images remain the fallback.
              */
           }
+
+          setCartConfiguration(
+            await cartConfigurationPromise,
+          );
 
           setCampaignImageOverrides(
             remoteScreenImages,
@@ -586,15 +602,27 @@ export default function RequestAnythingScreen() {
        * local cart description so checkout can copy it into
        * now.orders.notes.
        */
+      const legacyCartConfiguration =
+        getLegacyRequestAnythingCartConfiguration();
+
+      if (
+        legacyCartConfiguration.storeId !==
+        cartConfiguration.storeId
+      ) {
+        clearStoreCart(
+          legacyCartConfiguration.storeId,
+        );
+      }
+
       clearStoreCart(
-        REQUEST_ANYTHING_INTERNAL_STORE_ID,
+        cartConfiguration.storeId,
       );
 
       const addResult =
         addItem(
           {
             id:
-              REQUEST_ANYTHING_INTERNAL_STORE_ID,
+              cartConfiguration.storeId,
 
             name:
               'اطلب أي حاجة',
@@ -606,14 +634,14 @@ export default function RequestAnythingScreen() {
               REQUEST_ANYTHING_CATEGORY_SLUG,
 
             deliveryFee:
-              REQUEST_ANYTHING_DELIVERY_FEE,
+              cartConfiguration.deliveryFee,
 
             minimumOrder:
               0,
           },
           {
             id:
-              REQUEST_ANYTHING_INTERNAL_PRODUCT_ID,
+              cartConfiguration.productId,
 
             name:
               'اطلب أي حاجة',
@@ -658,11 +686,12 @@ export default function RequestAnythingScreen() {
 
         params: {
           storeId:
-            REQUEST_ANYTHING_INTERNAL_STORE_ID,
+            cartConfiguration.storeId,
         },
       });
     }, [
       addItem,
+      cartConfiguration,
       clearStoreCart,
       router,
       trimmedPickupAddress,
