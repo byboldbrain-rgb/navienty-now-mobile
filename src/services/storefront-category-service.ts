@@ -193,10 +193,17 @@ function mapStorefrontCategoryTile(
  * storefront-category contract. Matching is deliberately limited to key,
  * routeSlug and sourceSlugs so this helper does not depend on hidden backend
  * fields or on presentation labels.
+ *
+ * Callers may pass optional route/category identifiers directly. Nullish
+ * values normalize to an empty identifier and are ignored.
  */
 export function findStorefrontCategoryTile(
   tiles: readonly StorefrontCategoryTile[],
-  aliases: readonly string[],
+  aliases: readonly (
+    | string
+    | null
+    | undefined
+  )[],
 ): StorefrontCategoryTile | null {
   const normalizedAliases =
     new Set(
