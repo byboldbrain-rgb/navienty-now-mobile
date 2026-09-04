@@ -314,9 +314,7 @@ export default function DynamicCampaignPopup({
                   campaign.title
                 }
                 fadeDuration={0}
-                resizeMode={
-                  campaign.config.imageFit
-                }
+                resizeMode="cover"
                 source={imageSource}
                 style={styles.heroImage}
                 onError={(event) => {
