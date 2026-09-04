@@ -40,8 +40,7 @@ import { useOrdersStore } from '../store/orders-store';
 import { NAVIENTY_NOW_COLORS } from '../theme/navienty-now-theme';
 
 /*
- * Force Expo Router to use the Home route
- * as the initial screen for this Stack.
+ * Force Expo Router to use the Home route as the initial Stack screen.
  */
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -119,8 +118,7 @@ async function withTimeout<T>(
 
 void SplashScreen.preventAutoHideAsync().catch(
   () => {
-    // Safe during Fast Refresh / environments where the native splash
-    // may already be hidden.
+    // Safe during Fast Refresh or if the native splash is already hidden.
   },
 );
 
@@ -139,7 +137,6 @@ function AppBootstrapScreen({
   const nativeSplashHiddenRef = useRef(false);
   const exitStartedRef = useRef(false);
   const finishedRef = useRef(false);
-
   const holdTimerRef =
     useRef<ReturnType<typeof setTimeout> | null>(
       null,
@@ -151,19 +148,15 @@ function AppBootstrapScreen({
   const dotOpacity = useRef(
     new Animated.Value(0),
   ).current;
-
   const dotTranslateY = useRef(
     new Animated.Value(-58),
   ).current;
-
   const dotScale = useRef(
     new Animated.Value(0.94),
   ).current;
-
   const revealWidth = useRef(
     new Animated.Value(0),
   ).current;
-
   const screenOpacity = useRef(
     new Animated.Value(1),
   ).current;
@@ -176,32 +169,30 @@ function AppBootstrapScreen({
   const logoHeight =
     logoWidth / BOOTSTRAP_LOGO_ASPECT_RATIO;
 
-  const hideNativeSplash =
-    useCallback(() => {
-      if (nativeSplashHiddenRef.current) {
-        return;
-      }
+  const hideNativeSplash = useCallback(() => {
+    if (nativeSplashHiddenRef.current) {
+      return;
+    }
 
-      try {
-        SplashScreen.hide();
-        nativeSplashHiddenRef.current = true;
-      } catch (error) {
-        console.warn(
-          'Unable to hide native splash screen:',
-          error,
-        );
-      }
-    }, []);
+    try {
+      SplashScreen.hide();
+      nativeSplashHiddenRef.current = true;
+    } catch (error) {
+      console.warn(
+        'Unable to hide native splash screen:',
+        error,
+      );
+    }
+  }, []);
 
-  const finishBootstrap =
-    useCallback(() => {
-      if (finishedRef.current) {
-        return;
-      }
+  const finishBootstrap = useCallback(() => {
+    if (finishedRef.current) {
+      return;
+    }
 
-      finishedRef.current = true;
-      onFinished();
-    }, [onFinished]);
+    finishedRef.current = true;
+    onFinished();
+  }, [onFinished]);
 
   useEffect(() => {
     hideNativeSplash();
@@ -227,7 +218,6 @@ function AppBootstrapScreen({
 
     const introAnimation = Animated.sequence([
       Animated.delay(DOT_START_DELAY_MS),
-
       Animated.parallel([
         Animated.timing(dotOpacity, {
           toValue: 1,
@@ -235,7 +225,6 @@ function AppBootstrapScreen({
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-
         Animated.timing(dotTranslateY, {
           toValue: 0,
           duration: DOT_DROP_DURATION_MS,
@@ -247,7 +236,6 @@ function AppBootstrapScreen({
           ),
           useNativeDriver: true,
         }),
-
         Animated.timing(dotScale, {
           toValue: 1,
           duration: DOT_DROP_DURATION_MS,
@@ -255,7 +243,6 @@ function AppBootstrapScreen({
           useNativeDriver: true,
         }),
       ]),
-
       Animated.timing(revealWidth, {
         toValue: logoWidth,
         duration: WORDMARK_REVEAL_DURATION_MS,
@@ -315,9 +302,9 @@ function AppBootstrapScreen({
       }
     };
   }, [
+    finishBootstrap,
     introFinished,
     isReady,
-    finishBootstrap,
     screenOpacity,
   ]);
 
@@ -435,11 +422,9 @@ export default function RootLayout() {
   const cartHasHydrated = useCartStore(
     (state) => state.hasHydrated,
   );
-
   const customerHasHydrated = useCustomerStore(
     (state) => state.hasHydrated,
   );
-
   const ordersHasHydrated = useOrdersStore(
     (state) => state.hasHydrated,
   );
@@ -466,6 +451,17 @@ export default function RootLayout() {
     setDevelopmentHydrationFallbackReached,
   ] = useState(false);
 
+  const [
+    showBootstrapScreen,
+    setShowBootstrapScreen,
+  ] = useState(true);
+
+  /*
+   * Auth and the launch gate are independent startup dependencies. Start them
+   * at the same time instead of serializing the launch-gate/bootstrap network
+   * request behind anonymous-session creation. Production still waits for both
+   * before mounting the application, so this changes latency, not semantics.
+   */
   useEffect(() => {
     let cancelled = false;
 
@@ -503,10 +499,6 @@ export default function RootLayout() {
       return;
     }
 
-    if (!authBootstrapFinished) {
-      return;
-    }
-
     let cancelled = false;
 
     async function bootstrapLaunchGate() {
@@ -537,7 +529,7 @@ export default function RootLayout() {
     return () => {
       cancelled = true;
     };
-  }, [authBootstrapFinished]);
+  }, []);
 
   const refreshLaunchGate =
     useCallback(async () => {
@@ -659,15 +651,9 @@ export default function RootLayout() {
   const appIsAllowed =
     launchGateStatus === 'allowed';
 
-  const [
-    showBootstrapScreen,
-    setShowBootstrapScreen,
-  ] = useState(true);
-
-  const finishBootstrap =
-    useCallback(() => {
-      setShowBootstrapScreen(false);
-    }, []);
+  const finishBootstrap = useCallback(() => {
+    setShowBootstrapScreen(false);
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -688,7 +674,6 @@ export default function RootLayout() {
           )}
 
           <OrderRealtimeBridge />
-
           <PaymentProofRouteBridge />
 
           <Stack
@@ -709,13 +694,8 @@ export default function RootLayout() {
             />
 
             {/*
-             * CART ENTRY GATE
-             *
-             * `/cart` is intentionally tiny. It only decides whether the
-             * customer should go to cart-details or cart-picker. Keeping the
-             * gate transparent and animation-free prevents an intermediate
-             * screen from flashing while also avoiding mounting the large
-             * Cart implementation when several carts exist.
+             * `/cart` is a transparent, animation-free entry gate. The real
+             * cart UI lives in cart-details or cart-picker.
              */}
             <Stack.Screen
               name="cart"
@@ -730,13 +710,6 @@ export default function RootLayout() {
               }}
             />
 
-            {/*
-             * CART DETAILS
-             *
-             * This is the real Cart UI. It stays a normal native-stack card
-             * just like Restaurant, so the platform-native back swipe remains
-             * consistent across the Navienty Now experience.
-             */}
             <Stack.Screen
               name="cart-details"
               options={{
@@ -744,13 +717,6 @@ export default function RootLayout() {
               }}
             />
 
-            {/*
-             * MULTI-CART PICKER
-             *
-             * Only the chooser is transparent. The screen the customer was
-             * using before opening Cart therefore remains visible underneath
-             * the bottom sheet.
-             */}
             <Stack.Screen
               name="cart-picker"
               options={{
