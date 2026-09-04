@@ -52,8 +52,10 @@ function CategoryArtwork({
   category: HomeCategory;
   size: number;
 }) {
-  const [remoteImageFailed, setRemoteImageFailed] =
-    useState(false);
+  const [
+    remoteImageFailed,
+    setRemoteImageFailed,
+  ] = useState(false);
 
   useEffect(() => {
     setRemoteImageFailed(false);
@@ -62,22 +64,19 @@ function CategoryArtwork({
   const remoteImageUrl =
     category.image_url?.trim() ?? '';
 
-  const canShowRemoteImage =
+  const shouldShowRemoteImage =
     remoteImageUrl.length > 0 &&
     !remoteImageFailed;
 
-  const shouldShowRemoteImage =
-    canShowRemoteImage;
-
-  const imageSource =
-    shouldShowRemoteImage
-      ? { uri: remoteImageUrl }
-      : category.localArtwork ??
-        (category.configuredArtworkSlug
-          ? getCategoryIcon(
-              category.configuredArtworkSlug,
-            )
-          : null);
+  const localImageSource =
+    category.localArtwork ??
+    (
+      category.configuredArtworkSlug
+        ? getCategoryIcon(
+            category.configuredArtworkSlug,
+          )
+        : null
+    );
 
   return (
     <View
@@ -92,25 +91,37 @@ function CategoryArtwork({
         },
       ]}
     >
-      {imageSource ? (
+      {shouldShowRemoteImage ? (
+        <ExpoImage
+          accessibilityIgnoresInvertColors
+          accessibilityLabel={
+            `?????? ??? ${category.name_ar}`
+          }
+          cachePolicy="memory-disk"
+          contentFit="contain"
+          source={{
+            uri: remoteImageUrl,
+          }}
+          style={styles.categoryImage}
+          transition={0}
+          onError={() => {
+            setRemoteImageFailed(true);
+          }}
+        />
+      ) : localImageSource ? (
         <Image
           accessibilityIgnoresInvertColors
           accessibilityLabel={
-            `أيقونة قسم ${category.name_ar}`
+            `?????? ??? ${category.name_ar}`
           }
           resizeMode="contain"
-          source={imageSource}
+          source={localImageSource}
           style={styles.categoryImage}
-          onError={() => {
-            if (shouldShowRemoteImage) {
-              setRemoteImageFailed(true);
-            }
-          }}
         />
       ) : (
         <Ionicons
           accessibilityLabel={
-            `أيقونة قسم ${category.name_ar}`
+            `?????? ??? ${category.name_ar}`
           }
           color={
             NAVIENTY_NOW_COLORS.primaryDark
