@@ -50,9 +50,29 @@ export async function getRequestAnythingCartConfiguration(
         normalizedServiceAreaId,
       );
 
+    const catalogBackedStore = {
+      ...requestAnythingStore,
+      slug:
+        catalog.store.slug ||
+        requestAnythingStore.slug,
+      categorySlug:
+        catalog.store.categorySlug ||
+        requestAnythingStore.categorySlug,
+      name:
+        catalog.store.name ||
+        requestAnythingStore.name,
+      icon:
+        catalog.store.icon ||
+        requestAnythingStore.icon,
+      deliveryFee:
+        catalog.delivery.deliveryFee,
+      minimumOrder:
+        catalog.delivery.minimumOrder,
+    };
+
     return (
       resolveRequestAnythingCartConfiguration(
-        [requestAnythingStore],
+        [catalogBackedStore],
         catalog,
       ) ??
       getLegacyRequestAnythingCartConfiguration()
