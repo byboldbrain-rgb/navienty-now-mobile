@@ -1,24 +1,24 @@
 import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 
 import getAppBootstrap, {
-    type AppBootstrap,
-    type City,
-    type ServiceArea,
+  type AppBootstrap,
+  type City,
+  type ServiceArea,
 } from '../services/bootstrap-service';
 import {
-    listStores,
-    type StoreSummary,
+  listStores,
+  type StoreSummary,
 } from '../services/catalog-service';
 import { loadHomeSearchSuggestionNames } from '../services/home-search-suggestions-service';
 import {
-    listStorefrontCategoryTiles,
-    type StorefrontCategoryTile,
+  listStorefrontCategoryTiles,
+  type StorefrontCategoryTile,
 } from '../services/storefront-category-service';
 
 export type ResolvedHomeLocation = {
@@ -75,8 +75,7 @@ function resolveDefaultLocation(
   bootstrap: AppBootstrap,
 ): ResolvedHomeLocation {
   const defaultAreaId =
-    bootstrap.settings
-      .default_service_area_id;
+    bootstrap.settings.default_service_area_id;
 
   for (const city of bootstrap.cities) {
     const area = city.areas.find(
@@ -150,8 +149,7 @@ function isLocationStillAvailable(
 
   return bootstrap.cities.some((city) =>
     city.areas.some(
-      (area) =>
-        area.id === location.areaId,
+      (area) => area.id === location.areaId,
     ),
   );
 }
@@ -201,6 +199,8 @@ export function useHomeScreenData(
 ): UseHomeScreenDataResult {
   const isMountedRef = useRef(true);
   const bootstrapRequestIdRef = useRef(0);
+  const categoryTilesRequestIdRef =
+    useRef(0);
   const storesRequestIdRef = useRef(0);
   const suggestionsRequestIdRef =
     useRef(0);
@@ -212,38 +212,57 @@ export function useHomeScreenData(
 
   const [bootstrap, setBootstrap] =
     useState<AppBootstrap | null>(null);
-  const [homeCategoryTiles, setHomeCategoryTiles] =
-    useState<
-      StorefrontCategoryTile[] | null
-    >(null);
-  const [isBootstrapLoading, setIsBootstrapLoading] =
-    useState(true);
-  const [bootstrapError, setBootstrapError] =
-    useState<string | null>(null);
-  const [selectedLocation, setSelectedLocation] =
-    useState<ResolvedHomeLocation | null>(
-      null,
-    );
-  const [storesSnapshot, setStoresSnapshot] =
-    useState<StoresSnapshot>({
-      locationKey: '',
-      items: [],
-    });
-  const [suggestionsSnapshot, setSuggestionsSnapshot] =
-    useState<SuggestionsSnapshot>({
-      locationKey: '',
-      items: [],
-    });
+  const [
+    homeCategoryTiles,
+    setHomeCategoryTiles,
+  ] = useState<
+    StorefrontCategoryTile[] | null
+  >(null);
+  const [
+    isBootstrapLoading,
+    setIsBootstrapLoading,
+  ] = useState(true);
+  const [
+    bootstrapError,
+    setBootstrapError,
+  ] = useState<string | null>(null);
+  const [
+    selectedLocation,
+    setSelectedLocation,
+  ] = useState<ResolvedHomeLocation | null>(
+    null,
+  );
+  const [
+    storesSnapshot,
+    setStoresSnapshot,
+  ] = useState<StoresSnapshot>({
+    locationKey: '',
+    items: [],
+  });
+  const [
+    suggestionsSnapshot,
+    setSuggestionsSnapshot,
+  ] = useState<SuggestionsSnapshot>({
+    locationKey: '',
+    items: [],
+  });
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
       bootstrapRequestIdRef.current += 1;
+      categoryTilesRequestIdRef.current += 1;
       storesRequestIdRef.current += 1;
       suggestionsRequestIdRef.current += 1;
     };
   }, []);
 
+  /*
+   * Bootstrap is the only remote dependency that blocks the first usable Home
+   * render. Category tiles are optional remote configuration and load on their
+   * own path below, so a slow tile query cannot hold the entire screen behind
+   * the loading skeleton.
+   */
   const reloadBootstrap = useCallback(
     async () => {
       const requestId =
@@ -257,30 +276,8 @@ export function useHomeScreenData(
       }
 
       try {
-        const [
-          loadedBootstrap,
-          homeTilesResult,
-        ] = await Promise.all([
-          getAppBootstrap(),
-          listStorefrontCategoryTiles(
-            'home',
-          )
-            .then((tiles) => ({
-              ok: true as const,
-              tiles,
-            }))
-            .catch((error) => {
-              console.warn(
-                'Unable to load dynamic Home categories. Falling back to bundled categories.',
-                error,
-              );
-
-              return {
-                ok: false as const,
-                tiles: null,
-              };
-            }),
-        ]);
+        const loadedBootstrap =
+          await getAppBootstrap();
 
         if (
           !isMountedRef.current ||
@@ -291,11 +288,6 @@ export function useHomeScreenData(
         }
 
         setBootstrap(loadedBootstrap);
-        setHomeCategoryTiles(
-          homeTilesResult.ok
-            ? homeTilesResult.tiles
-            : null,
-        );
         setSelectedLocation(
           (currentLocation) =>
             resolvePreferredLocation(
@@ -319,7 +311,6 @@ export function useHomeScreenData(
             : 'تعذر تحميل بيانات التطبيق.';
 
         setBootstrap(null);
-        setHomeCategoryTiles(null);
         setSelectedLocation(null);
         setBootstrapError(message);
       } finally {
@@ -335,9 +326,60 @@ export function useHomeScreenData(
     [],
   );
 
+  const loadHomeCategoryTiles =
+    useCallback(async () => {
+      const requestId =
+        categoryTilesRequestIdRef.current + 1;
+      categoryTilesRequestIdRef.current =
+        requestId;
+
+      try {
+        const tiles =
+          await listStorefrontCategoryTiles(
+            'home',
+          );
+
+        if (
+          !isMountedRef.current ||
+          categoryTilesRequestIdRef.current !==
+            requestId
+        ) {
+          return;
+        }
+
+        setHomeCategoryTiles(tiles);
+      } catch (error) {
+        if (
+          !isMountedRef.current ||
+          categoryTilesRequestIdRef.current !==
+            requestId
+        ) {
+          return;
+        }
+
+        /*
+         * null intentionally means "remote configuration unavailable". The
+         * Home category builder then keeps using the bundled production-safe
+         * definitions instead of blocking or showing a broken empty state.
+         */
+        setHomeCategoryTiles(null);
+
+        if (__DEV__) {
+          console.warn(
+            'Unable to load dynamic Home categories. Falling back to bundled categories.',
+            error,
+          );
+        }
+      }
+    }, []);
+
   useEffect(() => {
     void reloadBootstrap();
-  }, [reloadBootstrap]);
+    void loadHomeCategoryTiles();
+  }, [
+    loadHomeCategoryTiles,
+    reloadBootstrap,
+  ]);
 
   /*
    * Location changes should not refetch bootstrap or Home tile configuration.
@@ -358,23 +400,18 @@ export function useHomeScreenData(
     );
   }, [bootstrap, savedServiceAreaId]);
 
-  const effectiveLocation =
-    useMemo(
-      () =>
-        selectedLocation ??
-        (bootstrap
-          ? resolveDefaultLocation(
-              bootstrap,
-            )
-          : null),
-      [bootstrap, selectedLocation],
-    );
+  const effectiveLocation = useMemo(
+    () =>
+      selectedLocation ??
+      (bootstrap
+        ? resolveDefaultLocation(bootstrap)
+        : null),
+    [bootstrap, selectedLocation],
+  );
 
   const locationKey =
     effectiveLocation
-      ? getLocationKey(
-          effectiveLocation,
-        )
+      ? getLocationKey(effectiveLocation)
       : '';
 
   const effectiveAreaId =
@@ -403,8 +440,7 @@ export function useHomeScreenData(
         const loadedStores =
           await listStores({
             serviceAreaId:
-              effectiveAreaId ??
-              undefined,
+              effectiveAreaId ?? undefined,
           });
 
         if (
