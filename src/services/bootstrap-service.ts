@@ -2,6 +2,9 @@ import {
   isV1PublicCategorySlug,
 } from '../config/v1-release-scope';
 import { publicSupabase } from '../lib/supabase';
+import {
+  recordStartupTimingOnce,
+} from './startup-performance-service';
 
 export type AppSettings = {
   app_name: string;
@@ -189,113 +192,156 @@ function findServiceAreaById(
 
 async function loadAppBootstrap():
   Promise<AppBootstrap> {
-  const { data, error } =
-    await publicSupabase.rpc(
-      'get_app_bootstrap',
-    );
+  const rpcStartedAt = Date.now();
+  let rpcOutcome:
+    | 'success'
+    | 'error' = 'success';
 
-  if (error) {
-    throw new Error(
-      `Supabase bootstrap failed: ${error.message}`,
-    );
-  }
-
-  if (!data) {
-    throw new Error(
-      'Supabase bootstrap returned no data.',
-    );
-  }
-
-  const bootstrap = data as AppBootstrap;
-
-  const currentCategories =
-    Array.isArray(
-      bootstrap.store_categories,
-    )
-      ? bootstrap.store_categories
-      : [];
-
-  const publicCategories =
-    currentCategories.filter(
-      (category) =>
-        isV1PublicCategorySlug(
-          category.slug,
-        ),
-    );
-
-  const bookstoreExists =
-    publicCategories.some((category) => {
-      const slug =
-        category.slug
-          .trim()
-          .toLowerCase();
-
-      return (
-        slug === 'bookstore' ||
-        slug === 'bookstores'
+  try {
+    const { data, error } =
+      await publicSupabase.rpc(
+        'get_app_bootstrap',
       );
-    });
 
-  if (bookstoreExists) {
+    if (error) {
+      throw new Error(
+        `Supabase bootstrap failed: ${error.message}`,
+      );
+    }
+
+    if (!data) {
+      throw new Error(
+        'Supabase bootstrap returned no data.',
+      );
+    }
+
+    const bootstrap = data as AppBootstrap;
+
+    const currentCategories =
+      Array.isArray(
+        bootstrap.store_categories,
+      )
+        ? bootstrap.store_categories
+        : [];
+
+    const publicCategories =
+      currentCategories.filter(
+        (category) =>
+          isV1PublicCategorySlug(
+            category.slug,
+          ),
+      );
+
+    const bookstoreExists =
+      publicCategories.some((category) => {
+        const slug =
+          category.slug
+            .trim()
+            .toLowerCase();
+
+        return (
+          slug === 'bookstore' ||
+          slug === 'bookstores'
+        );
+      });
+
+    if (bookstoreExists) {
+      return {
+        ...bootstrap,
+        store_categories:
+          publicCategories,
+      };
+    }
+
+    const bookstoreCategory: StoreCategory = {
+      id: 'bookstores',
+      slug: 'bookstores',
+      name_ar: 'المكتبات',
+      name_en: 'Bookstores',
+      icon: 'bookstore',
+      image_url: null,
+    };
+
     return {
       ...bootstrap,
-      store_categories:
-        publicCategories,
+      store_categories: [
+        ...publicCategories,
+        bookstoreCategory,
+      ],
     };
+  } catch (error) {
+    rpcOutcome = 'error';
+    throw error;
+  } finally {
+    recordStartupTimingOnce(
+      'app-bootstrap-rpc',
+      Date.now() - rpcStartedAt,
+      {
+        outcome: rpcOutcome,
+      },
+    );
   }
-
-  const bookstoreCategory: StoreCategory = {
-    id: 'bookstores',
-    slug: 'bookstores',
-    name_ar: 'المكتبات',
-    name_en: 'Bookstores',
-    icon: 'bookstore',
-    image_url: null,
-  };
-
-  return {
-    ...bootstrap,
-    store_categories: [
-      ...publicCategories,
-      bookstoreCategory,
-    ],
-  };
 }
 
 async function getAppBootstrap():
   Promise<AppBootstrap> {
-  const currentTime = Date.now();
+  const startedAt = Date.now();
+  let path:
+    | 'memory-cache'
+    | 'inflight'
+    | 'remote' = 'remote';
+  let outcome:
+    | 'success'
+    | 'error' = 'success';
 
-  if (
-    cachedAppBootstrap &&
-    cachedAppBootstrap.expiresAt >
-      currentTime
-  ) {
-    return cachedAppBootstrap.value;
-  }
+  try {
+    const currentTime = Date.now();
 
-  if (appBootstrapRequest) {
-    return appBootstrapRequest;
-  }
+    if (
+      cachedAppBootstrap &&
+      cachedAppBootstrap.expiresAt >
+        currentTime
+    ) {
+      path = 'memory-cache';
+      return cachedAppBootstrap.value;
+    }
 
-  appBootstrapRequest =
-    loadAppBootstrap().then(
-      (bootstrap) => {
-        cachedAppBootstrap = {
-          value: bootstrap,
-          expiresAt:
-            Date.now() +
-            APP_BOOTSTRAP_CACHE_TTL_MS,
-        };
+    if (appBootstrapRequest) {
+      path = 'inflight';
+      return await appBootstrapRequest;
+    }
 
-        return bootstrap;
+    appBootstrapRequest =
+      loadAppBootstrap().then(
+        (bootstrap) => {
+          cachedAppBootstrap = {
+            value: bootstrap,
+            expiresAt:
+              Date.now() +
+              APP_BOOTSTRAP_CACHE_TTL_MS,
+          };
+
+          return bootstrap;
+        },
+      );
+
+    return await appBootstrapRequest;
+  } catch (error) {
+    outcome = 'error';
+    throw error;
+  } finally {
+    recordStartupTimingOnce(
+      'app-bootstrap-total',
+      Date.now() - startedAt,
+      {
+        outcome,
+        path,
       },
     );
 
-  try {
-    return await appBootstrapRequest;
-  } finally {
-    appBootstrapRequest = null;
+    if (path === 'remote') {
+      appBootstrapRequest = null;
+    }
   }
 }
 
