@@ -1,4 +1,4 @@
-
+import { publicSupabase } from '../lib/supabase';
 
 export type StorefrontCategorySurface =
   | 'home'
