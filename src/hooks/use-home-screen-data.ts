@@ -479,13 +479,29 @@ export function useHomeScreenData(
         storesRequestIdRef.current ===
           requestId
       ) {
-        hydratedFromCache = true;
-
         const cachedStoreIdsKey =
           createHomeStoreIdsKey(
             cachedStores,
           );
 
+        const cachedSuggestions =
+          cachedStoreIdsKey
+            ? await readCachedHomeSuggestions(
+                locationKey,
+                cachedStoreIdsKey,
+              )
+            : null;
+
+        if (
+          cancelled ||
+          !isMountedRef.current ||
+          storesRequestIdRef.current !==
+            requestId
+        ) {
+          return;
+        }
+
+        hydratedFromCache = true;
         activeStoreIdsKeyRef.current =
           cachedStoreIdsKey;
 
@@ -494,29 +510,12 @@ export function useHomeScreenData(
           items: cachedStores,
         });
 
-        if (cachedStoreIdsKey) {
-          void readCachedHomeSuggestions(
+        if (cachedSuggestions) {
+          setSuggestionsSnapshot({
             locationKey,
-            cachedStoreIdsKey,
-          ).then((cachedSuggestions) => {
-            if (
-              !cachedSuggestions ||
-              cancelled ||
-              !isMountedRef.current ||
-              storesRequestIdRef.current !==
-                requestId ||
-              activeStoreIdsKeyRef.current !==
-                cachedStoreIdsKey
-            ) {
-              return;
-            }
-
-            setSuggestionsSnapshot({
-              locationKey,
-              storeIdsKey:
-                cachedStoreIdsKey,
-              items: cachedSuggestions,
-            });
+            storeIdsKey:
+              cachedStoreIdsKey,
+            items: cachedSuggestions,
           });
         }
       }
