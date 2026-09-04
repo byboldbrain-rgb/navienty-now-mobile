@@ -44,6 +44,12 @@ import {
     supabase
 } from '../lib/supabase';
 import {
+    calculatePaymentProcessingFee,
+} from '../domain/payment-method';
+import getAppBootstrap, {
+    type PaymentMethod,
+} from '../services/bootstrap-service';
+import {
     type CatalogProduct,
     type StoreCatalog,
     getStoreCatalog,
@@ -161,10 +167,12 @@ function isRequestAnythingCategory(
 }
 
 /**
- * Electronic payment fee remains fixed for now.
- * Delivery fee is store/area-specific and comes from the cart/catalog.
+ * Backward-compatibility only. Current bootstrap responses expose the
+ * payment-method fee configuration from Supabase. This keeps old cached or
+ * mixed-version clients on the existing 10 EGP preview if that configuration
+ * is temporarily unavailable, without blocking the Cart screen.
  */
-const FIXED_PAYMENT_PROCESSING_FEE = 10;
+const LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK = 10;
 
 
 /* ============================================================
@@ -1221,6 +1229,11 @@ function StoreCartScreen() {
   ] = useState<StoreCatalog | null>(null);
 
   const [
+    paymentMethods,
+    setPaymentMethods,
+  ] = useState<PaymentMethod[]>([]);
+
+  const [
     failedImages,
     setFailedImages,
   ] = useState<Record<string, boolean>>(
@@ -1323,6 +1336,11 @@ function StoreCartScreen() {
   const phoneNumber =
     useCustomerStore(
       (state) => state.phoneNumber,
+    );
+
+  const paymentMethod =
+    useCustomerStore(
+      (state) => state.paymentMethod,
     );
 
   const normalizedPhone =
@@ -1466,6 +1484,44 @@ function StoreCartScreen() {
   const minimumOrder =
     currentCart?.minimumOrder ?? 0;
 
+  /*
+   * Payment configuration is a non-blocking Cart enhancement. Checkout and
+   * Supabase remain authoritative. If bootstrap cannot be refreshed here,
+   * Cart keeps the legacy fee preview rather than becoming unavailable.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPaymentConfiguration() {
+      try {
+        const bootstrap =
+          await getAppBootstrap();
+
+        if (cancelled) {
+          return;
+        }
+
+        setPaymentMethods(
+          Array.isArray(
+            bootstrap.payment_methods,
+          )
+            ? bootstrap.payment_methods
+            : [],
+        );
+      } catch {
+        if (!cancelled) {
+          setPaymentMethods([]);
+        }
+      }
+    }
+
+    void loadPaymentConfiguration();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1569,8 +1625,30 @@ function StoreCartScreen() {
     [items],
   );
 
+  const paymentFeeMethod =
+    paymentMethods.find(
+      (method) =>
+        method.id === paymentMethod,
+    ) ??
+    paymentMethods[0] ??
+    null;
+
+  const hasRemotePaymentFeeConfiguration =
+    !!paymentFeeMethod &&
+    typeof paymentFeeMethod
+      .processing_fee_enabled ===
+      'boolean' &&
+    typeof paymentFeeMethod
+      .processing_fee_charge_customer ===
+      'boolean';
+
   const paymentProcessingFee =
-    FIXED_PAYMENT_PROCESSING_FEE;
+    hasRemotePaymentFeeConfiguration
+      ? calculatePaymentProcessingFee(
+          paymentFeeMethod,
+          subtotal,
+        )
+      : LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK;
 
   const deliveryFee =
     Number(currentCart?.deliveryFee ?? 0);
@@ -1741,6 +1819,18 @@ function StoreCartScreen() {
 
   const spinProcessingFeeDiscount =
     !spinRewardPaused &&
+    spinReward?.type ===
+      'processing_fee_waiver'
+      ? Math.min(
+          Math.max(
+            Number(spinReward.value ?? 0),
+            0,
+          ),
+          paymentProcessingFee,
+        )
+      : 0;
+
+  const spinProcessingFeeRewardDisplayValue =
     spinReward?.type ===
       'processing_fee_waiver'
       ? Math.min(
@@ -2464,7 +2554,9 @@ function StoreCartScreen() {
       spinReward.type ===
       'processing_fee_waiver'
     ) {
-      return '10ج';
+      return `${formatSummaryAmount(
+        spinProcessingFeeRewardDisplayValue,
+      )}ج`;
     }
 
     return `${spinReward.value}ج`;
@@ -3435,7 +3527,9 @@ function StoreCartScreen() {
                 >
                   {spinReward?.type ===
                   'processing_fee_waiver'
-                    ? '10'
+                    ? formatSummaryAmount(
+                        spinProcessingFeeRewardDisplayValue,
+                      )
                     : String(
                         spinReward?.value ??
                           0,
