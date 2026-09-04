@@ -73,6 +73,85 @@ function toSortOrder(
   return 0;
 }
 
+function normalizeStorefrontIdentifier(
+  value: string | null | undefined,
+): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function isStorefrontCategorySurface(
+  value: unknown,
+): value is StorefrontCategorySurface {
+  return (
+    value === 'home' ||
+    value === 'supermarket' ||
+    value === 'bookstore' ||
+    value === 'personal-care'
+  );
+}
+
+function isStorefrontCategoryTileKind(
+  value: unknown,
+): value is StorefrontCategoryTileKind {
+  return (
+    value === 'catalog' ||
+    value === 'virtual' ||
+    value === 'merged' ||
+    value === 'offers'
+  );
+}
+
+function isRawStorefrontCategoryTile(
+  value: unknown,
+): value is RawStorefrontCategoryTile {
+  if (
+    !value ||
+    typeof value !== 'object'
+  ) {
+    return false;
+  }
+
+  const row = value as Record<
+    string,
+    unknown
+  >;
+
+  return (
+    typeof row.id === 'string' &&
+    isStorefrontCategorySurface(
+      row.surface,
+    ) &&
+    typeof row.key === 'string' &&
+    typeof row.label_ar === 'string' &&
+    (
+      row.label_en === null ||
+      typeof row.label_en === 'string'
+    ) &&
+    isStorefrontCategoryTileKind(
+      row.kind,
+    ) &&
+    typeof row.route_slug === 'string' &&
+    (
+      row.source_slugs === null ||
+      Array.isArray(row.source_slugs)
+    ) &&
+    (
+      row.image_url === null ||
+      typeof row.image_url === 'string'
+    ) &&
+    (
+      row.sort_order === null ||
+      typeof row.sort_order === 'number' ||
+      typeof row.sort_order === 'string'
+    )
+  );
+}
+
 function mapStorefrontCategoryTile(
   row: RawStorefrontCategoryTile,
 ): StorefrontCategoryTile {
@@ -92,6 +171,10 @@ function mapStorefrontCategoryTile(
     sourceSlugs:
       Array.isArray(row.source_slugs)
         ? row.source_slugs
+            .filter(
+              (slug): slug is string =>
+                typeof slug === 'string',
+            )
             .map((slug) => slug.trim())
             .filter(Boolean)
         : [],
@@ -103,6 +186,72 @@ function mapStorefrontCategoryTile(
     sortOrder:
       toSortOrder(row.sort_order),
   };
+}
+
+/**
+ * Resolve one configured tile from the identifiers already exposed by the
+ * storefront-category contract. Matching is deliberately limited to key,
+ * routeSlug and sourceSlugs so this helper does not depend on hidden backend
+ * fields or on presentation labels.
+ */
+export function findStorefrontCategoryTile(
+  tiles: readonly StorefrontCategoryTile[],
+  aliases: readonly string[],
+): StorefrontCategoryTile | null {
+  const normalizedAliases =
+    new Set(
+      aliases
+        .map(
+          normalizeStorefrontIdentifier,
+        )
+        .filter(Boolean),
+    );
+
+  if (normalizedAliases.size === 0) {
+    return null;
+  }
+
+  return (
+    tiles.find((tile) => {
+      const identifiers = [
+        tile.key,
+        tile.routeSlug,
+        ...tile.sourceSlugs,
+      ];
+
+      return identifiers.some(
+        (identifier) =>
+          normalizedAliases.has(
+            normalizeStorefrontIdentifier(
+              identifier,
+            ),
+          ),
+      );
+    }) ?? null
+  );
+}
+
+/**
+ * The verified storefront_category_tiles contract currently exposes only one
+ * primary image URL. Deep-category image maps are not part of the selected
+ * schema, so callers must keep using their bundled image fallbacks until the
+ * backend contract explicitly provides those maps.
+ */
+export function getStorefrontTileCategoryImages(
+  _tile: StorefrontCategoryTile | null | undefined,
+): Record<string, string> {
+  return {};
+}
+
+/**
+ * Screen-specific artwork uses the same compatibility behavior as category
+ * images. Returning an empty map preserves the existing bundled hero/detail
+ * artwork instead of guessing database columns that are not in this service.
+ */
+export function getStorefrontTileScreenImages(
+  _tile: StorefrontCategoryTile | null | undefined,
+): Record<string, string> {
+  return {};
 }
 
 /**
@@ -161,11 +310,13 @@ export async function listStorefrontCategoryTiles(
     return [];
   }
 
-  return (
-    data as RawStorefrontCategoryTile[]
-  ).map(
-    mapStorefrontCategoryTile,
-  );
+  return (data as unknown[])
+    .filter(
+      isRawStorefrontCategoryTile,
+    )
+    .map(
+      mapStorefrontCategoryTile,
+    );
 }
 
 export default listStorefrontCategoryTiles;
