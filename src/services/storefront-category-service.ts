@@ -1,4 +1,7 @@
 import { publicSupabase } from '../lib/supabase';
+import {
+  recordStartupTimingOnce,
+} from './startup-performance-service';
 
 export type StorefrontCategorySurface =
   | 'home'
@@ -273,6 +276,17 @@ export function getStorefrontTileScreenImages(
 export async function listStorefrontCategoryTiles(
   surface: StorefrontCategorySurface,
 ): Promise<StorefrontCategoryTile[]> {
+  const startedAt = Date.now();
+  const shouldMeasureHome =
+    surface === 'home';
+
+  if (shouldMeasureHome) {
+    recordStartupTimingOnce(
+      'home-category-tiles-started',
+      0,
+    );
+  }
+
   const {
     data,
     error,
@@ -308,22 +322,57 @@ export async function listStorefrontCategoryTiles(
     );
 
   if (error) {
+    if (shouldMeasureHome) {
+      recordStartupTimingOnce(
+        'home-category-tiles-total',
+        Date.now() - startedAt,
+        {
+          outcome: 'error',
+          tileCount: 0,
+        },
+      );
+    }
+
     throw new Error(
       `Loading storefront categories failed: ${error.message}`,
     );
   }
 
   if (!Array.isArray(data)) {
+    if (shouldMeasureHome) {
+      recordStartupTimingOnce(
+        'home-category-tiles-total',
+        Date.now() - startedAt,
+        {
+          outcome: 'success',
+          tileCount: 0,
+        },
+      );
+    }
+
     return [];
   }
 
-  return (data as unknown[])
+  const tiles = (data as unknown[])
     .filter(
       isRawStorefrontCategoryTile,
     )
     .map(
       mapStorefrontCategoryTile,
     );
+
+  if (shouldMeasureHome) {
+    recordStartupTimingOnce(
+      'home-category-tiles-total',
+      Date.now() - startedAt,
+      {
+        outcome: 'success',
+        tileCount: tiles.length,
+      },
+    );
+  }
+
+  return tiles;
 }
 
 export default listStorefrontCategoryTiles;
