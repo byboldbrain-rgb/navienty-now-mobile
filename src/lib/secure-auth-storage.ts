@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
+import { recordStartupTimingOnce } from '../services/startup-performance-service';
+
 const CHUNK_SIZE = 1500;
 const STORAGE_VERSION = 1;
 const STORAGE_PREFIX = 'navienty.auth';
@@ -16,6 +18,32 @@ type SecureMetadata = {
   generation: string;
   count: number;
 };
+
+type StartupSecureStorageKind =
+  | 'supabase-auth'
+  | 'customer'
+  | 'orders';
+
+function getStartupSecureStorageKind(
+  key: string,
+): StartupSecureStorageKind | null {
+  if (key === 'navienty-now-customer') {
+    return 'customer';
+  }
+
+  if (key === 'navienty-now-orders') {
+    return 'orders';
+  }
+
+  if (
+    key.startsWith('sb-') &&
+    key.endsWith('-auth-token')
+  ) {
+    return 'supabase-auth';
+  }
+
+  return null;
+}
 
 function encodeStorageKey(
   key: string,
@@ -214,31 +242,70 @@ export const secureAuthStorage = {
   async getItem(
     key: string,
   ): Promise<string | null> {
-    const metadata =
-      await readMetadata(key);
+    const startupKind =
+      getStartupSecureStorageKind(key);
+    const startedAt = Date.now();
+    let chunkCount = 0;
+    let outcome:
+      | 'success'
+      | 'error' =
+      'success';
+    let source:
+      | 'empty'
+      | 'secure'
+      | 'legacy-migration' =
+      'empty';
 
-    if (metadata) {
-      return readSecureValue(
+    try {
+      const metadata =
+        await readMetadata(key);
+
+      if (metadata) {
+        source = 'secure';
+        chunkCount = metadata.count;
+
+        return await readSecureValue(
+          key,
+          metadata,
+        );
+      }
+
+      const legacyValue =
+        await AsyncStorage.getItem(
+          key,
+        );
+
+      if (legacyValue === null) {
+        return null;
+      }
+
+      source = 'legacy-migration';
+      chunkCount = splitValue(
+        legacyValue,
+      ).length;
+
+      await secureAuthStorage.setItem(
         key,
-        metadata,
-      );
-    }
-
-    const legacyValue =
-      await AsyncStorage.getItem(
-        key,
+        legacyValue,
       );
 
-    if (legacyValue === null) {
-      return null;
+      return legacyValue;
+    } catch (error) {
+      outcome = 'error';
+      throw error;
+    } finally {
+      if (startupKind) {
+        recordStartupTimingOnce(
+          `secure-storage-${startupKind}`,
+          Date.now() - startedAt,
+          {
+            chunkCount,
+            outcome,
+            source,
+          },
+        );
+      }
     }
-
-    await secureAuthStorage.setItem(
-      key,
-      legacyValue,
-    );
-
-    return legacyValue;
   },
 
   async setItem(
