@@ -35,6 +35,10 @@ import {
   V1_UNAVAILABLE_CATEGORY_MESSAGE,
 } from '../config/v1-release-scope';
 import {
+  calculatePaymentProcessingFee,
+  getPaymentProcessingFeeLabelAr,
+} from '../domain/payment-method';
+import {
   supabase,
 } from '../lib/supabase';
 import {
@@ -145,7 +149,12 @@ const LAUNDRY_CATEGORY_ALIASES = new Set([
 /* FEES                               */
 /* ---------------------------------- */
 
-const PAYMENT_PROCESSING_FEE = 10;
+/*
+ * Backward-compatibility only. New bootstrap responses provide the fee
+ * configuration from now.payment_methods. This value is used only if an
+ * older cached/backend contract does not expose those fields yet.
+ */
+const LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK = 10;
 const SPIN_UNLOCK_SUBTOTAL_FALLBACK = 200;
 
 /* ---------------------------------- */
@@ -667,6 +676,12 @@ function StoreCheckoutScreen() {
         item.isAgeRestricted === true,
     );
 
+  const paymentMethod =
+    useCustomerStore(
+      (state) =>
+        state.paymentMethod,
+    );
+
   const subtotal =
     items.reduce(
       (currentTotal, item) =>
@@ -680,8 +695,34 @@ function StoreCheckoutScreen() {
     deliveryResolution?.deliveryFee ??
     Number(checkoutCart?.deliveryFee ?? 0);
 
+  const paymentFeeMethod =
+    bootstrap?.payment_methods.find(
+      (method) =>
+        method.id ===
+        paymentMethod,
+    ) ?? null;
+
+  const hasRemotePaymentFeeConfiguration =
+    !!paymentFeeMethod &&
+    typeof paymentFeeMethod
+      .processing_fee_enabled ===
+      'boolean' &&
+    typeof paymentFeeMethod
+      .processing_fee_charge_customer ===
+      'boolean';
+
   const paymentProcessingFee =
-    PAYMENT_PROCESSING_FEE;
+    hasRemotePaymentFeeConfiguration
+      ? calculatePaymentProcessingFee(
+          paymentFeeMethod,
+          subtotal,
+        )
+      : LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK;
+
+  const paymentProcessingFeeLabel =
+    getPaymentProcessingFeeLabelAr(
+      paymentFeeMethod,
+    );
 
   const spinBelongsToCurrentStore =
     !!checkoutSpin &&
@@ -944,12 +985,6 @@ function StoreCheckoutScreen() {
     useCustomerStore(
       (state) =>
         state.landmark,
-    );
-
-  const paymentMethod =
-    useCustomerStore(
-      (state) =>
-        state.paymentMethod,
     );
 
   const setCustomerName =
@@ -2419,7 +2454,7 @@ function StoreCheckoutScreen() {
                 styles.summaryLabel
               }
             >
-              رسوم الدفع الإلكتروني
+              {paymentProcessingFeeLabel}
             </Text>
 
             <Text
