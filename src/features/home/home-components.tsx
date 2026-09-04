@@ -140,9 +140,15 @@ function CategoryArtwork({
 // like a continuous delivery route rather than a ping-pong animation.
 function IosDeliveryBikeHero() {
   const { width: viewportWidth } = useWindowDimensions();
-  const rideX = useRef(new Animated.Value(0)).current;
-  const bounceY = useRef(new Animated.Value(0)).current;
-  const bikeLean = useRef(new Animated.Value(0)).current;
+  const [rideX] = useState(
+    () => new Animated.Value(0),
+  );
+  const [bounceY] = useState(
+    () => new Animated.Value(0),
+  );
+  const [bikeLean] = useState(
+    () => new Animated.Value(0),
+  );
 
   const leanRotation = bikeLean.interpolate({
     inputRange: [-1, 0, 1],
@@ -304,17 +310,17 @@ function AndroidDeliveryBikeHero() {
   const endX =
     startX - travelDistance;
 
-  const rideX = useRef(
-    new Animated.Value(startX),
-  ).current;
+  const [rideX] = useState(
+    () => new Animated.Value(startX),
+  );
 
-  const bounceY = useRef(
-    new Animated.Value(0),
-  ).current;
+  const [bounceY] = useState(
+    () => new Animated.Value(0),
+  );
 
-  const bikeLean = useRef(
-    new Animated.Value(0),
-  ).current;
+  const [bikeLean] = useState(
+    () => new Animated.Value(0),
+  );
 
   const leanRotation = bikeLean.interpolate({
     inputRange: [-1, 0, 1],
@@ -533,7 +539,9 @@ function HeaderTimeMoods() {
 // the hero into a literal street illustration. The lane markers move in one
 // direction forever, so the courier feels like it is continuously travelling.
 function HeaderRoad() {
-  const roadOffset = useRef(new Animated.Value(0)).current;
+  const [roadOffset] = useState(
+    () => new Animated.Value(0),
+  );
 
   useEffect(() => {
     roadOffset.setValue(0);

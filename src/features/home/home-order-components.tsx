@@ -501,17 +501,17 @@ export function ActiveOrderTrackingCard({
       currentStage
     ] ?? HOME_ORDER_TRACKING_STEPS[0];
 
-  const cardEntrance = useRef(
-    new Animated.Value(0),
-  ).current;
+  const [cardEntrance] = useState(
+    () => new Animated.Value(0),
+  );
 
-  const activePulse = useRef(
-    new Animated.Value(0),
-  ).current;
+  const [activePulse] = useState(
+    () => new Animated.Value(0),
+  );
 
-  const routePulse = useRef(
-    new Animated.Value(0),
-  ).current;
+  const [routePulse] = useState(
+    () => new Animated.Value(0),
+  );
 
   useEffect(() => {
     cardEntrance.setValue(0);
