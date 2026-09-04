@@ -35,11 +35,46 @@ export async function ensureAppSession():
         'success';
 
       try {
+        const getSessionStartedAt = Date.now();
+
+        const getSessionResult =
+          await (async () => {
+            try {
+              const result =
+                await supabase.auth.getSession();
+
+              recordStartupTimingOnce(
+                'auth-get-session',
+                Date.now() - getSessionStartedAt,
+                {
+                  outcome:
+                    result.error
+                      ? 'error'
+                      : 'success',
+                  hasSession:
+                    Boolean(result.data.session),
+                },
+              );
+
+              return result;
+            } catch (error) {
+              recordStartupTimingOnce(
+                'auth-get-session',
+                Date.now() - getSessionStartedAt,
+                {
+                  outcome: 'error',
+                  hasSession: false,
+                },
+              );
+
+              throw error;
+            }
+          })();
+
         const {
           data: sessionData,
           error: sessionError,
-        } =
-          await supabase.auth.getSession();
+        } = getSessionResult;
 
         if (sessionError) {
           throw sessionError;
