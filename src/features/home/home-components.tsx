@@ -898,7 +898,7 @@ function RecentlyViewedCard({
 
     setImageFailed(false);
 
-    if (initialLogoUrl) {
+    if (initialLogoUrl || initialCoverImageUrl) {
       setResolvedArtwork({
         logoUrl: initialLogoUrl,
         coverImageUrl:
