@@ -5,9 +5,9 @@ import {
   compareVersions,
   isVersionBelowMinimum,
 } from '../domain/app-version';
-import getAppBootstrap, {
-  type AppSettings,
-} from './bootstrap-service';
+import getAppLaunchSettings, {
+  type AppLaunchSettings,
+} from './app-launch-settings-service';
 
 export {
   compareVersions,
@@ -27,16 +27,6 @@ export type AppLaunchGateResult = {
   messageAr: string | null;
   updateUrl: string | null;
   supportWhatsapp: string | null;
-};
-
-type AppSettingsWithStoreUrls = AppSettings & {
-  /** Optional future bootstrap fields. The gate remains backwards-compatible
-   * until get_app_bootstrap starts returning store URLs. */
-  ios_store_url?: string | null;
-  app_store_url?: string | null;
-  android_store_url?: string | null;
-  play_store_url?: string | null;
-  update_url?: string | null;
 };
 
 function normalizeNullableUrl(
@@ -61,7 +51,7 @@ function normalizeNullableUrl(
 }
 
 function getUpdateUrl(
-  settings: AppSettingsWithStoreUrls,
+  settings: AppLaunchSettings,
 ): string | null {
   if (Platform.OS === 'ios') {
     return normalizeNullableUrl(
@@ -99,11 +89,8 @@ export function getCurrentAppVersion(): string | null {
 export async function getAppLaunchGate():
   Promise<AppLaunchGateResult> {
   try {
-    const bootstrap =
-      await getAppBootstrap();
-
     const settings =
-      bootstrap.settings as AppSettingsWithStoreUrls;
+      await getAppLaunchSettings();
 
     const currentVersion =
       getCurrentAppVersion();
