@@ -5,6 +5,7 @@ import {
   getMyOrders,
   getOrderByToken,
 } from '../services/order-service';
+import { useOrderRealtimeHealthStore } from '../store/order-realtime-health-store';
 import { useOrdersStore } from '../store/orders-store';
 
 type OrderUpdatePayload = {
@@ -60,6 +61,39 @@ function getCachedOrder(
   );
 }
 
+function applyLatestOrder(
+  latestOrder: Awaited<
+    ReturnType<typeof getOrderByToken>
+  >,
+) {
+  const orderStore =
+    useOrdersStore.getState();
+
+  if (
+    orderStore.pendingOrder?.id ===
+    latestOrder.id
+  ) {
+    if (
+      latestOrder.status ===
+      'awaiting-whatsapp-send'
+    ) {
+      orderStore.setPendingOrder(
+        latestOrder,
+      );
+    } else {
+      orderStore.confirmPendingOrder(
+        latestOrder,
+      );
+    }
+
+    return;
+  }
+
+  orderStore.upsertOrder(
+    latestOrder,
+  );
+}
+
 export default function OrderRealtimeBridge() {
   useEffect(() => {
     let disposed = false;
@@ -74,12 +108,35 @@ export default function OrderRealtimeBridge() {
     const refreshingOrderIds =
       new Set<string>();
 
+    const setRealtimeHealth = (
+      userId: string | null,
+      status:
+        | 'idle'
+        | 'connecting'
+        | 'subscribed'
+        | 'error',
+    ) => {
+      useOrderRealtimeHealthStore
+        .getState()
+        .setStatus(
+          userId,
+          status,
+        );
+    };
+
+    const resetRealtimeHealth = () => {
+      useOrderRealtimeHealthStore
+        .getState()
+        .reset();
+    };
+
     async function removeActiveChannel() {
       const channel =
         activeChannel;
 
       activeChannel = null;
       activeUserId = null;
+      resetRealtimeHealth();
 
       if (!channel) {
         return;
@@ -125,11 +182,9 @@ export default function OrderRealtimeBridge() {
             );
 
           if (!disposed) {
-            useOrdersStore
-              .getState()
-              .upsertOrder(
-                latestOrder,
-              );
+            applyLatestOrder(
+              latestOrder,
+            );
           }
 
           return;
@@ -137,9 +192,8 @@ export default function OrderRealtimeBridge() {
 
         /**
          * A broadcast can arrive before a newly-created order has been
-         * persisted into Zustand (for example during a fast admin status
-         * transition). Recover by refreshing the user's authoritative order
-         * history once rather than silently dropping the event.
+         * persisted into Zustand. Recover by refreshing the authoritative
+         * order history once instead of silently dropping the event.
          */
         const latestOrders =
           await getMyOrders();
@@ -154,8 +208,9 @@ export default function OrderRealtimeBridge() {
         }
       } catch (error) {
         /**
-         * Realtime is an acceleration path, not the only consistency path.
-         * Existing focus refresh / polling remains available as a fallback.
+         * Realtime accelerates consistency but is never the only path. Home's
+         * health-aware polling automatically becomes the fast fallback when
+         * this channel is unavailable.
          */
         console.warn(
           'Unable to refresh order after realtime update:',
@@ -210,11 +265,21 @@ export default function OrderRealtimeBridge() {
         .getState()
         .prepareForUser(userId);
 
+      setRealtimeHealth(
+        userId,
+        'connecting',
+      );
+
       try {
         await supabase.realtime.setAuth(
           session.access_token,
         );
       } catch (error) {
+        setRealtimeHealth(
+          userId,
+          'error',
+        );
+
         console.warn(
           'Unable to authenticate order realtime channel:',
           error,
@@ -266,21 +331,54 @@ export default function OrderRealtimeBridge() {
         },
       );
 
+      activeUserId = userId;
+      activeChannel = channel;
+
       channel.subscribe(
         (status) => {
           if (
-            status ===
-            'CHANNEL_ERROR'
+            disposed ||
+            generation !==
+              connectionGeneration ||
+            activeChannel !== channel
           ) {
+            return;
+          }
+
+          if (
+            status === 'SUBSCRIBED'
+          ) {
+            setRealtimeHealth(
+              userId,
+              'subscribed',
+            );
+            return;
+          }
+
+          if (
+            status === 'CHANNEL_ERROR' ||
+            status === 'TIMED_OUT'
+          ) {
+            setRealtimeHealth(
+              userId,
+              'error',
+            );
+
             console.warn(
-              'Order realtime channel failed to subscribe.',
+              'Order realtime channel is unavailable.',
+              status,
+            );
+            return;
+          }
+
+          if (status === 'CLOSED') {
+            setRealtimeHealth(
+              userId,
+              'idle',
             );
           }
         },
       );
-
-      activeUserId = userId;
-      activeChannel = channel;
     }
 
     async function bootstrapRealtime() {
@@ -292,6 +390,8 @@ export default function OrderRealtimeBridge() {
           .getSession();
 
       if (error) {
+        resetRealtimeHealth();
+
         console.warn(
           'Unable to read session for order realtime:',
           error,
@@ -340,6 +440,7 @@ export default function OrderRealtimeBridge() {
 
       activeChannel = null;
       activeUserId = null;
+      resetRealtimeHealth();
 
       if (channel) {
         void supabase.removeChannel(
