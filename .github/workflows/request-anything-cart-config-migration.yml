@@ -156,33 +156,11 @@ jobs:
           )
 
           replace_once(
-              """      /*
-                 * Request Anything uses the exact same cart/order flow
-                 * as a normal store order.
-                 *
-                 * The Supabase migration creates a real internal store
-                 * and a real zero-price product. We keep one line only
-                 * and store the customer's free-form request inside the
-                 * local cart description so checkout can copy it into
-                 * now.orders.notes.
-                 */
-                clearStoreCart(
+              """      clearStoreCart(
                   REQUEST_ANYTHING_INTERNAL_STORE_ID,
                 );
           """,
-              """      /*
-                 * Request Anything uses the exact same cart/order flow
-                 * as a normal store order. The internal store, placeholder
-                 * product and service-area delivery values now come from the
-                 * public Supabase catalog. The legacy configuration is only a
-                 * compatibility fallback for mixed/temporarily unavailable
-                 * backend deployments.
-                 *
-                 * The placeholder line stays zero-price by design. The user's
-                 * free-form request remains in the local cart description so
-                 * checkout can copy it into now.orders.notes.
-                 */
-                const legacyCartConfiguration =
+              """      const legacyCartConfiguration =
                   getLegacyRequestAnythingCartConfiguration();
 
                 if (
