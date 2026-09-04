@@ -1,4 +1,7 @@
 import { publicSupabase } from '../lib/supabase';
+import {
+  recordStartupTimingOnce,
+} from './startup-performance-service';
 
 const HOME_SEARCH_STORE_BATCH_SIZE = 50;
 const HOME_SEARCH_BATCH_CONCURRENCY = 3;
@@ -199,10 +202,29 @@ function collectEffectiveCategoryNames(
 export async function loadHomeSearchSuggestionNames(
   storeIds: readonly string[],
 ): Promise<string[]> {
+  const startedAt = Date.now();
   const normalizedStoreIds =
     normalizeStoreIds(storeIds);
 
+  recordStartupTimingOnce(
+    'home-stores-ready-for-search',
+    0,
+    {
+      storeCount: normalizedStoreIds.length,
+    },
+  );
+
   if (normalizedStoreIds.length === 0) {
+    recordStartupTimingOnce(
+      'home-search-suggestions-total',
+      Date.now() - startedAt,
+      {
+        batchCount: 0,
+        storeCount: 0,
+        suggestionCount: 0,
+      },
+    );
+
     return [];
   }
 
@@ -303,6 +325,16 @@ export async function loadHomeSearchSuggestionNames(
       names.push(name);
     }
   }
+
+  recordStartupTimingOnce(
+    'home-search-suggestions-total',
+    Date.now() - startedAt,
+    {
+      batchCount: batches.length,
+      storeCount: normalizedStoreIds.length,
+      suggestionCount: names.length,
+    },
+  );
 
   return names;
 }
