@@ -161,7 +161,7 @@ function AppBootstrapScreen({
   const dotScale = useRef(
     new Animated.Value(0.94),
   ).current;
-  const revealWidth = useRef(
+  const revealCoverTranslateX = useRef(
     new Animated.Value(0),
   ).current;
   const screenOpacity = useRef(
@@ -221,7 +221,7 @@ function AppBootstrapScreen({
   }, [finishBootstrap, isReady]);
 
   useEffect(() => {
-    revealWidth.setValue(0);
+    revealCoverTranslateX.setValue(0);
 
     const introAnimation = Animated.sequence([
       Animated.delay(DOT_START_DELAY_MS),
@@ -250,7 +250,7 @@ function AppBootstrapScreen({
           useNativeDriver: true,
         }),
       ]),
-      Animated.timing(revealWidth, {
+      Animated.timing(revealCoverTranslateX, {
         toValue: logoWidth,
         duration: WORDMARK_REVEAL_DURATION_MS,
         easing: Easing.bezier(
@@ -259,7 +259,7 @@ function AppBootstrapScreen({
           0.22,
           1,
         ),
-        useNativeDriver: false,
+        useNativeDriver: true,
       }),
     ]);
 
@@ -277,7 +277,7 @@ function AppBootstrapScreen({
     dotScale,
     dotTranslateY,
     logoWidth,
-    revealWidth,
+    revealCoverTranslateX,
   ]);
 
   useEffect(() => {
@@ -336,13 +336,13 @@ function AppBootstrapScreen({
           },
         ]}
       >
-        <Animated.View
+        <View
           pointerEvents="none"
           style={[
-            styles.wordmarkClip,
+            styles.wordmarkLayer,
             {
               height: logoHeight,
-              width: revealWidth,
+              width: logoWidth,
             },
           ]}
         >
@@ -355,7 +355,24 @@ function AppBootstrapScreen({
               width: logoWidth,
             }}
           />
-        </Animated.View>
+
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.wordmarkRevealCover,
+              {
+                height: logoHeight,
+                transform: [
+                  {
+                    translateX:
+                      revealCoverTranslateX,
+                  },
+                ],
+                width: logoWidth,
+              },
+            ]}
+          />
+        </View>
 
         <Animated.Image
           accessibilityIgnoresInvertColors
@@ -925,12 +942,20 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 
-  wordmarkClip: {
+  wordmarkLayer: {
     left: 0,
     overflow: 'hidden',
     position: 'absolute',
     top: 0,
     zIndex: 1,
+  },
+
+  wordmarkRevealCover: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    left: 0,
+    position: 'absolute',
+    top: 0,
   },
 
   dotLayer: {
