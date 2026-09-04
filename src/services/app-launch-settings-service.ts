@@ -2,6 +2,7 @@ import { publicSupabase } from '../lib/supabase';
 import getAppBootstrap, {
   type AppSettings,
 } from './bootstrap-service';
+import { recordStartupTimingOnce } from './startup-performance-service';
 
 export type AppLaunchSettings = {
   maintenance_mode: boolean;
@@ -128,20 +129,39 @@ function isMissingLaunchGateRpc(
 
 async function getLightweightLaunchSettings():
   Promise<AppLaunchSettings | null> {
-  const { data, error } =
-    await publicSupabase.rpc(
-      'get_app_launch_gate',
-    );
+  const startedAt = Date.now();
+  let outcome:
+    | 'success'
+    | 'missing-rpc'
+    | 'error' =
+    'success';
 
-  if (error) {
-    if (isMissingLaunchGateRpc(error)) {
-      return null;
+  try {
+    const { data, error } =
+      await publicSupabase.rpc(
+        'get_app_launch_gate',
+      );
+
+    if (error) {
+      if (isMissingLaunchGateRpc(error)) {
+        outcome = 'missing-rpc';
+        return null;
+      }
+
+      outcome = 'error';
+      throw error;
     }
 
-    throw error;
+    return parseLaunchSettings(data);
+  } finally {
+    recordStartupTimingOnce(
+      'launch-gate-rpc',
+      Date.now() - startedAt,
+      {
+        outcome,
+      },
+    );
   }
-
-  return parseLaunchSettings(data);
 }
 
 function mapLegacyBootstrapSettings(
@@ -185,12 +205,21 @@ export async function getAppLaunchSettings():
     return lightweightSettings;
   }
 
-  const bootstrap =
-    await getAppBootstrap();
+  const fallbackStartedAt = Date.now();
 
-  return mapLegacyBootstrapSettings(
-    bootstrap.settings as LegacyBootstrapSettings,
-  );
+  try {
+    const bootstrap =
+      await getAppBootstrap();
+
+    return mapLegacyBootstrapSettings(
+      bootstrap.settings as LegacyBootstrapSettings,
+    );
+  } finally {
+    recordStartupTimingOnce(
+      'launch-gate-bootstrap-fallback',
+      Date.now() - fallbackStartedAt,
+    );
+  }
 }
 
 export default getAppLaunchSettings;
