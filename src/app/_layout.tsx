@@ -34,6 +34,9 @@ import {
   type AppLaunchGateResult,
 } from '../services/app-launch-gate-service';
 import { logMobileClientError } from '../services/mobile-error-telemetry-service';
+import {
+  recordStartupTimingOnce,
+} from '../services/startup-performance-service';
 import { useCartStore } from '../store/cart-store';
 import { useCustomerStore } from '../store/customer-store';
 import { useOrdersStore } from '../store/orders-store';
@@ -64,6 +67,10 @@ const EXIT_FADE_DURATION_MS = 260;
 const AUTH_BOOTSTRAP_TIMEOUT_MS = 8000;
 const LAUNCH_GATE_TIMEOUT_MS = 10000;
 const DEVELOPMENT_HYDRATION_TIMEOUT_MS = 6000;
+
+const PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED =
+  process.env.EXPO_PUBLIC_STARTUP_DIAGNOSTICS ===
+  '1';
 
 const DEVELOPMENT_ALLOWED_LAUNCH_GATE:
   AppLaunchGateResult = {
@@ -419,6 +426,10 @@ export function ErrorBoundary({
 }
 
 export default function RootLayout() {
+  const [rootLayoutStartedAt] = useState(
+    () => Date.now(),
+  );
+
   const cartHasHydrated = useCartStore(
     (state) => state.hasHydrated,
   );
@@ -436,7 +447,8 @@ export default function RootLayout() {
 
   const [launchGate, setLaunchGate] =
     useState<AppLaunchGateResult | null>(
-      __DEV__
+      __DEV__ &&
+      !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
         ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
         : null,
     );
@@ -492,7 +504,10 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (__DEV__) {
+    if (
+      __DEV__ &&
+      !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
+    ) {
       console.log(
         '[Navienty] Development launch gate bypass enabled.',
       );
@@ -540,7 +555,10 @@ export default function RootLayout() {
       setIsRefreshingLaunchGate(true);
 
       try {
-        if (__DEV__) {
+        if (
+          __DEV__ &&
+          !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
+        ) {
           setLaunchGate(
             DEVELOPMENT_ALLOWED_LAUNCH_GATE,
           );
@@ -578,6 +596,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (
       !__DEV__ ||
+      PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED ||
       appHasHydrated ||
       developmentHydrationFallbackReached
     ) {
@@ -611,6 +630,7 @@ export default function RootLayout() {
   const storageBootstrapFinished =
     appHasHydrated ||
     (__DEV__ &&
+      !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED &&
       developmentHydrationFallbackReached);
 
   const launchGateStatus =
@@ -618,8 +638,105 @@ export default function RootLayout() {
 
   const startupHasResolved =
     storageBootstrapFinished &&
-    (__DEV__ || authBootstrapFinished) &&
+    ((
+      __DEV__ &&
+      !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
+    ) ||
+      authBootstrapFinished) &&
     launchGate !== null;
+
+  useEffect(() => {
+    if (!cartHasHydrated) {
+      return;
+    }
+
+    recordStartupTimingOnce(
+      'root-layout-to-cart-hydrated',
+      Date.now() - rootLayoutStartedAt,
+      {
+        storage: 'async-storage',
+      },
+    );
+  }, [cartHasHydrated, rootLayoutStartedAt]);
+
+  useEffect(() => {
+    if (!customerHasHydrated) {
+      return;
+    }
+
+    recordStartupTimingOnce(
+      'root-layout-to-customer-hydrated',
+      Date.now() - rootLayoutStartedAt,
+      {
+        storage:
+          Platform.OS === 'web'
+            ? 'async-storage'
+            : 'secure-store',
+      },
+    );
+  }, [customerHasHydrated, rootLayoutStartedAt]);
+
+  useEffect(() => {
+    if (!ordersHasHydrated) {
+      return;
+    }
+
+    recordStartupTimingOnce(
+      'root-layout-to-orders-hydrated',
+      Date.now() - rootLayoutStartedAt,
+      {
+        storage:
+          Platform.OS === 'web'
+            ? 'async-storage'
+            : 'secure-store',
+      },
+    );
+  }, [ordersHasHydrated, rootLayoutStartedAt]);
+
+  useEffect(() => {
+    if (!authBootstrapFinished) {
+      return;
+    }
+
+    recordStartupTimingOnce(
+      'root-layout-to-auth-finished',
+      Date.now() - rootLayoutStartedAt,
+      {
+        blocking:
+          !__DEV__ ||
+          PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED,
+      },
+    );
+  }, [authBootstrapFinished, rootLayoutStartedAt]);
+
+  useEffect(() => {
+    if (!launchGate) {
+      return;
+    }
+
+    recordStartupTimingOnce(
+      'root-layout-to-launch-gate-resolved',
+      Date.now() - rootLayoutStartedAt,
+      {
+        status: launchGate.status,
+      },
+    );
+  }, [launchGate, rootLayoutStartedAt]);
+
+  useEffect(() => {
+    if (!startupHasResolved) {
+      return;
+    }
+
+    recordStartupTimingOnce(
+      'root-layout-to-startup-resolved',
+      Date.now() - rootLayoutStartedAt,
+      {
+        productionLikeDiagnostics:
+          PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED,
+      },
+    );
+  }, [rootLayoutStartedAt, startupHasResolved]);
 
   useEffect(() => {
     if (!__DEV__) {
@@ -636,6 +753,8 @@ export default function RootLayout() {
         launchGateStatus,
         developmentHydrationFallbackReached,
         startupHasResolved,
+        productionLikeStartupDiagnostics:
+          PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED,
       },
     );
   }, [
