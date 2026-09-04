@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { StoreSummary } from './catalog-service';
+import {
+  recordStartupTimingOnce,
+} from './startup-performance-service';
 
 const HOME_PUBLIC_CACHE_VERSION = 1;
 const HOME_PUBLIC_CACHE_MAX_AGE_MS =
@@ -22,6 +25,12 @@ type CachedHomeSuggestions = {
   storeIdsKey: string;
   suggestions: string[];
 };
+
+type HomeCacheReadOutcome =
+  | 'hit'
+  | 'miss'
+  | 'invalid'
+  | 'error';
 
 function isRecord(
   value: unknown,
@@ -131,6 +140,24 @@ function getStorageKey(
   ].join('/');
 }
 
+function recordHomeCacheRead(
+  kind: 'stores' | 'suggestions',
+  startedAt: number,
+  outcome: HomeCacheReadOutcome,
+  itemCount: number,
+): void {
+  recordStartupTimingOnce(
+    kind === 'stores'
+      ? 'home-stores-cache-read'
+      : 'home-suggestions-cache-read',
+    Date.now() - startedAt,
+    {
+      itemCount,
+      outcome,
+    },
+  );
+}
+
 async function removeCachedValue(
   key: string,
 ): Promise<void> {
@@ -158,12 +185,19 @@ export function createHomeStoreIdsKey(
 export async function readCachedHomeStores(
   locationKey: string,
 ): Promise<StoreSummary[] | null> {
+  const startedAt = Date.now();
   const key = getStorageKey(
     'stores',
     locationKey,
   );
 
   if (!key) {
+    recordHomeCacheRead(
+      'stores',
+      startedAt,
+      'miss',
+      0,
+    );
     return null;
   }
 
@@ -172,6 +206,12 @@ export async function readCachedHomeStores(
       await AsyncStorage.getItem(key);
 
     if (!rawValue) {
+      recordHomeCacheRead(
+        'stores',
+        startedAt,
+        'miss',
+        0,
+      );
       return null;
     }
 
@@ -187,12 +227,32 @@ export async function readCachedHomeStores(
       !Array.isArray(parsed.stores) ||
       !parsed.stores.every(isStoreSummary)
     ) {
+      recordHomeCacheRead(
+        'stores',
+        startedAt,
+        'invalid',
+        0,
+      );
       void removeCachedValue(key);
       return null;
     }
 
+    recordHomeCacheRead(
+      'stores',
+      startedAt,
+      'hit',
+      parsed.stores.length,
+    );
+
     return parsed.stores;
   } catch (error) {
+    recordHomeCacheRead(
+      'stores',
+      startedAt,
+      'error',
+      0,
+    );
+
     if (__DEV__) {
       console.warn(
         'Unable to read cached Home stores.',
@@ -242,12 +302,19 @@ export async function readCachedHomeSuggestions(
   locationKey: string,
   storeIdsKey: string,
 ): Promise<string[] | null> {
+  const startedAt = Date.now();
   const key = getStorageKey(
     'suggestions',
     locationKey,
   );
 
   if (!key || !storeIdsKey) {
+    recordHomeCacheRead(
+      'suggestions',
+      startedAt,
+      'miss',
+      0,
+    );
     return null;
   }
 
@@ -256,6 +323,12 @@ export async function readCachedHomeSuggestions(
       await AsyncStorage.getItem(key);
 
     if (!rawValue) {
+      recordHomeCacheRead(
+        'suggestions',
+        startedAt,
+        'miss',
+        0,
+      );
       return null;
     }
 
@@ -272,12 +345,32 @@ export async function readCachedHomeSuggestions(
       !Array.isArray(parsed.suggestions) ||
       !parsed.suggestions.every(isString)
     ) {
+      recordHomeCacheRead(
+        'suggestions',
+        startedAt,
+        'invalid',
+        0,
+      );
       void removeCachedValue(key);
       return null;
     }
 
+    recordHomeCacheRead(
+      'suggestions',
+      startedAt,
+      'hit',
+      parsed.suggestions.length,
+    );
+
     return parsed.suggestions;
   } catch (error) {
+    recordHomeCacheRead(
+      'suggestions',
+      startedAt,
+      'error',
+      0,
+    );
+
     if (__DEV__) {
       console.warn(
         'Unable to read cached Home search suggestions.',
