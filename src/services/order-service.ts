@@ -1,3 +1,6 @@
+import {
+  getAggregateGlobalOrderStatus,
+} from '../domain/global-order-status';
 import { supabase } from '../lib/supabase';
 import {
   getGlobalCartStoreGroups,
@@ -8,6 +11,7 @@ import type {
   CreateWhatsAppOrderInput,
   Order,
   OrderItem,
+  OrderStatus,
 } from '../types/supabase-order';
 import type {
   GlobalOrderGroup,
@@ -30,7 +34,7 @@ type GlobalOrderContext = {
 };
 
 type CachedGlobalOrder = {
-  context: GlobalOrderContext;
+  context?: GlobalOrderContext;
   order: Order;
 };
 
@@ -219,9 +223,80 @@ function mapCartItemsToOrderItems(
   );
 }
 
+function getEarliestDate(
+  values: Array<string | null | undefined>,
+): string | null {
+  const validDates = values
+    .filter(
+      (value): value is string =>
+        Boolean(value),
+    )
+    .map((value) => ({
+      value,
+      time: new Date(value).getTime(),
+    }))
+    .filter(({ time }) =>
+      Number.isFinite(time),
+    );
+
+  if (validDates.length === 0) {
+    return null;
+  }
+
+  return validDates.reduce(
+    (earliest, current) =>
+      current.time < earliest.time
+        ? current
+        : earliest,
+  ).value;
+}
+
+function getLatestDate(
+  values: Array<string | null | undefined>,
+): string | null {
+  const validDates = values
+    .filter(
+      (value): value is string =>
+        Boolean(value),
+    )
+    .map((value) => ({
+      value,
+      time: new Date(value).getTime(),
+    }))
+    .filter(({ time }) =>
+      Number.isFinite(time),
+    );
+
+  if (validDates.length === 0) {
+    return null;
+  }
+
+  return validDates.reduce(
+    (latest, current) =>
+      current.time > latest.time
+        ? current
+        : latest,
+  ).value;
+}
+
+function getFallbackGroupStatus(
+  group: GlobalOrderGroup,
+): OrderStatus {
+  if (group.status === 'cancelled') {
+    return 'cancelled';
+  }
+
+  if (group.status === 'submitted') {
+    return 'waiting-confirmation';
+  }
+
+  return 'awaiting-whatsapp-send';
+}
+
 function buildSyntheticGlobalOrder(
   group: GlobalOrderGroup,
   context?: GlobalOrderContext,
+  serverChildOrders: Order[] = [],
 ): Order {
   const cached =
     globalOrderCache.get(
@@ -237,23 +312,54 @@ function buildSyntheticGlobalOrder(
   const input =
     effectiveContext?.input;
 
+  const cachedItems =
+    cached?.order.items ?? [];
+
   const items =
     groups.length > 0
       ? mapCartItemsToOrderItems(
           groups,
         )
-      : cached?.order.items ?? [];
+      : cachedItems.length > 0
+        ? cachedItems
+        : serverChildOrders.flatMap(
+            (order) => order.items,
+          );
+
+  const firstChildOrder =
+    serverChildOrders[0] ?? null;
 
   const createdAt =
     effectiveContext?.createdAt ??
     cached?.order.createdAt ??
+    getEarliestDate(
+      serverChildOrders.map(
+        (order) => order.createdAt,
+      ),
+    ) ??
     new Date().toISOString();
 
+  const fallbackStatus =
+    getFallbackGroupStatus(group);
+
+  const status =
+    serverChildOrders.length > 0
+      ? getAggregateGlobalOrderStatus(
+          serverChildOrders.map(
+            (order) => order.status,
+          ),
+          fallbackStatus,
+        )
+      : cached?.order.status ??
+        fallbackStatus;
+
   const submitted =
-    group.status === 'submitted';
+    group.status === 'submitted' ||
+    status !==
+      'awaiting-whatsapp-send';
 
   const cancelled =
-    group.status === 'cancelled';
+    status === 'cancelled';
 
   const firstStore =
     groups[0] ?? null;
@@ -284,7 +390,33 @@ function buildSyntheticGlobalOrder(
           0,
         )
       : cached?.order.itemCount ??
-        items.length;
+        serverChildOrders.reduce(
+          (sum, order) =>
+            sum + order.itemCount,
+          0,
+        );
+
+  const allChildrenPaid =
+    serverChildOrders.length > 0 &&
+    serverChildOrders.every(
+      (order) =>
+        order.paymentStatus === 'paid',
+    );
+
+  const anyChildPaymentFailed =
+    serverChildOrders.some(
+      (order) =>
+        order.paymentStatus === 'failed',
+    );
+
+  const paymentStatus =
+    allChildrenPaid
+      ? 'paid'
+      : anyChildPaymentFailed
+        ? 'failed'
+        : cached?.order.paymentStatus ??
+          firstChildOrder?.paymentStatus ??
+          'pending';
 
   return {
     id: group.id,
@@ -299,42 +431,91 @@ function buildSyntheticGlobalOrder(
     appName: 'Navienty Now',
     createdAt,
     updatedAt:
+      getLatestDate([
+        cached?.order.updatedAt,
+        ...serverChildOrders.map(
+          (order) => order.updatedAt,
+        ),
+      ]) ??
       new Date().toISOString(),
     submittedAt:
-      submitted
+      cached?.order.submittedAt ??
+      getEarliestDate(
+        serverChildOrders.map(
+          (order) => order.submittedAt,
+        ),
+      ) ??
+      (submitted
         ? new Date().toISOString()
+        : null),
+    confirmedAt:
+      cached?.order.confirmedAt ??
+      getEarliestDate(
+        serverChildOrders.map(
+          (order) => order.confirmedAt,
+        ),
+      ),
+    preparingAt:
+      cached?.order.preparingAt ??
+      getEarliestDate(
+        serverChildOrders.map(
+          (order) => order.preparingAt,
+        ),
+      ),
+    outForDeliveryAt:
+      cached?.order.outForDeliveryAt ??
+      getEarliestDate(
+        serverChildOrders.map(
+          (order) => order.outForDeliveryAt,
+        ),
+      ),
+    deliveredAt:
+      status === 'delivered'
+        ? cached?.order.deliveredAt ??
+          getLatestDate(
+            serverChildOrders.map(
+              (order) => order.deliveredAt,
+            ),
+          )
         : null,
-    confirmedAt: null,
-    preparingAt: null,
-    outForDeliveryAt: null,
-    deliveredAt: null,
     cancelledAt:
       cancelled
-        ? new Date().toISOString()
+        ? cached?.order.cancelledAt ??
+          getLatestDate(
+            serverChildOrders.map(
+              (order) => order.cancelledAt,
+            ),
+          ) ??
+          new Date().toISOString()
         : null,
     cancellationReason:
       cancelled
-        ? 'global_order_group_cancelled'
+        ? cached?.order
+            .cancellationReason ??
+          'global_order_group_cancelled'
         : null,
-    status:
-      cancelled
-        ? 'cancelled'
-        : submitted
-          ? 'waiting-confirmation'
-          : 'awaiting-whatsapp-send',
-    paymentStatus: 'pending',
+    status,
+    paymentStatus,
+    globalOrderChildIds:
+      group.orders.map(
+        (child) => child.id,
+      ),
     storeId:
       firstChild?.storeId ??
       firstStore?.storeId ??
+      firstChildOrder?.storeId ??
       input?.storeId ?? '',
     storeName:
       group.orders.length > 1
         ? `طلب من ${group.orders.length} متاجر`
         : firstChild?.storeName ??
           firstStore?.storeName ??
+          firstChildOrder?.storeName ??
           'Navienty Now',
     storeIcon:
       firstStore?.storeIcon ??
+      firstChildOrder?.storeIcon ??
+      cached?.order.storeIcon ??
       '🛍️',
     items,
     itemCount:
@@ -342,9 +523,15 @@ function buildSyntheticGlobalOrder(
     subtotal:
       group.subtotal,
     voucherCode:
-      input?.voucherCode ?? null,
-    voucherTitle: null,
-    voucherDiscountAmount: 0,
+      input?.voucherCode ??
+      cached?.order.voucherCode ??
+      null,
+    voucherTitle:
+      cached?.order.voucherTitle ??
+      null,
+    voucherDiscountAmount:
+      cached?.order
+        .voucherDiscountAmount ?? 0,
     deliveryFee:
       group.deliveryFee,
     paymentProcessingFee:
@@ -356,40 +543,58 @@ function buildSyntheticGlobalOrder(
       group.currencySymbol,
     customerName:
       input?.customerName ??
-      cached?.order.customerName ?? '',
+      cached?.order.customerName ??
+      firstChildOrder?.customerName ??
+      '',
     phoneNumber:
       input?.customerPhone ??
-      cached?.order.phoneNumber ?? '',
+      cached?.order.phoneNumber ??
+      firstChildOrder?.phoneNumber ??
+      '',
     serviceAreaId:
       input?.serviceAreaId ??
-      cached?.order.serviceAreaId ?? '',
+      cached?.order.serviceAreaId ??
+      firstChildOrder?.serviceAreaId ??
+      '',
     area:
-      cached?.order.area ?? '',
+      cached?.order.area ??
+      firstChildOrder?.area ?? '',
     address:
       input?.address ??
-      cached?.order.address ?? '',
+      cached?.order.address ??
+      firstChildOrder?.address ?? '',
     landmark:
       input?.landmark ??
-      cached?.order.landmark ?? '',
+      cached?.order.landmark ??
+      firstChildOrder?.landmark ?? '',
     notes:
       input?.notes ??
-      cached?.order.notes ?? '',
+      cached?.order.notes ??
+      firstChildOrder?.notes ?? '',
     paymentMethod:
       input?.paymentMethodId ??
-      cached?.order.paymentMethod ?? '',
+      cached?.order.paymentMethod ??
+      firstChildOrder?.paymentMethod ?? '',
     paymentMethodTitle:
       cached?.order
-        .paymentMethodTitle ?? '',
+        .paymentMethodTitle ??
+      firstChildOrder
+        ?.paymentMethodTitle ?? '',
     whatsappNumber:
       group.whatsappNumber,
     whatsappMessage:
       group.whatsappMessage,
-    whatsappOpenedAt: null,
+    whatsappOpenedAt:
+      cached?.order
+        .whatsappOpenedAt ?? null,
     whatsappSentConfirmedAt:
-      submitted
+      cached?.order
+        .whatsappSentConfirmedAt ??
+      (submitted
         ? new Date().toISOString()
-        : null,
-    statusHistory: [],
+        : null),
+    statusHistory:
+      cached?.order.statusHistory ?? [],
   };
 }
 
@@ -436,25 +641,47 @@ export async function getOrderByToken(
       globalAccessToken,
     );
 
-  const order =
-    buildSyntheticGlobalOrder(
-      group,
-    );
+  const childIds = new Set(
+    group.orders.map(
+      (child) => child.id,
+    ),
+  );
+
+  let serverChildOrders: Order[] = [];
+
+  try {
+    const serverOrders =
+      await legacy.getMyOrders();
+
+    serverChildOrders =
+      serverOrders.filter(
+        (order) =>
+          childIds.has(order.id),
+      );
+  } catch {
+    // The group RPC is still authoritative. Cached parent data remains a safe
+    // fallback if the broader order-history refresh is temporarily unavailable.
+  }
 
   const cached =
     globalOrderCache.get(
       globalAccessToken,
     );
 
-  if (cached) {
-    globalOrderCache.set(
-      globalAccessToken,
-      {
-        ...cached,
-        order,
-      },
+  const order =
+    buildSyntheticGlobalOrder(
+      group,
+      cached?.context,
+      serverChildOrders,
     );
-  }
+
+  globalOrderCache.set(
+    globalAccessToken,
+    {
+      context: cached?.context,
+      order,
+    },
+  );
 
   return order;
 }
@@ -604,15 +831,13 @@ export async function submitOrderForConfirmation(
       cached?.context,
     );
 
-  if (cached) {
-    globalOrderCache.set(
-      globalAccessToken,
-      {
-        ...cached,
-        order,
-      },
-    );
-  }
+  globalOrderCache.set(
+    globalAccessToken,
+    {
+      context: cached?.context,
+      order,
+    },
+  );
 
   return order;
 }
