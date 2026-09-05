@@ -15,6 +15,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  selectAllCartItemCount,
+  selectAllCartSubtotal,
+  useCartStore,
+} from '../../store/cart-store';
+
 const DEFAULT_ACCENT = '#00B14F';
 const DEFAULT_ACCENT_DARK = '#009245';
 const SCROLL_DIRECTION_THRESHOLD = 1.5;
@@ -22,12 +28,11 @@ const TOP_REVEAL_OFFSET = 8;
 const HIDDEN_TRANSLATE_Y = 120;
 
 type CategoryCartDockProps = {
+  /** Kept for source compatibility; the dock now renders global totals. */
   itemCount: number;
+  /** Kept for source compatibility; the dock now renders global totals. */
   subtotal: number;
-  /**
-   * Kept temporarily for backward compatibility with existing callers.
-   * The Cart dock no longer displays or enforces a store minimum order.
-   */
+  /** No longer displayed or enforced. */
   minimumOrder: number;
   currencyCode?: string | null;
   accentColor?: string;
@@ -61,17 +66,11 @@ function formatAmount(
 }
 
 /**
- * Shared vertical-scroll direction detector for every shopping screen.
- *
- * Rules:
- * - scrolling down => hide the Cart dock.
- * - scrolling up => reveal the Cart dock.
- * - when the user returns to the very top => always reveal the Cart dock.
+ * Shared vertical-scroll behavior for the global Cart dock.
  */
 export function useCartDockScrollBehavior() {
   const lastOffsetYRef = useRef(0);
   const directionRef = useRef(false);
-
   const [isScrollingDown, setIsScrollingDown] =
     useState(false);
 
@@ -83,7 +82,6 @@ export function useCartDockScrollBehavior() {
         0,
         event.nativeEvent.contentOffset.y,
       );
-
       const delta =
         nextOffsetY - lastOffsetYRef.current;
 
@@ -118,8 +116,6 @@ export function useCartDockScrollBehavior() {
 }
 
 export default function CategoryCartDock({
-  itemCount,
-  subtotal,
   currencyCode = 'EGP',
   accentColor = DEFAULT_ACCENT,
   accentDarkColor = DEFAULT_ACCENT_DARK,
@@ -127,6 +123,15 @@ export default function CategoryCartDock({
   onPress,
 }: CategoryCartDockProps) {
   const insets = useSafeAreaInsets();
+
+  // The dock belongs to the whole platform now, not to the currently-open
+  // store. Existing screens can keep passing their old props during migration.
+  const itemCount = useCartStore(
+    selectAllCartItemCount,
+  );
+  const subtotal = useCartStore(
+    selectAllCartSubtotal,
+  );
 
   const visibilityAnimation = useRef(
     new Animated.Value(1),
@@ -138,8 +143,7 @@ export default function CategoryCartDock({
   );
 
   const shouldHideDock =
-    itemCount > 0 &&
-    isScrollingDown;
+    itemCount > 0 && isScrollingDown;
 
   useEffect(() => {
     Animated.timing(
@@ -219,8 +223,7 @@ export default function CategoryCartDock({
           style={[
             styles.basketCount,
             {
-              backgroundColor:
-                accentDarkColor,
+              backgroundColor: accentDarkColor,
             },
           ]}
         >
@@ -254,7 +257,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     zIndex: 999,
   },
-
   basketButton: {
     alignItems: 'center',
     borderRadius: 999,
@@ -263,16 +265,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 8,
   },
-
   basketButtonPressed: {
     opacity: 0.9,
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
+    transform: [{ scale: 0.99 }],
   },
-
   basketTotal: {
     color: '#FFFFFF',
     fontSize: 14.5,
@@ -281,7 +277,6 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     textAlign: 'left',
   },
-
   basketButtonTitle: {
     color: '#FFFFFF',
     flex: 1,
@@ -290,7 +285,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     writingDirection: 'rtl',
   },
-
   basketCount: {
     alignItems: 'center',
     borderRadius: 22,
@@ -298,7 +292,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 44,
   },
-
   basketCountText: {
     color: '#FFFFFF',
     fontSize: 16,
