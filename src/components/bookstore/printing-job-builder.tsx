@@ -586,9 +586,7 @@ export default function PrintingJobBuilder({
           />
         </View>
 
-        <Text style={styles.stateTitle}>
-          جاري تجهيز خدمة الطباعة
-        </Text>
+    
 
         <Text style={styles.stateDescription}>
           بنجهز لك الخيارات والأسعار المتاحة.
