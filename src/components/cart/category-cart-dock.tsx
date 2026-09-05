@@ -353,15 +353,6 @@ const styles = StyleSheet.create({
     width: 44,
   },
 
-  basketButtonPressed: {
-    opacity: 0.9,
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
-  },
-
   basketCountText: {
     color: '#FFFFFF',
     fontSize: 16,
