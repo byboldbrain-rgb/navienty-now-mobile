@@ -2,8 +2,11 @@ import type {
   OrderStatus,
 } from '../types/supabase-order';
 
+type ActiveOrderStatus =
+  Exclude<OrderStatus, 'cancelled'>;
+
 const STATUS_STAGE: Record<
-  Exclude<OrderStatus, 'cancelled'>,
+  ActiveOrderStatus,
   number
 > = {
   'awaiting-whatsapp-send': 0,
@@ -31,7 +34,9 @@ export function getAggregateGlobalOrderStatus(
 
   const activeStatuses =
     statuses.filter(
-      (status) =>
+      (
+        status,
+      ): status is ActiveOrderStatus =>
         status !== 'cancelled',
     );
 
