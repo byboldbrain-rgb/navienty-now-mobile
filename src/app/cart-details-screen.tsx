@@ -3122,6 +3122,31 @@ function StoreCartScreen() {
                 Number(item.price) *
                 item.quantity;
 
+              const selectedVariant =
+                item.variantId
+                  ? catalogProduct?.variants.find(
+                      (variant) =>
+                        variant.id ===
+                        item.variantId,
+                    ) ?? null
+                  : null;
+
+              const compareAtUnitPrice =
+                selectedVariant?.compareAtPrice ??
+                catalogProduct?.compareAtPrice ??
+                null;
+
+              const hasOfferPrice =
+                compareAtUnitPrice !== null &&
+                Number(compareAtUnitPrice) >
+                  Number(item.price);
+
+              const compareAtTotal =
+                hasOfferPrice
+                  ? Number(compareAtUnitPrice) *
+                    item.quantity
+                  : 0;
+
               const variantName =
                 item.variantName;
 
@@ -3204,15 +3229,43 @@ function StoreCartScreen() {
                         styles.itemPriceContainer
                       }
                     >
-                      <Text
+                      <View
                         style={
-                          styles.itemPrice
+                          styles.itemPriceRow
                         }
                       >
-                        {formatPrice(
-                          itemTotal,
-                        )}
-                      </Text>
+                        <View
+                          style={
+                            hasOfferPrice
+                              ? styles.itemOfferPriceWrap
+                              : undefined
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.itemPrice
+                            }
+                            numberOfLines={1}
+                          >
+                            {formatPrice(
+                              itemTotal,
+                            )}
+                          </Text>
+                        </View>
+
+                        {hasOfferPrice ? (
+                          <Text
+                            style={
+                              styles.itemOldPrice
+                            }
+                            numberOfLines={1}
+                          >
+                            {formatPrice(
+                              compareAtTotal,
+                            )}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                   </View>
 
@@ -4109,7 +4162,7 @@ function StoreCartScreen() {
                 styles.referenceSummaryLabel
               }
             >
-              المجموع الفرعي
+              إجمالي المنتجات
             </Text>
 
             <Text
@@ -5249,23 +5302,33 @@ const styles = StyleSheet.create({
   },
 
   headerContent: {
-    flex: 1,
-    marginLeft: 12,
+    alignItems: 'center',
+    bottom: 14,
+    height: 44,
+    justifyContent: 'center',
+    left: 72,
+    position: 'absolute',
+    right: 72,
   },
 
   pageTitle: {
     color: '#202020',
     fontSize: 18,
     fontWeight: '800',
+    textAlign: 'center',
+    width: '100%',
   },
 
   headerStoreName: {
     color: '#8a8a8a',
     fontSize: 11,
     marginTop: 2,
+    textAlign: 'center',
+    width: '100%',
   },
 
   clearCartButton: {
+    marginLeft: 'auto',
     paddingHorizontal: 6,
     paddingVertical: 7,
   },
@@ -5342,10 +5405,32 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
 
+  itemPriceRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  itemOfferPriceWrap: {
+    alignSelf: 'flex-start',
+    borderBottomColor: '#BFFF00',
+    borderBottomWidth: 2,
+  },
+
   itemPrice: {
     color: '#242424',
     fontSize: 14.5,
     fontWeight: '600',
+    writingDirection: 'ltr',
+  },
+
+  itemOldPrice: {
+    color: '#858585',
+    fontSize: 12,
+    fontWeight: '500',
+    textDecorationLine: 'line-through',
+    writingDirection: 'ltr',
   },
 
   itemMedia: {
