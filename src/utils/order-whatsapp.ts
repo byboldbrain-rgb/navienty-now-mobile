@@ -2,6 +2,9 @@ import { Linking } from 'react-native';
 
 import type { Order } from '../types/supabase-order';
 
+const STANDARD_ORDER_WHATSAPP_MESSAGE =
+  'أكد الاوردر بتاعي';
+
 function normalizeWhatsAppNumber(
   number: string,
 ): string {
@@ -47,18 +50,16 @@ export function buildOrderWhatsAppUrl(
       order.whatsappNumber,
     );
 
-  if (
-    !order.whatsappMessage.trim()
-  ) {
-    throw new Error(
-      'رسالة واتساب لم ترجع من Supabase.',
-    );
-  }
-
+  /*
+   * Order details — including the complete printing configuration — are
+   * already persisted in Supabase. WhatsApp is only the customer's standard
+   * confirmation handoff, so print jobs must use the exact same short message
+   * as every other store order instead of duplicating order/file details here.
+   */
   return (
     `https://wa.me/${whatsappNumber}` +
     `?text=${encodeURIComponent(
-      order.whatsappMessage,
+      STANDARD_ORDER_WHATSAPP_MESSAGE,
     )}`
   );
 }
