@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 
 import type { CampaignPopup } from '../services/campaign-popup-service';
+import DatabaseFirstImage from './ui/database-first-image';
 
 const localCampaignImages: Record<
   string,
@@ -36,6 +37,19 @@ function resolveCampaignImageSource(
       uri: imageUrl,
     }
   );
+}
+
+function getLocalCampaignArtworkKey(
+  imageUrl: string,
+): string | null {
+  if (
+    imageUrl ===
+    'local://navienty-now-hadaba-asyut-up'
+  ) {
+    return 'src/assets/images/navienty-now-hadaba-asyut-up.png';
+  }
+
+  return null;
 }
 
 export default function DynamicCampaignPopup({
@@ -107,6 +121,20 @@ export default function DynamicCampaignPopup({
         : null,
     [campaign],
   );
+
+  const localCampaignArtworkKey =
+    campaign
+      ? getLocalCampaignArtworkKey(
+          campaign.imageUrl,
+        )
+      : null;
+
+  const localCampaignFallback =
+    campaign
+      ? localCampaignImages[
+          campaign.imageUrl
+        ] ?? null
+      : null;
 
   useEffect(() => {
     setIsImageReady(false);
@@ -307,28 +335,59 @@ export default function DynamicCampaignPopup({
                 },
               ]}
             >
-              <Image
-                accessibilityIgnoresInvertColors
-                accessibilityLabel={
-                  campaign.altTextAr ??
-                  campaign.title
-                }
-                fadeDuration={0}
-                resizeMode="cover"
-                source={imageSource}
-                style={styles.heroImage}
-                onError={(event) => {
-                  console.warn(
-                    'Unable to load campaign popup image.',
-                    campaign.imageUrl,
-                    event.nativeEvent.error,
-                  );
-                  setIsImageReady(true);
-                }}
-                onLoad={() => {
-                  setIsImageReady(true);
-                }}
-              />
+              {localCampaignArtworkKey &&
+              localCampaignFallback ? (
+                <DatabaseFirstImage
+                  accessibilityIgnoresInvertColors
+                  accessibilityLabel={
+                    campaign.altTextAr ??
+                    campaign.title
+                  }
+                  artworkKey={
+                    localCampaignArtworkKey
+                  }
+                  fadeDuration={0}
+                  fallbackSource={
+                    localCampaignFallback
+                  }
+                  resizeMode="cover"
+                  style={styles.heroImage}
+                  onError={(event) => {
+                    console.warn(
+                      'Unable to load campaign popup image.',
+                      campaign.imageUrl,
+                      event.nativeEvent.error,
+                    );
+                    setIsImageReady(true);
+                  }}
+                  onLoad={() => {
+                    setIsImageReady(true);
+                  }}
+                />
+              ) : (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  accessibilityLabel={
+                    campaign.altTextAr ??
+                    campaign.title
+                  }
+                  fadeDuration={0}
+                  resizeMode="cover"
+                  source={imageSource}
+                  style={styles.heroImage}
+                  onError={(event) => {
+                    console.warn(
+                      'Unable to load campaign popup image.',
+                      campaign.imageUrl,
+                      event.nativeEvent.error,
+                    );
+                    setIsImageReady(true);
+                  }}
+                  onLoad={() => {
+                    setIsImageReady(true);
+                  }}
+                />
+              )}
 
               <View
                 pointerEvents="none"

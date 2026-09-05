@@ -37,6 +37,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { useAuthSession } from '../hooks/use-auth-session';
+import { useDatabaseFirstArtworkSource } from '../hooks/use-database-first-artwork';
 import { supabase } from '../lib/supabase';
 import {
   NAVIENTY_NOW_COLORS,
@@ -53,6 +54,9 @@ WebBrowser.maybeCompleteAuthSession();
 const navientyNowHero = require(
   '../assets/images/navienty-now-auth-hero.png',
 );
+
+const AUTH_HERO_ARTWORK_KEY =
+  'src/assets/images/navienty-now-auth-hero.png';
 
 /**
  * Hero background.
@@ -602,6 +606,15 @@ function NativeAppleProviderButton({
 
 export default function LoginScreen() {
   const router = useRouter();
+
+  const authHeroArtwork =
+    useDatabaseFirstArtworkSource(
+      AUTH_HERO_ARTWORK_KEY,
+      navientyNowHero,
+      {
+        timeoutMs: 2500,
+      },
+    );
 
   const params =
     useLocalSearchParams<{
@@ -1512,13 +1525,19 @@ export default function LoginScreen() {
           fadeDuration={0}
           resizeMode="contain"
           source={
+            authHeroArtwork.source ??
             navientyNowHero
+          }
+          onError={
+            authHeroArtwork.onError
           }
           style={[
             styles.loadingLogo,
             {
               opacity:
-                authLoadingPulse,
+                authHeroArtwork.isResolved
+                  ? authLoadingPulse
+                  : 0,
               transform: [
                 {
                   scale:
@@ -1655,11 +1674,18 @@ export default function LoginScreen() {
                   fadeDuration={0}
                   resizeMode="cover"
                   source={
-                    navientyNowHero
-                  }
-                  style={
-                    styles.heroArtworkImage
-                  }
+            authHeroArtwork.source ??
+            navientyNowHero
+          }
+          onError={
+            authHeroArtwork.onError
+          }
+                  style={[
+                    styles.heroArtworkImage,
+                    !authHeroArtwork.isResolved && {
+                      opacity: 0,
+                    },
+                  ]}
                 />
               </View>
             ) : (
@@ -1674,12 +1700,19 @@ export default function LoginScreen() {
                   fadeDuration={0}
                   resizeMode="contain"
                   source={
-                    navientyNowHero
-                  }
+            authHeroArtwork.source ??
+            navientyNowHero
+          }
+          onError={
+            authHeroArtwork.onError
+          }
                   style={{
                     height:
                       secondaryArtworkHeight,
-
+                    opacity:
+                      authHeroArtwork.isResolved
+                        ? 1
+                        : 0,
                     width:
                       secondaryArtworkWidth,
                   }}
