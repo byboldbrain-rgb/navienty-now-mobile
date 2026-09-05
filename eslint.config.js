@@ -20,6 +20,24 @@ module.exports = defineConfig([
     },
   },
   {
+    files: [
+      'src/services/catalog-service.ts',
+      'src/services/delivery-location-service.ts',
+      'src/services/order-service.ts',
+      'src/store/cart-store.ts',
+    ],
+    rules: {
+      /**
+       * These compatibility modules deliberately re-export the legacy/base
+       * public API and then provide explicit local overrides for selected
+       * functions. Explicit exports take precedence over star re-exports at
+       * module resolution time, so the duplicate-name report is intentional
+       * here and disabling only this lint rule preserves the existing API.
+       */
+      'import/export': 'off',
+    },
+  },
+  {
     files: ['supabase/functions/**/*.ts'],
     rules: {
       /**
