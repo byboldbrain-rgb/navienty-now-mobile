@@ -22,10 +22,45 @@ function fail(message) {
   process.exit(1);
 }
 
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+/**
+ * When this script is launched through `npm run`, npm exposes the exact
+ * JavaScript CLI entry point in npm_execpath. Running that file through the
+ * current Node executable avoids Windows spawnSync EINVAL errors from trying
+ * to execute npm.cmd directly, while preserving the same npm audit behavior.
+ */
+const npmExecPath =
+  process.env.npm_execpath?.trim() ||
+  null;
+
+const auditCommand = npmExecPath
+  ? process.execPath
+  : process.platform === 'win32'
+    ? 'cmd.exe'
+    : 'npm';
+
+const auditArgs = npmExecPath
+  ? [
+      npmExecPath,
+      'audit',
+      '--omit=dev',
+      '--json',
+    ]
+  : process.platform === 'win32'
+    ? [
+        '/d',
+        '/s',
+        '/c',
+        'npm audit --omit=dev --json',
+      ]
+    : [
+        'audit',
+        '--omit=dev',
+        '--json',
+      ];
+
 const auditProcess = spawnSync(
-  npmCommand,
-  ['audit', '--omit=dev', '--json'],
+  auditCommand,
+  auditArgs,
   {
     encoding: 'utf8',
     maxBuffer: 20 * 1024 * 1024,
