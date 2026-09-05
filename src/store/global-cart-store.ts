@@ -378,7 +378,21 @@ export const useCartStore = create<CartState>()(
         return id ? updateGroup(state, id, (items) => items.filter((item) => !sameCatalogLine(item, productId, variantId))) : state;
       }),
       clearCart: () => set((state) => ({ ...state, carts: {}, activeStoreId: null, ...emptyLegacy })),
-      setActiveCart: (storeId) => set((state) => ({ ...state, ...compatibilitySnapshot(state.carts, storeId) })),
+      setActiveCart: (storeId) => set((state) => {
+        const snapshot = compatibilitySnapshot(state.carts, storeId);
+        if (
+          state.activeStoreId === snapshot.activeStoreId &&
+          state.storeId === snapshot.storeId &&
+          state.storeName === snapshot.storeName &&
+          state.storeIcon === snapshot.storeIcon &&
+          state.deliveryFee === snapshot.deliveryFee &&
+          state.minimumOrder === snapshot.minimumOrder &&
+          state.items === snapshot.items
+        ) {
+          return state;
+        }
+        return { ...state, ...snapshot };
+      }),
       increaseStoreItem: (storeId, productId, variantId = null) => set((state) =>
         updateGroup(state, storeId, (items) => mutateCatalogQuantity(items, productId, variantId, 1))),
       decreaseStoreItem: (storeId, productId, variantId = null) => set((state) =>
