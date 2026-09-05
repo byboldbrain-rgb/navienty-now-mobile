@@ -6,16 +6,68 @@ on:
       - codex/google-play-release-readiness-20260905
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate-android-release:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
       - name: Checkout exact test branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply three TypeScript release-blocker fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'src/app/category/bookstore.tsx',
+              "  const currentStore = catalog.store;\n  const delivery = catalog.delivery;\n",
+              "  const currentCatalog = catalog;\n  const currentStore = currentCatalog.store;\n  const delivery = currentCatalog.delivery;\n",
+          )
+          replace_once(
+              'src/app/category/bookstore.tsx',
+              "        findPrintingServiceSection(\n          catalog,\n          item.section,\n        );",
+              "        findPrintingServiceSection(\n          currentCatalog,\n          item.section,\n        );",
+          )
+
+          replace_once(
+              'src/components/cart/global-location-picker-screen.native.tsx',
+              "  map: {\n    ...StyleSheet.absoluteFillObject,\n  },",
+              "  map: {\n    bottom: 0,\n    left: 0,\n    position: 'absolute',\n    right: 0,\n    top: 0,\n  },",
+          )
+
+          replace_once(
+              'src/services/order-service-legacy.ts',
+              "  Order,\n  OrderStatus,\n",
+              "  Order,\n  OrderItem,\n  OrderStatus,\n",
+          )
+          replace_once(
+              'src/services/order-service-legacy.ts',
+              "  ).map((item) => {\n    const printJob =",
+              "  ).map((item): OrderItem => {\n    const printJob =",
+          )
+          replace_once(
+              'src/services/order-service-legacy.ts',
+              "    const itemKind =\n      item.item_kind ===",
+              "    const itemKind: OrderItem['itemKind'] =\n      item.item_kind ===",
+          )
+          PY
+          git diff --check
+          git diff -- src/app/category/bookstore.tsx src/components/cart/global-location-picker-screen.native.tsx src/services/order-service-legacy.ts
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -24,7 +76,7 @@ jobs:
           cache: npm
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -94,3 +146,11 @@ jobs:
           path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 1
+
+      - name: Commit validated source fixes to test branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/category/bookstore.tsx src/components/cart/global-location-picker-screen.native.tsx src/services/order-service-legacy.ts
+          git commit -m "fix: resolve Android release TypeScript blockers"
+          git push origin HEAD:codex/google-play-release-readiness-20260905
