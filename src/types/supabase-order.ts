@@ -82,6 +82,13 @@ export type Order = {
   status: OrderStatus;
   paymentStatus: PaymentStatus;
 
+  /**
+   * Present only for the customer-facing parent created by a multi-store
+   * global checkout. These references let realtime/history refreshes keep the
+   * parent order while hiding its internal per-store child orders.
+   */
+  globalOrderChildIds?: string[];
+
   storeId: string;
   storeName: string;
   storeIcon: string;
