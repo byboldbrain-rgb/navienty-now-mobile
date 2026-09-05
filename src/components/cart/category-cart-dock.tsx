@@ -20,7 +20,6 @@ const DEFAULT_ACCENT_DARK = '#009245';
 const SCROLL_DIRECTION_THRESHOLD = 1.5;
 const TOP_REVEAL_OFFSET = 8;
 const HIDDEN_TRANSLATE_Y = 120;
-const ADD_REVEAL_DURATION_MS = 1400;
 
 type CategoryCartDockProps = {
   itemCount: number;
@@ -137,10 +136,6 @@ export default function CategoryCartDock({
     itemCount,
   );
 
-  const addRevealTimerRef = useRef<
-    ReturnType<typeof setTimeout> | null
-  >(null);
-
   const [
     forceRevealAfterAdd,
     setForceRevealAfterAdd,
@@ -158,37 +153,30 @@ export default function CategoryCartDock({
     previousItemCountRef.current =
       itemCount;
 
-    if (
-      itemCount <= 0 ||
-      itemCount <= previousItemCount
-    ) {
+    if (itemCount <= 0) {
+      setForceRevealAfterAdd(false);
       return;
     }
 
-    setForceRevealAfterAdd(true);
-
-    if (addRevealTimerRef.current) {
-      clearTimeout(
-        addRevealTimerRef.current,
-      );
+    if (
+      itemCount > previousItemCount &&
+      isScrollingDown
+    ) {
+      setForceRevealAfterAdd(true);
     }
-
-    addRevealTimerRef.current =
-      setTimeout(() => {
-        setForceRevealAfterAdd(false);
-        addRevealTimerRef.current = null;
-      }, ADD_REVEAL_DURATION_MS);
-  }, [itemCount]);
+  }, [itemCount, isScrollingDown]);
 
   useEffect(() => {
-    return () => {
-      if (addRevealTimerRef.current) {
-        clearTimeout(
-          addRevealTimerRef.current,
-        );
-      }
-    };
-  }, []);
+    if (
+      forceRevealAfterAdd &&
+      !isScrollingDown
+    ) {
+      setForceRevealAfterAdd(false);
+    }
+  }, [
+    forceRevealAfterAdd,
+    isScrollingDown,
+  ]);
 
   const shouldHideDock =
     itemCount > 0 &&
