@@ -1,9 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
 import { isV1PublicCategorySlug } from '../config/v1-release-scope';
+import { resilientAsyncStorage } from '../lib/resilient-storage';
 import type { PrintJobSnapshot } from '../types/printing';
 import {
   normalizePrintingUiCopy,
@@ -408,7 +408,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'navienty-now-cart',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => resilientAsyncStorage),
       partialize: (state): Persisted => ({ carts: state.carts, activeStoreId: state.activeStoreId }),
       version: 5,
       migrate: (value) => normalizePersisted(value),
