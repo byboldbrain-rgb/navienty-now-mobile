@@ -274,10 +274,6 @@ function facadeState(
   return facade;
 }
 
-const selectFacadeState = (
-  state: CartState,
-) => facadeState(state);
-
 /**
  * Compatibility hook: existing screens keep their exact UI and selectors,
  * while they now see one aggregate customer-facing Cart.
@@ -293,14 +289,11 @@ function useWrappedCartStore<T>(
 function useWrappedCartStore<T>(
   selector?: (state: CartState) => T,
 ): T | CartState {
-  if (!selector) {
-    return useBaseCartStore(
-      selectFacadeState,
-    );
-  }
-
   return useBaseCartStore(
-    (state) => selector(facadeState(state)),
+    (state) =>
+      selector
+        ? selector(facadeState(state))
+        : facadeState(state),
   );
 }
 
