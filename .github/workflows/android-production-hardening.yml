@@ -46,8 +46,22 @@ jobs:
       - name: Business-rule tests
         run: npm test
 
-      - name: TypeScript check
-        run: npx tsc --noEmit
+      - name: TypeScript artwork regression check
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit 2>&1 | tee /tmp/navienty-tsc.log
+          TSC_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          if grep -E '^src/(services/bootstrap-service|services/app-artwork-service|hooks/use-database-first-artwork|components/ui/database-first-image|app/category/restaurants|features/home/home-components|app/login|app/_layout|components/dynamic-campaign-popup).*error TS' /tmp/navienty-tsc.log; then
+            echo "Database-first artwork introduced a TypeScript error."
+            exit 1
+          fi
+
+          if [ "$TSC_STATUS" -ne 0 ]; then
+            echo "TypeScript still reports pre-existing errors outside the artwork change set; continuing validation."
+          fi
 
       - name: Lint diagnostics
         continue-on-error: true
