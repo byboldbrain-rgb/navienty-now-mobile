@@ -369,7 +369,11 @@ function AppBootstrapScreen({
           opacity: screenOpacity,
         },
       ]}
-      onLayout={hideNativeSplash}
+      onLayout={() => {
+        if (bootstrapArtworkResolved) {
+          hideNativeSplash();
+        }
+      }}
     >
       <View
         style={[

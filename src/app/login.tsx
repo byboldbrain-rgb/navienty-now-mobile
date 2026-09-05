@@ -1535,7 +1535,9 @@ export default function LoginScreen() {
             styles.loadingLogo,
             {
               opacity:
-                authLoadingPulse,
+                authHeroArtwork.isResolved
+                  ? authLoadingPulse
+                  : 0,
               transform: [
                 {
                   scale:
@@ -1678,9 +1680,12 @@ export default function LoginScreen() {
           onError={
             authHeroArtwork.onError
           }
-                  style={
-                    styles.heroArtworkImage
-                  }
+                  style={[
+                    styles.heroArtworkImage,
+                    !authHeroArtwork.isResolved && {
+                      opacity: 0,
+                    },
+                  ]}
                 />
               </View>
             ) : (
@@ -1704,7 +1709,10 @@ export default function LoginScreen() {
                   style={{
                     height:
                       secondaryArtworkHeight,
-
+                    opacity:
+                      authHeroArtwork.isResolved
+                        ? 1
+                        : 0,
                     width:
                       secondaryArtworkWidth,
                   }}
