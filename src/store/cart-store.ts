@@ -234,12 +234,28 @@ const clearStoreCart: CartState['clearStoreCart'] = () => {
   useBaseCartStore.getState().clearAllCarts();
 };
 
+/**
+ * React 18/19 + Zustand rely on useSyncExternalStore. A selector must return
+ * the same snapshot while the underlying store state has not changed.
+ *
+ * The compatibility facade below is derived from a CartState object. Cache it
+ * by that exact state object so repeated getSnapshot() calls are referentially
+ * stable and cannot trigger an infinite render loop.
+ */
+const facadeCache = new WeakMap<object, CartState>();
+
 function facadeState(
   state: CartState,
 ): CartState {
+  const cached = facadeCache.get(state);
+
+  if (cached) {
+    return cached;
+  }
+
   const aggregate = aggregateCart(state);
 
-  return {
+  const facade: CartState = {
     ...state,
     carts: cartFacade(state),
     deliveryFee: aggregate
@@ -252,25 +268,49 @@ function facadeState(
     removeStoreLine,
     clearStoreCart,
   };
+
+  facadeCache.set(state, facade);
+
+  return facade;
 }
+
+const selectFacadeState = (
+  state: CartState,
+) => facadeState(state);
 
 /**
  * Compatibility hook: existing screens keep their exact UI and selectors,
  * while they now see one aggregate customer-facing Cart.
+ *
+ * Some existing category screens call `useCartStore()` without a selector,
+ * while others pass a selector. Support both forms exactly like Zustand's
+ * bound store hook.
  */
-const wrappedUseCartStore = (<T>(
+function wrappedUseCartStore(): CartState;
+function wrappedUseCartStore<T>(
   selector: (state: CartState) => T,
-) =>
-  useBaseCartStore(
+): T;
+function wrappedUseCartStore<T>(
+  selector?: (state: CartState) => T,
+): T | CartState {
+  if (!selector) {
+    return useBaseCartStore(
+      selectFacadeState,
+    );
+  }
+
+  return useBaseCartStore(
     (state) => selector(facadeState(state)),
-  )) as typeof useBaseCartStore;
+  );
+}
 
 Object.assign(
   wrappedUseCartStore,
   useBaseCartStore,
 );
 
-export const useCartStore = wrappedUseCartStore;
+export const useCartStore =
+  wrappedUseCartStore as typeof useBaseCartStore;
 
 /** Real store groups used only by global checkout/order infrastructure. */
 export function getGlobalCartStoreGroups(): StoreCart[] {
