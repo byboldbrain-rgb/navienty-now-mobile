@@ -286,11 +286,11 @@ const selectFacadeState = (
  * while others pass a selector. Support both forms exactly like Zustand's
  * bound store hook.
  */
-function wrappedUseCartStore(): CartState;
-function wrappedUseCartStore<T>(
+function useWrappedCartStore(): CartState;
+function useWrappedCartStore<T>(
   selector: (state: CartState) => T,
 ): T;
-function wrappedUseCartStore<T>(
+function useWrappedCartStore<T>(
   selector?: (state: CartState) => T,
 ): T | CartState {
   if (!selector) {
@@ -305,12 +305,12 @@ function wrappedUseCartStore<T>(
 }
 
 Object.assign(
-  wrappedUseCartStore,
+  useWrappedCartStore,
   useBaseCartStore,
 );
 
 export const useCartStore =
-  wrappedUseCartStore as typeof useBaseCartStore;
+  useWrappedCartStore as typeof useBaseCartStore;
 
 /** Real store groups used only by global checkout/order infrastructure. */
 export function getGlobalCartStoreGroups(): StoreCart[] {
