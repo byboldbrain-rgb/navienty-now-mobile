@@ -2335,7 +2335,7 @@ export default function BookstoreScreen() {
     ) {
       const printingSection =
         findPrintingServiceSection(
-          catalog,
+          catalog!,
           item.section,
         );
 
