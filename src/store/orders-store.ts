@@ -6,6 +6,9 @@ import {
   persist,
 } from 'zustand/middleware';
 
+import {
+  getAggregateGlobalOrderStatus,
+} from '../domain/global-order-status';
 import { secureAuthStorage } from '../lib/secure-auth-storage';
 import type {
   Order,
@@ -19,6 +22,8 @@ export type {
 } from '../types/supabase-order';
 
 const MAX_PERSISTED_ORDERS = 20;
+const GLOBAL_ORDER_TOKEN_PREFIX =
+  'global-order-group:';
 
 const ordersPersistStorage =
   Platform.OS === 'web'
@@ -129,6 +134,184 @@ function addOrderToHistory(
   ]);
 }
 
+function isGlobalOrderParent(
+  order: Order,
+): boolean {
+  return (
+    order.accessToken.startsWith(
+      GLOBAL_ORDER_TOKEN_PREFIX,
+    ) &&
+    Array.isArray(
+      order.globalOrderChildIds,
+    ) &&
+    order.globalOrderChildIds.length > 0
+  );
+}
+
+function getLatestOrderTimestamp(
+  orders: Order[],
+  fallback: string,
+): string {
+  let latestValue = fallback;
+  let latestTime =
+    new Date(fallback).getTime();
+
+  if (!Number.isFinite(latestTime)) {
+    latestTime = 0;
+  }
+
+  for (const order of orders) {
+    const time =
+      new Date(
+        order.updatedAt,
+      ).getTime();
+
+    if (
+      Number.isFinite(time) &&
+      time > latestTime
+    ) {
+      latestTime = time;
+      latestValue = order.updatedAt;
+    }
+  }
+
+  return latestValue;
+}
+
+/**
+ * get_my_orders_v2 returns the internal per-store child orders because those
+ * are real rows in now.orders. A global checkout, however, is one order from
+ * the customer's perspective and its parent is persisted locally with the
+ * private group token.
+ *
+ * Keep that parent during authoritative history/realtime refreshes, use the
+ * child rows only to advance its aggregate status, and hide the child rows
+ * from the customer-facing history so the same checkout is never duplicated.
+ */
+function reconcileGlobalOrders(
+  serverOrders: Order[],
+  localOrders: Order[],
+  localPendingOrder: Order | null,
+): Order[] {
+  const localCandidates = [
+    ...localOrders,
+    ...(localPendingOrder
+      ? [localPendingOrder]
+      : []),
+  ];
+
+  const globalParents =
+    Array.from(
+      new Map(
+        localCandidates
+          .filter(
+            isGlobalOrderParent,
+          )
+          .map((order) => [
+            order.id,
+            order,
+          ]),
+      ).values(),
+    );
+
+  if (globalParents.length === 0) {
+    return serverOrders;
+  }
+
+  const serverById = new Map(
+    serverOrders.map((order) => [
+      order.id,
+      order,
+    ]),
+  );
+
+  const hiddenChildIds =
+    new Set<string>();
+
+  const reconciledParents =
+    globalParents.map(
+      (parent) => {
+        const childIds =
+          parent.globalOrderChildIds ??
+          [];
+
+        const childOrders =
+          childIds.flatMap(
+            (childId) => {
+              hiddenChildIds.add(
+                childId,
+              );
+
+              const child =
+                serverById.get(
+                  childId,
+                );
+
+              return child
+                ? [child]
+                : [];
+            },
+          );
+
+        if (childOrders.length === 0) {
+          return parent;
+        }
+
+        const status =
+          getAggregateGlobalOrderStatus(
+            childOrders.map(
+              (order) =>
+                order.status,
+            ),
+            parent.status,
+          );
+
+        const allChildrenPaid =
+          childOrders.every(
+            (order) =>
+              order.paymentStatus ===
+              'paid',
+          );
+
+        const anyPaymentFailed =
+          childOrders.some(
+            (order) =>
+              order.paymentStatus ===
+              'failed',
+          );
+
+        return {
+          ...parent,
+          status,
+          paymentStatus:
+            allChildrenPaid
+              ? 'paid'
+              : anyPaymentFailed
+                ? 'failed'
+                : parent.paymentStatus,
+          updatedAt:
+            getLatestOrderTimestamp(
+              childOrders,
+              parent.updatedAt,
+            ),
+        };
+      },
+    );
+
+  const visibleServerOrders =
+    serverOrders.filter(
+      (order) =>
+        !hiddenChildIds.has(
+          order.id,
+        ),
+    );
+
+  return [
+    ...reconciledParents,
+    ...visibleServerOrders,
+  ];
+}
+
 /**
  * A server order with this status exists before the customer confirms
  * that the WhatsApp message was actually sent.
@@ -215,20 +398,29 @@ export const useOrdersStore =
           userId,
           serverOrders,
         ) => {
-          const split =
-            splitServerOrders(
-              serverOrders,
-            );
+          set((state) => {
+            const reconciledOrders =
+              reconcileGlobalOrders(
+                serverOrders,
+                state.orders,
+                state.pendingOrder,
+              );
 
-          set({
-            ownerUserId:
-              userId,
+            const split =
+              splitServerOrders(
+                reconciledOrders,
+              );
 
-            orders:
-              split.orders,
+            return {
+              ownerUserId:
+                userId,
 
-            pendingOrder:
-              split.pendingOrder,
+              orders:
+                split.orders,
+
+              pendingOrder:
+                split.pendingOrder,
+            };
           });
         },
 
