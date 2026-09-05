@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply three TypeScript release-blocker fixes
+      - name: Apply release-blocker fixes
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -32,6 +32,13 @@ jobs:
               if count != 1:
                   raise SystemExit(f'{path}: expected 1 match, found {count}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          def prepend_once(path: str, prefix: str):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if text.startswith(prefix):
+                  return
+              p.write_text(prefix + text, encoding='utf-8')
 
           replace_once(
               'src/app/category/bookstore.tsx',
@@ -65,9 +72,36 @@ jobs:
               "    const itemKind =\n      item.item_kind ===",
               "    const itemKind: OrderItem['itemKind'] =\n      item.item_kind ===",
           )
+
+          # These facade modules intentionally re-export the legacy/base API
+          # and then override a small number of public functions. ECMAScript
+          # resolves the explicit exports correctly, but eslint-plugin-import's
+          # import/export rule reports the intentional shadowing as duplicates.
+          for path in (
+              'src/services/catalog-service.ts',
+              'src/services/delivery-location-service.ts',
+              'src/services/order-service.ts',
+              'src/store/cart-store.ts',
+          ):
+              prepend_once(
+                  path,
+                  '/* eslint-disable import/export -- compatibility facade intentionally overrides selected re-exports */\n',
+              )
+
+          # This wrapper is a real React/Zustand hook and must follow Hook naming
+          # rules rather than suppressing react-hooks/rules-of-hooks.
+          p = Path('src/store/cart-store.ts')
+          text = p.read_text(encoding='utf-8')
+          count = text.count('wrappedUseCartStore')
+          if count != 5:
+              raise SystemExit(f'src/store/cart-store.ts: expected 5 wrappedUseCartStore references, found {count}')
+          p.write_text(
+              text.replace('wrappedUseCartStore', 'useCartStoreFacade'),
+              encoding='utf-8',
+          )
           PY
           git diff --check
-          git diff -- src/app/category/bookstore.tsx src/components/cart/global-location-picker-screen.native.tsx src/services/order-service-legacy.ts
+          git diff -- src/app/category/bookstore.tsx src/components/cart/global-location-picker-screen.native.tsx src/services/order-service-legacy.ts src/services/catalog-service.ts src/services/delivery-location-service.ts src/services/order-service.ts src/store/cart-store.ts
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -151,6 +185,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/app/category/bookstore.tsx src/components/cart/global-location-picker-screen.native.tsx src/services/order-service-legacy.ts
-          git commit -m "fix: resolve Android release TypeScript blockers"
+          git add src/app/category/bookstore.tsx src/components/cart/global-location-picker-screen.native.tsx src/services/order-service-legacy.ts src/services/catalog-service.ts src/services/delivery-location-service.ts src/services/order-service.ts src/store/cart-store.ts
+          git commit -m "fix: resolve Android release blockers"
           git push origin HEAD:codex/google-play-release-readiness-20260905
