@@ -1,0 +1,261 @@
+name: Apply cart UI tweaks once
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+    paths:
+      - .github/workflows/cart-ui-tweaks-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-cart-ui-tweaks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/android-production-hardening
+          fetch-depth: 0
+
+      - name: Apply scoped Cart UI changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/app/cart-details-screen.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = []
+
+          old = '''              const itemTotal =
+                Number(item.price) *
+                item.quantity;
+
+              const variantName =
+                item.variantName;'''
+          new = '''              const itemTotal =
+                Number(item.price) *
+                item.quantity;
+
+              const selectedVariant =
+                item.variantId
+                  ? catalogProduct?.variants.find(
+                      (variant) =>
+                        variant.id ===
+                        item.variantId,
+                    ) ?? null
+                  : null;
+
+              const compareAtUnitPrice =
+                selectedVariant?.compareAtPrice ??
+                catalogProduct?.compareAtPrice ??
+                null;
+
+              const hasOfferPrice =
+                compareAtUnitPrice !== null &&
+                Number(compareAtUnitPrice) >
+                  Number(item.price);
+
+              const compareAtTotal =
+                hasOfferPrice
+                  ? Number(compareAtUnitPrice) *
+                    item.quantity
+                  : 0;
+
+              const variantName =
+                item.variantName;'''
+          replacements.append((old, new, 'offer calculation'))
+
+          old = '''                    <View
+                      style={
+                        styles.itemPriceContainer
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.itemPrice
+                        }
+                      >
+                        {formatPrice(
+                          itemTotal,
+                        )}
+                      </Text>
+                    </View>'''
+          new = '''                    <View
+                      style={
+                        styles.itemPriceContainer
+                      }
+                    >
+                      <View
+                        style={
+                          styles.itemPriceRow
+                        }
+                      >
+                        <View
+                          style={
+                            hasOfferPrice
+                              ? styles.itemOfferPriceWrap
+                              : undefined
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.itemPrice
+                            }
+                            numberOfLines={1}
+                          >
+                            {formatPrice(
+                              itemTotal,
+                            )}
+                          </Text>
+                        </View>
+
+                        {hasOfferPrice ? (
+                          <Text
+                            style={
+                              styles.itemOldPrice
+                            }
+                            numberOfLines={1}
+                          >
+                            {formatPrice(
+                              compareAtTotal,
+                            )}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>'''
+          replacements.append((old, new, 'offer price UI'))
+
+          old = '''  headerContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  pageTitle: {
+    color: '#202020',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+
+  headerStoreName: {
+    color: '#8a8a8a',
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  clearCartButton: {
+    paddingHorizontal: 6,
+    paddingVertical: 7,
+  },'''
+          new = '''  headerContent: {
+    alignItems: 'center',
+    bottom: 14,
+    height: 44,
+    justifyContent: 'center',
+    left: 72,
+    position: 'absolute',
+    right: 72,
+  },
+
+  pageTitle: {
+    color: '#202020',
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    width: '100%',
+  },
+
+  headerStoreName: {
+    color: '#8a8a8a',
+    fontSize: 11,
+    marginTop: 2,
+    textAlign: 'center',
+    width: '100%',
+  },
+
+  clearCartButton: {
+    marginLeft: 'auto',
+    paddingHorizontal: 6,
+    paddingVertical: 7,
+  },'''
+          replacements.append((old, new, 'center header'))
+
+          old = '''  itemPriceContainer: {
+    marginTop: 'auto',
+    paddingBottom: 4,
+  },
+
+  itemPrice: {
+    color: '#242424',
+    fontSize: 14.5,
+    fontWeight: '600',
+  },'''
+          new = '''  itemPriceContainer: {
+    marginTop: 'auto',
+    paddingBottom: 4,
+  },
+
+  itemPriceRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  itemOfferPriceWrap: {
+    alignSelf: 'flex-start',
+    borderBottomColor: '#BFFF00',
+    borderBottomWidth: 2,
+  },
+
+  itemPrice: {
+    color: '#242424',
+    fontSize: 14.5,
+    fontWeight: '600',
+    writingDirection: 'ltr',
+  },
+
+  itemOldPrice: {
+    color: '#858585',
+    fontSize: 12,
+    fontWeight: '500',
+    textDecorationLine: 'line-through',
+    writingDirection: 'ltr',
+  },'''
+          replacements.append((old, new, 'offer price styles'))
+
+          for old, new, label in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          summary_count = text.count('المجموع الفرعي')
+          if summary_count != 1:
+              raise SystemExit(f'summary label: expected exactly 1 match, found {summary_count}')
+          text = text.replace('المجموع الفرعي', 'إجمالي المنتجات', 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('Cart UI tweaks applied successfully.')
+          PY
+
+      - name: Remove one-time workflow and commit changes
+        shell: bash
+        run: |
+          rm -f .github/workflows/cart-ui-tweaks-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/app/cart-details-screen.tsx .github/workflows/cart-ui-tweaks-once.yml
+
+          if git diff --cached --quiet; then
+            echo "No Cart UI changes were generated."
+            exit 0
+          fi
+
+          git commit -m "Refine cart offer pricing and header copy"
+          git push origin HEAD:codex/android-production-hardening
