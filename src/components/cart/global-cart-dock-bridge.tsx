@@ -39,6 +39,9 @@ const LOCAL_CART_DOCK_PREFIXES = [
 const CART_FLOW_PREFIXES = [
   '/address-details',
   '/cart',
+  '/cart-details',
+  '/cart-details-screen',
+  '/cart-picker',
   '/checkout',
   '/global-checkout',
   '/global-location-picker',
@@ -48,6 +51,8 @@ const CART_FLOW_PREFIXES = [
   '/notification-settings',
   '/notification-test',
   '/order',
+  '/order-confirmation',
+  '/order-success',
   '/payment-proof',
   '/service-booking-payment-proof',
 ];
