@@ -1,0 +1,96 @@
+name: Google Play release readiness
+
+on:
+  push:
+    branches:
+      - codex/google-play-release-readiness-20260905
+
+permissions:
+  contents: read
+
+jobs:
+  validate-android-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact test branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Expo Doctor
+        run: npx expo-doctor@latest
+
+      - name: Validate Expo production configuration
+        run: |
+          npx expo config --type prebuild --json > /tmp/expo-prebuild-config.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('/tmp/expo-prebuild-config.json', 'utf8'));
+          const failures = [];
+          if (config.android?.package !== 'com.navienty.now') failures.push(`Unexpected Android package: ${config.android?.package}`);
+          if (!config.version) failures.push('Missing Expo app version');
+          if (!config.extra?.eas?.projectId) failures.push('Missing EAS projectId');
+          if (!config.icon) failures.push('Missing app icon');
+          if (!config.android?.adaptiveIcon?.foregroundImage) failures.push('Missing Android adaptive icon foreground');
+          if (failures.length) {
+            console.error(failures.join('\n'));
+            process.exit(1);
+          }
+          console.log(`Android package: ${config.android.package}`);
+          console.log(`App version: ${config.version}`);
+          console.log(`EAS projectId: ${config.extra.eas.projectId}`);
+          NODE
+
+      - name: Business-rule tests
+        run: npm test
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Validate public v1 scope
+        run: npm run validate:v1-scope
+
+      - name: Production dependency security audit
+        run: npm run audit:prod
+
+      - name: Android Metro export
+        run: npx expo export --platform android --output-dir /tmp/navienty-android-export
+
+      - name: Generate clean Android native project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Compile Android release bundle
+        working-directory: android
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Verify AAB exists
+        run: |
+          AAB_PATH="android/app/build/outputs/bundle/release/app-release.aab"
+          test -f "$AAB_PATH"
+          ls -lh "$AAB_PATH"
+
+      - name: Upload compile-check AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-compile-check-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 1
