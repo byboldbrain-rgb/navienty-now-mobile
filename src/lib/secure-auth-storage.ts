@@ -1,17 +1,26 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import { recordStartupTimingOnce } from '../services/startup-performance-service';
+import {
+  reportStorageFailure,
+  resilientAsyncStorage,
+} from './resilient-storage';
 
 const CHUNK_SIZE = 1500;
 const STORAGE_VERSION = 1;
 const STORAGE_PREFIX = 'navienty.auth';
+const SECURE_WRITE_RETRY_DELAY_MS = 30_000;
 
 const SECURE_STORE_OPTIONS:
   SecureStore.SecureStoreOptions = {
     keychainAccessible:
       SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   };
+
+const memoryFallback =
+  new Map<string, string>();
+
+let secureWriteBlockedUntil = 0;
 
 type SecureMetadata = {
   version: number;
@@ -228,15 +237,24 @@ async function readSecureValue(
   return chunks.join('');
 }
 
+function getMemoryValue(
+  key: string,
+): string | null {
+  return memoryFallback.has(key)
+    ? memoryFallback.get(key)!
+    : null;
+}
+
 /**
- * Supabase sessions can be larger than the payload size accepted by some
- * native secure-storage implementations. Store the session exclusively in
- * encrypted SecureStore chunks, with metadata committed last so an
- * interrupted write never replaces the previous valid generation.
+ * Supabase sessions and native customer/order state are kept in encrypted
+ * SecureStore chunks. Existing plaintext AsyncStorage values are read only for
+ * the one-time legacy migration and are removed after a successful secure
+ * write.
  *
- * Existing installs are migrated lazily from AsyncStorage the first time
- * Supabase asks for its auth storage key. The plaintext copy is deleted only
- * after the secure write has completed successfully.
+ * If iOS Keychain becomes temporarily unavailable (including extreme low-disk
+ * conditions), writes degrade to process memory instead of rejecting into app
+ * business logic. Sensitive values are never written back to plaintext
+ * AsyncStorage as a fallback.
  */
 export const secureAuthStorage = {
   async getItem(
@@ -253,10 +271,20 @@ export const secureAuthStorage = {
     let source:
       | 'empty'
       | 'secure'
+      | 'memory'
       | 'legacy-migration' =
       'empty';
 
     try {
+      const memoryValue =
+        getMemoryValue(key);
+
+      if (memoryValue !== null) {
+        source = 'memory';
+
+        return memoryValue;
+      }
+
       const metadata =
         await readMetadata(key);
 
@@ -264,14 +292,22 @@ export const secureAuthStorage = {
         source = 'secure';
         chunkCount = metadata.count;
 
-        return await readSecureValue(
+        const secureValue =
+          await readSecureValue(
+            key,
+            metadata,
+          );
+
+        memoryFallback.set(
           key,
-          metadata,
+          secureValue,
         );
+
+        return secureValue;
       }
 
       const legacyValue =
-        await AsyncStorage.getItem(
+        await resilientAsyncStorage.getItem(
           key,
         );
 
@@ -284,6 +320,11 @@ export const secureAuthStorage = {
         legacyValue,
       ).length;
 
+      memoryFallback.set(
+        key,
+        legacyValue,
+      );
+
       await secureAuthStorage.setItem(
         key,
         legacyValue,
@@ -292,7 +333,17 @@ export const secureAuthStorage = {
       return legacyValue;
     } catch (error) {
       outcome = 'error';
-      throw error;
+
+      reportStorageFailure(
+        'secure-store',
+        'read',
+        key,
+        error,
+      );
+
+      return getMemoryValue(
+        key,
+      );
     } finally {
       if (startupKind) {
         recordStartupTimingOnce(
@@ -312,32 +363,47 @@ export const secureAuthStorage = {
     key: string,
     value: string,
   ): Promise<void> {
-    const isAvailable =
-      await SecureStore.isAvailableAsync();
+    memoryFallback.set(
+      key,
+      value,
+    );
 
-    if (!isAvailable) {
-      throw new Error(
-        'SecureStore is unavailable on this device.',
-      );
+    if (
+      Date.now() <
+      secureWriteBlockedUntil
+    ) {
+      return;
     }
 
-    const previousMetadata =
-      await readMetadata(key);
+    let nextMetadata:
+      SecureMetadata | null =
+      null;
 
-    const generation =
-      createGeneration();
+    try {
+      const isAvailable =
+        await SecureStore.isAvailableAsync();
 
-    const chunks =
-      splitValue(value);
+      if (!isAvailable) {
+        throw new Error(
+          'SecureStore is unavailable on this device.',
+        );
+      }
 
-    const nextMetadata:
-      SecureMetadata = {
+      const previousMetadata =
+        await readMetadata(key);
+
+      const generation =
+        createGeneration();
+
+      const chunks =
+        splitValue(value);
+
+      nextMetadata = {
         version: STORAGE_VERSION,
         generation,
         count: chunks.length,
       };
 
-    try {
       await Promise.all(
         chunks.map(
           (chunk, index) =>
@@ -360,47 +426,73 @@ export const secureAuthStorage = {
         ),
         SECURE_STORE_OPTIONS,
       );
-    } catch (error) {
+
+      secureWriteBlockedUntil = 0;
+
+      /**
+       * The new generation is now authoritative. Cleanup is best-effort and
+       * must never invalidate the newly-written value.
+       */
       await deleteGeneration(
         key,
-        nextMetadata,
+        previousMetadata,
       );
 
-      throw error;
+      await resilientAsyncStorage.removeItem(
+        key,
+      );
+    } catch (error) {
+      secureWriteBlockedUntil =
+        Date.now() +
+        SECURE_WRITE_RETRY_DELAY_MS;
+
+      if (nextMetadata) {
+        await deleteGeneration(
+          key,
+          nextMetadata,
+        );
+      }
+
+      reportStorageFailure(
+        'secure-store',
+        'write',
+        key,
+        error,
+      );
     }
-
-    /**
-     * The new generation is now authoritative. Cleanup is best-effort and
-     * must never invalidate the newly-written session.
-     */
-    await deleteGeneration(
-      key,
-      previousMetadata,
-    );
-
-    await AsyncStorage.removeItem(
-      key,
-    ).catch(() => undefined);
   },
 
   async removeItem(
     key: string,
   ): Promise<void> {
-    const metadata =
-      await readMetadata(key);
-
-    await SecureStore.deleteItemAsync(
-      getMetadataKey(key),
-      SECURE_STORE_OPTIONS,
-    ).catch(() => undefined);
-
-    await deleteGeneration(
-      key,
-      metadata,
-    );
-
-    await AsyncStorage.removeItem(
+    memoryFallback.delete(
       key,
     );
+
+    try {
+      const metadata =
+        await readMetadata(key);
+
+      await SecureStore.deleteItemAsync(
+        getMetadataKey(key),
+        SECURE_STORE_OPTIONS,
+      ).catch(() => undefined);
+
+      await deleteGeneration(
+        key,
+        metadata,
+      );
+    } catch (error) {
+      reportStorageFailure(
+        'secure-store',
+        'delete',
+        key,
+        error,
+      );
+    } finally {
+      await resilientAsyncStorage.removeItem(
+        key,
+      );
+    }
   },
 };
