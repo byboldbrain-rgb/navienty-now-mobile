@@ -42,6 +42,9 @@ import {
 import {
   NAVIENTY_NOW_COLORS,
 } from '../theme/navienty-now-theme';
+import {
+  openOrderInWhatsApp,
+} from '../utils/order-whatsapp';
 
 const BRAND_GREEN =
   NAVIENTY_NOW_COLORS.primary;
@@ -220,6 +223,16 @@ function formatMoney(
   return `${numericValue.toFixed(
     2,
   )} ${currencySymbol}`;
+}
+
+function getSafeIoniconName(
+  value: string | null | undefined,
+  fallback: keyof typeof Ionicons.glyphMap,
+): keyof typeof Ionicons.glyphMap {
+  return value &&
+    value in Ionicons.glyphMap
+    ? (value as keyof typeof Ionicons.glyphMap)
+    : fallback;
 }
 
 function getOrderFromState(
@@ -466,6 +479,11 @@ function StoreOrderSuccessScreen() {
   const [
     isOpeningCancellation,
     setIsOpeningCancellation,
+  ] = useState(false);
+
+  const [
+    isOpeningPrintWhatsApp,
+    setIsOpeningPrintWhatsApp,
   ] = useState(false);
 
   /*
@@ -904,6 +922,38 @@ function StoreOrderSuccessScreen() {
     );
   }
 
+  async function openPrintFileWhatsApp() {
+    if (
+      !order ||
+      isOpeningPrintWhatsApp
+    ) {
+      return;
+    }
+
+    try {
+      setIsOpeningPrintWhatsApp(
+        true,
+      );
+
+      await openOrderInWhatsApp(
+        order,
+      );
+    } catch (error) {
+      Alert.alert(
+        'تعذر فتح واتساب',
+        error instanceof Error
+          ? error.message
+          : printJob?.uiCopy
+              .whatsappOpenErrorBody ??
+              'تعذر فتح واتساب لإرسال ملف الطباعة.',
+      );
+    } finally {
+      setIsOpeningPrintWhatsApp(
+        false,
+      );
+    }
+  }
+
   if (!hasHydrated) {
     return <OrderDetailsScreenSkeleton />;
   }
@@ -1033,6 +1083,16 @@ function StoreOrderSuccessScreen() {
   const isDelivered =
     order.status ===
     'delivered';
+
+  const printJob =
+    order.items.find(
+      (item) =>
+        item.itemKind ===
+        'print_job',
+    )?.printJob ?? null;
+
+  const hasPrintJob =
+    printJob !== null;
 
   const canRequestCancellation =
     !isCancelled &&
@@ -1631,9 +1691,10 @@ function StoreOrderSuccessScreen() {
                           styles.itemQuantityText
                         }
                       >
-                        {
-                          item.quantity
-                        }
+                        {item.itemKind ===
+                        'print_job'
+                          ? '🖨️'
+                          : item.quantity}
                       </Text>
                     </View>
 
@@ -1656,7 +1717,10 @@ function StoreOrderSuccessScreen() {
                       {item.variantName ? (
                         <Text
                           numberOfLines={
-                            1
+                            item.itemKind ===
+                            'print_job'
+                              ? 2
+                              : 1
                           }
                           style={
                             styles.itemVariant
@@ -1665,6 +1729,22 @@ function StoreOrderSuccessScreen() {
                           {
                             item.variantName
                           }
+                        </Text>
+                      ) : null}
+
+                      {item.printJob ? (
+                        <Text
+                          style={
+                            styles.printJobMeta
+                          }
+                        >
+                          {item.printJob.totalSheets}{' '}
+                          {item.printJob.uiCopy
+                            .physicalSheetsUnitLabel}{' '}
+                          •{' '}
+                          {item.printJob.copyCount}{' '}
+                          {item.printJob.uiCopy
+                            .copyUnitLabel}
                         </Text>
                       ) : null}
                     </View>
@@ -1726,7 +1806,10 @@ function StoreOrderSuccessScreen() {
                     styles.summaryLabel
                   }
                 >
-                  المنتجات
+                  {hasPrintJob
+                    ? printJob?.uiCopy
+                        .orderItemsSummaryLabel
+                    : 'المنتجات'}
                 </Text>
               </View>
 
@@ -1787,6 +1870,113 @@ function StoreOrderSuccessScreen() {
               </View>
             </View>
           </View>
+
+          {hasPrintJob &&
+          !isCancelled ? (
+            <View
+              style={
+                styles.printFileSection
+              }
+            >
+              <View
+                style={
+                  styles.printFileCard
+                }
+              >
+                <View
+                  style={
+                    styles.printFileIcon
+                  }
+                >
+                  <Ionicons
+                    name={getSafeIoniconName(
+                      printJob?.uiIcons
+                        .orderFile,
+                      'document-attach-outline',
+                    )}
+                    size={22}
+                    color={
+                      BRAND_GREEN
+                    }
+                  />
+                </View>
+
+                <View
+                  style={
+                    styles.printFileCopy
+                  }
+                >
+                  <Text
+                    style={
+                      styles.printFileTitle
+                    }
+                  >
+                    {printJob?.uiCopy
+                      .orderFileCtaTitle}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.printFileDescription
+                    }
+                  >
+                    {printJob?.uiCopy
+                      .orderFileCtaBody ??
+                      printJob
+                        ?.whatsappFilePrompt}
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={
+                  isOpeningPrintWhatsApp
+                }
+                style={({
+                  pressed,
+                }) => [
+                  styles.printFileButton,
+
+                  isOpeningPrintWhatsApp &&
+                    styles.printFileButtonDisabled,
+
+                  pressed &&
+                    !isOpeningPrintWhatsApp &&
+                    styles.printFileButtonPressed,
+                ]}
+                onPress={() => {
+                  void openPrintFileWhatsApp();
+                }}
+              >
+                {isOpeningPrintWhatsApp ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <Ionicons
+                    name={getSafeIoniconName(
+                      printJob?.uiIcons
+                        .orderFile,
+                      'logo-whatsapp',
+                    )}
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                )}
+
+                <Text
+                  style={
+                    styles.printFileButtonText
+                  }
+                >
+                  {printJob?.uiCopy
+                    .sendFileCtaLabel}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {/* CANCELLATION */}
 
@@ -2432,11 +2622,110 @@ const styles =
         'rtl',
     },
 
+    printJobMeta: {
+      color:
+        BRAND_GREEN_DARK,
+      fontSize: 9,
+      fontWeight: '700',
+      lineHeight: 15,
+      marginTop: 4,
+      textAlign:
+        'right',
+      writingDirection:
+        'rtl',
+    },
+
     itemPrice: {
       color:
         NAVIENTY_NOW_COLORS.text,
       fontSize: 11,
       fontWeight: '800',
+    },
+
+    printFileSection: {
+      marginHorizontal: 16,
+      marginTop: 18,
+    },
+
+    printFileCard: {
+      alignItems: 'center',
+      backgroundColor:
+        BRAND_GREEN_SOFT,
+      borderColor: '#CFEBDD',
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection:
+        'row-reverse',
+      padding: 13,
+    },
+
+    printFileIcon: {
+      alignItems: 'center',
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.white,
+      borderRadius: 16,
+      height: 44,
+      justifyContent: 'center',
+      width: 44,
+    },
+
+    printFileCopy: {
+      alignItems: 'flex-end',
+      flex: 1,
+      marginRight: 11,
+    },
+
+    printFileTitle: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+      fontSize: 13,
+      fontWeight: '900',
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    printFileDescription: {
+      color: '#486454',
+      fontSize: 10,
+      lineHeight: 16,
+      marginTop: 4,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    printFileButton: {
+      alignItems: 'center',
+      backgroundColor:
+        BRAND_GREEN,
+      borderRadius: 16,
+      flexDirection:
+        'row-reverse',
+      gap: 8,
+      justifyContent: 'center',
+      marginTop: 9,
+      minHeight: 54,
+      paddingHorizontal: 16,
+    },
+
+    printFileButtonPressed: {
+      backgroundColor:
+        BRAND_GREEN_DARK,
+      transform: [
+        {
+          scale: 0.993,
+        },
+      ],
+    },
+
+    printFileButtonDisabled: {
+      opacity: 0.55,
+    },
+
+    printFileButtonText: {
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontWeight: '900',
+      writingDirection: 'rtl',
     },
 
     /* ================================= */

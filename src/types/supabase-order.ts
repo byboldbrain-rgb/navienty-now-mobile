@@ -1,3 +1,8 @@
+import type {
+  PrintJobOrderPayload,
+  PrintJobSnapshot,
+} from './printing';
+
 export type OrderStatus =
   | 'awaiting-whatsapp-send'
   | 'waiting-confirmation'
@@ -15,6 +20,10 @@ export type PaymentStatus =
   | 'refunded'
   | 'partially-refunded';
 
+export type OrderItemKind =
+  | 'catalog_product'
+  | 'print_job';
+
 export type OrderItem = {
   id: string;
   productId: string | null;
@@ -28,7 +37,16 @@ export type OrderItem = {
   lineTotal: number;
   icon: string;
   imageUrl: string | null;
+
+  /**
+   * Catalog products use the purchased unit count. For a print job this is
+   * the server-calculated physical A4 sheet count; customer-facing item
+   * counts should treat the whole print job as one semantic line.
+   */
   quantity: number;
+
+  itemKind: OrderItemKind;
+  printJob: PrintJobSnapshot | null;
 
   isAgeRestricted: boolean;
 };
@@ -139,5 +157,6 @@ export type CreateWhatsAppOrderInput = {
     productId: string;
     variantId?: string | null;
     quantity: number;
+    printJob?: PrintJobOrderPayload | null;
   }>;
 };

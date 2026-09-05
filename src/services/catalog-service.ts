@@ -165,6 +165,12 @@ export type CatalogProduct = {
   slug: string;
 
   /**
+   * physical = normal catalog product
+   * service = database-routed custom experience (for example printing)
+   */
+  productType: string;
+
+  /**
    * Category التي المنتج مربوط بها مباشرة.
    */
   catalogCategoryId: string;
@@ -222,6 +228,12 @@ export type CatalogProduct = {
 export type CatalogSection = {
   id: string;
   slug: string;
+
+  /**
+   * Optional database-selected UI experience for this category.
+   * null keeps the existing generic catalog UI.
+   */
+  experienceKey: string | null;
 
   name: string;
   nameEn: string | null;
@@ -527,6 +539,8 @@ type RawCatalogProduct = {
   id: string;
   slug: string;
 
+  product_type?: string | null;
+
   name_ar: string;
 
   name_en:
@@ -584,6 +598,10 @@ type RawCatalogSection = {
   id: string;
   slug: string;
 
+  experience_key?:
+    | string
+    | null;
+
   name_ar: string;
 
   name_en:
@@ -612,6 +630,10 @@ type RawCatalogCategoryMeta = {
   id: string;
 
   parent_id:
+    | string
+    | null;
+
+  experience_key:
     | string
     | null;
 
@@ -914,6 +936,10 @@ function mapCatalogProduct(
     slug:
       product.slug,
 
+    productType:
+      product.product_type ??
+      'physical',
+
     catalogCategoryId,
 
     name:
@@ -1031,6 +1057,9 @@ function buildCatalogSections(
           slug:
             category.slug,
 
+          experienceKey:
+            category.experience_key,
+
           name:
             category.name_ar,
 
@@ -1100,6 +1129,10 @@ function buildCatalogSections(
 
       slug:
         rawSection.slug,
+
+      experienceKey:
+        rawSection.experience_key ??
+        null,
 
       name:
         rawSection.name_ar,
@@ -2101,6 +2134,7 @@ async function loadCatalogCategoryMeta(
       [
         'id',
         'parent_id',
+        'experience_key',
         'slug',
         'name_ar',
         'name_en',

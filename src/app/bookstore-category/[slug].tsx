@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
+import PrintingJobBuilder from '../../components/bookstore/printing-job-builder';
 import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   getBookstoreCategoryImage,
@@ -1848,6 +1849,10 @@ export default function BookstoreCategoryScreen() {
       label?:
         | string
         | string[];
+
+      editLineId?:
+        | string
+        | string[];
     }>();
 
   const sectionSlug =
@@ -1869,6 +1874,11 @@ export default function BookstoreCategoryScreen() {
     getSingleParam(
       params.label,
     );
+
+  const editLineId =
+    getSingleParam(
+      params.editLineId,
+    )?.trim() || null;
 
   const isOffersPage =
     normalizeSlug(sectionSlug) ===
@@ -2590,6 +2600,17 @@ export default function BookstoreCategoryScreen() {
           );
       }
 
+      /*
+       * Service products are rendered by their database-selected custom
+       * experience. They must never appear as a normal product card where a
+       * customer could add one unit without completing the service form.
+       */
+      products = products.filter(
+        (product) =>
+          product.productType !==
+          'service',
+      );
+
       return deduplicateProducts(
         products,
       );
@@ -2712,6 +2733,20 @@ export default function BookstoreCategoryScreen() {
   const isStoreClosed =
     currentStore.isManuallyClosed;
 
+  if (
+    selectedSection?.experienceKey ===
+    'print_job_builder'
+  ) {
+    return (
+      <PrintingJobBuilder
+        catalog={catalog}
+        section={selectedSection}
+        currencyCode={currencyCode}
+        editLineId={editLineId}
+      />
+    );
+  }
+
   const currentCart =
     carts[currentStore.id] ??
     null;
@@ -2819,7 +2854,8 @@ export default function BookstoreCategoryScreen() {
     child: CatalogSection,
   ) {
     if (
-      child.children.length > 0
+      child.children.length > 0 ||
+      !!child.experienceKey
     ) {
       router.push({
         pathname:

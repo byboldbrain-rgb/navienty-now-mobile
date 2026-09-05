@@ -64,6 +64,8 @@ import {
 
 import ServicePackageCart from '../components/service/service-package-cart';
 import {
+    type CartItem,
+    isPrintJobCartItem,
     useCartStore,
 } from '../store/cart-store';
 import {
@@ -75,6 +77,9 @@ import {
 import {
     useVoucherStore,
 } from '../store/voucher-store';
+import {
+    toPrintJobRpcPayload,
+} from '../types/printing';
 
 const BRAND_GREEN = '#00B14F';
 const BRAND_GREEN_SOFT = '#EAF8F0';
@@ -1269,6 +1274,10 @@ function StoreCartScreen() {
     (state) => state.removeStoreItem,
   );
 
+  const removeStoreLine = useCartStore(
+    (state) => state.removeStoreLine,
+  );
+
   const clearStoreCart = useCartStore(
     (state) => state.clearStoreCart,
   );
@@ -2038,7 +2047,8 @@ function StoreCartScreen() {
     return catalogProducts
       .filter(
         (product) =>
-          !cartProductIds.has(product.id),
+          !cartProductIds.has(product.id) &&
+          product.productType !== 'service',
       )
       .slice(0, 8);
   }, [
@@ -2308,12 +2318,20 @@ function StoreCartScreen() {
           variant_id:
             item.variantId ?? null,
           quantity: item.quantity,
+          ...(isPrintJobCartItem(item)
+            ? {
+                print_job:
+                  toPrintJobRpcPayload(
+                    item.printJob,
+                  ),
+              }
+            : {}),
         }),
       );
 
       const { data, error } =
         await supabase.rpc(
-          'claim_cart_spin_reward',
+          'claim_cart_spin_reward_v2',
           {
             p_store_id: storeId,
             p_items: spinItems,
@@ -2791,6 +2809,36 @@ function StoreCartScreen() {
     router.replace('/');
   }
 
+  function editCartItem(
+    item: CartItem,
+  ) {
+    if (
+      isPrintJobCartItem(item) &&
+      storeId
+    ) {
+      router.push({
+        pathname:
+          '/bookstore-category/[slug]',
+        params: {
+          slug:
+            item.printJob.categorySlug,
+          storeId,
+          categoryKey:
+            item.printJob
+              .catalogCategoryId,
+          label:
+            item.name,
+          editLineId:
+            item.lineId,
+        },
+      });
+
+      return;
+    }
+
+    continueShopping();
+  }
+
   function handleCheckout() {
     if (
       !minimumReached ||
@@ -3097,10 +3145,7 @@ function StoreCartScreen() {
 
               return (
                 <View
-                  key={`${item.id}-${
-                    item.variantId ??
-                    'base'
-                  }`}
+                  key={item.lineId}
                   style={[
                     styles.itemRow,
 
@@ -3141,7 +3186,10 @@ function StoreCartScreen() {
                           styles.buttonPressed,
                       ]}
                       onPress={
-                        continueShopping
+                        () =>
+                          editCartItem(
+                            item,
+                          )
                       }
                     >
                       <Ionicons
@@ -3155,7 +3203,13 @@ function StoreCartScreen() {
                           styles.editButtonText
                         }
                       >
-                        تعديل
+                        {isPrintJobCartItem(
+                          item,
+                        )
+                          ? item.printJob
+                              .uiCopy
+                              .cartEditLabel
+                          : 'تعديل'}
                       </Text>
                     </Pressable>
 
@@ -3238,6 +3292,53 @@ function StoreCartScreen() {
 
                     {/* QUANTITY PILL */}
 
+                    {isPrintJobCartItem(
+                      item,
+                    ) ? (
+                      <View
+                        style={[
+                          styles.quantityControl,
+                          styles.printJobControl,
+                        ]}
+                      >
+                        <Pressable
+                          accessibilityLabel={
+                            item.printJob
+                              .uiCopy
+                              .cartDeleteAccessibilityLabel
+                          }
+                          style={({ pressed }) => [
+                            styles.quantityButton,
+                            pressed &&
+                              styles.buttonPressed,
+                          ]}
+                          onPress={() => {
+                            if (!storeId) {
+                              return;
+                            }
+
+                            if (
+                              items.length === 1
+                            ) {
+                              clearOrderNotes(
+                                storeId,
+                              );
+                            }
+
+                            removeStoreLine(
+                              storeId,
+                              item.lineId,
+                            );
+                          }}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={17}
+                            color={BRAND_GREEN}
+                          />
+                        </Pressable>
+                      </View>
+                    ) : (
                     <View
                       style={
                         styles.quantityControl
@@ -3334,6 +3435,7 @@ function StoreCartScreen() {
                         />
                       </Pressable>
                     </View>
+                    )}
                   </View>
                 </View>
               );
@@ -5349,6 +5451,11 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
 
     elevation: 4,
+  },
+
+  printJobControl: {
+    justifyContent: 'center',
+    minWidth: 48,
   },
 
   quantityButton: {

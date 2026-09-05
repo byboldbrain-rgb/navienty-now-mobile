@@ -55,6 +55,16 @@ export default function OrderConfirmationScreen() {
     (state) => state.confirmPendingOrder,
   );
 
+  const printJob =
+    pendingOrder?.items.find(
+      (item) =>
+        item.itemKind ===
+        'print_job',
+    )?.printJob ?? null;
+
+  const hasPrintJob =
+    printJob !== null;
+
   async function submitPendingOrder() {
     if (
       !pendingOrder ||
@@ -72,11 +82,17 @@ export default function OrderConfirmationScreen() {
           pendingOrder.accessToken,
         );
 
-      confirmPendingOrder({
+      const orderForConfirmation = {
         ...submittedOrder,
+        whatsappNumber:
+          pendingOrder.whatsappNumber,
         whatsappMessage:
           pendingOrder.whatsappMessage,
-      });
+      };
+
+      confirmPendingOrder(
+        orderForConfirmation,
+      );
 
       /*
        * A pending order can survive an app restart while the customer uses a
@@ -100,6 +116,21 @@ export default function OrderConfirmationScreen() {
           id: submittedOrder.id,
         },
       });
+
+      if (hasPrintJob) {
+        try {
+          await openOrderInWhatsApp(
+            orderForConfirmation,
+          );
+        } catch {
+          Alert.alert(
+            'تم تأكيد الطلب',
+            printJob?.uiCopy
+              .whatsappOpenErrorBody ??
+              'تعذر فتح واتساب تلقائيًا. افتح الطلب وأرسل ملف الطباعة.',
+          );
+        }
+      }
     } catch (error) {
       Alert.alert(
         'تعذر تأكيد الطلب',
@@ -231,12 +262,17 @@ export default function OrderConfirmationScreen() {
           </View>
 
           <Text style={styles.heroTitle}>
-            طلبك محفوظ وجاهز للإرسال
+            {hasPrintJob
+              ? printJob?.uiCopy
+                  .confirmationTitle
+              : 'طلبك محفوظ وجاهز للإرسال'}
           </Text>
 
           <Text style={styles.heroDescription}>
-            اضغط الزر الأخضر لإرسال الطلب للمراجعة داخل
-            Navienty Now. لا تحتاج إلى فتح أي تطبيق آخر.
+            {hasPrintJob
+              ? printJob?.uiCopy
+                  .confirmationBody
+              : 'اضغط الزر الأخضر لإرسال الطلب للمراجعة داخل Navienty Now. لا تحتاج إلى فتح أي تطبيق آخر.'}
           </Text>
         </View>
 
@@ -279,7 +315,9 @@ export default function OrderConfirmationScreen() {
                 {pendingOrder.itemCount}
               </Text>
               <Text style={styles.summaryLabel}>
-                منتج
+                {hasPrintJob
+                  ? 'عنصر'
+                  : 'منتج'}
               </Text>
             </View>
 
@@ -298,7 +336,11 @@ export default function OrderConfirmationScreen() {
         </View>
 
         <Pressable
-          accessibilityLabel="تأكيد الطلب داخل التطبيق"
+          accessibilityLabel={
+            hasPrintJob
+              ? 'تأكيد الطلب والمتابعة لإرسال ملف الطباعة'
+              : 'تأكيد الطلب داخل التطبيق'
+          }
           accessibilityRole="button"
           disabled={isBusy}
           style={({ pressed }) => [
@@ -326,12 +368,19 @@ export default function OrderConfirmationScreen() {
           )}
 
           <Text style={styles.submitButtonText}>
-            تأكيد الطلب داخل التطبيق
+            {hasPrintJob
+              ? printJob?.uiCopy
+                  .confirmationPrimaryCta
+              : 'تأكيد الطلب داخل التطبيق'}
           </Text>
         </Pressable>
 
         <Pressable
-          accessibilityLabel="متابعة عبر واتساب، اختياري"
+          accessibilityLabel={
+            hasPrintJob
+              ? 'إرسال ملف الطباعة عبر واتساب'
+              : 'متابعة عبر واتساب، اختياري'
+          }
           accessibilityRole="button"
           disabled={isBusy}
           style={({ pressed }) => [
@@ -360,10 +409,16 @@ export default function OrderConfirmationScreen() {
 
           <View style={styles.whatsAppCopy}>
             <Text style={styles.whatsAppTitle}>
-              متابعة عبر واتساب (اختياري)
+              {hasPrintJob
+                ? printJob?.uiCopy
+                    .sendFileCtaLabel
+                : 'متابعة عبر واتساب (اختياري)'}
             </Text>
             <Text style={styles.whatsAppDescription}>
-              للتواصل مع فريق الدعم فقط
+              {hasPrintJob
+                ? printJob?.uiCopy
+                    .sendFileCtaHelper
+                : 'للتواصل مع فريق الدعم فقط'}
             </Text>
           </View>
         </Pressable>

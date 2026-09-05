@@ -5,6 +5,10 @@ import {
   getOrderRequestFingerprint,
 } from '../domain/order-idempotency';
 import { supabase } from '../lib/supabase';
+import {
+  normalizePrintingUiCopy,
+  normalizePrintingUiIcons,
+} from '../types/printing';
 import type {
   CreateWhatsAppOrderInput,
   Order,
@@ -37,6 +41,35 @@ type RawPaymentStatus =
   | 'failed'
   | 'refunded'
   | 'partially_refunded';
+
+type RawPrintJobConfiguration = {
+  printing_service_id: string;
+  store_id: string;
+  catalog_category_id: string;
+  category_slug: string;
+  product_id: string;
+  product_variant_id: string;
+  product_name_ar: string;
+  product_icon: string;
+  color_option_id: string;
+  color_key: string;
+  color_label_ar: string;
+  side_option_id: string;
+  side_key: string;
+  side_label_ar: string;
+  pages_per_sheet: NumericValue;
+  page_size_label_ar: string;
+  page_count: NumericValue;
+  copy_count: NumericValue;
+  sheets_per_copy: NumericValue;
+  total_sheets: NumericValue;
+  price_per_sheet: NumericValue;
+  total_price: NumericValue;
+  summary_ar: string;
+  whatsapp_file_prompt_ar: string;
+  ui_copy?: unknown;
+  ui_icons?: unknown;
+};
 
 type RawOrderDetails = {
   id: string;
@@ -98,6 +131,12 @@ type RawOrderDetails = {
     id: string;
     product_id: string | null;
     product_variant_id: string | null;
+    item_kind?:
+      | 'catalog_product'
+      | 'print_job';
+    configuration?:
+      | RawPrintJobConfiguration
+      | null;
     name_ar: string;
     variant_name_ar: string | null;
     sku: string | null;
@@ -189,41 +228,138 @@ function mapPaymentStatus(
   return statusMap[status];
 }
 
+function mapPrintJobConfiguration(
+  configuration:
+    | RawPrintJobConfiguration
+    | null
+    | undefined,
+) {
+  if (!configuration) {
+    return null;
+  }
+
+  return {
+    printingServiceId:
+      configuration.printing_service_id,
+    storeId:
+      configuration.store_id,
+    catalogCategoryId:
+      configuration.catalog_category_id,
+    categorySlug:
+      configuration.category_slug,
+    productId:
+      configuration.product_id,
+    productVariantId:
+      configuration.product_variant_id,
+    productName:
+      configuration.product_name_ar,
+    productIcon:
+      configuration.product_icon ||
+      '🖨️',
+    colorOptionId:
+      configuration.color_option_id,
+    colorKey:
+      configuration.color_key,
+    colorLabel:
+      configuration.color_label_ar,
+    sideOptionId:
+      configuration.side_option_id,
+    sideKey:
+      configuration.side_key,
+    sideLabel:
+      configuration.side_label_ar,
+    pagesPerSheet: toNumber(
+      configuration.pages_per_sheet,
+    ),
+    pageSizeLabel:
+      configuration.page_size_label_ar,
+    pageCount: toNumber(
+      configuration.page_count,
+    ),
+    copyCount: toNumber(
+      configuration.copy_count,
+    ),
+    sheetsPerCopy: toNumber(
+      configuration.sheets_per_copy,
+    ),
+    totalSheets: toNumber(
+      configuration.total_sheets,
+    ),
+    pricePerSheet: toNumber(
+      configuration.price_per_sheet,
+    ),
+    totalPrice: toNumber(
+      configuration.total_price,
+    ),
+    summary:
+      configuration.summary_ar,
+    whatsappFilePrompt:
+      configuration.whatsapp_file_prompt_ar,
+    uiCopy:
+      normalizePrintingUiCopy(
+        configuration.ui_copy,
+      ),
+    uiIcons:
+      normalizePrintingUiIcons(
+        configuration.ui_icons,
+      ),
+  };
+}
+
 function mapOrder(
   rawOrder: RawOrderDetails,
 ): Order {
   const items = (
     rawOrder.items ?? []
-  ).map((item) => ({
-    id: item.id,
-    productId: item.product_id,
-    productVariantId:
-      item.product_variant_id,
+  ).map((item) => {
+    const printJob =
+      mapPrintJobConfiguration(
+        item.configuration,
+      );
 
-    name: item.name_ar,
-    variantName:
-      item.variant_name_ar,
+    const itemKind =
+      item.item_kind ===
+        'print_job' &&
+      printJob
+        ? 'print_job'
+        : 'catalog_product';
 
-    description:
-      item.variant_name_ar ??
-      item.sku ??
-      '',
+    return {
+      id: item.id,
+      productId: item.product_id,
+      productVariantId:
+        item.product_variant_id,
+      itemKind,
+      printJob:
+        itemKind === 'print_job'
+          ? printJob
+          : null,
 
-    price: toNumber(
-      item.unit_price,
-    ),
+      name: item.name_ar,
+      variantName:
+        item.variant_name_ar,
 
-    lineTotal: toNumber(
-      item.line_total,
-    ),
+      description:
+        item.variant_name_ar ??
+        item.sku ??
+        '',
 
-    icon: item.icon ?? '📦',
-    imageUrl: item.image_url,
-    quantity: item.quantity,
+      price: toNumber(
+        item.unit_price,
+      ),
 
-    isAgeRestricted:
-      item.is_age_restricted,
-  }));
+      lineTotal: toNumber(
+        item.line_total,
+      ),
+
+      icon: item.icon ?? '📦',
+      imageUrl: item.image_url,
+      quantity: item.quantity,
+
+      isAgeRestricted:
+        item.is_age_restricted,
+    };
+  });
 
   return {
     id: rawOrder.id,
@@ -283,7 +419,11 @@ function mapOrder(
 
     itemCount: items.reduce(
       (total, item) =>
-        total + item.quantity,
+        total +
+        (item.itemKind ===
+        'print_job'
+          ? 1
+          : item.quantity),
       0,
     ),
 
@@ -665,6 +805,46 @@ function getErrorMessage(
       'نوع المنتج المختار غير متاح حاليًا.',
     ],
     [
+      'printing_service_not_available',
+      'خدمة الطباعة غير متاحة حاليًا.',
+    ],
+    [
+      'printing_color_option_not_available',
+      'نوع الطباعة المختار لم يعد متاحًا.',
+    ],
+    [
+      'printing_side_option_not_available',
+      'اختيار وجه/وجهين لم يعد متاحًا.',
+    ],
+    [
+      'printing_rate_not_available',
+      'سعر الطباعة المختار لم يعد متاحًا.',
+    ],
+    [
+      'invalid_printing_page_count',
+      'عدد صفحات ملف الطباعة خارج الحد المسموح.',
+    ],
+    [
+      'invalid_printing_copy_count',
+      'عدد نسخ الطباعة خارج الحد المسموح.',
+    ],
+    [
+      'printing_total_sheets_limit_exceeded',
+      'إجمالي أوراق الطباعة أكبر من الحد المسموح.',
+    ],
+    [
+      'multiple_print_jobs_not_supported',
+      'يمكن إضافة طلب طباعة واحد فقط في الطلب.',
+    ],
+    [
+      'printing_order_too_large',
+      'طلب الطباعة أكبر من الحد الذي يمكن إرساله.',
+    ],
+    [
+      'print_job_order_conflict',
+      'تغيرت مواصفات طلب الطباعة. ارجع إلى السلة وحدّث الطلب.',
+    ],
+    [
       'minimum_order_not_reached',
       'قيمة المنتجات أقل من الحد الأدنى المطلوب للمتجر.',
     ],
@@ -777,7 +957,7 @@ export async function getMyOrders():
   Promise<Order[]> {
   const { data, error } =
     await supabase.rpc(
-      'get_my_orders',
+      'get_my_orders_v2',
     );
 
   if (error) {
@@ -808,7 +988,7 @@ export async function getOrderByToken(
 ): Promise<Order> {
   const { data, error } =
     await supabase.rpc(
-      'get_order_by_token',
+      'get_order_by_token_v2',
       {
         p_access_token:
           accessToken,
@@ -901,13 +1081,35 @@ export async function createWhatsAppOrder(
           item.variantId ?? null,
 
         quantity: item.quantity,
+
+        ...(item.printJob
+          ? {
+              print_job: {
+                printing_service_id:
+                  item.printJob
+                    .printingServiceId,
+                color_option_id:
+                  item.printJob
+                    .colorOptionId,
+                side_option_id:
+                  item.printJob
+                    .sideOptionId,
+                page_count:
+                  item.printJob
+                    .pageCount,
+                copy_count:
+                  item.printJob
+                    .copyCount,
+              },
+            }
+          : {}),
       }),
     ),
   };
 
   const { data, error } =
     await supabase.rpc(
-      'create_whatsapp_order_v2',
+      'create_whatsapp_order_v3',
       {
         p_payload: payload,
       },
@@ -979,8 +1181,8 @@ export async function confirmWhatsAppOrderSent(
     );
   }
 
-  return mapOrder(
-    data as unknown as RawOrderDetails,
+  return getOrderByToken(
+    accessToken,
   );
 }
 
@@ -1015,8 +1217,8 @@ export async function submitOrderForConfirmation(
     );
   }
 
-  return mapOrder(
-    data as unknown as RawOrderDetails,
+  return getOrderByToken(
+    accessToken,
   );
 }
 
@@ -1047,7 +1249,7 @@ export async function cancelPendingWhatsAppOrder(
     );
   }
 
-  return mapOrder(
-    data as unknown as RawOrderDetails,
+  return getOrderByToken(
+    accessToken,
   );
 }

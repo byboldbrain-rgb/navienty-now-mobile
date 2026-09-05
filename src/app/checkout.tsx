@@ -12,7 +12,6 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -64,6 +63,7 @@ import {
   validateVoucher,
 } from '../services/voucher-service';
 import {
+  isPrintJobCartItem,
   useCartStore,
 } from '../store/cart-store';
 import {
@@ -78,6 +78,12 @@ import {
 import {
   useVoucherStore,
 } from '../store/voucher-store';
+import {
+  toPrintJobOrderPayload,
+} from '../types/printing';
+import {
+  openOrderInWhatsApp,
+} from '../utils/order-whatsapp';
 
 /* ---------------------------------- */
 /* BRAND                              */
@@ -92,11 +98,6 @@ const WHATSAPP_ORDER_PHONE =
 
 const WHATSAPP_ORDER_MESSAGE =
   'أكد الاوردر بتاعي';
-
-const WHATSAPP_ORDER_URL =
-  `https://wa.me/${WHATSAPP_ORDER_PHONE}?text=${encodeURIComponent(
-    WHATSAPP_ORDER_MESSAGE,
-  )}`;
 
 /* ---------------------------------- */
 /* LOCAL PAYMENT METHOD IMAGES        */
@@ -1784,6 +1785,14 @@ function StoreCheckoutScreen() {
         >
       > | null = null;
 
+    const printJob =
+      items.find(
+        isPrintJobCartItem,
+      )?.printJob ?? null;
+
+    const hasPrintJob =
+      printJob !== null;
+
     try {
       setIsSubmittingOrder(
         true,
@@ -1860,15 +1869,32 @@ function StoreCheckoutScreen() {
 
               quantity:
                 item.quantity,
+
+              ...(isPrintJobCartItem(
+                item,
+              )
+                ? {
+                    printJob:
+                      toPrintJobOrderPayload(
+                        item.printJob,
+                      ),
+                  }
+                : {}),
             }),
           ),
         });
 
       const whatsappConfirmationMessage =
-        WHATSAPP_ORDER_MESSAGE;
+        hasPrintJob
+          ? createdOrder.whatsappMessage
+          : WHATSAPP_ORDER_MESSAGE;
 
       const orderForWhatsApp = {
         ...createdOrder,
+        whatsappNumber:
+          hasPrintJob
+            ? createdOrder.whatsappNumber
+            : WHATSAPP_ORDER_PHONE,
         whatsappMessage:
           whatsappConfirmationMessage,
       };
@@ -1917,6 +1943,8 @@ function StoreCheckoutScreen() {
 
       confirmPendingOrder({
         ...submittedOrder,
+        whatsappNumber:
+          orderForWhatsApp.whatsappNumber,
         whatsappMessage:
           whatsappConfirmationMessage,
       });
@@ -1944,13 +1972,16 @@ function StoreCheckoutScreen() {
       });
 
       try {
-        await Linking.openURL(
-          WHATSAPP_ORDER_URL,
+        await openOrderInWhatsApp(
+          orderForWhatsApp,
         );
       } catch {
         Alert.alert(
           'تعذر فتح واتساب',
-          'تم إنشاء طلبك بنجاح. افتح واتساب وأرسل «أكد الاوردر بتاعي» إلى رقم ناڤينتي ناو.',
+          hasPrintJob
+            ? printJob?.uiCopy
+                .whatsappOpenErrorBody
+            : 'تم إنشاء طلبك بنجاح. افتح واتساب وأرسل «أكد الاوردر بتاعي» إلى رقم ناڤينتي ناو.',
         );
       }
     } catch (error) {

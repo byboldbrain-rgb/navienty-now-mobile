@@ -13,6 +13,17 @@ import {
 import {
   getMatchingSearchAttributionForCartAdd,
 } from '../services/search-attribution-service';
+import type {
+  PrintJobSnapshot,
+} from '../types/printing';
+import {
+  normalizePrintingUiCopy,
+  normalizePrintingUiIcons,
+} from '../types/printing';
+
+export type CartItemKind =
+  | 'catalog_product'
+  | 'print_job';
 
 export type CartProduct = {
   /**
@@ -24,6 +35,16 @@ export type CartProduct = {
   description: string;
   price: number;
   icon: string;
+
+  /** Stable identity for a semantic cart row. */
+  lineId?: string;
+
+  itemKind?: CartItemKind;
+
+  /** Server-authoritative quote snapshot for a print job. */
+  printJob?:
+    | PrintJobSnapshot
+    | null;
 
   /**
    * Selected variant/size from now.product_variants.id.
@@ -47,6 +68,10 @@ export type CartProduct = {
 
 export type CartItem = CartProduct & {
   quantity: number;
+
+  lineId: string;
+  itemKind: CartItemKind;
+  printJob: PrintJobSnapshot | null;
 
   /**
    * Normalized in persisted/current state so consumers can
@@ -182,6 +207,12 @@ type CartState = {
     variantId?: string | null,
   ) => void;
 
+  /** Removes one semantic row, including a configured print job. */
+  removeStoreLine: (
+    storeId: string,
+    lineId: string,
+  ) => void;
+
   clearStoreCart: (
     storeId: string,
   ) => void;
@@ -291,6 +322,198 @@ function normalizeCategorySlug(
     : null;
 }
 
+function normalizeLineId(
+  value:
+    | string
+    | null
+    | undefined,
+): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  return normalized.length > 0
+    ? normalized
+    : null;
+}
+
+function normalizePositiveInteger(
+  value: unknown,
+): number {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) &&
+    parsed > 0
+    ? Math.floor(parsed)
+    : 0;
+}
+
+function normalizeFiniteNumber(
+  value: unknown,
+): number {
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed)
+    ? parsed
+    : 0;
+}
+
+function normalizePrintJobSnapshot(
+  value: unknown,
+): PrintJobSnapshot | null {
+  if (
+    !value ||
+    typeof value !== 'object'
+  ) {
+    return null;
+  }
+
+  const candidate =
+    value as Partial<PrintJobSnapshot>;
+
+  const requiredIds = [
+    candidate.printingServiceId,
+    candidate.storeId,
+    candidate.catalogCategoryId,
+    candidate.categorySlug,
+    candidate.productId,
+    candidate.productVariantId,
+    candidate.colorOptionId,
+    candidate.sideOptionId,
+  ];
+
+  if (
+    requiredIds.some(
+      (id) =>
+        typeof id !== 'string' ||
+        id.trim().length === 0,
+    )
+  ) {
+    return null;
+  }
+
+  const pageCount =
+    normalizePositiveInteger(
+      candidate.pageCount,
+    );
+  const copyCount =
+    normalizePositiveInteger(
+      candidate.copyCount,
+    );
+  const totalSheets =
+    normalizePositiveInteger(
+      candidate.totalSheets,
+    );
+
+  if (
+    pageCount <= 0 ||
+    copyCount <= 0 ||
+    totalSheets <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    printingServiceId:
+      candidate.printingServiceId!,
+    storeId: candidate.storeId!,
+    catalogCategoryId:
+      candidate.catalogCategoryId!,
+    categorySlug:
+      candidate.categorySlug!,
+    productId: candidate.productId!,
+    productVariantId:
+      candidate.productVariantId!,
+    productName:
+      String(
+        candidate.productName ??
+          'طلب طباعة A4',
+      ),
+    productIcon:
+      String(
+        candidate.productIcon ??
+          '🖨️',
+      ),
+    colorOptionId:
+      candidate.colorOptionId!,
+    colorKey:
+      String(
+        candidate.colorKey ?? '',
+      ),
+    colorLabel:
+      String(
+        candidate.colorLabel ?? '',
+      ),
+    sideOptionId:
+      candidate.sideOptionId!,
+    sideKey:
+      String(
+        candidate.sideKey ?? '',
+      ),
+    sideLabel:
+      String(
+        candidate.sideLabel ?? '',
+      ),
+    pagesPerSheet: Math.max(
+      normalizePositiveInteger(
+        candidate.pagesPerSheet,
+      ),
+      1,
+    ),
+    pageSizeLabel:
+      String(
+        candidate.pageSizeLabel ??
+          'A4',
+      ),
+    pageCount,
+    copyCount,
+    sheetsPerCopy:
+      normalizePositiveInteger(
+        candidate.sheetsPerCopy,
+      ),
+    totalSheets,
+    pricePerSheet:
+      normalizeFiniteNumber(
+        candidate.pricePerSheet,
+      ),
+    totalPrice:
+      normalizeFiniteNumber(
+        candidate.totalPrice,
+      ),
+    summary:
+      String(
+        candidate.summary ?? '',
+      ),
+    whatsappFilePrompt:
+      String(
+        candidate.whatsappFilePrompt ??
+          '',
+      ),
+    uiCopy:
+      normalizePrintingUiCopy(
+        candidate.uiCopy,
+      ),
+    uiIcons:
+      normalizePrintingUiIcons(
+        candidate.uiIcons,
+      ),
+  };
+}
+
+export function isPrintJobCartItem(
+  item: CartItem,
+): item is CartItem & {
+  itemKind: 'print_job';
+  printJob: PrintJobSnapshot;
+} {
+  return (
+    item.itemKind === 'print_job' &&
+    item.printJob !== null
+  );
+}
+
 /**
  * Used by screens when they need to apply the restaurant-only rule.
  */
@@ -333,6 +556,7 @@ function isSameCartLine(
     | null,
 ) {
   return (
+    !isPrintJobCartItem(item) &&
     item.id === productId &&
     normalizeVariantId(
       item.variantId,
@@ -346,17 +570,80 @@ function isSameCartLine(
 function normalizeCartProduct(
   product: CartProduct,
 ): Omit<CartItem, 'quantity'> {
+  const printJob =
+    normalizePrintJobSnapshot(
+      product.printJob,
+    );
+
+  const itemKind: CartItemKind =
+    product.itemKind ===
+      'print_job' && printJob
+      ? 'print_job'
+      : 'catalog_product';
+
+  const variantId =
+    itemKind === 'print_job'
+      ? printJob!.productVariantId
+      : normalizeVariantId(
+          product.variantId,
+        );
+
+  const requestedLineId =
+    normalizeLineId(
+      product.lineId,
+    );
+
+  const lineId =
+    requestedLineId ??
+    (itemKind === 'print_job'
+      ? `print-job:${printJob!.printingServiceId}`
+      : `catalog:${product.id}:${variantId ?? 'base'}`);
+
   return {
     ...product,
 
-    variantId: normalizeVariantId(
-      product.variantId,
-    ),
+    id:
+      itemKind === 'print_job'
+        ? printJob!.productId
+        : product.id,
+
+    name:
+      itemKind === 'print_job'
+        ? printJob!.productName
+        : product.name,
+
+    description:
+      itemKind === 'print_job'
+        ? printJob!.summary
+        : product.description,
+
+    price:
+      itemKind === 'print_job'
+        ? printJob!.totalPrice
+        : normalizeFiniteNumber(
+            product.price,
+          ),
+
+    icon:
+      itemKind === 'print_job'
+        ? printJob!.productIcon
+        : product.icon,
+
+    lineId,
+    itemKind,
+    printJob:
+      itemKind === 'print_job'
+        ? printJob
+        : null,
+
+    variantId,
 
     variantName:
-      normalizeVariantName(
-        product.variantName,
-      ),
+      itemKind === 'print_job'
+        ? printJob!.summary
+        : normalizeVariantName(
+            product.variantName,
+          ),
 
     isAgeRestricted:
       product.isAgeRestricted === true,
@@ -366,35 +653,23 @@ function normalizeCartProduct(
 function normalizeCartItem(
   item: CartItem,
 ): CartItem {
-  const quantity = Number(
-    item.quantity ?? 0,
-  );
+  const normalizedProduct =
+    normalizeCartProduct(item);
+
+  const quantity =
+    Number(item.quantity ?? 0);
 
   return {
-    ...item,
-
-    price: Number(
-      item.price ?? 0,
-    ),
+    ...normalizedProduct,
 
     quantity:
-      Number.isFinite(quantity) &&
-      quantity > 0
-        ? Math.floor(quantity)
-        : 1,
-
-    variantId:
-      normalizeVariantId(
-        item.variantId,
-      ),
-
-    variantName:
-      normalizeVariantName(
-        item.variantName,
-      ),
-
-    isAgeRestricted:
-      item.isAgeRestricted === true,
+      normalizedProduct.itemKind ===
+      'print_job'
+        ? 1
+        : Number.isFinite(quantity) &&
+            quantity > 0
+          ? Math.floor(quantity)
+          : 1,
   };
 }
 
@@ -790,6 +1065,18 @@ async function trackSuccessfulCartAdd(
           product.price ?? 0,
         ),
       quantity_delta: 1,
+      item_kind:
+        product.itemKind ??
+        'catalog_product',
+      print_page_count:
+        product.printJob?.pageCount ??
+        null,
+      print_copy_count:
+        product.printJob?.copyCount ??
+        null,
+      print_total_sheets:
+        product.printJob?.totalSheets ??
+        null,
       attribution_source:
         attribution
           ? 'search'
@@ -908,34 +1195,25 @@ export const useCartStore = create<CartState>()(
           const existingItem =
             currentItems.find(
               (item) =>
-                isSameCartLine(
-                  item,
-                  normalizedProduct.id,
-                  normalizedProduct.variantId,
-                ),
+                item.lineId ===
+                normalizedProduct.lineId,
             );
 
           const nextItems =
             existingItem
               ? currentItems.map(
                   (item) =>
-                    isSameCartLine(
-                      item,
-                      normalizedProduct.id,
-                      normalizedProduct.variantId,
-                    )
+                    item.lineId ===
+                    normalizedProduct.lineId
                       ? {
-                          ...item,
-
-                          /**
-                           * Refresh current product/variant
-                           * snapshots while keeping quantity.
-                           */
                           ...normalizedProduct,
 
                           quantity:
-                            item.quantity +
-                            1,
+                            normalizedProduct.itemKind ===
+                            'print_job'
+                              ? 1
+                              : item.quantity +
+                                1,
                         }
                       : item,
                 )
@@ -1313,6 +1591,31 @@ export const useCartStore = create<CartState>()(
         );
       },
 
+      removeStoreLine: (
+        storeId,
+        lineId,
+      ) => {
+        const normalizedLineId =
+          normalizeLineId(lineId);
+
+        if (!normalizedLineId) {
+          return;
+        }
+
+        set((state) =>
+          updateStoreCartItems(
+            state,
+            storeId,
+            (items) =>
+              items.filter(
+                (item) =>
+                  item.lineId !==
+                  normalizedLineId,
+              ),
+          ),
+        );
+      },
+
       clearStoreCart: (
         storeId,
       ) => {
@@ -1390,7 +1693,7 @@ export const useCartStore = create<CartState>()(
        *
        * Existing version 1/2 carts are migrated automatically.
        */
-      version: 3,
+      version: 4,
 
       migrate: (
         persistedState,

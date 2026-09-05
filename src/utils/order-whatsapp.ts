@@ -5,8 +5,26 @@ import type { Order } from '../types/supabase-order';
 function normalizeWhatsAppNumber(
   number: string,
 ): string {
-  const normalizedNumber =
+  let normalizedNumber =
     number.replace(/\D/g, '');
+
+  if (
+    normalizedNumber.startsWith(
+      '00',
+    )
+  ) {
+    normalizedNumber =
+      normalizedNumber.slice(2);
+  }
+
+  if (
+    normalizedNumber.startsWith(
+      '0',
+    )
+  ) {
+    normalizedNumber =
+      `20${normalizedNumber.slice(1)}`;
+  }
 
   if (!normalizedNumber) {
     throw new Error(

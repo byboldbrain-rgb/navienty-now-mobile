@@ -1,7 +1,12 @@
+import type {
+  PrintJobOrderPayload,
+} from '../types/printing';
+
 export type OrderIdempotencyItem = {
   productId: string;
   variantId?: string | null;
   quantity: number;
+  printJob?: PrintJobOrderPayload | null;
 };
 
 export type OrderIdempotencyInput = {
@@ -53,20 +58,74 @@ function normalizeCoordinate(
     : null;
 }
 
+function normalizeInteger(
+  value: number | null | undefined,
+): number {
+  return typeof value === 'number' &&
+    Number.isFinite(value)
+    ? Math.trunc(value)
+    : 0;
+}
+
+function normalizePrintJob(
+  printJob:
+    | PrintJobOrderPayload
+    | null
+    | undefined,
+) {
+  if (!printJob) {
+    return null;
+  }
+
+  return {
+    printingServiceId:
+      normalizeText(
+        printJob.printingServiceId,
+      ),
+    colorOptionId:
+      normalizeText(
+        printJob.colorOptionId,
+      ),
+    sideOptionId:
+      normalizeText(
+        printJob.sideOptionId,
+      ),
+    pageCount:
+      normalizeInteger(
+        printJob.pageCount,
+      ),
+    copyCount:
+      normalizeInteger(
+        printJob.copyCount,
+      ),
+  };
+}
+
 function hashFingerprintSource(
   value: string,
 ): string {
   let hashA = 0x811c9dc5;
   let hashB = 0x9e3779b9;
 
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
+  for (
+    let index = 0;
+    index < value.length;
+    index += 1
+  ) {
+    const code =
+      value.charCodeAt(index);
 
     hashA ^= code;
-    hashA = Math.imul(hashA, 0x01000193);
+    hashA = Math.imul(
+      hashA,
+      0x01000193,
+    );
 
     hashB ^= code + index;
-    hashB = Math.imul(hashB, 0x85ebca6b);
+    hashB = Math.imul(
+      hashB,
+      0x85ebca6b,
+    );
   }
 
   return [hashA, hashB]
@@ -81,10 +140,9 @@ function hashFingerprintSource(
 /**
  * Produces a stable, non-PII fingerprint for one logical checkout request.
  *
- * The fingerprint deliberately ignores cart item ordering while preserving
- * product, variant, quantity, customer, delivery, payment, voucher and Spin
- * semantics. It is used only to decide whether a retry should reuse the same
- * client_request_id; it is not an authentication or authorization token.
+ * Print configuration is part of the fingerprint. Changing pages, copies,
+ * color, or sides therefore creates a new logical request instead of
+ * accidentally reusing an older order's client_request_id.
  */
 export function getOrderRequestFingerprint(
   input: OrderIdempotencyInput,
@@ -97,20 +155,30 @@ export function getOrderRequestFingerprint(
       variantId: normalizeNullableId(
         item.variantId,
       ),
-      quantity: Number.isFinite(
+      quantity: normalizeInteger(
         item.quantity,
-      )
-        ? Math.trunc(item.quantity)
-        : 0,
+      ),
+      printJob: normalizePrintJob(
+        item.printJob,
+      ),
     }))
     .sort((left, right) => {
-      const leftKey = `${left.productId}|${left.variantId ?? ''}|${left.quantity}`;
-      const rightKey = `${right.productId}|${right.variantId ?? ''}|${right.quantity}`;
-      return leftKey.localeCompare(rightKey);
+      const leftKey = JSON.stringify(
+        left,
+      );
+      const rightKey = JSON.stringify(
+        right,
+      );
+
+      return leftKey.localeCompare(
+        rightKey,
+      );
     });
 
   const source = JSON.stringify({
-    storeId: normalizeText(input.storeId),
+    storeId: normalizeText(
+      input.storeId,
+    ),
     serviceAreaId: normalizeNullableId(
       input.serviceAreaId,
     ),
@@ -129,9 +197,15 @@ export function getOrderRequestFingerprint(
     customerPhone: normalizePhone(
       input.customerPhone,
     ),
-    address: normalizeText(input.address),
-    landmark: normalizeText(input.landmark),
-    notes: normalizeText(input.notes),
+    address: normalizeText(
+      input.address,
+    ),
+    landmark: normalizeText(
+      input.landmark,
+    ),
+    notes: normalizeText(
+      input.notes,
+    ),
     voucherCode:
       normalizeText(
         input.voucherCode,
@@ -142,7 +216,9 @@ export function getOrderRequestFingerprint(
     items: normalizedItems,
   });
 
-  return hashFingerprintSource(source);
+  return hashFingerprintSource(
+    source,
+  );
 }
 
 /**
@@ -162,7 +238,8 @@ export function createClientRequestId(
       const value =
         character === 'x'
           ? randomValue
-          : (randomValue & 0x3) | 0x8;
+          : (randomValue & 0x3) |
+            0x8;
 
       return value.toString(16);
     },
