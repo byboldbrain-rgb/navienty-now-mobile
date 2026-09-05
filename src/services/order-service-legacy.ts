@@ -12,6 +12,7 @@ import {
 import type {
   CreateWhatsAppOrderInput,
   Order,
+  OrderItemKind,
   OrderStatus,
   PaymentStatus,
 } from '../types/supabase-order';
@@ -317,7 +318,7 @@ function mapOrder(
         item.configuration,
       );
 
-    const itemKind =
+    const itemKind: OrderItemKind =
       item.item_kind ===
         'print_job' &&
       printJob
