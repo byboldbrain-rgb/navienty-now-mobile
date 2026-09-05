@@ -6,10 +6,13 @@ import {
   recordStartupTimingOnce,
 } from './startup-performance-service';
 
+export type AppArtworkMap = Record<string, string>;
+
 export type AppSettings = {
   app_name: string;
   app_slug: string;
   app_logo_url: string | null;
+  artwork?: AppArtworkMap;
   default_locale: string;
   timezone: string;
   currency_code: string;
@@ -295,6 +298,24 @@ async function loadAppBootstrap():
       },
     );
   }
+}
+
+export function getCachedAppBootstrap(): AppBootstrap | null {
+  const currentTime = Date.now();
+
+  if (
+    cachedAppBootstrap &&
+    cachedAppBootstrap.expiresAt >
+      currentTime
+  ) {
+    return cachedAppBootstrap.value;
+  }
+
+  if (cachedAppBootstrap) {
+    cachedAppBootstrap = null;
+  }
+
+  return null;
 }
 
 async function getAppBootstrap():

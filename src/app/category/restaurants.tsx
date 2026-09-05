@@ -26,6 +26,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import CategorySearchEntry from '../../components/search/category-search-entry';
+import DatabaseFirstImage from '../../components/ui/database-first-image';
 import { RestaurantsScreenSkeleton } from '../../components/ui/loading-skeleton';
 import getAppBootstrap, {
   type AppBootstrap,
@@ -353,6 +354,12 @@ const PREVIEW_CUISINE_KEYS = [
   'sandwiches',
   'desserts',
 ];
+
+function getCuisineArtworkKey(
+  cuisineKey: string,
+) {
+  return `src/assets/cuisines/${cuisineKey}.webp`;
+}
 
 function getStoreSearchText(
   store: StoreSummary,
@@ -1543,11 +1550,14 @@ function CuisinePreviewItem({
             styles.cuisinePreviewImageActive,
         ]}
       >
-        <Image
+        <DatabaseFirstImage
           accessibilityIgnoresInvertColors
           accessibilityLabel={`صورة ${cuisine.label}`}
+          artworkKey={getCuisineArtworkKey(
+            cuisine.key,
+          )}
+          fallbackSource={cuisine.image}
           resizeMode="cover"
-          source={cuisine.image}
           style={
             styles.cuisinePreviewPhoto
           }
@@ -2160,13 +2170,16 @@ function CuisinesModal({
                             styles.cuisineGridImageActive,
                         ]}
                       >
-                        <Image
+                        <DatabaseFirstImage
                           accessibilityIgnoresInvertColors
                           accessibilityLabel={`صورة ${cuisine.label}`}
-                          resizeMode="cover"
-                          source={
+                          artworkKey={getCuisineArtworkKey(
+                            cuisine.key,
+                          )}
+                          fallbackSource={
                             cuisine.image
                           }
+                          resizeMode="cover"
                           style={
                             styles.cuisineGridPhoto
                           }

@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 
 import AppBottomNavigation from '../../category/app-bottom-navigation';
+import DatabaseFirstImage from '../../components/ui/database-first-image';
 import { getCategoryIcon } from '../../config/category-icons';
 import type { StoreSummary } from '../../services/catalog-service';
 import { getHomeStoreArtwork } from '../../services/home-store-artwork-service';
@@ -42,6 +43,32 @@ import { styles } from './home-screen.styles';
 
 const navientyDeliveryBike = require('../../assets/images/navienty-now-delivery-bike-transparent.png');
 const navienty24hMoodBackground = require('../../assets/images/navienty-now-24h-mood-background.png');
+
+const HOME_DISCOVERY_ARTWORK_KEYS:
+  Readonly<Record<string, string>> = {
+    breakfast:
+      'src/assets/cuisines/breakfast.webp',
+    bakery:
+      'src/assets/cuisines/bakery.webp',
+    'coffee-tea':
+      'assets/images/supermarket-categories/coffee-tea.webp',
+    beverages:
+      'assets/images/supermarket-categories/beverages.webp',
+    sandwiches:
+      'src/assets/cuisines/sandwiches.webp',
+    pizza:
+      'src/assets/cuisines/pizza.webp',
+    crepes:
+      'src/assets/cuisines/crepes.webp',
+    desserts:
+      'src/assets/cuisines/desserts.webp',
+    'snacks-chocolate':
+      'assets/images/supermarket-categories/snacks-chocolate.webp',
+    notebooks:
+      'assets/images/bookstore-categories/notebooks.webp',
+    'face-care':
+      'assets/images/personal-care-categories/face-care.webp',
+  };
 
 const HOME_SEARCH_PLACEHOLDER_ROTATION_MS = 1800;
 
@@ -269,10 +296,11 @@ function IosDeliveryBikeHero() {
         }}
       >
         <View style={styles.deliveryBikeShadow} />
-        <Image
+        <DatabaseFirstImage
           accessibilityIgnoresInvertColors
+          artworkKey="src/assets/images/navienty-now-delivery-bike-transparent.png"
+          fallbackSource={navientyDeliveryBike}
           resizeMode="contain"
-          source={navientyDeliveryBike}
           style={styles.deliveryBikeImage}
         />
       </Animated.View>
@@ -465,12 +493,12 @@ function AndroidDeliveryBikeHero() {
         >
           <View style={styles.deliveryBikeShadow} />
 
-          <ExpoImage
+          <DatabaseFirstImage
             accessibilityLabel="Navienty delivery motorcycle"
-            contentFit="contain"
-            source={navientyDeliveryBike}
+            artworkKey="src/assets/images/navienty-now-delivery-bike-transparent.png"
+            fallbackSource={navientyDeliveryBike}
+            resizeMode="contain"
             style={styles.deliveryBikeImage}
-            transition={0}
           />
         </Animated.View>
       </Animated.View>
@@ -493,10 +521,11 @@ function HeaderTimeMoods() {
       pointerEvents="none"
       style={styles.headerTimeMoodLayer}
     >
-      <Image
+      <DatabaseFirstImage
         accessibilityIgnoresInvertColors
+        artworkKey="src/assets/images/navienty-now-24h-mood-background.png"
+        fallbackSource={navienty24hMoodBackground}
         resizeMode="stretch"
-        source={navienty24hMoodBackground}
         style={styles.headerTimeMoodBackground}
       />
 
@@ -1470,10 +1499,15 @@ export function HomeDiscoveryRail({
               onPressItem(item);
             }}
           >
-            <Image
+            <DatabaseFirstImage
               accessibilityIgnoresInvertColors
+              artworkKey={
+                HOME_DISCOVERY_ARTWORK_KEYS[
+                  item.key
+                ] ?? ''
+              }
+              fallbackSource={item.image}
               resizeMode="cover"
-              source={item.image}
               style={
                 styles.discoveryImage
               }

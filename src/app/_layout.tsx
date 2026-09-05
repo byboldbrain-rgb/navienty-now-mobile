@@ -31,6 +31,7 @@ import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
 import getAppBootstrap from '../services/bootstrap-service';
+import { useDatabaseFirstArtworkSource } from '../hooks/use-database-first-artwork';
 import {
   getAppLaunchGate,
   type AppLaunchGateResult,
@@ -143,6 +144,28 @@ function AppBootstrapScreen({
   const { width: windowWidth } =
     useWindowDimensions();
 
+  const fullLogoArtwork =
+    useDatabaseFirstArtworkSource(
+      'src/assets/images/navienty-now-bootstrap-full.png',
+      bootstrapFullLogo,
+      {
+        timeoutMs: 2500,
+      },
+    );
+
+  const dotArtwork =
+    useDatabaseFirstArtworkSource(
+      'src/assets/images/navienty-now-bootstrap-dot.png',
+      bootstrapDot,
+      {
+        timeoutMs: 2500,
+      },
+    );
+
+  const bootstrapArtworkResolved =
+    fullLogoArtwork.isResolved &&
+    dotArtwork.isResolved;
+
   const nativeSplashHiddenRef = useRef(false);
   const exitStartedRef = useRef(false);
   const finishedRef = useRef(false);
@@ -204,11 +227,21 @@ function AppBootstrapScreen({
   }, [onFinished]);
 
   useEffect(() => {
+    if (!bootstrapArtworkResolved) {
+      return;
+    }
+
     hideNativeSplash();
-  }, [hideNativeSplash]);
+  }, [
+    bootstrapArtworkResolved,
+    hideNativeSplash,
+  ]);
 
   useEffect(() => {
-    if (!isReady) {
+    if (
+      !isReady ||
+      !bootstrapArtworkResolved
+    ) {
       return;
     }
 
@@ -220,9 +253,17 @@ function AppBootstrapScreen({
     return () => {
       clearTimeout(fallbackTimer);
     };
-  }, [finishBootstrap, isReady]);
+  }, [
+    bootstrapArtworkResolved,
+    finishBootstrap,
+    isReady,
+  ]);
 
   useEffect(() => {
+    if (!bootstrapArtworkResolved) {
+      return;
+    }
+
     revealCoverTranslateX.setValue(0);
 
     const introAnimation = Animated.sequence([
@@ -277,6 +318,7 @@ function AppBootstrapScreen({
   }, [
     dotOpacity,
     dotScale,
+    bootstrapArtworkResolved,
     dotTranslateY,
     logoWidth,
     revealCoverTranslateX,
@@ -351,7 +393,13 @@ function AppBootstrapScreen({
           <Image
             accessibilityIgnoresInvertColors
             resizeMode="contain"
-            source={bootstrapFullLogo}
+            source={
+              fullLogoArtwork.source ??
+              bootstrapFullLogo
+            }
+            onError={
+              fullLogoArtwork.onError
+            }
             style={{
               height: logoHeight,
               width: logoWidth,
@@ -379,7 +427,13 @@ function AppBootstrapScreen({
         <Animated.Image
           accessibilityIgnoresInvertColors
           resizeMode="contain"
-          source={bootstrapDot}
+          source={
+            dotArtwork.source ??
+            bootstrapDot
+          }
+          onError={
+            dotArtwork.onError
+          }
           style={[
             styles.dotLayer,
             {
