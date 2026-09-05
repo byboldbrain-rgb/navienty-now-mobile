@@ -1,4 +1,7 @@
-import { useRouter } from 'expo-router';
+import {
+  useLocalSearchParams,
+  useRouter,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
   useEffect,
@@ -18,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import PrintingJobBuilder from '../../components/bookstore/printing-job-builder';
 import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
@@ -49,6 +53,9 @@ import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 const CATEGORY_COLUMNS_PER_ROW = 4;
 const CATEGORY_HORIZONTAL_PADDING = 16;
 const CATEGORY_COLUMN_GAP = 7;
+
+const PRINTING_SERVICE_SLUG =
+  'printing-paper-printing-service';
 
 /**
  * Local bookstore category artwork.
@@ -389,6 +396,99 @@ function normalizeCategoryValue(
       '-',
     )
     .replace(/^-+|-+$/g, '');
+}
+
+function getSingleRouteParam(
+  value:
+    | string
+    | string[]
+    | undefined,
+) {
+  return Array.isArray(value)
+    ? value[0]
+    : value;
+}
+
+function isPrintingCategoryItem(
+  item: CategoryDisplayItem,
+) {
+  const values = [
+    item.key,
+    item.slug,
+    item.label,
+    item.section?.slug,
+    item.section?.name,
+    item.section?.nameEn,
+  ]
+    .filter(
+      (
+        value,
+      ): value is string =>
+        Boolean(value),
+    )
+    .map(normalizeCategoryValue);
+
+  return values.some(
+    (value) =>
+      value ===
+        normalizeCategoryValue(
+          'printing-paper',
+        ) ||
+      value ===
+        normalizeCategoryValue(
+          PRINTING_SERVICE_SLUG,
+        ) ||
+      value ===
+        normalizeCategoryValue(
+          'طباعة أوراق',
+        ),
+  );
+}
+
+function findPrintingServiceSection(
+  catalog: StoreCatalog,
+  rootSection:
+    | CatalogSection
+    | null,
+) {
+  const normalizedPrintingSlug =
+    normalizeCategoryValue(
+      PRINTING_SERVICE_SLUG,
+    );
+
+  const candidates = [
+    ...(rootSection?.children ?? []),
+    ...catalog.sections,
+    ...catalog.categoryTree,
+  ];
+
+  const exactChild =
+    candidates.find(
+      (section) =>
+        normalizeCategoryValue(
+          section.slug,
+        ) ===
+          normalizedPrintingSlug &&
+        (
+          !rootSection ||
+          section.parentId ===
+            rootSection.id
+        ),
+    );
+
+  if (exactChild) {
+    return exactChild;
+  }
+
+  return (
+    candidates.find(
+      (section) =>
+        normalizeCategoryValue(
+          section.slug,
+        ) ===
+        normalizedPrintingSlug,
+    ) ?? null
+  );
 }
 
 function findBookstoreCategorySection(
@@ -1680,6 +1780,26 @@ function FeaturedProductCard({
 export default function BookstoreScreen() {
   const router = useRouter();
 
+  const routeParams =
+    useLocalSearchParams<{
+      printingSectionId?:
+        | string
+        | string[];
+      storeId?:
+        | string
+        | string[];
+    }>();
+
+  const requestedPrintingSectionId =
+    getSingleRouteParam(
+      routeParams.printingSectionId,
+    );
+
+  const requestedStoreId =
+    getSingleRouteParam(
+      routeParams.storeId,
+    );
+
   const {
     isScrollingDown: isCartDockScrollingDown,
     onScroll: handleCartDockScroll,
@@ -1763,14 +1883,25 @@ export default function BookstoreScreen() {
         );
       }
 
+      const requestedBookstore =
+        requestedStoreId
+          ? bookstoreStores.find(
+              (store) =>
+                store.id ===
+                requestedStoreId,
+            ) ?? null
+          : null;
+
       const bookstore =
+        requestedBookstore ??
         bookstoreStores.find(
           (store) =>
             store.isFeatured &&
             !store.isManuallyClosed,
         ) ??
         bookstoreStores.find(
-          (store) => !store.isManuallyClosed,
+          (store) =>
+            !store.isManuallyClosed,
         ) ??
         bookstoreStores[0];
 
@@ -1832,7 +1963,10 @@ export default function BookstoreScreen() {
 
   useEffect(() => {
     void loadBookstore();
-  }, [savedServiceAreaId]);
+  }, [
+    savedServiceAreaId,
+    requestedStoreId,
+  ]);
 
   const categories = useMemo<
     CategoryDisplayItem[]
@@ -1984,6 +2118,42 @@ export default function BookstoreScreen() {
       ),
     [categories],
   );
+
+  const activePrintingSection =
+    useMemo(() => {
+      if (
+        !catalog ||
+        !requestedPrintingSectionId
+      ) {
+        return null;
+      }
+
+      return (
+        catalog.sections.find(
+          (section) =>
+            section.id ===
+            requestedPrintingSectionId,
+        ) ??
+        catalog.categoryTree.find(
+          (section) =>
+            section.id ===
+            requestedPrintingSectionId,
+        ) ??
+        catalog.sections.find(
+          (section) =>
+            normalizeCategoryValue(
+              section.slug,
+            ) ===
+            normalizeCategoryValue(
+              PRINTING_SERVICE_SLUG,
+            ),
+        ) ??
+        null
+      );
+    }, [
+      catalog,
+      requestedPrintingSectionId,
+    ]);
 
   const catalogProductsById = useMemo(() => {
     const productsById =
@@ -2158,6 +2328,32 @@ export default function BookstoreScreen() {
   function openCategory(
     item: CategoryDisplayItem,
   ) {
+    if (
+      isPrintingCategoryItem(
+        item,
+      )
+    ) {
+      const printingSection =
+        findPrintingServiceSection(
+          catalog,
+          item.section,
+        );
+
+      if (printingSection) {
+        router.push({
+          pathname:
+            '/category/bookstore',
+          params: {
+            storeId:
+              currentStore.id,
+            printingSectionId:
+              printingSection.id,
+          },
+        });
+        return;
+      }
+    }
+
     if (item.isOffers) {
       router.push({
         pathname:
@@ -2319,6 +2515,23 @@ export default function BookstoreScreen() {
           }
         />
       </SafeAreaView>
+    );
+  }
+
+  if (
+    requestedPrintingSectionId &&
+    activePrintingSection
+  ) {
+    return (
+      <PrintingJobBuilder
+        catalog={catalog}
+        section={
+          activePrintingSection
+        }
+        currencyCode={
+          currencyCode
+        }
+      />
     );
   }
 

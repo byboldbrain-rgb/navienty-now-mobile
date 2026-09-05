@@ -1,18 +1,17 @@
-import { Ionicons } from '@expo/vector-icons';
 import {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
 } from 'react';
 import {
-    Animated,
-    type NativeScrollEvent,
-    type NativeSyntheticEvent,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,12 +19,15 @@ const DEFAULT_ACCENT = '#00B14F';
 const DEFAULT_ACCENT_DARK = '#009245';
 const SCROLL_DIRECTION_THRESHOLD = 1.5;
 const TOP_REVEAL_OFFSET = 8;
-const FULL_BUTTON_BLOCK_HEIGHT = 67;
-const HIDDEN_TRANSLATE_Y = 170;
+const HIDDEN_TRANSLATE_Y = 120;
 
 type CategoryCartDockProps = {
   itemCount: number;
   subtotal: number;
+  /**
+   * Kept temporarily for backward compatibility with existing callers.
+   * The Cart dock no longer displays or enforces a store minimum order.
+   */
   minimumOrder: number;
   currencyCode?: string | null;
   accentColor?: string;
@@ -62,9 +64,9 @@ function formatAmount(
  * Shared vertical-scroll direction detector for every shopping screen.
  *
  * Rules:
- * - scrolling down => compact/hide Cart dock depending on minimum order.
- * - scrolling up => reveal the full Cart dock.
- * - when the user returns to the very top => always reveal the full Cart dock.
+ * - scrolling down => hide the Cart dock.
+ * - scrolling up => reveal the Cart dock.
+ * - when the user returns to the very top => always reveal the Cart dock.
  */
 export function useCartDockScrollBehavior() {
   const lastOffsetYRef = useRef(0);
@@ -118,7 +120,6 @@ export function useCartDockScrollBehavior() {
 export default function CategoryCartDock({
   itemCount,
   subtotal,
-  minimumOrder,
   currencyCode = 'EGP',
   accentColor = DEFAULT_ACCENT,
   accentDarkColor = DEFAULT_ACCENT_DARK,
@@ -131,72 +132,26 @@ export default function CategoryCartDock({
     new Animated.Value(1),
   ).current;
 
-  const buttonAnimation = useRef(
-    new Animated.Value(1),
-  ).current;
-
   const normalizedSubtotal = Math.max(
     Number(subtotal ?? 0),
     0,
   );
 
-  const normalizedMinimumOrder = Math.max(
-    Number(minimumOrder ?? 0),
-    0,
-  );
-
-  const amountRemaining = Math.max(
-    normalizedMinimumOrder - normalizedSubtotal,
-    0,
-  );
-
-  const minimumReached =
-    normalizedMinimumOrder <= 0 ||
-    amountRemaining <= 0;
-
-  const orderProgress =
-    normalizedMinimumOrder <= 0
-      ? itemCount > 0
-        ? 1
-        : 0
-      : Math.min(
-          normalizedSubtotal /
-            normalizedMinimumOrder,
-          1,
-        );
-
   const shouldHideDock =
     itemCount > 0 &&
-    isScrollingDown &&
-    minimumReached;
-
-  const shouldShowFullDock =
-    itemCount > 0 &&
-    !isScrollingDown;
+    isScrollingDown;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(
-        visibilityAnimation,
-        {
-          toValue: shouldHideDock ? 0 : 1,
-          duration: 175,
-          useNativeDriver: true,
-        },
-      ),
-      Animated.timing(
-        buttonAnimation,
-        {
-          toValue: shouldShowFullDock ? 1 : 0,
-          duration: 175,
-          useNativeDriver: false,
-        },
-      ),
-    ]).start();
+    Animated.timing(
+      visibilityAnimation,
+      {
+        toValue: shouldHideDock ? 0 : 1,
+        duration: 175,
+        useNativeDriver: true,
+      },
+    ).start();
   }, [
-    buttonAnimation,
     shouldHideDock,
-    shouldShowFullDock,
     visibilityAnimation,
   ]);
 
@@ -204,23 +159,10 @@ export default function CategoryCartDock({
     return null;
   }
 
-  const message = minimumReached
-    ? 'طلبك جاهز!'
-    : `أضف منتجات بقيمة ${formatAmount(
-        amountRemaining,
-        currencyCode,
-      )} إلى طلبك!`;
-
   const dockTranslateY =
     visibilityAnimation.interpolate({
       inputRange: [0, 1],
       outputRange: [HIDDEN_TRANSLATE_Y, 0],
-    });
-
-  const buttonBlockHeight =
-    buttonAnimation.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, FULL_BUTTON_BLOCK_HEIGHT],
     });
 
   return (
@@ -244,90 +186,49 @@ export default function CategoryCartDock({
         },
       ]}
     >
-      <View style={styles.messageRow}>
-        <Ionicons
-          name="bag-handle"
-          size={25}
-          color="#242424"
-        />
-
-        <Text
-          style={styles.messageText}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.82}
-        >
-          {message}
-        </Text>
-      </View>
-
-      <View style={styles.progressTrack}>
-        <View
-          style={[
-            styles.progressValue,
-            {
-              width: `${orderProgress * 100}%`,
-            },
-          ]}
-        />
-      </View>
-
-      <Animated.View
-        pointerEvents={
-          shouldShowFullDock ? 'auto' : 'none'
-        }
-        style={[
-          styles.buttonClip,
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`عرض السلة، ${itemCount} منتجات، الإجمالي ${formatAmount(
+          normalizedSubtotal,
+          currencyCode,
+        )}`}
+        style={({ pressed }) => [
+          styles.basketButton,
           {
-            height: buttonBlockHeight,
-            opacity: buttonAnimation,
+            backgroundColor: accentColor,
           },
+          pressed && styles.basketButtonPressed,
         ]}
+        onPress={onPress}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`عرض السلة، ${itemCount} منتجات، الإجمالي ${formatAmount(
+        <Text
+          style={styles.basketTotal}
+          numberOfLines={1}
+        >
+          {formatAmount(
             normalizedSubtotal,
             currencyCode,
-          )}`}
-          style={({ pressed }) => [
-            styles.basketButton,
+          )}
+        </Text>
+
+        <Text style={styles.basketButtonTitle}>
+          عرض السلة
+        </Text>
+
+        <View
+          style={[
+            styles.basketCount,
             {
-              backgroundColor: accentColor,
+              backgroundColor:
+                accentDarkColor,
             },
-            pressed && styles.basketButtonPressed,
           ]}
-          onPress={onPress}
         >
-          <Text
-            style={styles.basketTotal}
-            numberOfLines={1}
-          >
-            {formatAmount(
-              normalizedSubtotal,
-              currencyCode,
-            )}
+          <Text style={styles.basketCountText}>
+            {itemCount}
           </Text>
-
-          <Text style={styles.basketButtonTitle}>
-            عرض السلة
-          </Text>
-
-          <View
-            style={[
-              styles.basketCount,
-              {
-                backgroundColor:
-                  accentDarkColor,
-              },
-            ]}
-          >
-            <Text style={styles.basketCountText}>
-              {itemCount}
-            </Text>
-          </View>
-        </Pressable>
-      </Animated.View>
+        </View>
+      </Pressable>
     </Animated.View>
   );
 }
@@ -354,50 +255,12 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
 
-  messageRow: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    minHeight: 28,
-  },
-
-  messageText: {
-    color: '#242424',
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 21,
-    marginRight: 8,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  progressTrack: {
-    backgroundColor: '#E7E7E7',
-    borderRadius: 999,
-    height: 5,
-    marginTop: 10,
-    overflow: 'hidden',
-    width: '100%',
-  },
-
-  progressValue: {
-    backgroundColor: '#202020',
-    borderRadius: 999,
-    height: '100%',
-  },
-
-  buttonClip: {
-    overflow: 'hidden',
-    width: '100%',
-  },
-
   basketButton: {
     alignItems: 'center',
     borderRadius: 999,
     flexDirection: 'row',
     height: 56,
     justifyContent: 'space-between',
-    marginTop: 11,
     paddingHorizontal: 8,
   },
 

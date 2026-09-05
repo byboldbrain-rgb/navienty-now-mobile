@@ -1,84 +1,84 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-    Stack,
-    useLocalSearchParams,
-    useRouter,
+  Stack,
+  useLocalSearchParams,
+  useRouter,
 } from 'expo-router';
 import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Easing,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-    useExpirationStatus,
+  useExpirationStatus,
 } from '../hooks/use-expiration-status';
 
 import Svg, {
-    Circle,
-    Defs,
-    G,
-    Path,
-    Stop,
-    LinearGradient as SvgLinearGradient,
+  Circle,
+  Defs,
+  G,
+  Path,
+  Stop,
+  LinearGradient as SvgLinearGradient,
 } from 'react-native-svg';
 
 import {
-    supabase
-} from '../lib/supabase';
-import {
-    calculatePaymentProcessingFee,
+  calculatePaymentProcessingFee,
 } from '../domain/payment-method';
+import {
+  supabase
+} from '../lib/supabase';
 import getAppBootstrap, {
-    type PaymentMethod,
+  type PaymentMethod,
 } from '../services/bootstrap-service';
 import {
-    type CatalogProduct,
-    type StoreCatalog,
-    getStoreCatalog,
+  type CatalogProduct,
+  type StoreCatalog,
+  getStoreCatalog,
 } from '../services/catalog-service';
 
 import {
-    ensureAppSession,
+  ensureAppSession,
 } from '../services/anonymous-auth-service';
 import {
-    validateVoucher,
+  validateVoucher,
 } from '../services/voucher-service';
 
 import ServicePackageCart from '../components/service/service-package-cart';
 import {
-    type CartItem,
-    isPrintJobCartItem,
-    useCartStore,
+  type CartItem,
+  isPrintJobCartItem,
+  useCartStore,
 } from '../store/cart-store';
 import {
-    useCustomerStore,
+  useCustomerStore,
 } from '../store/customer-store';
 import {
-    useOrderNotesStore,
+  useOrderNotesStore,
 } from '../store/order-notes-store';
 import {
-    useVoucherStore,
+  useVoucherStore,
 } from '../store/voucher-store';
 import {
-    toPrintJobRpcPayload,
+  toPrintJobRpcPayload,
 } from '../types/printing';
 
 const BRAND_GREEN = '#00B14F';
@@ -2056,17 +2056,6 @@ function StoreCartScreen() {
     items,
   ]);
 
-  const remainingForMinimum = Math.max(
-    Number(minimumOrder ?? 0) -
-      Number(subtotal ?? 0),
-    0,
-  );
-
-  const minimumReached =
-    items.length > 0 &&
-    Number(subtotal ?? 0) >=
-      Number(minimumOrder ?? 0);
-
   function formatPrice(
     value:
       | number
@@ -2840,10 +2829,7 @@ function StoreCartScreen() {
   }
 
   function handleCheckout() {
-    if (
-      !minimumReached ||
-      !storeId
-    ) {
+    if (!storeId) {
       return;
     }
 
@@ -4348,31 +4334,6 @@ function StoreCartScreen() {
           </View>
         </View>
 
-        {!minimumReached &&
-          Number(minimumOrder) > 0 && (
-            <View
-              style={styles.minimumNotice}
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={15}
-                color="#8a6519"
-              />
-
-              <Text
-                style={
-                  styles.minimumNoticeText
-                }
-              >
-                متبقي{' '}
-                {formatPrice(
-                  remainingForMinimum,
-                )}{' '}
-                للوصول إلى الحد الأدنى
-                للطلب
-              </Text>
-            </View>
-          )}
       </ScrollView>
 
       {/* BOTTOM CHECKOUT */}
@@ -4408,32 +4369,18 @@ function StoreCartScreen() {
           </Pressable>
 
           <Pressable
-            disabled={!minimumReached}
             style={({ pressed }) => [
               styles.checkoutButton,
 
-              !minimumReached &&
-                styles.checkoutButtonDisabled,
-
               pressed &&
-                minimumReached &&
                 styles.bottomButtonPressed,
             ]}
             onPress={handleCheckout}
           >
             <Text
-              style={[
-                styles.checkoutButtonText,
-
-                !minimumReached &&
-                  styles.checkoutButtonTextDisabled,
-              ]}
+              style={styles.checkoutButtonText}
             >
-              {minimumReached
-                ? 'تابع للدفع'
-                : `متبقي ${Math.ceil(
-                    remainingForMinimum,
-                  )}`}
+              تابع للدفع
             </Text>
           </Pressable>
         </View>
@@ -6929,24 +6876,6 @@ const styles = StyleSheet.create({
     writingDirection: 'ltr',
   },
 
-  minimumNotice: {
-    alignItems: 'center',
-    backgroundColor: '#fff8e7',
-    borderRadius: 11,
-    flexDirection: 'row',
-    marginHorizontal: 18,
-    marginTop: 11,
-    padding: 9,
-  },
-
-  minimumNoticeText: {
-    color: '#82651f',
-    flex: 1,
-    fontSize: 10.5,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-
   /* ---------------------------------- */
   /* BOTTOM BAR                         */
   /* ---------------------------------- */
@@ -7005,18 +6934,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  checkoutButtonDisabled: {
-    backgroundColor: '#dddddd',
-  },
-
   checkoutButtonText: {
     color: '#ffffff',
     fontSize: 14.5,
     fontWeight: '800',
-  },
-
-  checkoutButtonTextDisabled: {
-    color: '#8b8b8b',
   },
 
   bottomButtonPressed: {

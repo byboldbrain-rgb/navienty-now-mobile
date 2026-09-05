@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import {
   useEffect,
   useMemo,
@@ -33,6 +34,10 @@ import {
   isPrintJobCartItem,
   useCartStore,
 } from '../../store/cart-store';
+import {
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
+} from '../../theme/navienty-now-theme';
 import type {
   PrintingColorOption,
   PrintingServiceConfig,
@@ -44,6 +49,11 @@ type PrintingJobBuilderProps = {
   section: CatalogSection;
   currencyCode: string;
   editLineId?: string | null;
+};
+
+type PrintingOptionBase = {
+  id: string;
+  label: string;
 };
 
 function digitsOnly(
@@ -211,6 +221,11 @@ export default function PrintingJobBuilder({
     copyCount,
     setCopyCount,
   ] = useState(1);
+
+  const [
+    isPageInputFocused,
+    setIsPageInputFocused,
+  ] = useState(false);
 
   const [
     isSubmitting,
@@ -549,14 +564,34 @@ export default function PrintingJobBuilder({
 
   if (isLoading) {
     return (
-      <View style={styles.stateScreen}>
-        <ActivityIndicator
-          size="large"
-          color="#00B14F"
-        />
+      <View
+        style={[
+          styles.stateScreen,
+          {
+            paddingTop:
+              insets.top,
+            paddingBottom:
+              insets.bottom,
+          },
+        ]}
+      >
+        <StatusBar style="dark" />
+
+        <View style={styles.loadingIcon}>
+          <ActivityIndicator
+            size="small"
+            color={
+              NAVIENTY_NOW_COLORS.primary
+            }
+          />
+        </View>
+
+        <Text style={styles.stateTitle}>
+          جاري تجهيز خدمة الطباعة
+        </Text>
 
         <Text style={styles.stateDescription}>
-          جاري تجهيز خدمة الطباعة
+          بنجهز لك الخيارات والأسعار المتاحة.
         </Text>
       </View>
     );
@@ -564,12 +599,26 @@ export default function PrintingJobBuilder({
 
   if (!config || loadError) {
     return (
-      <View style={styles.stateScreen}>
+      <View
+        style={[
+          styles.stateScreen,
+          {
+            paddingTop:
+              insets.top,
+            paddingBottom:
+              insets.bottom,
+          },
+        ]}
+      >
+        <StatusBar style="dark" />
+
         <View style={styles.stateIcon}>
           <Ionicons
             name="print-outline"
             size={30}
-            color="#00B14F"
+            color={
+              NAVIENTY_NOW_COLORS.primary
+            }
           />
         </View>
 
@@ -583,7 +632,12 @@ export default function PrintingJobBuilder({
         </Text>
 
         <Pressable
-          style={styles.retryButton}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.retryButton,
+            pressed &&
+              styles.primaryPressed,
+          ]}
           onPress={() => {
             void loadConfig();
           }}
@@ -594,7 +648,12 @@ export default function PrintingJobBuilder({
         </Pressable>
 
         <Pressable
-          style={styles.stateBackButton}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.stateBackButton,
+            pressed &&
+              styles.buttonPressed,
+          ]}
           onPress={() => router.back()}
         >
           <Text style={styles.stateBackText}>
@@ -623,6 +682,8 @@ export default function PrintingJobBuilder({
           : undefined
       }
     >
+      <StatusBar style="dark" />
+
       <View
         style={[
           styles.header,
@@ -630,7 +691,10 @@ export default function PrintingJobBuilder({
             paddingTop:
               Math.max(
                 insets.top,
-                6,
+                Platform.OS ===
+                  'android'
+                  ? 24
+                  : 6,
               ),
           },
         ]}
@@ -640,10 +704,11 @@ export default function PrintingJobBuilder({
             config.uiCopy
               .backAccessibilityLabel
           }
+          accessibilityRole="button"
           style={({ pressed }) => [
             styles.headerButton,
             pressed &&
-              styles.buttonPressed,
+              styles.headerButtonPressed,
           ]}
           onPress={() =>
             router.back()
@@ -651,8 +716,10 @@ export default function PrintingJobBuilder({
         >
           <Ionicons
             name="arrow-back"
-            size={21}
-            color="#202020"
+            size={22}
+            color={
+              NAVIENTY_NOW_COLORS.text
+            }
           />
         </Pressable>
 
@@ -668,98 +735,21 @@ export default function PrintingJobBuilder({
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingBottom:
-              Math.max(
-                insets.bottom,
-                12,
-              ) + 118,
-          },
-        ]}
+        contentContainerStyle={
+          styles.scrollContent
+        }
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={[
-            styles.heroCard,
-            {
-              backgroundColor:
-                config.heroBackgroundColor,
-            },
-          ]}
-        >
-          <View style={styles.heroTopRow}>
-            <View
-              style={[
-                styles.heroIcon,
-                {
-                  backgroundColor:
-                    config.accentColor,
-                },
-              ]}
-            >
-              <OptionIcon
-                name={config.uiIcons.hero}
-                fallback="print-outline"
-                size={28}
-                color="#FFFFFF"
-              />
-            </View>
-
-            <View style={styles.heroBadge}>
-              <OptionIcon
-                name={
-                  config.uiIcons
-                    .pageSizeBadge
-                }
-                color={config.accentColor}
-                size={15}
-              />
-
-              <Text
-                style={[
-                  styles.heroBadgeText,
-                  {
-                    color:
-                      config.accentDarkColor,
-                  },
-                ]}
-              >
-                {config.pageSizeLabel}
-              </Text>
-            </View>
-          </View>
-
-          <Text
-            style={[
-              styles.eyebrow,
-              {
-                color:
-                  config.accentDarkColor,
-              },
-            ]}
-          >
-            {config.eyebrow}
-          </Text>
-
-          <Text style={styles.heroTitle}>
-            {config.title}
-          </Text>
-
-          <Text style={styles.heroSubtitle}>
-            {config.subtitle}
-          </Text>
-        </View>
-
         {catalog.store.isManuallyClosed ? (
           <View style={styles.closedCard}>
-            <Ionicons
-              name="time-outline"
-              size={19}
-              color="#9A6516"
-            />
+            <View style={styles.closedIcon}>
+              <Ionicons
+                name="time-outline"
+                size={18}
+                color="#8A5A12"
+              />
+            </View>
 
             <Text style={styles.closedText}>
               {catalog.store.manualClosedNote ??
@@ -769,13 +759,12 @@ export default function PrintingJobBuilder({
         ) : null}
 
         <OptionSection
-          title={
-            config.colorSectionTitle
-          }
+          title="نوع الطباعة"
           options={config.colorOptions}
           selectedId={selectedColorId}
-          accentColor={config.accentColor}
-          onSelect={(option) => {
+          onSelect={(
+            option: PrintingColorOption,
+          ) => {
             setSelectedColorId(
               option.id,
             );
@@ -783,14 +772,13 @@ export default function PrintingJobBuilder({
           }}
         />
 
-        <SideOptionSection
-          title={
-            config.sidesSectionTitle
-          }
+        <OptionSection
+          title="شكل الطباعة"
           options={config.sideOptions}
           selectedId={selectedSideId}
-          accentColor={config.accentColor}
-          onSelect={(option) => {
+          onSelect={(
+            option: PrintingSideOption,
+          ) => {
             setSelectedSideId(
               option.id,
             );
@@ -798,26 +786,20 @@ export default function PrintingJobBuilder({
           }}
         />
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {config.pageCountLabel}
-          </Text>
-
-          <Text style={styles.sectionHelper}>
-            {config.pageCountHelper}
-          </Text>
+        <View style={styles.sectionCard}>
+          <SectionHeading
+            title="عدد الصفحات"
+          />
 
           <View
             style={[
               styles.pageInputCard,
+              isPageInputFocused &&
+                styles.pageInputCardFocused,
               !!pageCountError &&
                 styles.inputCardError,
             ]}
           >
-            <Text style={styles.pageInputSuffix}>
-              {config.uiCopy.pageUnitLabel}
-            </Text>
-
             <TextInput
               value={pageCountText}
               keyboardType="number-pad"
@@ -825,10 +807,22 @@ export default function PrintingJobBuilder({
               placeholder={String(
                 config.defaultPageCount,
               )}
-              placeholderTextColor="#B0B0B0"
+              placeholderTextColor={
+                NAVIENTY_NOW_COLORS.textMuted
+              }
               selectTextOnFocus
               style={styles.pageInput}
               textAlign="right"
+              onBlur={() =>
+                setIsPageInputFocused(
+                  false,
+                )
+              }
+              onFocus={() =>
+                setIsPageInputFocused(
+                  true,
+                )
+              }
               onChangeText={(value) => {
                 setPageCountText(
                   digitsOnly(value),
@@ -836,12 +830,26 @@ export default function PrintingJobBuilder({
                 setSubmitError(null);
               }}
             />
+
+            <Text style={styles.pageInputSuffix}>
+              {config.uiCopy.pageUnitLabel}
+            </Text>
           </View>
 
           {pageCountError ? (
-            <Text style={styles.errorText}>
-              {pageCountError}
-            </Text>
+            <View style={styles.inlineErrorRow}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={15}
+                color={
+                  NAVIENTY_NOW_COLORS.error
+                }
+              />
+
+              <Text style={styles.errorText}>
+                {pageCountError}
+              </Text>
+            </View>
           ) : null}
 
           {visiblePresets.length > 0 ? (
@@ -855,14 +863,17 @@ export default function PrintingJobBuilder({
                   return (
                     <Pressable
                       key={preset}
-                      style={[
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected:
+                          isSelected,
+                      }}
+                      style={({ pressed }) => [
                         styles.presetChip,
-                        isSelected && {
-                          backgroundColor:
-                            config.accentColor,
-                          borderColor:
-                            config.accentColor,
-                        },
+                        isSelected &&
+                          styles.presetChipSelected,
+                        pressed &&
+                          styles.buttonPressed,
                       ]}
                       onPress={() =>
                         selectPreset(
@@ -887,200 +898,155 @@ export default function PrintingJobBuilder({
           ) : null}
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.copyHeader}>
-            <View
-              style={styles.copyStepper}
-            >
-              <Pressable
-                accessibilityLabel={
-                  config.uiCopy
-                    .increaseCopiesAccessibilityLabel
-                }
-                disabled={
-                  copyCount >=
-                  config.maximumCopyCount
-                }
-                style={({ pressed }) => [
-                  styles.stepperButton,
-                  {
-                    borderColor:
-                      config.accentColor,
-                  },
-                  pressed &&
-                    styles.buttonPressed,
-                  copyCount >=
-                    config.maximumCopyCount &&
-                    styles.stepperDisabled,
-                ]}
-                onPress={() =>
-                  changeCopyCount(
-                    copyCount + 1,
-                  )
-                }
-              >
-                <Ionicons
-                  name="add"
-                  size={20}
-                  color={config.accentColor}
-                />
-              </Pressable>
+        <View style={styles.sectionCard}>
+          <SectionHeading
+            title={config.copyCountLabel}
+          />
 
+          <View style={styles.copyStepper}>
+            <Pressable
+              accessibilityLabel={
+                config.uiCopy
+                  .increaseCopiesAccessibilityLabel
+              }
+              accessibilityRole="button"
+              disabled={
+                copyCount >=
+                config.maximumCopyCount
+              }
+              style={({ pressed }) => [
+                styles.stepperButton,
+                pressed &&
+                  copyCount <
+                    config.maximumCopyCount &&
+                  styles.stepperButtonPressed,
+                copyCount >=
+                  config.maximumCopyCount &&
+                  styles.stepperDisabled,
+              ]}
+              onPress={() =>
+                changeCopyCount(
+                  copyCount + 1,
+                )
+              }
+            >
+              <Ionicons
+                name="add"
+                size={23}
+                color={
+                  NAVIENTY_NOW_COLORS.primary
+                }
+              />
+            </Pressable>
+
+            <View style={styles.copyValueWrap}>
               <Text style={styles.copyValue}>
                 {copyCount}
               </Text>
+            </View>
 
-              <Pressable
-                accessibilityLabel={
-                  config.uiCopy
-                    .decreaseCopiesAccessibilityLabel
-                }
-                disabled={
-                  copyCount <=
-                  config.minimumCopyCount
-                }
-                style={({ pressed }) => [
-                  styles.stepperButton,
-                  {
-                    borderColor:
-                      config.accentColor,
-                  },
-                  pressed &&
-                    styles.buttonPressed,
-                  copyCount <=
+            <Pressable
+              accessibilityLabel={
+                config.uiCopy
+                  .decreaseCopiesAccessibilityLabel
+              }
+              accessibilityRole="button"
+              disabled={
+                copyCount <=
+                config.minimumCopyCount
+              }
+              style={({ pressed }) => [
+                styles.stepperButton,
+                pressed &&
+                  copyCount >
                     config.minimumCopyCount &&
-                    styles.stepperDisabled,
-                ]}
-                onPress={() =>
-                  changeCopyCount(
-                    copyCount - 1,
-                  )
+                  styles.stepperButtonPressed,
+                copyCount <=
+                  config.minimumCopyCount &&
+                  styles.stepperDisabled,
+              ]}
+              onPress={() =>
+                changeCopyCount(
+                  copyCount - 1,
+                )
+              }
+            >
+              <Ionicons
+                name="remove"
+                size={23}
+                color={
+                  NAVIENTY_NOW_COLORS.primary
                 }
-              >
-                <Ionicons
-                  name="remove"
-                  size={20}
-                  color={config.accentColor}
-                />
-              </Pressable>
-            </View>
-
-            <View style={styles.copyTitleWrap}>
-              <Text style={styles.sectionTitle}>
-                {config.copyCountLabel}
-              </Text>
-
-              <Text style={styles.sectionHelper}>
-                {config.copyCountHelper}
-              </Text>
-            </View>
+              />
+            </Pressable>
           </View>
         </View>
 
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
-            <View
-              style={[
-                styles.summaryIcon,
-                {
-                  backgroundColor:
-                    config.heroBackgroundColor,
-                },
-              ]}
-            >
-              <OptionIcon
-                name={config.uiIcons.summary}
-                fallback="receipt-outline"
-                size={20}
-                color={config.accentColor}
-              />
-            </View>
-
             <Text style={styles.summaryTitle}>
               {config.summaryTitle}
             </Text>
           </View>
 
-          <SummaryRow
-            label={
-              config.sheetsPerCopyLabel
-            }
-            value={String(
-              localQuote?.sheetsPerCopy ??
-                0,
-            )}
-          />
+          <View style={styles.summaryRows}>
+            <SummaryRow
+              label={
+                config.sheetsPerCopyLabel
+              }
+              value={String(
+                localQuote?.sheetsPerCopy ??
+                  0,
+              )}
+            />
 
-          <SummaryRow
-            label={
-              config.totalSheetsLabel
-            }
-            value={String(
-              localQuote?.totalSheets ??
-                0,
-            )}
-          />
+            <View style={styles.summaryRowDivider} />
 
-          <SummaryRow
-            label={
-              config.pricePerSheetLabel
-            }
-            value={formatAmount(
-              localQuote?.rate
-                ?.pricePerSheet ?? 0,
-              currencyCode,
-            )}
-          />
+            <SummaryRow
+              label={
+                config.pricePerSheetLabel
+              }
+              value={formatAmount(
+                localQuote?.rate
+                  ?.pricePerSheet ?? 0,
+                currencyCode,
+              )}
+            />
+          </View>
 
-          <View style={styles.summaryDivider} />
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>
+              {config.totalLabel}
+            </Text>
 
-          <View style={styles.totalRow}>
-            <Text
-              style={[
-                styles.totalValue,
-                {
-                  color:
-                    config.accentDarkColor,
-                },
-              ]}
-            >
+            <Text style={styles.totalValue}>
               {formatAmount(
                 localQuote?.totalPrice ??
                   0,
                 currencyCode,
               )}
             </Text>
-
-            <Text style={styles.totalLabel}>
-              {config.totalLabel}
-            </Text>
           </View>
         </View>
 
         {totalSheetsError ? (
-          <Text style={styles.errorText}>
-            {totalSheetsError}
-          </Text>
+          <View style={styles.submitErrorCard}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={
+                NAVIENTY_NOW_COLORS.error
+              }
+            />
+
+            <Text style={styles.submitErrorText}>
+              {totalSheetsError}
+            </Text>
+          </View>
         ) : null}
 
-        <View
-          style={[
-            styles.fileNotice,
-            {
-              backgroundColor:
-                config.heroBackgroundColor,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.fileNoticeIcon,
-              {
-                backgroundColor:
-                  config.accentColor,
-              },
-            ]}
-          >
+        <View style={styles.fileNotice}>
+          <View style={styles.fileNoticeIcon}>
             <OptionIcon
               name={config.uiIcons.fileNotice}
               fallback="logo-whatsapp"
@@ -1105,7 +1071,9 @@ export default function PrintingJobBuilder({
             <Ionicons
               name="alert-circle-outline"
               size={18}
-              color="#C83737"
+              color={
+                NAVIENTY_NOW_COLORS.error
+              }
             />
 
             <Text style={styles.submitErrorText}>
@@ -1122,209 +1090,130 @@ export default function PrintingJobBuilder({
             paddingBottom:
               Math.max(
                 insets.bottom,
-                10,
+                12,
               ),
           },
         ]}
       >
-        <Pressable
-          accessibilityRole="button"
-          disabled={!canSubmit}
-          style={({ pressed }) => [
-            styles.submitButton,
-            {
-              backgroundColor:
-                config.accentColor,
-            },
-            !canSubmit &&
-              styles.submitButtonDisabled,
-            pressed &&
-              canSubmit && {
-                backgroundColor:
-                  config.accentDarkColor,
-                transform: [
-                  {
-                    scale: 0.992,
-                  },
-                ],
-              },
-          ]}
-          onPress={() => {
-            void submitPrintJob();
-          }}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator
-              size="small"
-              color="#FFFFFF"
-            />
-          ) : (
-            <>
-              <Text style={styles.submitTotal}>
-                {formatAmount(
-                  localQuote?.totalPrice ??
-                    0,
-                  currencyCode,
-                )}
-              </Text>
+        <View style={styles.bottomBarContent}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              editingItem
+                ? config.updateCtaLabel
+                : config.addCtaLabel
+            }
+            disabled={!canSubmit}
+            style={({ pressed }) => [
+              styles.submitButton,
+              !canSubmit &&
+                styles.submitButtonDisabled,
+              pressed &&
+                canSubmit &&
+                styles.submitButtonPressed,
+            ]}
+            onPress={() => {
+              void submitPrintJob();
+            }}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator
+                size="small"
+                color="#FFFFFF"
+              />
+            ) : (
+              <>
+                <Text
+                  numberOfLines={1}
+                  style={styles.submitTotal}
+                >
+                  {formatAmount(
+                    localQuote?.totalPrice ??
+                      0,
+                    currencyCode,
+                  )}
+                </Text>
 
-              <Text style={styles.submitLabel}>
-                {editingItem
-                  ? config.updateCtaLabel
-                  : config.addCtaLabel}
-              </Text>
+                <Text
+                  numberOfLines={1}
+                  style={styles.submitLabel}
+                >
+                  {editingItem
+                    ? config.updateCtaLabel
+                    : config.addCtaLabel}
+                </Text>
 
-              <View style={styles.submitIcon}>
-                <OptionIcon
-                  name={
-                    editingItem
-                      ? config.uiIcons
-                          .updateCta
-                      : config.uiIcons
-                          .addCta
-                  }
-                  fallback={
-                    editingItem
-                      ? 'checkmark'
-                      : 'bag-add-outline'
-                  }
-                  size={20}
-                  color="#FFFFFF"
-                />
-              </View>
-            </>
-          )}
-        </Pressable>
+                <View style={styles.submitIcon}>
+                  <OptionIcon
+                    name={
+                      editingItem
+                        ? config.uiIcons
+                            .updateCta
+                        : config.uiIcons
+                            .addCta
+                    }
+                    fallback={
+                      editingItem
+                        ? 'checkmark'
+                        : 'bag-add-outline'
+                    }
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                </View>
+              </>
+            )}
+          </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-function OptionSection({
+function SectionHeading({
   title,
-  options,
-  selectedId,
-  accentColor,
-  onSelect,
 }: {
   title: string;
-  options: PrintingColorOption[];
-  selectedId: string;
-  accentColor: string;
-  onSelect: (
-    option: PrintingColorOption,
-  ) => void;
 }) {
   return (
-    <View style={styles.section}>
+    <View style={styles.sectionHeading}>
       <Text style={styles.sectionTitle}>
         {title}
       </Text>
-
-      <View style={styles.optionsRow}>
-        {options.map((option) => {
-          const isSelected =
-            option.id === selectedId;
-
-          return (
-            <Pressable
-              key={option.id}
-              style={({ pressed }) => [
-                styles.optionCard,
-                isSelected && {
-                  backgroundColor:
-                    `${accentColor}0D`,
-                  borderColor:
-                    accentColor,
-                },
-                pressed &&
-                  styles.buttonPressed,
-              ]}
-              onPress={() =>
-                onSelect(option)
-              }
-            >
-              <View
-                style={[
-                  styles.optionIcon,
-                  isSelected && {
-                    backgroundColor:
-                      accentColor,
-                  },
-                ]}
-              >
-                <OptionIcon
-                  name={option.iconName}
-                  color={
-                    isSelected
-                      ? '#FFFFFF'
-                      : '#313131'
-                  }
-                />
-              </View>
-
-              <Text style={styles.optionLabel}>
-                {option.label}
-              </Text>
-
-              <Text
-                numberOfLines={2}
-                style={styles.optionHelper}
-              >
-                {option.helper}
-              </Text>
-
-              <View
-                style={[
-                  styles.radioOuter,
-                  isSelected && {
-                    borderColor:
-                      accentColor,
-                  },
-                ]}
-              >
-                {isSelected ? (
-                  <View
-                    style={[
-                      styles.radioInner,
-                      {
-                        backgroundColor:
-                          accentColor,
-                      },
-                    ]}
-                  />
-                ) : null}
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
     </View>
   );
 }
 
-function SideOptionSection({
+function OptionSection<
+  TOption extends PrintingOptionBase,
+>({
   title,
   options,
   selectedId,
-  accentColor,
   onSelect,
 }: {
   title: string;
-  options: PrintingSideOption[];
+  options: TOption[];
   selectedId: string;
-  accentColor: string;
   onSelect: (
-    option: PrintingSideOption,
+    option: TOption,
   ) => void;
 }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>
-        {title}
-      </Text>
+  const hasTitle = title.trim().length > 0;
 
-      <View style={styles.optionsRow}>
+  return (
+    <View style={styles.sectionCard}>
+      {hasTitle ? (
+        <SectionHeading title={title} />
+      ) : null}
+
+      <View
+        style={[
+          styles.optionsGrid,
+          !hasTitle &&
+            styles.optionsGridWithoutTitle,
+        ]}
+      >
         {options.map((option) => {
           const isSelected =
             option.id === selectedId;
@@ -1332,14 +1221,14 @@ function SideOptionSection({
           return (
             <Pressable
               key={option.id}
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: isSelected,
+              }}
               style={({ pressed }) => [
                 styles.optionCard,
-                isSelected && {
-                  backgroundColor:
-                    `${accentColor}0D`,
-                  borderColor:
-                    accentColor,
-                },
+                isSelected &&
+                  styles.optionCardSelected,
                 pressed &&
                   styles.buttonPressed,
               ]}
@@ -1347,57 +1236,10 @@ function SideOptionSection({
                 onSelect(option)
               }
             >
-              <View
-                style={[
-                  styles.optionIcon,
-                  isSelected && {
-                    backgroundColor:
-                      accentColor,
-                  },
-                ]}
-              >
-                <OptionIcon
-                  name={option.iconName}
-                  color={
-                    isSelected
-                      ? '#FFFFFF'
-                      : '#313131'
-                  }
-                />
-              </View>
-
               <Text style={styles.optionLabel}>
                 {option.label}
               </Text>
 
-              <Text
-                numberOfLines={2}
-                style={styles.optionHelper}
-              >
-                {option.helper}
-              </Text>
-
-              <View
-                style={[
-                  styles.radioOuter,
-                  isSelected && {
-                    borderColor:
-                      accentColor,
-                  },
-                ]}
-              >
-                {isSelected ? (
-                  <View
-                    style={[
-                      styles.radioInner,
-                      {
-                        backgroundColor:
-                          accentColor,
-                      },
-                    ]}
-                  />
-                ) : null}
-              </View>
             </Pressable>
           );
         })}
@@ -1415,12 +1257,12 @@ function SummaryRow({
 }) {
   return (
     <View style={styles.summaryRow}>
-      <Text style={styles.summaryValue}>
-        {value}
-      </Text>
-
       <Text style={styles.summaryLabel}>
         {label}
+      </Text>
+
+      <Text style={styles.summaryValue}>
+        {value}
       </Text>
     </View>
   );
@@ -1428,302 +1270,345 @@ function SummaryRow({
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: '#F7F8F7',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.page,
     flex: 1,
   },
+
   stateScreen: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.page,
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
+
+  loadingIcon: {
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryUltraPale,
+    borderRadius: 28,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+
   stateIcon: {
     alignItems: 'center',
-    backgroundColor: '#EAF8F0',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
     borderRadius: 32,
     height: 64,
     justifyContent: 'center',
     width: 64,
   },
+
   stateTitle: {
-    color: '#202020',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 18,
     fontWeight: '900',
-    marginTop: 15,
+    marginTop: 16,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+
   stateDescription: {
-    color: '#6F6F6F',
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
     fontSize: 12,
     lineHeight: 20,
-    marginTop: 8,
+    marginTop: 7,
+    maxWidth: 300,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+
   retryButton: {
     alignItems: 'center',
-    backgroundColor: '#00B14F',
-    borderRadius: 16,
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 999,
     justifyContent: 'center',
-    marginTop: 18,
-    minHeight: 48,
-    minWidth: 160,
-    paddingHorizontal: 20,
+    marginTop: 20,
+    minHeight: 50,
+    minWidth: 170,
+    paddingHorizontal: 24,
   },
+
   retryButtonText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
   },
+
   stateBackButton: {
-    marginTop: 9,
-    padding: 10,
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
   },
+
   stateBackText: {
-    color: '#666666',
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
+
   header: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#ECECEC',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.page,
+    borderBottomColor: '#ECECEF',
     borderBottomWidth:
       StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    minHeight: 68,
-    paddingBottom: 8,
+    minHeight: 78,
+    paddingBottom: 12,
     paddingHorizontal: 16,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    zIndex: 10,
   },
+
   headerButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E1E1E1',
-    borderRadius: 22,
+    borderRadius: 23,
     borderWidth: 1,
-    height: 44,
+    height: 46,
     justifyContent: 'center',
-    width: 44,
+    width: 46,
   },
+
+  headerButtonPressed: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.surface,
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
   headerTitle: {
-    color: '#202020',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     flex: 1,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+
   headerSpacer: {
-    height: 44,
-    width: 44,
+    height: 46,
+    width: 46,
   },
+
   scrollView: {
     flex: 1,
   },
+
   scrollContent: {
     alignSelf: 'center',
-    maxWidth: 720,
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    paddingBottom: 28,
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 16,
     width: '100%',
   },
-  heroCard: {
-    borderRadius: 24,
-    padding: 18,
-  },
-  heroTopRow: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
-  },
-  heroIcon: {
-    alignItems: 'center',
-    borderRadius: 20,
-    height: 54,
-    justifyContent: 'center',
-    width: 54,
-  },
-  heroBadge: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 999,
-    flexDirection: 'row-reverse',
-    gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-  },
-  heroBadgeText: {
-    fontSize: 11,
-    fontWeight: '900',
-    writingDirection: 'rtl',
-  },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.2,
-    marginTop: 16,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  heroTitle: {
-    color: '#172019',
-    fontSize: 22,
-    fontWeight: '900',
-    lineHeight: 31,
-    marginTop: 5,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  heroSubtitle: {
-    color: '#4D6254',
-    fontSize: 12.5,
-    lineHeight: 21,
-    marginTop: 8,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+
   closedCard: {
     alignItems: 'center',
-    backgroundColor: '#FFF5DA',
-    borderColor: '#F0D89E',
-    borderRadius: 15,
+    backgroundColor: '#FFF8E8',
+    borderColor: '#F0DFC0',
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.controlRadius,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     marginTop: 12,
-    padding: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
+
+  closedIcon: {
+    alignItems: 'center',
+    backgroundColor: '#FFF0C9',
+    borderRadius: 15,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+
   closedText: {
-    color: '#745814',
+    color: '#735414',
     flex: 1,
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 18,
-    marginRight: 8,
+    marginRight: 9,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-  section: {
+
+  sectionCard: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#ECEEEC',
-    borderRadius: 20,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.cardRadius,
     borderWidth: 1,
-    marginTop: 13,
+    marginTop: 14,
     padding: 15,
   },
+
+  sectionHeading: {
+    alignItems: 'flex-end',
+  },
+
   sectionTitle: {
-    color: '#202020',
+    alignSelf: 'stretch',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 15,
     fontWeight: '900',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
-  sectionHelper: {
-    color: '#777777',
-    fontSize: 10.5,
-    lineHeight: 17,
-    marginTop: 4,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  optionsRow: {
+
+
+  optionsGrid: {
+    alignItems: 'stretch',
     flexDirection: 'row-reverse',
     gap: 10,
-    marginTop: 13,
+    marginTop: 12,
   },
+
+  optionsGridWithoutTitle: {
+    marginTop: 0,
+  },
+
   optionCard: {
-    alignItems: 'flex-end',
-    backgroundColor: '#FAFAFA',
-    borderColor: '#E7E7E7',
-    borderRadius: 17,
+    alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.surface,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius: 16,
     borderWidth: 1.5,
     flex: 1,
-    minHeight: 142,
-    padding: 12,
-    position: 'relative',
-  },
-  optionIcon: {
-    alignItems: 'center',
-    backgroundColor: '#EFEFEF',
-    borderRadius: 14,
-    height: 42,
     justifyContent: 'center',
-    width: 42,
+    minHeight: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
   },
+
+  optionCardSelected: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryUltraPale,
+    borderColor:
+      NAVIENTY_NOW_COLORS.primary,
+  },
+
   optionLabel: {
-    color: '#222222',
-    fontSize: 13.5,
+    color:
+      NAVIENTY_NOW_COLORS.text,
+    fontSize: 14,
     fontWeight: '900',
-    marginTop: 10,
-    textAlign: 'right',
+    includeFontPadding: false,
+    lineHeight: 20,
+    textAlign: 'center',
+    width: '100%',
     writingDirection: 'rtl',
   },
-  optionHelper: {
-    color: '#777777',
-    fontSize: 9.5,
-    lineHeight: 15,
-    marginTop: 4,
-    paddingLeft: 20,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  radioOuter: {
-    alignItems: 'center',
-    borderColor: '#CFCFCF',
-    borderRadius: 9,
-    borderWidth: 1.5,
-    height: 18,
-    justifyContent: 'center',
-    left: 10,
-    position: 'absolute',
-    top: 10,
-    width: 18,
-  },
-  radioInner: {
-    borderRadius: 5,
-    height: 10,
-    width: 10,
-  },
+
+
   pageInputCard: {
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    borderColor: '#DFDFDF',
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    marginTop: 12,
-    minHeight: 60,
-    paddingHorizontal: 15,
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.surface,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.controlRadius,
+    borderWidth: 1.5,
+    flexDirection: 'row-reverse',
+    marginTop: 14,
+    minHeight: 64,
+    paddingHorizontal: 12,
   },
+
+  pageInputCardFocused: {
+    backgroundColor: '#FFFFFF',
+    borderColor:
+      NAVIENTY_NOW_COLORS.primary,
+  },
+
   inputCardError: {
-    borderColor: '#D94C4C',
+    backgroundColor: '#FFF9F9',
+    borderColor:
+      NAVIENTY_NOW_COLORS.error,
   },
+
   pageInput: {
-    color: '#202020',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     flex: 1,
     fontSize: 22,
     fontWeight: '900',
-    minHeight: 56,
-    paddingHorizontal: 10,
+    minHeight: 58,
+    paddingHorizontal: 11,
+    paddingVertical: 0,
   },
+
   pageInputSuffix: {
-    color: '#777777',
-    fontSize: 12,
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 11.5,
     fontWeight: '800',
     writingDirection: 'rtl',
   },
+
+  inlineErrorRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+    marginTop: 8,
+  },
+
+  errorText: {
+    color:
+      NAVIENTY_NOW_COLORS.error,
+    flex: 1,
+    fontSize: 10,
+    lineHeight: 16,
+    marginRight: 6,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
   presetsRow: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 7,
-    marginTop: 11,
+    marginTop: 12,
   },
+
   presetChip: {
     alignItems: 'center',
-    backgroundColor: '#F6F6F6',
-    borderColor: '#E2E2E2',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.surface,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
     borderRadius: 999,
     borderWidth: 1,
     justifyContent: 'center',
@@ -1731,170 +1616,238 @@ const styles = StyleSheet.create({
     minWidth: 52,
     paddingHorizontal: 12,
   },
+
+  presetChipSelected: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.text,
+    borderColor:
+      NAVIENTY_NOW_COLORS.text,
+  },
+
   presetText: {
-    color: '#3B3B3B',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 12,
     fontWeight: '800',
   },
+
   presetTextSelected: {
     color: '#FFFFFF',
   },
-  errorText: {
-    color: '#C83737',
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 7,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-  copyHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  copyTitleWrap: {
-    alignItems: 'flex-end',
-    flex: 1,
-    marginLeft: 14,
-  },
+
   copyStepper: {
     alignItems: 'center',
-    backgroundColor: '#F7F7F7',
-    borderRadius: 999,
-    flexDirection: 'row',
-    gap: 12,
-    padding: 5,
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.surface,
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.controlRadius,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    minHeight: 66,
+    padding: 7,
   },
+
   stepperButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderColor: '#DCDCE0',
+    borderRadius: 23,
     borderWidth: 1,
-    height: 36,
+    height: 46,
     justifyContent: 'center',
-    width: 36,
+    width: 46,
   },
+
+  stepperButtonPressed: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPale,
+    borderColor:
+      NAVIENTY_NOW_COLORS.primary,
+    transform: [
+      {
+        scale: 0.97,
+      },
+    ],
+  },
+
   stepperDisabled: {
     opacity: 0.35,
   },
+
+  copyValueWrap: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+
   copyValue: {
-    color: '#202020',
-    fontSize: 17,
+    color:
+      NAVIENTY_NOW_COLORS.text,
+    fontSize: 21,
     fontWeight: '900',
-    minWidth: 25,
+    minWidth: 36,
     textAlign: 'center',
   },
+
   summaryCard: {
-    backgroundColor: '#202320',
-    borderRadius: 21,
-    marginTop: 13,
-    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderColor:
+      NAVIENTY_NOW_COLORS.border,
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.cardRadius,
+    borderWidth: 1,
+    marginTop: 14,
+    padding: 15,
   },
+
   summaryHeader: {
-    alignItems: 'center',
-    flexDirection: 'row-reverse',
     marginBottom: 12,
   },
-  summaryIcon: {
-    alignItems: 'center',
-    borderRadius: 13,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
+
   summaryTitle: {
-    color: '#FFFFFF',
-    flex: 1,
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 14,
     fontWeight: '900',
-    marginRight: 9,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
+
+  summaryRows: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.surface,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+
   summaryRow: {
     alignItems: 'center',
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
-    minHeight: 31,
+    minHeight: 40,
   },
+
   summaryLabel: {
-    color: 'rgba(255,255,255,0.65)',
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
+    flex: 1,
     fontSize: 10.5,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
+
   summaryValue: {
-    color: '#FFFFFF',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
+    marginRight: 12,
     textAlign: 'left',
   },
-  summaryDivider: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 11,
+
+  summaryRowDivider: {
+    backgroundColor: '#E8E8EB',
+    height:
+      StyleSheet.hairlineWidth,
   },
-  totalRow: {
+
+  totalCard: {
     alignItems: 'center',
-    flexDirection: 'row',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryUltraPale,
+    borderColor: '#DDF3E6',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
     justifyContent: 'space-between',
+    marginTop: 10,
+    minHeight: 58,
+    paddingHorizontal: 13,
   },
+
   totalLabel: {
-    color: '#FFFFFF',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 13,
     fontWeight: '900',
     writingDirection: 'rtl',
   },
+
   totalValue: {
-    fontSize: 20,
+    color:
+      NAVIENTY_NOW_COLORS.primaryDark,
+    fontSize: 19,
     fontWeight: '900',
+    textAlign: 'left',
   },
+
   fileNotice: {
     alignItems: 'center',
-    borderRadius: 19,
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryUltraPale,
+    borderColor: '#DDF3E6',
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.cardRadius,
+    borderWidth: 1,
     flexDirection: 'row-reverse',
-    marginTop: 13,
+    marginTop: 14,
     padding: 13,
   },
+
   fileNoticeIcon: {
     alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
     borderRadius: 17,
     height: 44,
     justifyContent: 'center',
     width: 44,
   },
+
   fileNoticeCopy: {
     alignItems: 'flex-end',
     flex: 1,
     marginRight: 11,
   },
+
   fileNoticeTitle: {
-    color: '#203226',
+    color:
+      NAVIENTY_NOW_COLORS.text,
     fontSize: 12.5,
     fontWeight: '900',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
+
   fileNoticeBody: {
-    color: '#536B5B',
+    color:
+      NAVIENTY_NOW_COLORS.textSecondary,
     fontSize: 10,
     lineHeight: 16,
     marginTop: 3,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
+
   submitErrorCard: {
     alignItems: 'flex-start',
-    backgroundColor: '#FFF1F1',
-    borderColor: '#F1CACA',
-    borderRadius: 15,
+    backgroundColor: '#FFF5F5',
+    borderColor: '#F0D0D0',
+    borderRadius:
+      NAVIENTY_NOW_LAYOUT.controlRadius,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     marginTop: 12,
     padding: 11,
   },
+
   submitErrorText: {
-    color: '#9C3030',
+    color: '#A53636',
     flex: 1,
     fontSize: 10.5,
     lineHeight: 17,
@@ -1902,55 +1855,97 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     writingDirection: 'rtl',
   },
+
   bottomBar: {
     backgroundColor: '#FFFFFF',
-    borderTopColor: '#E8E8E8',
+    borderTopColor: '#EEEEEE',
     borderTopWidth:
       StyleSheet.hairlineWidth,
-    bottom: 0,
-    left: 0,
+    elevation: 18,
     paddingHorizontal: 16,
-    paddingTop: 10,
-    position: 'absolute',
-    right: 0,
+    paddingTop: 11,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
   },
+
+  bottomBarContent: {
+    alignSelf: 'center',
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
+    width: '100%',
+  },
+
   submitButton: {
     alignItems: 'center',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
     borderRadius: 999,
     flexDirection: 'row',
     height: 56,
     justifyContent: 'space-between',
     paddingHorizontal: 8,
   },
+
   submitButtonDisabled: {
-    opacity: 0.45,
+    backgroundColor: '#A8DDBF',
   },
+
+  submitButtonPressed: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPressed,
+    transform: [
+      {
+        scale: 0.99,
+      },
+    ],
+  },
+
   submitTotal: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '900',
-    minWidth: 86,
+    minWidth: 88,
     paddingLeft: 9,
     textAlign: 'left',
   },
+
   submitLabel: {
     color: '#FFFFFF',
     flex: 1,
-    fontSize: 14,
+    fontSize: 15.5,
     fontWeight: '900',
+    paddingHorizontal: 6,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
+
   submitIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.13)',
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryDark,
     borderRadius: 22,
     height: 44,
     justifyContent: 'center',
     width: 44,
   },
+
   buttonPressed: {
-    opacity: 0.75,
+    opacity: 0.78,
+    transform: [
+      {
+        scale: 0.985,
+      },
+    ],
+  },
+
+  primaryPressed: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primaryPressed,
     transform: [
       {
         scale: 0.985,
