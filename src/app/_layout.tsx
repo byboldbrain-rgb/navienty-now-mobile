@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 
 import AppLaunchBlockScreen from '../components/app-launch-block-screen';
+import GlobalCartDockBridge from '../components/cart/global-cart-dock-bridge';
 import OrderRealtimeBridge from '../components/order-realtime-bridge';
 import PaymentProofRouteBridge from '../components/payment-proof-route-bridge';
 import PushNotificationsBridge from '../components/push-notifications-bridge';
@@ -915,6 +916,10 @@ export default function RootLayout() {
               }}
             />
           </Stack>
+
+          <GlobalCartDockBridge
+            enabled={!showBootstrapScreen}
+          />
         </>
       ) : null}
 
