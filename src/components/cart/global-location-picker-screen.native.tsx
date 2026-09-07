@@ -10,6 +10,7 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -22,6 +23,9 @@ import MapView, {
 } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  getDeliveryAddressForCoordinate,
+} from '../../services/delivery-address-geocoding-service';
 import {
   getDeliveryLocationErrorMessage,
   resolveDeliveryLocation,
@@ -40,32 +44,11 @@ const FALLBACK_REGION: Region = {
   longitudeDelta: 0.045,
 };
 
-function buildAddress(
-  address: Location.LocationGeocodedAddress,
-) {
-  const formatted =
-    address.formattedAddress?.trim();
-
-  if (formatted) {
-    return formatted;
-  }
-
-  return [
-    address.name,
-    address.street,
-    address.district,
-    address.city,
-    address.region,
-    address.country,
-  ]
-    .filter(Boolean)
-    .join('، ');
-}
-
 export default function GlobalLocationPickerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView | null>(null);
+  const manualSelectionRef = useRef(false);
 
   const savedLatitude = useCustomerStore(
     (state) => state.locationLatitude,
@@ -88,11 +71,16 @@ export default function GlobalLocationPickerScreen() {
         }
       : null;
 
+  const hasSavedCoordinate =
+    savedCoordinate !== null;
+
   const [coordinate, setCoordinate] =
     useState(savedCoordinate);
   const [isLocating, setIsLocating] =
     useState(false);
   const [isConfirming, setIsConfirming] =
+    useState(false);
+  const [hasLocationPermission, setHasLocationPermission] =
     useState(false);
 
   const initialRegion: Region =
@@ -110,10 +98,24 @@ export default function GlobalLocationPickerScreen() {
       const permission =
         await Location.requestForegroundPermissionsAsync();
 
+      setHasLocationPermission(permission.granted);
+
       if (!permission.granted) {
         Alert.alert(
-          'السماح بالموقع مطلوب',
-          'اسمح لـ Navienty Now باستخدام موقعك لتحديد مكان التوصيل.',
+          'موقعك الحالي غير متاح',
+          'تقدر تكمل بدون تفعيل الموقع بتحريك الخريطة وتحديد مكان التوصيل يدويًا.',
+          [
+            {
+              text: 'إلغاء',
+              style: 'cancel',
+            },
+            {
+              text: 'فتح الإعدادات',
+              onPress: () => {
+                void Linking.openSettings();
+              },
+            },
+          ],
         );
         return;
       }
@@ -137,12 +139,10 @@ export default function GlobalLocationPickerScreen() {
         },
         280,
       );
-    } catch (error) {
+    } catch {
       Alert.alert(
-        'تعذر تحديد الموقع',
-        error instanceof Error
-          ? error.message
-          : 'حاول مرة أخرى.',
+        'تعذر تحديد موقعك الحالي',
+        'تقدر تكمل بدونه بتحريك الخريطة وتحديد مكان التوصيل يدويًا.',
       );
     } finally {
       setIsLocating(false);
@@ -150,10 +150,60 @@ export default function GlobalLocationPickerScreen() {
   }
 
   useEffect(() => {
-    if (!savedCoordinate) {
-      void requestCurrentLocation();
+    let cancelled = false;
+
+    async function prepareExistingLocation() {
+      try {
+        const permission =
+          await Location.getForegroundPermissionsAsync();
+
+        if (cancelled) {
+          return;
+        }
+
+        setHasLocationPermission(permission.granted);
+
+        if (
+          !permission.granted ||
+          hasSavedCoordinate
+        ) {
+          return;
+        }
+
+        const position =
+          await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+
+        if (cancelled || manualSelectionRef.current) {
+          return;
+        }
+
+        const next = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        };
+
+        setCoordinate(next);
+        mapRef.current?.animateToRegion(
+          {
+            ...next,
+            latitudeDelta: 0.009,
+            longitudeDelta: 0.009,
+          },
+          280,
+        );
+      } catch {
+        // The fallback map remains fully usable without Location Services.
+      }
     }
-  }, []);
+
+    void prepareExistingLocation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasSavedCoordinate]);
 
   async function confirmLocation() {
     if (!coordinate) {
@@ -184,21 +234,16 @@ export default function GlobalLocationPickerScreen() {
         return;
       }
 
-      const addresses =
-        await Location.reverseGeocodeAsync(
+      const address =
+        await getDeliveryAddressForCoordinate(
           coordinate,
+          {
+            serviceAreaName:
+              resolution.serviceAreaName,
+            cityName:
+              resolution.cityName,
+          },
         );
-      const address = addresses[0]
-        ? buildAddress(addresses[0])
-        : '';
-
-      if (!address) {
-        Alert.alert(
-          'تعذر قراءة العنوان',
-          'حرّك الخريطة قليلًا وحاول مرة أخرى.',
-        );
-        return;
-      }
 
       setDeliveryLocation({
         latitude: coordinate.latitude,
@@ -260,14 +305,17 @@ export default function GlobalLocationPickerScreen() {
           }
           style={styles.map}
           initialRegion={initialRegion}
-          showsUserLocation
+          showsUserLocation={hasLocationPermission}
           showsMyLocationButton={false}
-          onRegionChangeComplete={(region) =>
+          onPanDrag={() => {
+            manualSelectionRef.current = true;
+          }}
+          onRegionChangeComplete={(region) => {
             setCoordinate({
               latitude: region.latitude,
               longitude: region.longitude,
-            })
-          }
+            });
+          }}
         />
 
         <View pointerEvents="none" style={styles.pinWrap}>

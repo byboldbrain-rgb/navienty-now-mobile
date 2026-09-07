@@ -30,6 +30,12 @@ import MapView, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  requiresForegroundPermissionForGeocoding,
+} from '../domain/delivery-location-selection';
+import {
+  getDeliveryAddressForCoordinate,
+} from '../services/delivery-address-geocoding-service';
+import {
   getDeliveryLocationErrorMessage,
   resolveDeliveryLocation,
 } from '../services/delivery-location-service';
@@ -106,71 +112,6 @@ function isValidCoordinate(
     Number.isFinite(
       longitude,
     )
-  );
-}
-
-function buildAddress(
-  address:
-    Location.LocationGeocodedAddress,
-): string {
-  const formattedAddress =
-    address.formattedAddress
-      ?.trim();
-
-  if (formattedAddress) {
-    return formattedAddress;
-  }
-
-  const streetLine = [
-    address.streetNumber,
-    address.street,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .trim();
-
-  const possibleParts = [
-    address.name,
-    streetLine,
-    address.district,
-    address.subregion,
-    address.city,
-    address.region,
-    address.postalCode,
-    address.country,
-  ];
-
-  const uniqueParts:
-    string[] = [];
-
-  possibleParts.forEach(
-    (part) => {
-      const normalized =
-        part?.trim();
-
-      if (
-        !normalized ||
-        uniqueParts.some(
-          (
-            existingPart,
-          ) =>
-            existingPart
-              .toLocaleLowerCase() ===
-            normalized
-              .toLocaleLowerCase(),
-        )
-      ) {
-        return;
-      }
-
-      uniqueParts.push(
-        normalized,
-      );
-    },
-  );
-
-  return uniqueParts.join(
-    '، ',
   );
 }
 
@@ -424,10 +365,10 @@ export default function LocationPickerScreen() {
       .openSettings();
   }
 
-  function showPermissionAlert() {
+  function showCurrentLocationPermissionAlert() {
     Alert.alert(
-      'السماح بالموقع مطلوب',
-      'اسمح لـ Navienty Now باستخدام موقعك لتحديد عنوان التوصيل بدقة.',
+      'موقعك الحالي غير متاح',
+      'تقدر تكمل بدون تفعيل الموقع: حرّك الخريطة أو ابحث عن العنوان يدويًا.',
       [
         {
           text:
@@ -445,6 +386,13 @@ export default function LocationPickerScreen() {
             openLocationSettings,
         },
       ],
+    );
+  }
+
+  function showAddressSearchPermissionAlert() {
+    Alert.alert(
+      'البحث بالعنوان غير متاح',
+      'على Android فقط، البحث بالاسم يحتاج إذن الموقع. تقدر تكمل بدونه بتحريك الخريطة وتحديد المكان يدويًا.',
     );
   }
 
@@ -496,7 +444,7 @@ export default function LocationPickerScreen() {
         await ensurePermission();
 
       if (!granted) {
-        showPermissionAlert();
+        showCurrentLocationPermissionAlert();
 
         return;
       }
@@ -527,13 +475,10 @@ export default function LocationPickerScreen() {
       animateToCoordinate(
         coordinate,
       );
-    } catch (error) {
+    } catch {
       Alert.alert(
-        'تعذر تحديد الموقع',
-
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحديد موقعك الحالي.',
+        'تعذر تحديد موقعك الحالي',
+        'تقدر تكمل بدونه بتحريك الخريطة أو البحث عن العنوان يدويًا.',
       );
     } finally {
       setIsLocating(
@@ -556,7 +501,7 @@ export default function LocationPickerScreen() {
         true;
 
       try {
-        let permission =
+        const permission =
           await Location
             .getForegroundPermissionsAsync();
 
@@ -564,21 +509,9 @@ export default function LocationPickerScreen() {
           return;
         }
 
-        if (
-          !permission.granted &&
-          !hasSavedCoordinate
-        ) {
-          permission =
-            await Location
-              .requestForegroundPermissionsAsync();
-
-          if (cancelled) {
-            return;
-          }
-        }
-
         setPermissionDenied(
-          !permission.granted,
+          permission.status ===
+            'denied',
         );
 
         setHasLocationPermission(
@@ -667,7 +600,7 @@ export default function LocationPickerScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hasSavedCoordinate]);
 
   function handleMapPress(
     event:
@@ -734,13 +667,19 @@ export default function LocationPickerScreen() {
         true,
       );
 
-      const granted =
-        await ensurePermission();
+      if (
+        requiresForegroundPermissionForGeocoding(
+          Platform.OS,
+        )
+      ) {
+        const granted =
+          await ensurePermission();
 
-      if (!granted) {
-        showPermissionAlert();
+        if (!granted) {
+          showAddressSearchPermissionAlert();
 
-        return;
+          return;
+        }
       }
 
       const results =
@@ -838,48 +777,6 @@ export default function LocationPickerScreen() {
         true,
       );
 
-      const granted =
-        await ensurePermission();
-
-      if (!granted) {
-        showPermissionAlert();
-
-        return;
-      }
-
-      const addresses =
-        await Location
-          .reverseGeocodeAsync({
-            latitude:
-              selectedCoordinate
-                .latitude,
-
-            longitude:
-              selectedCoordinate
-                .longitude,
-          });
-
-      const firstAddress =
-        addresses[0];
-
-      const generatedAddress =
-        firstAddress
-          ? buildAddress(
-              firstAddress,
-            )
-          : '';
-
-      if (
-        !generatedAddress
-      ) {
-        Alert.alert(
-          'تعذر قراءة العنوان',
-          'تم تحديد الموقع على الخريطة، لكن تعذر تحويله إلى عنوان مكتوب. حرّك الخريطة قليلًا وحاول مرة أخرى.',
-        );
-
-        return;
-      }
-
       const deliveryResolution =
         await resolveDeliveryLocation({
           latitude:
@@ -921,6 +818,20 @@ export default function LocationPickerScreen() {
 
         return;
       }
+
+      const generatedAddress =
+        await getDeliveryAddressForCoordinate(
+          selectedCoordinate,
+          {
+            serviceAreaName:
+              deliveryResolution
+                .serviceAreaName,
+
+            cityName:
+              deliveryResolution
+                .cityName,
+          },
+        );
 
       setDeliveryLocation({
         latitude:
