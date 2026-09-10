@@ -1,23 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import {
-    Image,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import {
-    SafeAreaView,
-    useSafeAreaInsets,
+  SafeAreaView,
+  useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 
 import type { HomeBanner } from '../../services/home-banners-service';
 import {
-    NAVIENTY_NOW_COLORS,
-    NAVIENTY_NOW_LAYOUT,
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
 } from '../../theme/navienty-now-theme';
 
 type PremiumPromoTemplateProps = {

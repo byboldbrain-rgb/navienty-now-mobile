@@ -2379,12 +2379,10 @@ export default function PersonalCareCategoryScreen() {
 
   /*
    * We render the normal filter rail using a regular row instead of
-   * row-reverse. To keep the Arabic visual order:
+   * row-reverse. The child categories are reversed only for display
+   * so the first Subcategory starts from the Arabic right edge.
    *
-   * Right edge:
-   *   الكل → أول Subcategory → ...
-   *
-   * the child categories are reversed only for display.
+   * The internal `all` state still exists, but it has no visible card.
    */
   const activePersonalCareCategory =
     useMemo(
@@ -2531,14 +2529,19 @@ export default function PersonalCareCategoryScreen() {
       }
 
       /*
-       * بنعرض كل Main Categories في صفحة العروض،
-       * حتى لو Category معينة مفيهاش عروض حالياً.
+       * صفحة العروض تعرض فقط الـCategories
+       * التي تحتوي فعلياً على عرض واحد على الأقل.
        *
-       * قبل كده كان فيه filter بيخفي أي Category
-       * مفيهاش منتج compareAtPrice > price.
+       * أي Category لا يوجد بداخلها منتج
+       * compareAtPrice > price لن تظهر في شريط الفلاتر.
        */
       return getOfferPageRootCategories(
         catalog,
+      ).filter(
+        (category) =>
+          getCatalogSectionOffers(
+            category,
+          ).length > 0,
       );
     }, [catalog]);
 
@@ -2996,37 +2999,18 @@ export default function PersonalCareCategoryScreen() {
   ) {
     scrollProductsToStart();
 
-    const child =
-      item.section;
-
-    if (
-      child &&
-      child.children.length > 0
-    ) {
-      router.push({
-        pathname:
-          '/personal-care-category/[slug]',
-
-        params: {
-          slug:
-            child.slug,
-
-          storeId:
-            currentStore.id,
-
-          categoryKey:
-            categoryKey,
-
-          label:
-            child.name,
-        },
-      });
-
-      return;
-    }
-
+    /*
+     * Subcategory cards behave as a toggle filter:
+     * - first press => show only that Subcategory's products
+     * - press the same selected card again => return to all products
+     *
+     * Keep the user on the current category screen instead of
+     * navigating into another nested route.
+     */
     setSelectedFilterKey(
-      item.key,
+      selectedFilterKey === item.key
+        ? 'all'
+        : item.key,
     );
 
     setSearchQuery('');
@@ -3549,8 +3533,9 @@ export default function PersonalCareCategoryScreen() {
               {/* CHILD CATEGORIES
                *
                * Reversed only for display because this ScrollView
-               * uses a normal row. The visible Arabic order starts:
-               * الكل → أول Subcategory → ثاني Subcategory → ...
+               * uses a normal row. We keep the Arabic visual order
+               * starting from the right edge, but "الكل" is no longer
+               * rendered as a visible card.
                */}
 
               {categoryFilterItemsForDisplay.map(
@@ -3564,9 +3549,12 @@ export default function PersonalCareCategoryScreen() {
                       key={
                         item.key
                       }
-                      style={
-                        styles.filterItem
-                      }
+                      accessibilityRole="button"
+                      style={({ pressed }) => [
+                        styles.filterItem,
+                        pressed &&
+                          styles.pressed,
+                      ]}
                       onPress={() =>
                         openChildCategory(
                           item,
@@ -3599,105 +3587,33 @@ export default function PersonalCareCategoryScreen() {
                           }
                         />
 
-                        {item.section &&
-                          item.section.children.length >
-                          0 && (
-                          <View
-                            style={
-                              styles.hasChildrenBadge
+                        <View
+                          pointerEvents="none"
+                          style={
+                            styles.filterTitleArea
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.filterLabel,
+
+                              isSelected &&
+                                styles.filterLabelSelected,
+                            ]}
+                            numberOfLines={
+                              2
                             }
                           >
-                            <Ionicons
-                              name="chevron-forward"
-                              size={
-                                10
-                              }
-                              color="#FFFFFF"
-                            />
-                          </View>
-                        )}
+                            {
+                              item.label
+                            }
+                          </Text>
+                        </View>
                       </View>
-
-                      <Text
-                        style={[
-                          styles.filterLabel,
-
-                          isSelected &&
-                            styles.filterLabelSelected,
-                        ]}
-                        numberOfLines={
-                          2
-                        }
-                      >
-                        {
-                          item.label
-                        }
-                      </Text>
                     </Pressable>
                   );
                 },
               )}
-
-
-              {/* ALL — rightmost / selected by default */}
-
-              <Pressable
-                style={
-                  styles.filterItem
-                }
-                onPress={() => {
-                  scrollProductsToStart();
-
-                  setSelectedFilterKey(
-                    'all',
-                  );
-
-                  setSearchQuery(
-                    '',
-                  );
-                }}
-              >
-                <View
-                  style={[
-                    styles.filterImageCircle,
-
-                    selectedFilterKey ===
-                      'all' &&
-                      styles.filterImageCircleSelected,
-                  ]}
-                >
-                  <CategoryFilterVisual
-                    section={
-                      selectedSection
-                    }
-                    definitionKey={
-                      fallbackCategory?.key
-                    }
-                    categoryKey={
-                      passedCategoryKey ??
-                      fallbackCategory?.key ??
-                      selectedSection?.slug
-                    }
-                    isRoot
-                    remoteImageUrl={
-                      rootCategoryImageUrl
-                    }
-                  />
-                </View>
-
-                <Text
-                  style={[
-                    styles.filterLabel,
-
-                    selectedFilterKey ===
-                      'all' &&
-                      styles.filterLabelSelected,
-                  ]}
-                  numberOfLines={2}
-                >
-                  الكل
-                </Text>
-              </Pressable>
             </ScrollView>
 
             <View
@@ -4197,57 +4113,63 @@ const styles =
 
     filtersRail: {
       /*
-       * Avoid row-reverse here. On horizontal ScrollViews it can
-       * produce inconsistent initial offsets between iOS/Android and
-       * when Expo Router reuses the screen.
-       *
-       * Items are explicitly arranged in the JSX and we scroll to the
-       * right edge when a category opens.
+       * Keep the existing explicit Arabic ordering/scroll behavior,
+       * but use the same visual spacing as the restaurants
+       * subcategory cards.
        */
       flexDirection:
         'row',
 
       flexGrow: 1,
 
-      gap: 17,
+      gap: 9,
 
       justifyContent:
         'flex-end',
 
       paddingBottom:
-        6,
+        12,
 
       paddingHorizontal:
-        18,
+        16,
 
-      paddingTop: 7,
+      paddingTop: 12,
     },
 
     filterItem: {
-      alignItems:
-        'center',
+      borderRadius: 15,
 
-      width: 79,
+      flexShrink: 0,
+
+      shadowColor:
+        '#111111',
+
+      shadowOffset: {
+        height: 1,
+
+        width: 0,
+      },
+
+      shadowOpacity: 0.06,
+
+      shadowRadius: 3,
+
+      width: 76,
     },
 
     filterImageCircle: {
-      alignItems:
-        'center',
-
       backgroundColor:
-        '#FFFFFF',
+        '#F5F0E9',
 
       borderColor:
-        'transparent',
+        '#ECE9E5',
 
-      borderRadius: 39,
+      borderRadius: 15,
 
-      borderWidth: 2.4,
+      borderWidth:
+        StyleSheet.hairlineWidth,
 
-      height: 78,
-
-      justifyContent:
-        'center',
+      height: 108,
 
       overflow:
         'hidden',
@@ -4255,40 +4177,79 @@ const styles =
       position:
         'relative',
 
-      width: 78,
+      width: 76,
     },
 
     filterImageCircleSelected: {
       borderColor:
-        '#202020',
+        NAVIENTY_NOW_GREEN,
+
+      borderWidth: 1.5,
     },
 
     filterCategoryImage: {
+      bottom: 0,
+
       height: '100%',
+
+      left: 0,
+
+      position:
+        'absolute',
+
+      right: 0,
+
+      top: 0,
 
       width: '100%',
     },
 
     filterImagePlaceholder: {
       backgroundColor:
-        '#F3F3F3',
+        '#F5F0E9',
+
+      bottom: 0,
 
       height: '100%',
+
+      left: 0,
+
+      position:
+        'absolute',
+
+      right: 0,
+
+      top: 0,
 
       width: '100%',
     },
 
+    filterTitleArea: {
+      alignItems:
+        'center',
+
+      left: 5,
+
+      position:
+        'absolute',
+
+      right: 5,
+
+      top: 8,
+
+      zIndex: 2,
+    },
+
     filterLabel: {
       color:
-        '#666666',
+        '#171717',
 
-      fontSize: 12.5,
+      fontSize: 12,
 
-      lineHeight: 17,
+      fontWeight:
+        '600',
 
-      marginTop: 6,
-
-      minHeight: 17,
+      lineHeight: 15,
 
       textAlign:
         'center',
@@ -4299,39 +4260,10 @@ const styles =
 
     filterLabelSelected: {
       color:
-        '#1D1D1D',
+        '#171717',
 
       fontWeight:
         '700',
-    },
-
-    hasChildrenBadge: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        '#202020',
-
-      borderColor:
-        '#FFFFFF',
-
-      borderRadius: 9,
-
-      borderWidth: 2,
-
-      bottom: 1,
-
-      height: 18,
-
-      justifyContent:
-        'center',
-
-      position:
-        'absolute',
-
-      right: 0,
-
-      width: 18,
     },
 
     sectionDivider: {

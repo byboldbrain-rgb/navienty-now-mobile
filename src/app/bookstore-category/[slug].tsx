@@ -2507,14 +2507,19 @@ export default function BookstoreCategoryScreen() {
       }
 
       /*
-       * بنعرض كل Main Categories في صفحة العروض،
-       * حتى لو Category معينة مفيهاش عروض حالياً.
+       * صفحة العروض تعرض فقط الـCategories
+       * التي تحتوي فعلياً على عرض واحد على الأقل.
        *
-       * قبل كده كان فيه filter بيخفي أي Category
-       * مفيهاش منتج compareAtPrice > price.
+       * أي Category لا يوجد بداخلها منتج
+       * compareAtPrice > price لن تظهر في شريط الفلاتر.
        */
       return getOfferPageRootCategories(
         catalog,
+      ).filter(
+        (category) =>
+          getCatalogSectionOffers(
+            category,
+          ).length > 0,
       );
     }, [catalog]);
 
@@ -3019,34 +3024,10 @@ export default function BookstoreCategoryScreen() {
   ) {
     scrollProductsToStart();
 
-    if (
-      child.children.length > 0 ||
-      !!child.experienceKey
-    ) {
-      router.push({
-        pathname:
-          '/bookstore-category/[slug]',
-
-        params: {
-          slug:
-            child.slug,
-
-          storeId:
-            currentStore.id,
-
-          categoryKey:
-            categoryKey,
-
-          label:
-            child.name,
-        },
-      });
-
-      return;
-    }
-
-    setSelectedFilterKey(
-      child.id,
+    setSelectedFilterKey((currentFilterKey) =>
+      currentFilterKey === child.id
+        ? 'all'
+        : child.id,
     );
 
     setSearchQuery('');
@@ -3569,9 +3550,9 @@ export default function BookstoreCategoryScreen() {
                 {/* CHILD CATEGORIES
                  *
                  * Reversed only for display because this ScrollView
-                 * uses a normal row. They come before OFFERS in the
-                 * underlying LTR row so the visible Arabic order starts:
-                 * الكل → العروض → أول Subcategory → ثاني Subcategory → ...
+                 * uses a normal row. We keep the Arabic visual order
+                 * starting from the right edge, while "الكل" remains
+                 * an internal filter state and is not rendered as a card.
                  */}
 
                 {childCategoriesForDisplay.map(
@@ -3585,9 +3566,12 @@ export default function BookstoreCategoryScreen() {
                         key={
                           child.id
                         }
-                        style={
-                          styles.filterItem
-                        }
+                        accessibilityRole="button"
+                        style={({ pressed }) => [
+                          styles.filterItem,
+                          pressed &&
+                            styles.pressed,
+                        ]}
                         onPress={() =>
                           openChildCategory(
                             child,
@@ -3606,43 +3590,39 @@ export default function BookstoreCategoryScreen() {
                             section={
                               child
                             }
+                            remoteImageUrl={
+                              categoryImageOverrides[
+                                normalizeSlug(
+                                  child.slug,
+                                )
+                              ] ??
+                              null
+                            }
                           />
 
-                          {child
-                            .children
-                            .length >
-                            0 && (
-                            <View
-                              style={
-                                styles.hasChildrenBadge
+                          <View
+                            pointerEvents="none"
+                            style={
+                              styles.filterTitleArea
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.filterLabel,
+
+                                isSelected &&
+                                  styles.filterLabelSelected,
+                              ]}
+                              numberOfLines={
+                                2
                               }
                             >
-                              <Ionicons
-                                name="chevron-forward"
-                                size={
-                                  10
-                                }
-                                color="#FFFFFF"
-                              />
-                            </View>
-                          )}
+                              {
+                                child.name
+                              }
+                            </Text>
+                          </View>
                         </View>
-
-                        <Text
-                          style={[
-                            styles.filterLabel,
-
-                            isSelected &&
-                              styles.filterLabelSelected,
-                          ]}
-                          numberOfLines={
-                            2
-                          }
-                        >
-                          {
-                            child.name
-                          }
-                        </Text>
                       </Pressable>
                     );
                   },
@@ -3659,14 +3639,21 @@ export default function BookstoreCategoryScreen() {
                         key={
                           subcategory.key
                         }
-                        style={
-                          styles.filterItem
-                        }
+                        accessibilityRole="button"
+                        style={({ pressed }) => [
+                          styles.filterItem,
+                          pressed &&
+                            styles.pressed,
+                        ]}
                         onPress={() => {
                           scrollProductsToStart();
 
                           setSelectedFilterKey(
-                            subcategory.key,
+                            (currentFilterKey) =>
+                              currentFilterKey ===
+                              subcategory.key
+                                ? 'all'
+                                : subcategory.key,
                           );
 
                           setSearchQuery(
@@ -3695,116 +3682,35 @@ export default function BookstoreCategoryScreen() {
                               null
                             }
                           />
+
+                          <View
+                            pointerEvents="none"
+                            style={
+                              styles.filterTitleArea
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.filterLabel,
+
+                                isSelected &&
+                                  styles.filterLabelSelected,
+                              ]}
+                              numberOfLines={
+                                2
+                              }
+                            >
+                              {
+                                subcategory.label
+                              }
+                            </Text>
+                          </View>
                         </View>
-
-                        <Text
-                          style={[
-                            styles.filterLabel,
-
-                            isSelected &&
-                              styles.filterLabelSelected,
-                          ]}
-                          numberOfLines={
-                            2
-                          }
-                        >
-                          {
-                            subcategory.label
-                          }
-                        </Text>
                       </Pressable>
                     );
                   },
                 )}
 
-
-                {/* ALL — rightmost / selected by default */}
-
-                <Pressable
-                  style={
-                    styles.filterItem
-                  }
-                  onPress={() => {
-                  scrollProductsToStart();
-
-                    setSelectedFilterKey(
-                      'all',
-                    );
-
-                    setSearchQuery(
-                      '',
-                    );
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.filterImageCircle,
-
-                      selectedFilterKey ===
-                        'all' &&
-                        styles.filterImageCircleSelected,
-                    ]}
-                  >
-                    {categoryImageSection ??
-                    selectedSection ? (
-                      <CategoryFilterVisual
-                        section={
-                          categoryImageSection ??
-                          selectedSection!
-                        }
-                        fallbackKey={
-                          categoryKey ||
-                          fallbackCategory?.key
-                        }
-                        remoteImageUrl={
-                          rootCategoryImageUrl
-                        }
-                      />
-                    ) : fallbackCategory ? (
-                      <ExpoImage
-                        source={
-                          rootCategoryImageUrl
-                            ? {
-                                uri:
-                                  rootCategoryImageUrl,
-                              }
-                            : BOOKSTORE_ROOT_CATEGORY_IMAGES[
-                                fallbackCategory.key
-                              ]
-                        }
-                        style={
-                          styles.filterCategoryImage
-                        }
-                        contentFit="cover"
-                        cachePolicy={
-                          rootCategoryImageUrl
-                            ? 'memory-disk'
-                            : 'none'
-                        }
-                        priority="high"
-                        recyclingKey={`bookstore-root-${fallbackCategory.key}`}
-                        transition={
-                          rootCategoryImageUrl
-                            ? 120
-                            : 0
-                        }
-                      />
-                    ) : null}
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.filterLabel,
-
-                      selectedFilterKey ===
-                        'all' &&
-                        styles.filterLabelSelected,
-                    ]}
-                    numberOfLines={2}
-                  >
-                    الكل
-                  </Text>
-                </Pressable>
               </ScrollView>
 
               <View
@@ -4306,57 +4212,63 @@ const styles =
 
     filtersRail: {
       /*
-       * Avoid row-reverse here. On horizontal ScrollViews it can
-       * produce inconsistent initial offsets between iOS/Android and
-       * when Expo Router reuses the screen.
-       *
-       * Items are explicitly arranged in the JSX and we scroll to the
-       * right edge when a category opens.
+       * Keep the existing explicit Arabic ordering/scroll behavior,
+       * but use the exact same visual spacing as the supermarket
+       * subcategory cards.
        */
       flexDirection:
         'row',
 
       flexGrow: 1,
 
-      gap: 17,
+      gap: 9,
 
       justifyContent:
         'flex-end',
 
       paddingBottom:
-        6,
+        12,
 
       paddingHorizontal:
-        18,
+        16,
 
-      paddingTop: 7,
+      paddingTop: 12,
     },
 
     filterItem: {
-      alignItems:
-        'center',
+      borderRadius: 15,
 
-      width: 79,
+      flexShrink: 0,
+
+      shadowColor:
+        '#111111',
+
+      shadowOffset: {
+        height: 1,
+
+        width: 0,
+      },
+
+      shadowOpacity: 0.06,
+
+      shadowRadius: 3,
+
+      width: 76,
     },
 
     filterImageCircle: {
-      alignItems:
-        'center',
-
       backgroundColor:
-        '#FFFFFF',
+        '#F5F0E9',
 
       borderColor:
-        'transparent',
+        '#ECE9E5',
 
-      borderRadius: 39,
+      borderRadius: 15,
 
-      borderWidth: 2.4,
+      borderWidth:
+        StyleSheet.hairlineWidth,
 
-      height: 78,
-
-      justifyContent:
-        'center',
+      height: 108,
 
       overflow:
         'hidden',
@@ -4364,40 +4276,79 @@ const styles =
       position:
         'relative',
 
-      width: 78,
+      width: 76,
     },
 
     filterImageCircleSelected: {
       borderColor:
-        '#202020',
+        NAVIENTY_NOW_GREEN,
+
+      borderWidth: 1.5,
     },
 
     filterCategoryImage: {
+      bottom: 0,
+
       height: '100%',
+
+      left: 0,
+
+      position:
+        'absolute',
+
+      right: 0,
+
+      top: 0,
 
       width: '100%',
     },
 
     filterImagePlaceholder: {
       backgroundColor:
-        '#F3F3F3',
+        '#F5F0E9',
+
+      bottom: 0,
 
       height: '100%',
+
+      left: 0,
+
+      position:
+        'absolute',
+
+      right: 0,
+
+      top: 0,
 
       width: '100%',
     },
 
+    filterTitleArea: {
+      alignItems:
+        'center',
+
+      left: 5,
+
+      position:
+        'absolute',
+
+      right: 5,
+
+      top: 8,
+
+      zIndex: 2,
+    },
+
     filterLabel: {
       color:
-        '#666666',
+        '#171717',
 
-      fontSize: 12.5,
+      fontSize: 12,
 
-      lineHeight: 17,
+      fontWeight:
+        '600',
 
-      marginTop: 6,
-
-      minHeight: 17,
+      lineHeight: 15,
 
       textAlign:
         'center',
@@ -4408,39 +4359,10 @@ const styles =
 
     filterLabelSelected: {
       color:
-        '#1D1D1D',
+        '#171717',
 
       fontWeight:
         '700',
-    },
-
-    hasChildrenBadge: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        '#202020',
-
-      borderColor:
-        '#FFFFFF',
-
-      borderRadius: 9,
-
-      borderWidth: 2,
-
-      bottom: 1,
-
-      height: 18,
-
-      justifyContent:
-        'center',
-
-      position:
-        'absolute',
-
-      right: 0,
-
-      width: 18,
     },
 
     sectionDivider: {
