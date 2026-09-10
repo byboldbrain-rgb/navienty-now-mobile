@@ -1,25 +1,26 @@
-import { Ionicons } from '@expo/vector-icons';
 import {
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    Animated,
-    Easing,
-    Image,
-    type ImageSourcePropType,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
+  Animated,
+  Easing,
+  Image,
+  type ImageSourcePropType,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 
 import type { CampaignPopup } from '../services/campaign-popup-service';
 import DatabaseFirstImage from './ui/database-first-image';
+
+const HERO_IMAGE_SCALE = 1.08;
 
 const localCampaignImages: Record<
   string,
@@ -65,17 +66,23 @@ export default function DynamicCampaignPopup({
   onPresented: (
     campaign: CampaignPopup,
   ) => void;
-  onPrimaryAction: () => Promise<void> | void;
+  onPrimaryAction:
+    () => Promise<void> | void;
 }) {
   const {
     height: viewportHeight,
     width: viewportWidth,
   } = useWindowDimensions();
 
-  const [isImageReady, setIsImageReady] =
-    useState(false);
-  const [isActionPending, setIsActionPending] =
-    useState(false);
+  const [
+    isImageReady,
+    setIsImageReady,
+  ] = useState(false);
+
+  const [
+    isActionPending,
+    setIsActionPending,
+  ] = useState(false);
 
   const cardEntrance = useRef(
     new Animated.Value(0),
@@ -93,24 +100,32 @@ export default function DynamicCampaignPopup({
   );
 
   useEffect(() => {
-    onPresentedRef.current = onPresented;
+    onPresentedRef.current =
+      onPresented;
   }, [onPresented]);
 
   const cardWidth = Math.min(
     356,
-    Math.max(286, viewportWidth - 32),
+    Math.max(
+      286,
+      viewportWidth - 32,
+    ),
   );
 
   const heroHeight = Math.min(
     282,
     Math.max(
       218,
-      Math.round(cardWidth * 0.73),
+      Math.round(
+        cardWidth * 0.73,
+      ),
     ),
   );
 
   const modalVerticalPadding =
-    viewportHeight < 720 ? 16 : 28;
+    viewportHeight < 720
+      ? 16
+      : 28;
 
   const imageSource = useMemo(
     () =>
@@ -139,6 +154,7 @@ export default function DynamicCampaignPopup({
   useEffect(() => {
     setIsImageReady(false);
     setIsActionPending(false);
+
     cardEntrance.setValue(0);
     backdropOpacity.setValue(0);
   }, [
@@ -149,9 +165,13 @@ export default function DynamicCampaignPopup({
   ]);
 
   useEffect(() => {
-    if (!visible || !campaign) {
+    if (
+      !visible ||
+      !campaign
+    ) {
       cardEntrance.setValue(0);
       backdropOpacity.setValue(0);
+
       return;
     }
 
@@ -160,10 +180,14 @@ export default function DynamicCampaignPopup({
         backdropOpacity,
         {
           toValue: 1,
+
           duration: 180,
-          easing: Easing.out(
-            Easing.quad,
-          ),
+
+          easing:
+            Easing.out(
+              Easing.quad,
+            ),
+
           useNativeDriver: true,
         },
       );
@@ -196,9 +220,13 @@ export default function DynamicCampaignPopup({
         cardEntrance,
         {
           toValue: 1,
+
           damping: 18,
+
           stiffness: 190,
+
           mass: 0.78,
+
           useNativeDriver: true,
         },
       );
@@ -214,7 +242,10 @@ export default function DynamicCampaignPopup({
     ) {
       lastPresentedKeyRef.current =
         presentationKey;
-      onPresentedRef.current(campaign);
+
+      onPresentedRef.current(
+        campaign,
+      );
     }
 
     return () => {
@@ -227,44 +258,72 @@ export default function DynamicCampaignPopup({
     visible,
   ]);
 
-  if (!campaign || !imageSource) {
+  if (
+    !campaign ||
+    !imageSource
+  ) {
     return null;
   }
 
   const cardTranslateY =
     cardEntrance.interpolate({
       inputRange: [0, 1],
+
       outputRange: [34, 0],
     });
 
   const cardScale =
     cardEntrance.interpolate({
       inputRange: [0, 1],
+
       outputRange: [0.96, 1],
     });
 
-  const canRenderCta = Boolean(
-    campaign.ctaLabel,
-  );
+  const canRenderCta =
+    Boolean(
+      campaign.ctaLabel,
+    );
 
-  const handleRequestClose = () => {
-    if (campaign.config.dismissible) {
-      onDismiss();
-    }
-  };
+  const handleRequestClose =
+    () => {
+      if (
+        campaign.config
+          .dismissible
+      ) {
+        onDismiss();
+      }
+    };
 
-  const handlePrimaryAction = async () => {
-    if (isActionPending) {
-      return;
-    }
+  const handleBackdropPress =
+    () => {
+      if (
+        campaign.config
+          .dismissible
+      ) {
+        onDismiss();
+      }
+    };
 
-    try {
-      setIsActionPending(true);
-      await onPrimaryAction();
-    } finally {
-      setIsActionPending(false);
-    }
-  };
+  const handlePrimaryAction =
+    async () => {
+      if (
+        isActionPending
+      ) {
+        return;
+      }
+
+      try {
+        setIsActionPending(
+          true,
+        );
+
+        await onPrimaryAction();
+      } finally {
+        setIsActionPending(
+          false,
+        );
+      }
+    };
 
   return (
     <Modal
@@ -273,7 +332,9 @@ export default function DynamicCampaignPopup({
       presentationStyle="overFullScreen"
       statusBarTranslucent
       visible={visible}
-      onRequestClose={handleRequestClose}
+      onRequestClose={
+        handleRequestClose
+      }
     >
       <View
         style={[
@@ -284,33 +345,67 @@ export default function DynamicCampaignPopup({
           },
         ]}
       >
+        {/*
+         * Full-screen interactive
+         * backdrop.
+         *
+         * The X button has been
+         * intentionally removed.
+         *
+         * Tapping outside the popup
+         * dismisses it when the
+         * campaign is dismissible.
+         */}
         <Animated.View
-          pointerEvents="none"
           style={[
             styles.backdrop,
             {
               backgroundColor:
-                campaign.theme.backdropColor,
-              opacity: backdropOpacity,
+                campaign.theme
+                  .backdropColor,
+
+              opacity:
+                backdropOpacity,
             },
           ]}
-        />
+        >
+          <Pressable
+            accessibilityLabel="إغلاق الرسالة"
+            accessibilityRole="button"
+            disabled={
+              !campaign.config
+                .dismissible
+            }
+            style={
+              styles.backdropPressTarget
+            }
+            onPress={
+              handleBackdropPress
+            }
+          />
+        </Animated.View>
 
         <Animated.View
           style={[
             styles.card,
             {
-              opacity: isImageReady
-                ? cardEntrance
-                : 0,
-              width: cardWidth,
+              opacity:
+                isImageReady
+                  ? cardEntrance
+                  : 0,
+
+              width:
+                cardWidth,
+
               transform: [
                 {
                   translateY:
                     cardTranslateY,
                 },
+
                 {
-                  scale: cardScale,
+                  scale:
+                    cardScale,
                 },
               ],
             },
@@ -321,9 +416,8 @@ export default function DynamicCampaignPopup({
               styles.surface,
               {
                 backgroundColor:
-                  campaign.theme.surfaceColor,
-                borderColor:
-                  campaign.theme.borderColor,
+                  campaign.theme
+                    .surfaceColor,
               },
             ]}
           >
@@ -331,7 +425,8 @@ export default function DynamicCampaignPopup({
               style={[
                 styles.heroWrap,
                 {
-                  height: heroHeight,
+                  height:
+                    heroHeight,
                 },
               ]}
             >
@@ -351,17 +446,28 @@ export default function DynamicCampaignPopup({
                     localCampaignFallback
                   }
                   resizeMode="cover"
-                  style={styles.heroImage}
-                  onError={(event) => {
+                  style={
+                    styles.heroImage
+                  }
+                  onError={(
+                    event,
+                  ) => {
                     console.warn(
                       'Unable to load campaign popup image.',
                       campaign.imageUrl,
-                      event.nativeEvent.error,
+                      event
+                        .nativeEvent
+                        .error,
                     );
-                    setIsImageReady(true);
+
+                    setIsImageReady(
+                      true,
+                    );
                   }}
                   onLoad={() => {
-                    setIsImageReady(true);
+                    setIsImageReady(
+                      true,
+                    );
                   }}
                 />
               ) : (
@@ -373,80 +479,93 @@ export default function DynamicCampaignPopup({
                   }
                   fadeDuration={0}
                   resizeMode="cover"
-                  source={imageSource}
-                  style={styles.heroImage}
-                  onError={(event) => {
+                  source={
+                    imageSource
+                  }
+                  style={
+                    styles.heroImage
+                  }
+                  onError={(
+                    event,
+                  ) => {
                     console.warn(
                       'Unable to load campaign popup image.',
                       campaign.imageUrl,
-                      event.nativeEvent.error,
+                      event
+                        .nativeEvent
+                        .error,
                     );
-                    setIsImageReady(true);
+
+                    setIsImageReady(
+                      true,
+                    );
                   }}
                   onLoad={() => {
-                    setIsImageReady(true);
+                    setIsImageReady(
+                      true,
+                    );
                   }}
                 />
               )}
 
               <View
                 pointerEvents="none"
-                style={styles.heroShade}
+                style={
+                  styles.heroShade
+                }
               />
             </View>
 
-            {campaign.config.dismissible ? (
-              <Pressable
-                accessibilityLabel="إغلاق الرسالة"
-                accessibilityRole="button"
-                hitSlop={12}
-                style={({ pressed }) => [
-                  styles.closeButton,
-                  pressed &&
-                    styles.closeButtonPressed,
-                ]}
-                onPress={onDismiss}
+            <View
+              style={
+                styles.content
+              }
+            >
+              <View
+                style={
+                  styles.copy
+                }
               >
-                <Ionicons
-                  color={
-                    campaign.theme.primaryColor
-                  }
-                  name="close"
-                  size={25}
-                />
-              </Pressable>
-            ) : null}
-
-            <View style={styles.content}>
-              <View style={styles.copy}>
                 <Text
-                  maxFontSizeMultiplier={1.15}
+                  maxFontSizeMultiplier={
+                    1.15
+                  }
                   numberOfLines={2}
                   style={[
                     styles.headline,
+
                     {
                       color:
-                        campaign.theme
+                        campaign
+                          .theme
                           .primaryColor,
                     },
                   ]}
                 >
-                  {campaign.title}
+                  {
+                    campaign.title
+                  }
                 </Text>
 
                 {campaign.subtitle ? (
                   <Text
-                    maxFontSizeMultiplier={1.2}
+                    maxFontSizeMultiplier={
+                      1.2
+                    }
                     style={[
                       styles.description,
+
                       {
                         color:
-                          campaign.theme
+                          campaign
+                            .theme
                             .textColor,
                       },
                     ]}
                   >
-                    {campaign.subtitle}
+                    {
+                      campaign.subtitle
+                    }
                   </Text>
                 ) : null}
               </View>
@@ -458,14 +577,21 @@ export default function DynamicCampaignPopup({
                     undefined
                   }
                   accessibilityRole="button"
-                  disabled={isActionPending}
-                  style={({ pressed }) => [
+                  disabled={
+                    isActionPending
+                  }
+                  style={({
+                    pressed,
+                  }) => [
                     styles.primaryButton,
+
                     {
                       backgroundColor:
-                        campaign.theme
+                        campaign
+                          .theme
                           .buttonColor,
                     },
+
                     (pressed ||
                       isActionPending) &&
                       styles.primaryButtonPressed,
@@ -475,17 +601,23 @@ export default function DynamicCampaignPopup({
                   }}
                 >
                   <Text
-                    maxFontSizeMultiplier={1.15}
+                    maxFontSizeMultiplier={
+                      1.15
+                    }
                     style={[
                       styles.primaryButtonText,
+
                       {
                         color:
-                          campaign.theme
+                          campaign
+                            .theme
                             .buttonTextColor,
                       },
                     ]}
                   >
-                    {campaign.ctaLabel}
+                    {
+                      campaign.ctaLabel
+                    }
                   </Text>
                 </Pressable>
               ) : null}
@@ -497,163 +629,219 @@ export default function DynamicCampaignPopup({
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    alignItems: 'center',
-    bottom: 0,
-    justifyContent: 'center',
-    left: 0,
-    paddingHorizontal: 16,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
+const styles =
+  StyleSheet.create({
+    root: {
+      alignItems: 'center',
 
-  backdrop: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
+      bottom: 0,
 
-  card: {
-    maxWidth: 356,
-    position: 'relative',
-    shadowColor: '#001A0B',
-    shadowOffset: {
-      width: 0,
-      height: 16,
+      justifyContent: 'center',
+
+      left: 0,
+
+      paddingHorizontal: 16,
+
+      position: 'absolute',
+
+      right: 0,
+
+      top: 0,
     },
-    shadowOpacity: 0.22,
-    shadowRadius: 30,
-    elevation: 18,
-  },
 
-  surface: {
-    borderRadius: 28,
-    borderWidth: 1,
-    overflow: 'hidden',
-    width: '100%',
-  },
+    /*
+     * Backdrop now receives touches
+     * instead of being pointerEvents
+     * none.
+     */
+    backdrop: {
+      bottom: 0,
 
-  heroWrap: {
-    backgroundColor: '#DCE7DE',
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
-  },
+      left: 0,
 
-  heroImage: {
-    height: '100%',
-    width: '100%',
-  },
+      position: 'absolute',
 
-  heroShade: {
-    backgroundColor:
-      'rgba(0, 0, 0, 0.025)',
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
+      right: 0,
 
-  closeButton: {
-    alignItems: 'center',
-    backgroundColor:
-      'rgba(255, 255, 255, 0.94)',
-    borderColor:
-      'rgba(0, 45, 19, 0.08)',
-    borderRadius: 20,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 12,
-    shadowColor: '#001A0B',
-    shadowOffset: {
-      width: 0,
-      height: 3,
+      top: 0,
     },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    top: 12,
-    width: 40,
-    zIndex: 6,
-    elevation: 5,
-  },
 
-  closeButtonPressed: {
-    backgroundColor:
-      'rgba(244, 250, 246, 0.98)',
-    transform: [
-      {
-        scale: 0.95,
+    backdropPressTarget: {
+      bottom: 0,
+
+      left: 0,
+
+      position: 'absolute',
+
+      right: 0,
+
+      top: 0,
+    },
+
+    card: {
+      maxWidth: 356,
+
+      position: 'relative',
+
+      shadowColor: '#001A0B',
+
+      shadowOffset: {
+        width: 0,
+        height: 16,
       },
-    ],
-  },
 
-  content: {
-    paddingBottom: 22,
-    paddingHorizontal: 22,
-    paddingTop: 21,
-    width: '100%',
-  },
+      shadowOpacity: 0.22,
 
-  copy: {
-    alignItems: 'center',
-    width: '100%',
-  },
+      shadowRadius: 30,
 
-  headline: {
-    fontSize: 30,
-    fontWeight: '900',
-    lineHeight: 39,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-    width: '100%',
-  },
+      elevation: 18,
 
-  description: {
-    fontSize: 15.5,
-    fontWeight: '700',
-    lineHeight: 24,
-    marginTop: 8,
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-
-  primaryButton: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    borderRadius: 22,
-    justifyContent: 'center',
-    marginTop: 20,
-    minHeight: 55,
-    shadowColor: '#075B2A',
-    shadowOffset: {
-      width: 0,
-      height: 6,
+      /*
+       * Ensures the popup itself
+       * stays visually/touch-wise
+       * above the dismiss backdrop.
+       */
+      zIndex: 2,
     },
-    shadowOpacity: 0.13,
-    shadowRadius: 10,
-    elevation: 4,
-  },
 
-  primaryButtonPressed: {
-    opacity: 0.92,
-    transform: [
-      {
-        scale: 0.985,
+    surface: {
+      borderRadius: 28,
+
+      overflow: 'hidden',
+
+      width: '100%',
+    },
+
+    heroWrap: {
+      backgroundColor:
+        'transparent',
+
+      overflow: 'hidden',
+
+      position: 'relative',
+
+      width: '100%',
+    },
+
+    heroImage: {
+      height: '100%',
+
+      width: '100%',
+
+      transform: [
+        {
+          scale:
+            HERO_IMAGE_SCALE,
+        },
+      ],
+    },
+
+    heroShade: {
+      backgroundColor:
+        'rgba(0, 0, 0, 0.025)',
+
+      bottom: 0,
+
+      left: 0,
+
+      position: 'absolute',
+
+      right: 0,
+
+      top: 0,
+    },
+
+    content: {
+      paddingBottom: 22,
+
+      paddingHorizontal: 22,
+
+      paddingTop: 21,
+
+      width: '100%',
+    },
+
+    copy: {
+      alignItems: 'center',
+
+      width: '100%',
+    },
+
+    headline: {
+      fontSize: 30,
+
+      fontWeight: '900',
+
+      lineHeight: 39,
+
+      textAlign: 'center',
+
+      writingDirection:
+        'rtl',
+
+      width: '100%',
+    },
+
+    description: {
+      fontSize: 15.5,
+
+      fontWeight: '700',
+
+      lineHeight: 24,
+
+      marginTop: 8,
+
+      textAlign: 'center',
+
+      writingDirection:
+        'rtl',
+    },
+
+    primaryButton: {
+      alignItems: 'center',
+
+      alignSelf: 'stretch',
+
+      borderRadius: 22,
+
+      justifyContent: 'center',
+
+      marginTop: 20,
+
+      minHeight: 55,
+
+      shadowColor: '#075B2A',
+
+      shadowOffset: {
+        width: 0,
+        height: 6,
       },
-    ],
-  },
 
-  primaryButtonText: {
-    fontSize: 18,
-    fontWeight: '900',
-    textAlign: 'center',
-    writingDirection: 'rtl',
-  },
-});
+      shadowOpacity: 0.13,
+
+      shadowRadius: 10,
+
+      elevation: 4,
+    },
+
+    primaryButtonPressed: {
+      opacity: 0.92,
+
+      transform: [
+        {
+          scale: 0.985,
+        },
+      ],
+    },
+
+    primaryButtonText: {
+      fontSize: 18,
+
+      fontWeight: '900',
+
+      textAlign: 'center',
+
+      writingDirection:
+        'rtl',
+    },
+  });

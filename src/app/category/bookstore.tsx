@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import {
   useLocalSearchParams,
   useRouter,
@@ -11,6 +13,7 @@ import {
 } from 'react';
 import {
   Animated,
+  FlatList,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -53,6 +56,9 @@ import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 const CATEGORY_COLUMNS_PER_ROW = 4;
 const CATEGORY_HORIZONTAL_PADDING = 16;
 const CATEGORY_COLUMN_GAP = 7;
+
+const PROMOTION_PRODUCT_GAP = 7;
+const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
 
 const PRINTING_SERVICE_SLUG =
   'printing-paper-printing-service';
@@ -290,6 +296,28 @@ function getProductImage(
   return product.images[0]?.imageUrl ?? null;
 }
 
+function prefetchBookstoreImageUrls(
+  urls: Array<string | null | undefined>,
+) {
+  const uniqueUrls = Array.from(
+    new Set(
+      urls.filter(
+        (url): url is string =>
+          Boolean(url?.trim()),
+      ),
+    ),
+  );
+
+  if (uniqueUrls.length === 0) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    uniqueUrls,
+    'memory-disk',
+  ).catch(() => {});
+}
+
 function getDiscountPercent(
   product: CatalogProduct,
 ): number | null {
@@ -314,9 +342,11 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${getArabicCurrencyLabel(
+  return `${amount.toFixed(
+    2,
+  )} ${getArabicCurrencyLabel(
     currencyCode,
-  )} ${amount.toFixed(2)}`;
+  )}`;
 }
 
 function getArabicCurrencyLabel(
@@ -737,21 +767,11 @@ function getBookstoreCategoryFallbackIcon(
 
 function BackArrowIcon() {
   return (
-    <View style={styles.backArrowCanvas}>
-      <View style={styles.backArrowStem} />
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowTop,
-        ]}
-      />
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowBottom,
-        ]}
-      />
-    </View>
+    <Ionicons
+      color={NAVIENTY_NOW_COLORS.text}
+      name="arrow-back-outline"
+      size={20}
+    />
   );
 }
 
@@ -1545,18 +1565,24 @@ function CategoryVisual({
       ]}
     >
       {item.imageUrl ? (
-        <Image
+        <ExpoImage
           source={{
             uri: item.imageUrl,
           }}
           style={styles.categoryImage}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          priority="high"
+          recyclingKey={`bookstore-category-${item.key}`}
+          transition={100}
         />
       ) : item.imageSource ? (
-        <Image
+        <ExpoImage
           source={item.imageSource}
           style={styles.categoryImage}
-          resizeMode="cover"
+          contentFit="cover"
+          priority="high"
+          recyclingKey={`bookstore-category-${item.key}`}
         />
       ) : (
         <Text style={styles.categoryFallbackIcon}>
@@ -1731,8 +1757,9 @@ function FeaturedProductCard({
         }
         numberOfLines={2}
       >
-        {product.nameEn?.trim() ||
-          product.name}
+        {product.name?.trim() ||
+          product.nameEn?.trim() ||
+          ''}
       </Text>
 
       <View
@@ -1933,6 +1960,33 @@ export default function BookstoreScreen() {
           );
           return null;
         }),
+      ]);
+
+      /*
+       * Start warming the image cache BEFORE the screen renders.
+       * Local category artwork is bundled, so only remote URLs
+       * need prefetching here.
+       */
+      const initialProductImageUrls =
+        loadedCatalog.sections
+          .flatMap((section) =>
+            getCatalogSectionProducts(
+              section,
+              true,
+            ),
+          )
+          .slice(0, 12)
+          .map(getProductImage);
+
+      prefetchBookstoreImageUrls([
+        ...loadedPromotionBanners.map(
+          (banner) => banner.imageUrl,
+        ),
+        ...(loadedStorefrontCategoryTiles ??
+          []).map(
+          (tile) => tile.imageUrl,
+        ),
+        ...initialProductImageUrls,
       ]);
 
       setCatalog(loadedCatalog);
@@ -2203,6 +2257,31 @@ export default function BookstoreScreen() {
     promotionBanners,
   ]);
 
+  /*
+   * Keep the category and promotion artwork hot in memory/disk cache.
+   * Banner product lists are small, so warming the first few cards
+   * produces the same fast image feel used elsewhere in the app.
+   */
+  useEffect(() => {
+    prefetchBookstoreImageUrls([
+      ...categories.map(
+        (item) => item.imageUrl,
+      ),
+      ...resolvedPromotionBanners.map(
+        (banner) => banner.imageUrl,
+      ),
+      ...resolvedPromotionBanners.flatMap(
+        (banner) =>
+          banner.products
+            .slice(0, 6)
+            .map(getProductImage),
+      ),
+    ]);
+  }, [
+    categories,
+    resolvedPromotionBanners,
+  ]);
+
   const pageWidth = Math.min(
     windowWidth,
     560,
@@ -2223,8 +2302,8 @@ export default function BookstoreScreen() {
   );
 
   const featuredCardWidth = Math.min(
-    116,
-    Math.max(92, pageWidth * 0.3),
+    136,
+    Math.max(108, pageWidth * 0.34),
   );
 
   const promotionBannerWidth = Math.max(
@@ -2233,11 +2312,11 @@ export default function BookstoreScreen() {
   );
 
   const promotionBannerHeight = Math.round(
-    promotionBannerWidth * 0.64,
+    promotionBannerWidth * 0.66,
   );
 
   const promotionProductsOverlap = Math.round(
-    promotionBannerHeight * 0.49,
+    promotionBannerHeight * 0.55,
   );
 
   if (isLoading) {
@@ -2554,6 +2633,12 @@ export default function BookstoreScreen() {
           >
             <BackArrowIcon />
           </Pressable>
+
+          <CategorySearchEntry
+            scope="bookstore"
+            suggestions={searchSuggestions}
+            style={styles.headerSearchEntry}
+          />
         </View>
 
         <ScrollView
@@ -2567,11 +2652,6 @@ export default function BookstoreScreen() {
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
-          <CategorySearchEntry
-            scope="bookstore"
-            suggestions={searchSuggestions}
-          />
-
           <View style={styles.categoriesSection}>
             <Text style={styles.categoriesTitle}>
               تسوق حسب الفئة
@@ -2678,10 +2758,13 @@ export default function BookstoreScreen() {
                 ]}
               >
                 <View
+                  pointerEvents="none"
                   style={styles.promotionBannerFrame}
                 >
                   <Image
-                    source={{ uri: banner.imageUrl }}
+                    source={{
+                      uri: banner.imageUrl,
+                    }}
                     style={[
                       styles.promotionBanner,
                       {
@@ -2698,10 +2781,65 @@ export default function BookstoreScreen() {
                 </View>
 
                 {banner.products.length > 0 && (
-                  <ScrollView
+                  <FlatList
                     horizontal
-                    showsHorizontalScrollIndicator={false}
+                    nestedScrollEnabled
+                    data={banner.products}
+                    keyExtractor={(product) =>
+                      `${banner.id}-${product.id}`
+                    }
+                    renderItem={({
+                      item: product,
+                    }) => (
+                      <FeaturedProductCard
+                        product={product}
+                        currencyCode={currencyCode}
+                        cardWidth={featuredCardWidth}
+                        quantity={getProductQuantity(
+                          product.id,
+                        )}
+                        isStoreClosed={
+                          isStoreClosed
+                        }
+                        onAdd={() =>
+                          addFeaturedProduct(
+                            product,
+                          )
+                        }
+                        onIncrease={() =>
+                          increaseFeaturedProduct(
+                            product,
+                          )
+                        }
+                        onDecrease={() =>
+                          decreaseFeaturedProduct(
+                            product.id,
+                          )
+                        }
+                      />
+                    )}
+                    showsHorizontalScrollIndicator={
+                      false
+                    }
                     directionalLockEnabled
+                    initialNumToRender={4}
+                    maxToRenderPerBatch={4}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={3}
+                    getItemLayout={(
+                      _data,
+                      index,
+                    ) => ({
+                      length:
+                        featuredCardWidth +
+                        PROMOTION_PRODUCT_GAP,
+                      offset:
+                        PROMOTION_PRODUCT_HORIZONTAL_PADDING +
+                        (featuredCardWidth +
+                          PROMOTION_PRODUCT_GAP) *
+                          index,
+                      index,
+                    })}
                     contentContainerStyle={
                       styles.promotionProductsRail
                     }
@@ -2712,39 +2850,7 @@ export default function BookstoreScreen() {
                           -promotionProductsOverlap,
                       },
                     ]}
-                  >
-                    {banner.products.map(
-                      (product) => (
-                        <FeaturedProductCard
-                          key={`${banner.id}-${product.id}`}
-                          product={product}
-                          currencyCode={currencyCode}
-                          cardWidth={featuredCardWidth}
-                          quantity={getProductQuantity(
-                            product.id,
-                          )}
-                          isStoreClosed={
-                            isStoreClosed
-                          }
-                          onAdd={() =>
-                            addFeaturedProduct(
-                              product,
-                            )
-                          }
-                          onIncrease={() =>
-                            increaseFeaturedProduct(
-                              product,
-                            )
-                          }
-                          onDecrease={() =>
-                            decreaseFeaturedProduct(
-                              product.id,
-                            )
-                          }
-                        />
-                      ),
-                    )}
-                  </ScrollView>
+                  />
                 )}
               </View>
             ),
@@ -2787,54 +2893,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
-    paddingBottom: 12,
+    gap: 10,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     paddingTop: 10,
     zIndex: 10,
   },
+  headerSearchEntry: {
+    flex: 1,
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
+  },
   backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 46,
+    borderColor: '#E6E6E6',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
   headerButtonPressed: {
     backgroundColor: '#F7F7F7',
     transform: [{ scale: 0.97 }],
-  },
-  backArrowCanvas: {
-    height: 23,
-    position: 'relative',
-    width: 24,
-  },
-  backArrowStem: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 3,
-    position: 'absolute',
-    top: 10.3,
-    width: 19,
-  },
-  backArrowDiagonal: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 2,
-    position: 'absolute',
-    width: 10,
-  },
-  backArrowTop: {
-    top: 7,
-    transform: [{ rotate: '-42deg' }],
-  },
-  backArrowBottom: {
-    top: 14,
-    transform: [{ rotate: '42deg' }],
   },
   mainScrollView: {
     flex: 1,
@@ -2858,6 +2941,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
     marginBottom: 14,
     paddingHorizontal: 16,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    width: '100%',
   },
   categoriesScroll: {
     direction: 'ltr',
@@ -2949,9 +3035,10 @@ const styles = StyleSheet.create({
   },
   promotionProductsRail: {
     alignItems: 'flex-start',
-    gap: 7,
+    gap: PROMOTION_PRODUCT_GAP,
     paddingBottom: 7,
-    paddingHorizontal: 21,
+    paddingHorizontal:
+      PROMOTION_PRODUCT_HORIZONTAL_PADDING,
     paddingTop: 0,
   },
   featuredProductCard: {
@@ -2960,9 +3047,9 @@ const styles = StyleSheet.create({
   },
   featuredProductImageBox: {
     alignItems: 'center',
-    backgroundColor: '#F4F4F4',
+    backgroundColor: '#F7F7F7',
     borderColor: '#E8E8E8',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     justifyContent: 'center',
     overflow: 'hidden',
@@ -2998,19 +3085,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E7E7E7',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    bottom: 6,
+    bottom: 8,
     elevation: 2,
-    height: 34,
+    height: 38,
     justifyContent: 'center',
     position: 'absolute',
-    right: 6,
+    right: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
-    width: 34,
+    width: 38,
     zIndex: 8,
   },
   featuredAddButtonPressed: {
@@ -3022,23 +3109,23 @@ const styles = StyleSheet.create({
   },
   featuredAddButtonText: {
     color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 25,
+    fontSize: 27,
     fontWeight: '300',
-    lineHeight: 27,
+    lineHeight: 29,
     marginTop: -2,
   },
   featuredQuantityPill: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E7E7E7',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    bottom: 6,
+    bottom: 8,
     elevation: 2,
     flexDirection: 'row',
-    height: 34,
+    height: 38,
     position: 'absolute',
-    right: 6,
+    right: 8,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
@@ -3047,58 +3134,64 @@ const styles = StyleSheet.create({
   },
   featuredQuantityButton: {
     alignItems: 'center',
-    height: 32,
+    height: 36,
     justifyContent: 'center',
-    width: 25,
+    width: 28,
   },
   featuredQuantityButtonText: {
     color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: 22,
   },
   featuredQuantityValue: {
     color: '#202020',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    minWidth: 14,
+    minWidth: 16,
     textAlign: 'center',
   },
   featuredProductName: {
     color: '#202020',
-    fontSize: 12.5,
+    fontSize: 13.5,
     fontWeight: '500',
-    letterSpacing: -0.15,
-    lineHeight: 15,
-    marginTop: 6,
-    textAlign: 'left',
-    writingDirection: 'ltr',
+    letterSpacing: -0.1,
+    lineHeight: 17,
+    marginTop: 8,
+    minHeight: 34,
+    paddingHorizontal: 2,
+    textAlign: 'center',
+    width: '100%',
+    writingDirection: 'rtl',
   },
   featuredPriceRow: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
-    marginTop: 1,
+    justifyContent: 'center',
+    marginTop: 4,
+    width: '100%',
   },
   featuredCurrentPriceWrap: {
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     borderBottomColor: '#BFFF00',
     borderBottomWidth: 2,
   },
   featuredCurrentPrice: {
     color: '#202020',
-    fontSize: 10.5,
+    fontSize: 11.5,
     fontWeight: '500',
-    lineHeight: 13,
-    textAlign: 'left',
+    lineHeight: 14,
+    textAlign: 'center',
     writingDirection: 'ltr',
   },
   featuredOldPrice: {
     color: '#858585',
-    fontSize: 9,
-    lineHeight: 11,
-    textAlign: 'left',
+    fontSize: 9.5,
+    lineHeight: 12,
+    textAlign: 'center',
     textDecorationLine: 'line-through',
     writingDirection: 'ltr',
   },

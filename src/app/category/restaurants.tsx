@@ -1,8 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import {
   useLocalSearchParams,
   useRouter,
 } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import {
   useEffect,
   useMemo,
@@ -11,7 +13,7 @@ import {
 } from 'react';
 import {
   Animated,
-  Image,
+  FlatList,
   type ImageSourcePropType,
   Modal,
   PanResponder,
@@ -21,9 +23,12 @@ import {
   StyleSheet,
   Text,
   useWindowDimensions,
-  View,
+  View
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import DatabaseFirstImage from '../../components/ui/database-first-image';
@@ -347,13 +352,9 @@ const CUISINES: CuisineItem[] = [
   },
 ];
 
-const PREVIEW_CUISINE_KEYS = [
-  'pizza',
-  'crepes',
-  'grills',
-  'sandwiches',
-  'desserts',
-];
+const PREVIEW_CUISINE_KEYS = CUISINES.map(
+  (cuisine) => cuisine.key,
+);
 
 function getCuisineArtworkKey(
   cuisineKey: string,
@@ -499,7 +500,7 @@ function prefetchRestaurantImages(
   const urls = Array.from(
     new Set(
       stores
-        .slice(0, 6)
+        .slice(0, 8)
         .flatMap((store) => [
           getStoreCoverUrl(store),
           getStoreLogoUrl(store),
@@ -518,7 +519,9 @@ function prefetchRestaurantImages(
   void ExpoImage.prefetch(
     urls,
     'memory-disk',
-  );
+  ).catch(() => {
+    // Prefetch is an optimization only. Normal image loading still works.
+  });
 }
 
 function StoreArtwork({
@@ -554,36 +557,53 @@ function StoreArtwork({
 
   return (
     <View style={styles.storeArtwork}>
-      {canShowCover ? (
-        <ExpoImage
-          accessibilityLabel={`صورة الغلاف الخاصة بـ ${store.name}`}
-          cachePolicy="memory-disk"
-          contentFit="cover"
-          priority={priority}
-          source={coverUrl ?? ''}
-          style={
-            styles.storeCoverImage
-          }
-          transition={120}
-          onError={() => {
-            setCoverFailed(true);
-          }}
-        />
-      ) : (
-        <View
-          style={
-            styles.storeCoverFallback
-          }
-        >
-          <Text
+      <View style={styles.storeCoverClip}>
+        {canShowCover ? (
+          <ExpoImage
+            accessibilityLabel={`صورة الغلاف الخاصة بـ ${store.name}`}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            priority={priority}
+            recyclingKey={`restaurant-cover-${store.id}`}
+            source={coverUrl ?? ''}
             style={
-              styles.storeCoverFallbackText
+              styles.storeCoverImage
+            }
+            transition={120}
+            onError={() => {
+              setCoverFailed(true);
+            }}
+          />
+        ) : (
+          <View
+            style={
+              styles.storeCoverFallback
             }
           >
-            {getStoreInitial(store)}
-          </Text>
-        </View>
-      )}
+            <Text
+              style={
+                styles.storeCoverFallbackText
+              }
+            >
+              {getStoreInitial(store)}
+            </Text>
+          </View>
+        )}
+
+        {store.isManuallyClosed && (
+          <View
+            style={styles.closedOverlay}
+          >
+            <Text
+              style={
+                styles.closedOverlayText
+              }
+            >
+              مغلق
+            </Text>
+          </View>
+        )}
+      </View>
 
       <View style={styles.logoBadge}>
         {canShowLogo ? (
@@ -592,6 +612,7 @@ function StoreArtwork({
             cachePolicy="memory-disk"
             contentFit="contain"
             priority={priority}
+            recyclingKey={`restaurant-logo-${store.id}`}
             source={logoUrl ?? ''}
             style={styles.logoImage}
             transition={100}
@@ -613,49 +634,24 @@ function StoreArtwork({
           </View>
         )}
       </View>
-
-      {store.isManuallyClosed && (
-        <View
-          style={styles.closedOverlay}
-        >
-          <Text
-            style={
-              styles.closedOverlayText
-            }
-          >
-            مغلق
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
 
 function BackArrowIcon() {
   return (
-    <View style={styles.backArrowCanvas}>
-      <View style={styles.backArrowStem} />
-
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowTop,
-        ]}
-      />
-
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowBottom,
-        ]}
-      />
-    </View>
+    <Ionicons
+      color={
+        NAVIENTY_NOW_COLORS.text
+      }
+      name="arrow-back-outline"
+      size={20}
+    />
   );
 }
 
 export default function RestaurantsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
 
   const params =
     useLocalSearchParams<{
@@ -925,6 +921,17 @@ export default function RestaurantsScreen() {
       stores,
     ]);
 
+  /*
+   * Warm the memory/disk cache for the restaurants that are currently
+   * at the top of the filtered list. This also runs when a cuisine filter
+   * changes, so the newly visible restaurants do not wait for cold images.
+   */
+  useEffect(() => {
+    prefetchRestaurantImages(
+      visibleStores,
+    );
+  }, [visibleStores]);
+
   function toggleSelectedCuisine(
     cuisineKey: string,
   ) {
@@ -941,16 +948,6 @@ export default function RestaurantsScreen() {
 
         return [cuisineKey];
       },
-    );
-  }
-
-  function openCuisinesModal() {
-    setDraftCuisineKeys(
-      selectedCuisineKeys,
-    );
-
-    setIsCuisinesModalVisible(
-      true,
     );
   }
 
@@ -1048,390 +1045,400 @@ export default function RestaurantsScreen() {
   }
 
   return (
-    <View style={styles.screen}>
-      <View
-        style={[
-          styles.topHeader,
-          Platform.OS === 'android' && {
-            minHeight:
-              Math.max(insets.top, 24) + 76,
-            paddingTop:
-              Math.max(insets.top, 24) + 10,
-          },
-        ]}
-      >
-        <Pressable
-          accessibilityLabel="العودة"
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed &&
-              styles.headerButtonPressed,
-          ]}
-          onPress={() =>
-            router.back()
-          }
-        >
-          <BackArrowIcon />
-        </Pressable>
-      </View>
+    <SafeAreaView
+      style={styles.screen}
+      edges={['top']}
+    >
+      <StatusBar
+        style="dark"
+      />
 
-      <ScrollView
-        contentContainerStyle={
-          styles.pageContent
-        }
-        showsVerticalScrollIndicator={
-          false
+      <View
+        style={
+          styles.pageShell
         }
       >
-        <View style={styles.container}>
+        <View
+          style={styles.header}
+        >
+          <Pressable
+            accessibilityLabel="العودة"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.backButton,
+
+              pressed &&
+                styles.headerButtonPressed,
+            ]}
+            onPress={() =>
+              router.back()
+            }
+          >
+            <BackArrowIcon />
+          </Pressable>
+
           <CategorySearchEntry
             scope="restaurants"
             suggestions={searchSuggestions}
+            style={styles.headerSearchEntry}
           />
+        </View>
 
-          <ScrollView
-            horizontal
-            contentContainerStyle={
-              styles.cuisinesPreviewContent
-            }
-            key="restaurants-cuisines-exact-order"
-            ref={
-              cuisinesPreviewScrollRef
-            }
-            showsHorizontalScrollIndicator={
-              false
-            }
-            style={
-              styles.cuisinesPreview
-            }
-            onContentSizeChange={() =>
-              cuisinesPreviewScrollRef.current?.scrollToEnd(
-                {
-                  animated: false,
-                },
-              )
-            }
-          >
-            {previewCuisines.map(
-              (cuisine) => (
-                <CuisinePreviewItem
-                  key={cuisine.key}
-                  active={selectedCuisineKeys.includes(
-                    cuisine.key,
-                  )}
-                  cuisine={cuisine}
-                  onPress={() =>
-                    toggleSelectedCuisine(
-                      cuisine.key,
-                    )
-                  }
-                />
-              ),
-            )}
-
-            <CuisinePreviewItem
-              active={false}
-              cuisine={{
-                key: 'view-all',
-                label: 'عرض الكل',
-                image: require('../../assets/cuisines/view-all.webp'),
-                keywords: [],
-              }}
-              onPress={
-                openCuisinesModal
-              }
-            />
-          </ScrollView>
-
-          {hasActiveFilters && (
+        <FlatList
+          contentContainerStyle={
+            styles.pageContent
+          }
+          data={visibleStores}
+          initialNumToRender={4}
+          keyExtractor={(store) =>
+            store.id
+          }
+          maxToRenderPerBatch={4}
+          removeClippedSubviews={
+            Platform.OS === 'android'
+          }
+          showsVerticalScrollIndicator={
+            false
+          }
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          ItemSeparatorComponent={() => (
             <View
               style={
-                styles.clearFiltersRow
+                styles.storeListSeparator
               }
-            >
-              <Pressable
-                accessibilityRole="button"
-                style={({ pressed }) => [
-                  styles.clearFiltersButton,
-                  pressed &&
-                    styles.pressed,
-                ]}
-                onPress={
-                  resetAllFilters
+            />
+          )}
+          ListHeaderComponent={
+            <View style={styles.container}>
+              <ScrollView
+                horizontal
+                contentContainerStyle={
+                  styles.cuisinesPreviewContent
                 }
+                key="restaurants-cuisines-exact-order"
+                ref={
+                  cuisinesPreviewScrollRef
+                }
+                showsHorizontalScrollIndicator={
+                  false
+                }
+                style={
+                  styles.cuisinesPreview
+                }
+                onContentSizeChange={() =>
+                  cuisinesPreviewScrollRef.current?.scrollToEnd(
+                    {
+                      animated: false,
+                    },
+                  )
+                }
+              >
+                {previewCuisines.map(
+                  (cuisine) => (
+                    <CuisinePreviewItem
+                      key={cuisine.key}
+                      active={selectedCuisineKeys.includes(
+                        cuisine.key,
+                      )}
+                      cuisine={cuisine}
+                      onPress={() =>
+                        toggleSelectedCuisine(
+                          cuisine.key,
+                        )
+                      }
+                    />
+                  ),
+                )}
+              </ScrollView>
+
+              {hasActiveFilters && (
+                <View
+                  style={
+                    styles.clearFiltersRow
+                  }
+                >
+                  <Pressable
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.clearFiltersButton,
+                      pressed &&
+                        styles.pressed,
+                    ]}
+                    onPress={
+                      resetAllFilters
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.clearFiltersText
+                      }
+                    >
+                      مسح الفلاتر
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.container}>
+              <View
+                style={styles.emptyCard}
               >
                 <Text
                   style={
-                    styles.clearFiltersText
+                    styles.emptyIcon
                   }
                 >
-                  مسح الفلاتر
+                  🔎
                 </Text>
-              </Pressable>
+
+                <Text
+                  style={
+                    styles.emptyTitle
+                  }
+                >
+                  لا توجد نتائج
+                </Text>
+
+                <Text
+                  style={
+                    styles.emptyDescription
+                  }
+                >
+                  جرّب اختيار مطبخ مختلف أو
+                  إزالة بعض الفلاتر.
+                </Text>
+
+                {hasActiveFilters && (
+                  <Pressable
+                    accessibilityRole="button"
+                    style={({
+                      pressed,
+                    }) => [
+                      styles.emptyResetButton,
+                      pressed &&
+                        styles.pressed,
+                    ]}
+                    onPress={
+                      resetAllFilters
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.emptyResetButtonText
+                      }
+                    >
+                      عرض كل المطاعم
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
-          )}
+          }
+          renderItem={({
+            item: store,
+            index: storeIndex,
+          }) => {
+            const ratingInfo =
+              getStoreRatingInfo(
+                store,
+              );
 
-          {visibleStores.length ===
-          0 ? (
-            <View
-              style={styles.emptyCard}
-            >
-              <Text
+            return (
+              <View
                 style={
-                  styles.emptyIcon
+                  styles.storeListItem
                 }
               >
-                🔎
-              </Text>
-
-              <Text
-                style={
-                  styles.emptyTitle
-                }
-              >
-                لا توجد نتائج
-              </Text>
-
-              <Text
-                style={
-                  styles.emptyDescription
-                }
-              >
-                جرّب اختيار مطبخ مختلف أو
-                إزالة بعض الفلاتر.
-              </Text>
-
-              {hasActiveFilters && (
                 <Pressable
+                  accessibilityLabel={
+                    store.isManuallyClosed
+                      ? `${store.name} مغلق`
+                      : `فتح ${store.name}`
+                  }
                   accessibilityRole="button"
                   style={({
                     pressed,
                   }) => [
-                    styles.emptyResetButton,
+                    styles.storeRow,
+                    store.isManuallyClosed &&
+                      styles.storeRowClosed,
                     pressed &&
-                      styles.pressed,
+                      styles.storeRowPressed,
                   ]}
-                  onPress={
-                    resetAllFilters
-                  }
-                >
-                  <Text
-                    style={
-                      styles.emptyResetButtonText
+                  onPress={() => {
+                    if (
+                      store.isManuallyClosed
+                    ) {
+                      setClosedStoreNotice(
+                        store,
+                      );
+                      return;
                     }
+
+                    router.push({
+                      pathname:
+                        '/store/[id]',
+                      params: {
+                        id: store.id,
+                      },
+                    });
+                  }}
+                >
+                  <StoreArtwork
+                    priority={
+                      storeIndex < 4
+                        ? 'high'
+                        : 'normal'
+                    }
+                    store={store}
+                  />
+
+                  <View
+                    style={[
+                      styles.storeBody,
+                      store.isManuallyClosed &&
+                        styles.storeBodyClosed,
+                    ]}
                   >
-                    عرض كل المطاعم
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-          ) : (
-            <View
-              style={
-                styles.storesList
-              }
-            >
-              {visibleStores.map(
-                (store, storeIndex) => {
-                  const ratingInfo =
-                    getStoreRatingInfo(
-                      store,
-                    );
-
-                  return (
-                    <Pressable
-                      key={store.id}
-                      accessibilityLabel={
-                        store.isManuallyClosed
-                          ? `${store.name} مغلق`
-                          : `فتح ${store.name}`
-                      }
-                      accessibilityRole="button"
-                      style={({
-                        pressed,
-                      }) => [
-                        styles.storeRow,
+                    <View
+                      style={[
+                        styles.storeNameRow,
                         store.isManuallyClosed &&
-                          styles.storeRowClosed,
-                        pressed &&
-                          styles.storeRowPressed,
+                          styles.storeNameRowClosed,
                       ]}
-                      onPress={() => {
-                        if (
-                          store.isManuallyClosed
-                        ) {
-                          setClosedStoreNotice(
-                            store,
-                          );
-                          return;
-                        }
-
-                        router.push({
-                          pathname:
-                            '/store/[id]',
-                          params: {
-                            id: store.id,
-                          },
-                        });
-                      }}
                     >
-                      <StoreArtwork
-                        priority={
-                          storeIndex < 4
-                            ? 'high'
-                            : 'normal'
-                        }
-                        store={store}
-                      />
-
-                      <View
+                      <Text
+                        numberOfLines={1}
                         style={[
-                          styles.storeBody,
+                          styles.storeName,
                           store.isManuallyClosed &&
-                            styles.storeBodyClosed,
+                            styles.storeNameClosed,
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.storeNameRow,
-                            store.isManuallyClosed &&
-                              styles.storeNameRowClosed,
-                          ]}
-                        >
-                          <Text
-                            numberOfLines={
-                              1
-                            }
-                            style={[
-                              styles.storeName,
-                              store.isManuallyClosed &&
-                                styles.storeNameClosed,
-                            ]}
-                          >
-                            {store.name}
-                          </Text>
-                        </View>
+                        {store.name}
+                      </Text>
+                    </View>
 
-                        {store.isManuallyClosed ? (
+                    {store.isManuallyClosed ? (
+                      <View
+                        style={
+                          styles.closedStoreMetaRow
+                        }
+                      >
+                        {ratingInfo.hasRatings &&
+                        ratingInfo.rating !==
+                          null ? (
                           <View
                             style={
-                              styles.closedStoreMetaRow
+                              styles.closedRatingGroup
                             }
                           >
-                            {ratingInfo.hasRatings &&
-                            ratingInfo.rating !==
-                              null ? (
-                              <View
-                                style={
-                                  styles.closedRatingGroup
-                                }
-                              >
-                                <Text
-                                  style={
-                                    styles.closedRatingStar
-                                  }
-                                >
-                                  ★
-                                </Text>
+                            <Text
+                              style={
+                                styles.closedRatingStar
+                              }
+                            >
+                              ★
+                            </Text>
 
-                                <Text
-                                  style={
-                                    styles.closedMetaText
-                                  }
-                                >
-                                  {ratingInfo.rating.toFixed(
-                                    1,
-                                  )}
-                                </Text>
-                              </View>
-                            ) : (
-                              <Text
-                                style={
-                                  styles.closedMetaText
-                                }
-                              >
-                                New
-                              </Text>
-                            )}
+                            <Text
+                              style={
+                                styles.closedMetaText
+                              }
+                            >
+                              {ratingInfo.rating.toFixed(
+                                1,
+                              )}
+                            </Text>
                           </View>
                         ) : (
-                          <View
+                          <Text
                             style={
-                              styles.storeMetaRow
+                              styles.closedMetaText
                             }
                           >
-                            {ratingInfo.hasRatings &&
-                            ratingInfo.rating !==
-                              null ? (
-                              <>
-                                <Text
-                                  style={
-                                    styles.ratingStar
-                                  }
-                                >
-                                  ★
-                                </Text>
-
-                                <Text
-                                  style={
-                                    styles.ratingText
-                                  }
-                                >
-                                  {ratingInfo.rating.toFixed(
-                                    1,
-                                  )}
-                                </Text>
-                              </>
-                            ) : (
-                              <Text
-                                style={
-                                  styles.newStoreText
-                                }
-                              >
-                                New
-                              </Text>
-                            )}
-                          </View>
+                            New
+                          </Text>
                         )}
                       </View>
-                    </Pressable>
-                  );
-                },
-              )}
-            </View>
-          )}
-        </View>
-      </ScrollView>
+                    ) : (
+                      <View
+                        style={
+                          styles.storeMetaRow
+                        }
+                      >
+                        {ratingInfo.hasRatings &&
+                        ratingInfo.rating !==
+                          null ? (
+                          <>
+                            <Text
+                              style={
+                                styles.ratingStar
+                              }
+                            >
+                              ★
+                            </Text>
 
-      <ClosedStoreNotice
-        store={closedStoreNotice}
-        onClose={() =>
-          setClosedStoreNotice(null)
-        }
-      />
+                            <Text
+                              style={
+                                styles.ratingText
+                              }
+                            >
+                              {ratingInfo.rating.toFixed(
+                                1,
+                              )}
+                            </Text>
+                          </>
+                        ) : (
+                          <Text
+                            style={
+                              styles.newStoreText
+                            }
+                          >
+                            New
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                </Pressable>
+              </View>
+            );
+          }}
+        />
 
-      <CuisinesModal
-        draftCuisineKeys={
-          draftCuisineKeys
-        }
-        visible={
-          isCuisinesModalVisible
-        }
-        onApply={
-          applyCuisineFilters
-        }
-        onClose={
-          closeCuisinesModal
-        }
-        onReset={
-          resetCuisineFilters
-        }
-        onToggleCuisine={
-          toggleDraftCuisine
-        }
-      />
-    </View>
+        <ClosedStoreNotice
+          store={closedStoreNotice}
+          onClose={() =>
+            setClosedStoreNotice(null)
+          }
+        />
+
+        <CuisinesModal
+          draftCuisineKeys={
+            draftCuisineKeys
+          }
+          visible={
+            isCuisinesModalVisible
+          }
+          onApply={
+            applyCuisineFilters
+          }
+          onClose={
+            closeCuisinesModal
+          }
+          onReset={
+            resetCuisineFilters
+          }
+          onToggleCuisine={
+            toggleDraftCuisine
+          }
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -1562,18 +1569,25 @@ function CuisinePreviewItem({
             styles.cuisinePreviewPhoto
           }
         />
-      </View>
 
-      <Text
-        numberOfLines={1}
-        style={[
-          styles.cuisinePreviewLabel,
-          active &&
-            styles.cuisinePreviewLabelActive,
-        ]}
-      >
-        {cuisine.label}
-      </Text>
+        <View
+          pointerEvents="none"
+          style={
+            styles.cuisinePreviewTitleArea
+          }
+        >
+          <Text
+            numberOfLines={2}
+            style={[
+              styles.cuisinePreviewLabel,
+              active &&
+                styles.cuisinePreviewLabelActive,
+            ]}
+          >
+            {cuisine.label}
+          </Text>
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -2256,37 +2270,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  topHeader: {
+  pageShell: {
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+    maxWidth: 560,
+    position: 'relative',
+    width: '100%',
+  },
+
+  header: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderBottomColor: '#ECECEF',
-    borderBottomWidth: 1,
+    /*
+     * Header layout:
+     * Back button stays at the FAR LEFT.
+     * Search fills the remaining space immediately to its RIGHT.
+     */
     flexDirection: 'row',
-    gap: 14,
-    minHeight: 100,
-    paddingBottom: 14,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 34,
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
+    gap: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 10,
     zIndex: 10,
+  },
+
+  headerSearchEntry: {
+    flex: 1,
+    /*
+     * CategorySearchEntry has page-level margins by default.
+     * Remove them here because it now lives inside the header row.
+     */
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
   },
 
   backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 46,
+    borderColor: '#E6E6E6',
+    borderRadius: 999,
+    borderWidth:
+      StyleSheet.hairlineWidth,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
 
   headerButtonPressed: {
@@ -2294,49 +2323,6 @@ const styles = StyleSheet.create({
     transform: [
       {
         scale: 0.97,
-      },
-    ],
-  },
-
-  backArrowCanvas: {
-    height: 23,
-    position: 'relative',
-    width: 24,
-  },
-
-  backArrowStem: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 3,
-    position: 'absolute',
-    top: 10.3,
-    width: 19,
-  },
-
-  backArrowDiagonal: {
-    backgroundColor: '#242424',
-    borderRadius: 2,
-    height: 2.2,
-    left: 2,
-    position: 'absolute',
-    width: 10,
-  },
-
-  backArrowTop: {
-    top: 7,
-    transform: [
-      {
-        rotate: '-42deg',
-      },
-    ],
-  },
-
-  backArrowBottom: {
-    top: 14,
-    transform: [
-      {
-        rotate: '42deg',
       },
     ],
   },
@@ -2361,62 +2347,79 @@ const styles = StyleSheet.create({
   cuisinesPreviewContent: {
     direction: 'ltr',
     flexDirection: 'row-reverse',
-    gap: 16,
-    paddingBottom: 13,
+    gap: 9,
+    paddingBottom: 12,
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 18,
+    paddingTop: 12,
   },
 
   cuisinePreviewItem: {
-    alignItems: 'center',
-    width: 84,
+    borderRadius: 15,
+    flexShrink: 0,
+    shadowColor: '#111111',
+    shadowOffset: {
+      height: 1,
+      width: 0,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    width: 76,
   },
 
   cuisinePreviewImage: {
-    alignItems: 'center',
-    backgroundColor: '#F6F4F1',
-    borderColor: '#F1F1F2',
-    borderRadius: 39,
-    borderWidth: 1,
-    height: 78,
-    justifyContent: 'center',
+    backgroundColor: '#F5F0E9',
+    borderColor: '#ECE9E5',
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 108,
     overflow: 'hidden',
-    shadowColor: '#111111',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    width: 78,
+    position: 'relative',
+    width: 76,
   },
 
   cuisinePreviewImageActive: {
-    backgroundColor: '#EAF8F0',
     borderColor:
       NAVIENTY_NOW_COLORS.primary,
-    borderWidth: 2,
+    borderWidth: 1.5,
   },
 
+  /*
+   * The database artwork now owns the COMPLETE visual surface
+   * of the category card. DatabaseFirstImage is still database-first,
+   * while the bundled asset remains only as a safe fallback.
+   */
   cuisinePreviewPhoto: {
-    borderRadius: 39,
+    bottom: 0,
     height: '100%',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
     width: '100%',
   },
 
+  cuisinePreviewTitleArea: {
+    alignItems: 'center',
+    left: 5,
+    position: 'absolute',
+    right: 5,
+    top: 8,
+    zIndex: 2,
+  },
+
   cuisinePreviewLabel: {
-    color: '#6B6B70',
+    color: '#171717',
     fontSize: 12,
-    marginTop: 8,
-    maxWidth: 84,
+    fontWeight: '600',
+    lineHeight: 15,
     textAlign: 'center',
+    writingDirection: 'rtl',
   },
 
   cuisinePreviewLabelActive: {
-    color:
-      NAVIENTY_NOW_COLORS.primary,
-    fontWeight: '900',
+    color: '#171717',
+    fontWeight: '700',
   },
 
   clearFiltersRow: {
@@ -2438,40 +2441,71 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
-  storesList: {
-    paddingBottom: 8,
+  storeListItem: {
+    alignSelf: 'center',
+    maxWidth:
+      NAVIENTY_NOW_LAYOUT.contentMaxWidth,
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 12,
+    width: '100%',
+  },
+
+  storeListSeparator: {
+    height: 18,
+  },
+
+  storesList: {
+    gap: 18,
+    paddingBottom: 12,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingTop: 14,
   },
 
   storeRow: {
-    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    direction: 'ltr',
-    flexDirection: 'row-reverse',
-    gap: 14,
-    minHeight: 128,
-    paddingVertical: 8,
+    borderColor: '#ECECEF',
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    elevation: 2,
+    overflow: 'visible',
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 3,
+      width: 0,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
     width: '100%',
   },
 
   storeRowClosed: {
-    flexDirection: 'row-reverse',
+    opacity: 0.92,
   },
 
   storeRowPressed: {
-    opacity: 0.76,
+    opacity: 0.82,
+    transform: [
+      {
+        scale: 0.995,
+      },
+    ],
   },
 
   storeArtwork: {
     backgroundColor: '#EFEFEF',
-    borderRadius: 21,
-    flexShrink: 0,
-    height: 112,
-    overflow: 'hidden',
+    height: 176,
     position: 'relative',
-    width: 132,
+    width: '100%',
+  },
+
+  storeCoverClip: {
+    backgroundColor: '#EFEFEF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '100%',
+    overflow: 'hidden',
+    width: '100%',
   },
 
   storeCoverImage: {
@@ -2488,7 +2522,7 @@ const styles = StyleSheet.create({
 
   storeCoverFallbackText: {
     color: '#8B8B92',
-    fontSize: 34,
+    fontSize: 40,
     fontWeight: '900',
   },
 
@@ -2504,25 +2538,25 @@ const styles = StyleSheet.create({
   logoBadge: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 17,
+    borderColor: '#EEEEF0',
+    borderRadius: 18,
     borderWidth: 1,
-    elevation: 3,
-    height: 50,
+    bottom: -30,
+    elevation: 5,
+    height: 68,
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'absolute',
-    right: 8,
+    right: 16,
     shadowColor: '#000000',
     shadowOffset: {
-      height: 2,
+      height: 3,
       width: 0,
     },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    top: 8,
-    width: 50,
-    zIndex: 4,
+    shadowOpacity: 0.14,
+    shadowRadius: 7,
+    width: 68,
+    zIndex: 8,
   },
 
   logoImage: {
@@ -2532,7 +2566,7 @@ const styles = StyleSheet.create({
 
   logoFallback: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F7F7F8',
     flex: 1,
     justifyContent: 'center',
     width: '100%',
@@ -2540,14 +2574,14 @@ const styles = StyleSheet.create({
 
   logoFallbackText: {
     color: '#66666C',
-    fontSize: 21,
+    fontSize: 24,
     fontWeight: '800',
   },
 
   closedOverlay: {
     alignItems: 'center',
     backgroundColor:
-      'rgba(18,18,20,0.66)',
+      'rgba(18,18,20,0.58)',
     bottom: 0,
     justifyContent: 'center',
     left: 0,
@@ -2559,10 +2593,10 @@ const styles = StyleSheet.create({
 
   closedOverlayText: {
     color: '#FFFFFF',
-    fontSize: 25,
+    fontSize: 24,
     fontWeight: '900',
     letterSpacing: -0.2,
-    lineHeight: 31,
+    lineHeight: 30,
     textAlign: 'center',
     textShadowColor:
       'rgba(0,0,0,0.22)',
@@ -2575,18 +2609,18 @@ const styles = StyleSheet.create({
 
   storeBody: {
     alignItems: 'stretch',
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 104,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    minHeight: 112,
     overflow: 'hidden',
-    paddingLeft: 2,
-    paddingRight: 0,
+    paddingBottom: 18,
+    paddingHorizontal: 16,
+    paddingTop: 38,
   },
 
   storeBodyClosed: {
     alignItems: 'stretch',
-    paddingLeft: 2,
-    paddingRight: 0,
   },
 
   storeNameRow: {
@@ -2601,20 +2635,21 @@ const styles = StyleSheet.create({
   },
 
   storeName: {
-    color: '#202024',
+    color: '#18181B',
     flex: 1,
-    fontSize: 19,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '500',
     letterSpacing: 0,
-    lineHeight: 27,
+    lineHeight: 24,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
 
   storeNameClosed: {
-    color: '#202024',
-    fontSize: 19,
-    fontWeight: '700',
+    color: '#18181B',
+    fontSize: 17,
+    fontWeight: '500',
+    lineHeight: 24,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -2638,69 +2673,69 @@ const styles = StyleSheet.create({
 
   storeMetaRow: {
     alignItems: 'center',
+    alignSelf: 'flex-end',
     direction: 'ltr',
     flexDirection: 'row-reverse',
-    gap: 5,
+    gap: 6,
     justifyContent: 'flex-start',
-    marginTop: 7,
-    minHeight: 24,
-    width: '100%',
+    marginTop: 6,
+    minHeight: 22,
   },
 
   ratingStar: {
-    color: '#F5A800',
+    color: '#F5C400',
     flexShrink: 0,
-    fontSize: 21,
-    lineHeight: 23,
+    fontSize: 18,
+    lineHeight: 20,
   },
 
   ratingText: {
-    color: '#2B2B2F',
-    fontSize: 16,
-    fontWeight: '500',
-    lineHeight: 23,
+    color: '#4A4A4F',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
     textAlign: 'right',
     writingDirection: 'ltr',
   },
 
   newStoreText: {
-    color: '#55555B',
-    fontSize: 15,
-    fontWeight: '500',
-    lineHeight: 23,
+    color: '#66666B',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
     textAlign: 'right',
     writingDirection: 'ltr',
   },
 
   closedStoreMetaRow: {
     alignItems: 'center',
+    alignSelf: 'flex-end',
     direction: 'ltr',
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: 6,
     justifyContent: 'flex-start',
-    marginTop: 7,
-    minHeight: 24,
-    width: '100%',
+    marginTop: 6,
+    minHeight: 22,
   },
 
   closedRatingGroup: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
-    gap: 5,
+    gap: 6,
   },
 
   closedRatingStar: {
-    color: '#F5A800',
-    fontSize: 21,
-    lineHeight: 23,
+    color: '#F5C400',
+    fontSize: 18,
+    lineHeight: 20,
   },
 
   closedMetaText: {
-    color: '#2B2B2F',
-    fontSize: 16,
-    fontWeight: '500',
-    lineHeight: 23,
+    color: '#4A4A4F',
+    fontSize: 14,
+    fontWeight: '400',
+    lineHeight: 20,
     textAlign: 'right',
     writingDirection: 'ltr',
   },

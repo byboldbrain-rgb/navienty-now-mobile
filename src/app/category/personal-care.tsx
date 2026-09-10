@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -9,6 +11,7 @@ import {
 } from 'react';
 import {
   Animated,
+  FlatList,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -48,6 +51,9 @@ const CATEGORY_COLUMNS_PER_ROW = 4;
 const CATEGORY_HORIZONTAL_PADDING = 16;
 const CATEGORY_COLUMN_GAP = 7;
 const PAGE_MAX_WIDTH = 560;
+
+const PROMOTION_PRODUCT_GAP = 7;
+const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
 
 /*
  * الفئات النهائية:
@@ -724,6 +730,33 @@ function getProductImage(
   return product.images[0]?.imageUrl ?? null;
 }
 
+function prefetchPersonalCareImages(
+  urls: Array<string | null | undefined>,
+) {
+  const uniqueUrls = Array.from(
+    new Set(
+      urls.filter(
+        (url): url is string =>
+          Boolean(url?.trim()),
+      ),
+    ),
+  );
+
+  if (uniqueUrls.length === 0) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    uniqueUrls,
+    'memory-disk',
+  ).catch(() => {
+    /*
+     * Prefetch is an optimization only.
+     * A failed prefetch must never block the screen.
+     */
+  });
+}
+
 function getDiscountPercent(
   product: CatalogProduct,
 ): number | null {
@@ -749,9 +782,11 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${getArabicCurrencyLabel(
+  return `${amount.toFixed(
+    2,
+  )} ${getArabicCurrencyLabel(
     currencyCode,
-  )} ${amount.toFixed(2)}`;
+  )}`;
 }
 
 function isPersonalCareBannerVisibleNow(
@@ -1184,41 +1219,16 @@ function getNextOpeningLabel(
 }
 
 function BackArrowIcon({
-  color = '#242424',
+  color = NAVIENTY_NOW_COLORS.text,
 }: {
   color?: string;
 }) {
   return (
-    <View style={styles.backArrowCanvas}>
-      <View
-        style={[
-          styles.backArrowStem,
-          {
-            backgroundColor: color,
-          },
-        ]}
-      />
-
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowTop,
-          {
-            backgroundColor: color,
-          },
-        ]}
-      />
-
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowBottom,
-          {
-            backgroundColor: color,
-          },
-        ]}
-      />
-    </View>
+    <Ionicons
+      color={color}
+      name="arrow-back-outline"
+      size={20}
+    />
   );
 }
 
@@ -1233,13 +1243,16 @@ function PersonalCareCategoryImagePreloader() {
     >
       {PERSONAL_CARE_CATEGORY_IMAGE_SOURCES.map(
         (source, index) => (
-          <Image
+          <ExpoImage
             key={`personal-care-category-preload-${index}`}
             source={source}
             style={
               styles.categoryPreloadImage
             }
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory"
+            priority="high"
+            recyclingKey={`personal-care-category-preload-${index}`}
           />
         ),
       )}
@@ -1268,18 +1281,25 @@ function CategoryVisual({
       ]}
     >
       {item.imageUrl ? (
-        <Image
+        <ExpoImage
           source={{
             uri: item.imageUrl,
           }}
           style={styles.categoryImage}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          priority="high"
+          recyclingKey={`personal-care-category-${item.categoryKey}`}
+          transition={100}
         />
       ) : item.imageSource ? (
-        <Image
+        <ExpoImage
           source={item.imageSource}
           style={styles.categoryImage}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory"
+          priority="high"
+          recyclingKey={`personal-care-category-${item.categoryKey}`}
         />
       ) : (
         <Text
@@ -1456,8 +1476,9 @@ function FeaturedProductCard({
         }
         numberOfLines={2}
       >
-        {product.nameEn?.trim() ||
-          product.name}
+        {product.name?.trim() ||
+          product.nameEn?.trim() ||
+          ''}
       </Text>
 
       <View
@@ -2308,6 +2329,32 @@ export default function PersonalCareScreen() {
           }),
         ]);
 
+        /*
+         * Warm remote artwork before React commits the loaded screen.
+         * This runs while the skeleton is still visible.
+         */
+        const initialProductImageUrls =
+          loadedCatalog.sections
+            .flatMap((section) =>
+              getCatalogSectionProducts(
+                section,
+                true,
+              ),
+            )
+            .slice(0, 12)
+            .map(getProductImage);
+
+        prefetchPersonalCareImages([
+          ...loadedPromotionBanners.map(
+            (banner) => banner.imageUrl,
+          ),
+          ...(loadedStorefrontCategoryTiles ??
+            []).map(
+            (tile) => tile.imageUrl,
+          ),
+          ...initialProductImageUrls,
+        ]);
+
         if (
           loadRequestIdRef.current !==
           requestId
@@ -2653,6 +2700,30 @@ export default function PersonalCareScreen() {
     promotionBanners,
   ]);
 
+  /*
+   * Keep currently relevant remote images hot in memory/disk cache.
+   * Local category assets are already warmed by the hidden preloader.
+   */
+  useEffect(() => {
+    prefetchPersonalCareImages([
+      ...categories.map(
+        (item) => item.imageUrl,
+      ),
+      ...resolvedPromotionBanners.map(
+        (banner) => banner.imageUrl,
+      ),
+      ...resolvedPromotionBanners.flatMap(
+        (banner) =>
+          banner.products
+            .slice(0, 6)
+            .map(getProductImage),
+      ),
+    ]);
+  }, [
+    categories,
+    resolvedPromotionBanners,
+  ]);
+
   const pageWidth = Math.min(
     windowWidth,
     PAGE_MAX_WIDTH,
@@ -2680,8 +2751,8 @@ export default function PersonalCareScreen() {
     );
 
   const featuredCardWidth = Math.min(
-    116,
-    Math.max(92, pageWidth * 0.3),
+    136,
+    Math.max(108, pageWidth * 0.34),
   );
 
   const promotionBannerWidth = Math.max(
@@ -2690,11 +2761,11 @@ export default function PersonalCareScreen() {
   );
 
   const promotionBannerHeight = Math.round(
-    promotionBannerWidth * 0.64,
+    promotionBannerWidth * 0.66,
   );
 
   const promotionProductsOverlap = Math.round(
-    promotionBannerHeight * 0.49,
+    promotionBannerHeight * 0.55,
   );
 
   if (isLoading) {
@@ -2986,6 +3057,12 @@ export default function PersonalCareScreen() {
           >
             <BackArrowIcon />
           </Pressable>
+
+          <CategorySearchEntry
+            scope="personal-care"
+            suggestions={searchSuggestions}
+            style={styles.headerSearchEntry}
+          />
         </View>
 
         <ScrollView
@@ -3001,11 +3078,6 @@ export default function PersonalCareScreen() {
             false
           }
         >
-          <CategorySearchEntry
-            scope="personal-care"
-            suggestions={searchSuggestions}
-          />
-
           <View
             style={
               styles.categoriesSection
@@ -3177,13 +3249,69 @@ export default function PersonalCareScreen() {
                 </View>
 
                 {banner.products.length > 0 && (
-                  <ScrollView
+                  <FlatList
                     horizontal
                     nestedScrollEnabled
+                    data={banner.products}
+                    keyExtractor={(product) =>
+                      `${banner.id}-${product.id}`
+                    }
+                    renderItem={({
+                      item: product,
+                    }) => (
+                      <FeaturedProductCard
+                        product={product}
+                        currencyCode={
+                          currencyCode
+                        }
+                        cardWidth={
+                          featuredCardWidth
+                        }
+                        quantity={getProductQuantity(
+                          product.id,
+                        )}
+                        isStoreClosed={
+                          isStoreClosed
+                        }
+                        onAdd={() =>
+                          addFeaturedProduct(
+                            product,
+                          )
+                        }
+                        onIncrease={() =>
+                          increaseFeaturedProduct(
+                            product,
+                          )
+                        }
+                        onDecrease={() =>
+                          decreaseFeaturedProduct(
+                            product.id,
+                          )
+                        }
+                      />
+                    )}
                     showsHorizontalScrollIndicator={
                       false
                     }
                     directionalLockEnabled
+                    initialNumToRender={4}
+                    maxToRenderPerBatch={4}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={3}
+                    getItemLayout={(
+                      _data,
+                      index,
+                    ) => ({
+                      length:
+                        featuredCardWidth +
+                        PROMOTION_PRODUCT_GAP,
+                      offset:
+                        PROMOTION_PRODUCT_HORIZONTAL_PADDING +
+                        (featuredCardWidth +
+                          PROMOTION_PRODUCT_GAP) *
+                          index,
+                      index,
+                    })}
                     contentContainerStyle={
                       styles.promotionProductsRail
                     }
@@ -3194,43 +3322,7 @@ export default function PersonalCareScreen() {
                           -promotionProductsOverlap,
                       },
                     ]}
-                  >
-                    {banner.products.map(
-                      (product) => (
-                        <FeaturedProductCard
-                          key={`${banner.id}-${product.id}`}
-                          product={product}
-                          currencyCode={
-                            currencyCode
-                          }
-                          cardWidth={
-                            featuredCardWidth
-                          }
-                          quantity={getProductQuantity(
-                            product.id,
-                          )}
-                          isStoreClosed={
-                            isStoreClosed
-                          }
-                          onAdd={() =>
-                            addFeaturedProduct(
-                              product,
-                            )
-                          }
-                          onIncrease={() =>
-                            increaseFeaturedProduct(
-                              product,
-                            )
-                          }
-                          onDecrease={() =>
-                            decreaseFeaturedProduct(
-                              product.id,
-                            )
-                          }
-                        />
-                      ),
-                    )}
-                  </ScrollView>
+                  />
                 )}
               </View>
             ),
@@ -3299,21 +3391,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
-    paddingBottom: 12,
+    gap: 10,
+    paddingBottom: 10,
     paddingHorizontal: 16,
     paddingTop: 10,
     zIndex: 10,
   },
 
+  headerSearchEntry: {
+    flex: 1,
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
+  },
+
   backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderRadius: 24,
-    borderWidth: 1,
-    height: 46,
+    borderColor: '#E6E6E6',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
 
   headerButtonPressed: {
@@ -3392,6 +3492,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.45,
     marginBottom: 14,
     paddingHorizontal: 16,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+    width: '100%',
   },
 
   categoriesScroll: {
@@ -3487,37 +3590,33 @@ const styles = StyleSheet.create({
 
   promotionProductsRail: {
     alignItems: 'flex-start',
-    gap: 7,
+    gap: PROMOTION_PRODUCT_GAP,
     paddingBottom: 7,
-    paddingHorizontal: 21,
+    paddingHorizontal:
+      PROMOTION_PRODUCT_HORIZONTAL_PADDING,
     paddingTop: 0,
   },
-
   featuredProductCard: {
     backgroundColor: 'transparent',
     overflow: 'visible',
   },
-
   featuredProductImageBox: {
     alignItems: 'center',
-    backgroundColor: '#F4F4F4',
+    backgroundColor: '#F7F7F7',
     borderColor: '#E8E8E8',
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'relative',
   },
-
   featuredProductImage: {
     height: '100%',
     width: '100%',
   },
-
   featuredProductFallback: {
     fontSize: 34,
   },
-
   featuredDiscountBadge: {
     alignItems: 'center',
     backgroundColor: '#BFFF00',
@@ -3531,145 +3630,126 @@ const styles = StyleSheet.create({
     top: 6,
     zIndex: 5,
   },
-
   featuredDiscountText: {
     color: '#111111',
     fontSize: 8.5,
     fontWeight: '500',
     lineHeight: 11,
   },
-
   featuredAddButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E7E7E7',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    bottom: 6,
+    bottom: 8,
     elevation: 2,
-    height: 34,
+    height: 38,
     justifyContent: 'center',
     position: 'absolute',
-    right: 6,
+    right: 8,
     shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
-    width: 34,
+    width: 38,
     zIndex: 8,
   },
-
   featuredAddButtonPressed: {
     backgroundColor: '#F8F8F8',
-    transform: [
-      {
-        scale: 0.94,
-      },
-    ],
+    transform: [{ scale: 0.94 }],
   },
-
   featuredAddButtonDisabled: {
     opacity: 0.45,
   },
-
   featuredAddButtonText: {
     color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 25,
+    fontSize: 27,
     fontWeight: '300',
-    lineHeight: 27,
+    lineHeight: 29,
     marginTop: -2,
   },
-
   featuredQuantityPill: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E7E7E7',
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    bottom: 6,
+    bottom: 8,
     elevation: 2,
     flexDirection: 'row',
-    height: 34,
+    height: 38,
     position: 'absolute',
-    right: 6,
+    right: 8,
     shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
     zIndex: 8,
   },
-
   featuredQuantityButton: {
     alignItems: 'center',
-    height: 32,
+    height: 36,
     justifyContent: 'center',
-    width: 25,
+    width: 28,
   },
-
   featuredQuantityButtonText: {
     color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: 22,
   },
-
   featuredQuantityValue: {
     color: '#202020',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    minWidth: 14,
+    minWidth: 16,
     textAlign: 'center',
   },
-
   featuredProductName: {
     color: '#202020',
-    fontSize: 12.5,
+    fontSize: 13.5,
     fontWeight: '500',
-    letterSpacing: -0.15,
-    lineHeight: 15,
-    marginTop: 6,
-    textAlign: 'left',
-    writingDirection: 'ltr',
+    letterSpacing: -0.1,
+    lineHeight: 17,
+    marginTop: 8,
+    minHeight: 34,
+    paddingHorizontal: 2,
+    textAlign: 'center',
+    width: '100%',
+    writingDirection: 'rtl',
   },
-
   featuredPriceRow: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
-    marginTop: 1,
+    justifyContent: 'center',
+    marginTop: 4,
+    width: '100%',
   },
-
   featuredCurrentPriceWrap: {
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     borderBottomColor: '#BFFF00',
     borderBottomWidth: 2,
   },
-
   featuredCurrentPrice: {
     color: '#202020',
-    fontSize: 10.5,
+    fontSize: 11.5,
     fontWeight: '500',
-    lineHeight: 13,
-    textAlign: 'left',
+    lineHeight: 14,
+    textAlign: 'center',
     writingDirection: 'ltr',
   },
-
   featuredOldPrice: {
     color: '#858585',
-    fontSize: 9,
-    lineHeight: 11,
-    textAlign: 'left',
+    fontSize: 9.5,
+    lineHeight: 12,
+    textAlign: 'center',
     textDecorationLine: 'line-through',
     writingDirection: 'ltr',
   },
-
   emptyCategories: {
     alignItems: 'center',
     paddingHorizontal: 28,

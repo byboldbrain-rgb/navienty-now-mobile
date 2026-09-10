@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import {
   useLocalSearchParams,
   useRouter,
@@ -11,7 +12,7 @@ import {
   useState,
 } from 'react';
 import {
-  Image,
+  FlatList,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -23,10 +24,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import PrintingJobBuilder from '../../components/bookstore/printing-job-builder';
 import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
-import PrintingJobBuilder from '../../components/bookstore/printing-job-builder';
 import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   getBookstoreCategoryImage,
@@ -757,6 +758,37 @@ function getProductImage(
   );
 }
 
+function prefetchBookstoreCategoryImages(
+  urls: Array<
+    string | null | undefined
+  >,
+) {
+  const uniqueUrls =
+    Array.from(
+      new Set(
+        urls.filter(
+          (
+            url,
+          ): url is string =>
+            Boolean(
+              url?.trim(),
+            ),
+        ),
+      ),
+    );
+
+  if (
+    uniqueUrls.length === 0
+  ) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    uniqueUrls,
+    'memory-disk',
+  ).catch(() => {});
+}
+
 function getDiscountPercent(
   product: CatalogProduct,
 ): number | null {
@@ -1275,28 +1307,35 @@ function CategoryFilterVisual({
 }) {
   if (remoteImageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: remoteImageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
+        transition={120}
       />
     );
   }
 
   if (section.imageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: section.imageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
+        recyclingKey={`bookstore-filter-${section.id}`}
+        transition={120}
       />
     );
   }
@@ -1313,12 +1352,13 @@ function CategoryFilterVisual({
    */
   if (localSubcategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={localSubcategoryImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
       />
     );
   }
@@ -1336,12 +1376,13 @@ function CategoryFilterVisual({
 
   if (localRootCategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={localRootCategoryImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
       />
     );
   }
@@ -1356,12 +1397,13 @@ function CategoryFilterVisual({
 
   if (mainCategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={mainCategoryImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
       />
     );
   }
@@ -1380,14 +1422,15 @@ function CategoryFilterVisual({
 
   if (fallbackRootCategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={
           fallbackRootCategoryImage
         }
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
       />
     );
   }
@@ -1401,12 +1444,13 @@ function CategoryFilterVisual({
 
   if (fallbackLocalImage) {
     return (
-      <Image
+      <ExpoImage
         source={fallbackLocalImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
       />
     );
   }
@@ -1420,14 +1464,15 @@ function CategoryFilterVisual({
 
   if (fallbackMainCategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={
           fallbackMainCategoryImage
         }
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
       />
     );
   }
@@ -1450,12 +1495,16 @@ function VirtualCategoryFilterVisual({
 }) {
   if (remoteImageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: remoteImageUrl,
         }}
         style={styles.filterCategoryImage}
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
+        recyclingKey={`bookstore-virtual-filter-${subcategory.key}`}
+        transition={120}
       />
     );
   }
@@ -1466,10 +1515,12 @@ function VirtualCategoryFilterVisual({
 
   if (localSubcategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={localSubcategoryImage}
         style={styles.filterCategoryImage}
-        resizeMode="cover"
+        contentFit="cover"
+        priority="high"
+        recyclingKey={`bookstore-virtual-filter-${subcategory.key}`}
       />
     );
   }
@@ -1501,6 +1552,8 @@ type ProductCardProps = {
 
   mode: ProductCardMode;
 
+  priority?: 'high' | 'normal' | 'low';
+
   onAdd: () => void;
 
   onIncrease: () => void;
@@ -1515,6 +1568,7 @@ function ProductCard({
   quantity,
   isStoreClosed,
   mode,
+  priority = 'normal',
   onAdd,
   onIncrease,
   onDecrease,
@@ -1555,14 +1609,18 @@ function ProductCard({
         ]}
       >
         {imageUrl ? (
-          <Image
+          <ExpoImage
             source={{
               uri: imageUrl,
             }}
             style={
               styles.productImage
             }
-            resizeMode="contain"
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            priority={priority}
+            recyclingKey={`bookstore-product-${product.id}`}
+            transition={120}
           />
         ) : (
           <Text
@@ -1822,6 +1880,18 @@ export default function BookstoreCategoryScreen() {
   const hasPositionedFiltersRef =
     useRef(false);
 
+  /*
+   * Product list reference.
+   *
+   * Used to reset the vertical products position whenever the user
+   * changes the active Subcategory, so the newly selected products
+   * always start from the beginning of the list.
+   */
+  const productsListRef =
+    useRef<FlatList<CatalogProduct> | null>(
+      null,
+    );
+
   const {
     width: windowWidth,
   } = useWindowDimensions();
@@ -2063,6 +2133,17 @@ export default function BookstoreCategoryScreen() {
         remoteCategoryImages,
       );
 
+      /*
+       * Warm the remote category artwork immediately, while the
+       * catalog request is still being prepared.
+       */
+      prefetchBookstoreCategoryImages([
+        remoteRootImageUrl,
+        ...Object.values(
+          remoteCategoryImages,
+        ),
+      ]);
+
       const serviceAreaId =
         savedServiceAreaId ??
         bootstrap.settings
@@ -2111,6 +2192,44 @@ export default function BookstoreCategoryScreen() {
           storeId,
           serviceAreaId,
         );
+
+      /*
+       * Prefetch the products that are most likely to be visible first.
+       * This starts before setCatalog(), so the first FlatList cells can
+       * often read directly from memory/disk cache.
+       */
+      const prefetchSection =
+        isOffersPage
+          ? null
+          : findCatalogSectionByRouteParams(
+              loadedCatalog,
+              sectionSlug,
+              passedCategoryKey,
+              passedLabel,
+            );
+
+      const initialProductsToPrefetch =
+        isOffersPage
+          ? getAllCatalogOffers(
+              loadedCatalog,
+            )
+          : prefetchSection
+            ? getCatalogSectionProducts(
+                prefetchSection,
+                true,
+              )
+            : fallbackCategory
+              ? getFallbackCategoryProducts(
+                  loadedCatalog,
+                  fallbackCategory,
+                )
+              : [];
+
+      prefetchBookstoreCategoryImages(
+        initialProductsToPrefetch
+          .slice(0, 12)
+          .map(getProductImage),
+      );
 
       /*
        * العروض ليست Category حقيقية.
@@ -2414,6 +2533,24 @@ export default function BookstoreCategoryScreen() {
       [offerCategoryTabs],
     );
 
+  useEffect(() => {
+    prefetchBookstoreCategoryImages([
+      rootCategoryImageUrl,
+      ...Object.values(
+        categoryImageOverrides,
+      ),
+      selectedSection?.imageUrl,
+      ...childCategories.map(
+        (child) => child.imageUrl,
+      ),
+    ]);
+  }, [
+    rootCategoryImageUrl,
+    categoryImageOverrides,
+    selectedSection?.id,
+    childCategories,
+  ]);
+
   /* ==========================================================
    * PRODUCTS
    * ==========================================================
@@ -2625,6 +2762,16 @@ export default function BookstoreCategoryScreen() {
       offerCategoryTabs,
       fallbackCategory?.key,
     ]);
+
+  useEffect(() => {
+    prefetchBookstoreCategoryImages(
+      filteredProducts
+        .slice(0, 8)
+        .map(getProductImage),
+    );
+  }, [
+    filteredProducts,
+  ]);
 
   /* ==========================================================
    * LOADING
@@ -2850,9 +2997,28 @@ export default function BookstoreCategoryScreen() {
    * ==========================================================
    */
 
+  function scrollProductsToStart() {
+    /*
+     * The selected filter changes the FlatList data immediately.
+     * Moving the list on the next animation frame guarantees that
+     * React Native applies offset 0 after the new filter is selected,
+     * even if the user was deep down in the previous Subcategory.
+     */
+    requestAnimationFrame(() => {
+      productsListRef.current?.scrollToOffset(
+        {
+          offset: 0,
+          animated: false,
+        },
+      );
+    });
+  }
+
   function openChildCategory(
     child: CatalogSection,
   ) {
+    scrollProductsToStart();
+
     if (
       child.children.length > 0 ||
       !!child.experienceKey
@@ -3071,10 +3237,7 @@ export default function BookstoreCategoryScreen() {
   return (
     <SafeAreaView
       style={styles.screen}
-      edges={[
-        'top',
-        'bottom',
-      ]}
+      edges={['top']}
     >
       <StatusBar
         style="dark"
@@ -3103,7 +3266,7 @@ export default function BookstoreCategoryScreen() {
             >
               <Ionicons
                 name="search-outline"
-                size={18}
+                size={17}
                 color="#222222"
               />
 
@@ -3137,7 +3300,7 @@ export default function BookstoreCategoryScreen() {
               >
                 <Ionicons
                   name="close"
-                  size={20}
+                  size={18}
                   color="#222222"
                 />
               </Pressable>
@@ -3160,7 +3323,7 @@ export default function BookstoreCategoryScreen() {
               >
                 <Ionicons
                   name="arrow-back"
-                  size={22}
+                  size={20}
                   color="#202020"
                 />
               </Pressable>
@@ -3198,7 +3361,7 @@ export default function BookstoreCategoryScreen() {
               >
                 <Ionicons
                   name="search-outline"
-                  size={21}
+                  size={19}
                   color="#202020"
                 />
               </Pressable>
@@ -3345,40 +3508,22 @@ export default function BookstoreCategoryScreen() {
         )}
 
         {/* =====================================================
-         * CONTENT
+         * FIXED NORMAL CATEGORY FILTERS
+         *
+         * This rail lives OUTSIDE the FlatList on purpose.
+         * The header + subcategories stay visible while only
+         * the products list scrolls vertically.
          * =====================================================
          */}
 
-        <ScrollView
-          style={
-            styles.scrollView
-          }
-          contentContainerStyle={[
-            styles.scrollContent,
-
-            {
-              paddingBottom:
-                shouldShowNormalCartDock
-                  ? 180
-                  : 30,
-            },
-          ]}
-          onScroll={handleCartDockScroll}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={
-            false
-          }
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* ===================================================
-           * NORMAL CATEGORY FILTERS
-           * ===================================================
-           */}
-
-          {!isOffersPage &&
-            (selectedSection ||
-              fallbackCategory) && (
-            <>
+        {!isOffersPage &&
+          (selectedSection ||
+            fallbackCategory) && (
+          <View
+            style={
+              styles.fixedFiltersContainer
+            }
+          >
               <ScrollView
                 ref={
                   filtersScrollRef
@@ -3518,6 +3663,8 @@ export default function BookstoreCategoryScreen() {
                           styles.filterItem
                         }
                         onPress={() => {
+                          scrollProductsToStart();
+
                           setSelectedFilterKey(
                             subcategory.key,
                           );
@@ -3578,6 +3725,8 @@ export default function BookstoreCategoryScreen() {
                     styles.filterItem
                   }
                   onPress={() => {
+                  scrollProductsToStart();
+
                     setSelectedFilterKey(
                       'all',
                     );
@@ -3612,7 +3761,7 @@ export default function BookstoreCategoryScreen() {
                         }
                       />
                     ) : fallbackCategory ? (
-                      <Image
+                      <ExpoImage
                         source={
                           rootCategoryImageUrl
                             ? {
@@ -3626,7 +3775,19 @@ export default function BookstoreCategoryScreen() {
                         style={
                           styles.filterCategoryImage
                         }
-                        resizeMode="cover"
+                        contentFit="cover"
+                        cachePolicy={
+                          rootCategoryImageUrl
+                            ? 'memory-disk'
+                            : 'none'
+                        }
+                        priority="high"
+                        recyclingKey={`bookstore-root-${fallbackCategory.key}`}
+                        transition={
+                          rootCategoryImageUrl
+                            ? 120
+                            : 0
+                        }
                       />
                     ) : null}
                   </View>
@@ -3651,9 +3812,84 @@ export default function BookstoreCategoryScreen() {
                   styles.sectionDivider
                 }
               />
-            </>
-          )}
+          </View>
+        )}
 
+
+        {/* =====================================================
+         * CONTENT
+         * =====================================================
+         */}
+
+        <FlatList
+          ref={
+            productsListRef
+          }
+          style={
+            styles.scrollView
+          }
+          data={
+            filteredProducts
+          }
+          keyExtractor={(
+            product,
+          ) => product.id}
+          numColumns={2}
+          renderItem={({
+            item: product,
+            index,
+          }) => (
+            <ProductCard
+              product={product}
+              cardWidth={
+                productCardWidth
+              }
+              currencyCode={
+                currencyCode
+              }
+              quantity={
+                getProductQuantity(
+                  product.id,
+                )
+              }
+              isStoreClosed={
+                isStoreClosed
+              }
+              mode={
+                isOffersPage
+                  ? 'offers'
+                  : 'category'
+              }
+              priority={
+                index < 6
+                  ? 'high'
+                  : 'normal'
+              }
+              onAdd={() =>
+                addProduct(
+                  product,
+                )
+              }
+              onIncrease={() =>
+                increaseProduct(
+                  product,
+                )
+              }
+              onDecrease={() =>
+                decreaseProduct(
+                  product.id,
+                )
+              }
+            />
+          )}
+          columnWrapperStyle={[
+            styles.productsListRow,
+
+            isOffersPage &&
+              styles.offersProductsListRow,
+          ]}
+          ListHeaderComponent={
+            <>
           {/* ===================================================
            * CLOSED
            * ===================================================
@@ -3676,93 +3912,19 @@ export default function BookstoreCategoryScreen() {
             </View>
           )}
 
-          {/* ===================================================
-           * NORMAL PAGE RESULTS COUNT
-           * ===================================================
-           */}
+              {filteredProducts.length > 0 && (
+                <View
+                  style={[
+                    styles.productsGridTopSpacer,
 
-          {!isOffersPage &&
-            filteredProducts.length >
-              0 && (
-              <View
-                style={
-                  styles.productsHeader
-                }
-              >
-                <Text
-                  style={
-                    styles.productsCount
-                  }
-                >
-                  {
-                    filteredProducts.length
-                  }{' '}
-                  منتج
-                </Text>
-              </View>
-            )}
-
-          {/* ===================================================
-           * PRODUCTS
-           * ===================================================
-           */}
-
-          {filteredProducts.length >
-          0 ? (
-            <View
-              style={[
-                styles.productsGrid,
-
-                isOffersPage &&
-                  styles.offersProductsGrid,
-              ]}
-            >
-              {filteredProducts.map(
-                (product) => (
-                  <ProductCard
-                    key={
-                      product.id
-                    }
-                    product={
-                      product
-                    }
-                    cardWidth={
-                      productCardWidth
-                    }
-                    currencyCode={
-                      currencyCode
-                    }
-                    quantity={getProductQuantity(
-                      product.id,
-                    )}
-                    isStoreClosed={
-                      isStoreClosed
-                    }
-                    mode={
-                      isOffersPage
-                        ? 'offers'
-                        : 'category'
-                    }
-                    onAdd={() =>
-                      addProduct(
-                        product,
-                      )
-                    }
-                    onIncrease={() =>
-                      increaseProduct(
-                        product,
-                      )
-                    }
-                    onDecrease={() =>
-                      decreaseProduct(
-                        product.id,
-                      )
-                    }
-                  />
-                ),
+                    isOffersPage &&
+                      styles.offersProductsGridTopSpacer,
+                  ]}
+                />
               )}
-            </View>
-          ) : (
+            </>
+          }
+          ListEmptyComponent={
             <View
               style={
                 styles.emptyState
@@ -3792,8 +3954,29 @@ export default function BookstoreCategoryScreen() {
                 {getEmptyMessage()}
               </Text>
             </View>
-          )}
-        </ScrollView>
+          }
+          contentContainerStyle={[
+            styles.scrollContent,
+
+            {
+              paddingBottom:
+                shouldShowNormalCartDock
+                  ? 180
+                  : 30,
+            },
+          ]}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+        />
 
         {/* =====================================================
          * NORMAL CATEGORY CART
@@ -3808,8 +3991,8 @@ export default function BookstoreCategoryScreen() {
           subtotal={currentStoreSubtotal}
           minimumOrder={minimumOrder}
           currencyCode={currencyCode}
-          accentColor={NAVIENTY_NOW_GREEN}
-          accentDarkColor={NAVIENTY_NOW_GREEN_DARK}
+          accentColor="#00B956"
+          accentDarkColor="#009D49" 
           isScrollingDown={isCartDockScrollingDown}
           onPress={openCart}
         />
@@ -3868,13 +4051,15 @@ const styles =
       justifyContent:
         'space-between',
 
-      minHeight: 68,
+      // Compact header to match the cleaner proportions used
+      // by the supermarket category-list screen.
+      minHeight: 56,
 
       paddingHorizontal:
-        18,
+        16,
 
       paddingVertical:
-        10,
+        6,
     },
 
     headerCircleButton: {
@@ -3887,16 +4072,16 @@ const styles =
       borderColor:
         '#E1E1E1',
 
-      borderRadius: 24,
+      borderRadius: 20,
 
       borderWidth: 1,
 
-      height: 48,
+      height: 40,
 
       justifyContent:
         'center',
 
-      width: 48,
+      width: 40,
     },
 
     headerTitleGroup: {
@@ -3909,7 +4094,7 @@ const styles =
         'center',
 
       paddingHorizontal:
-        12,
+        10,
     },
 
     headerTitle: {
@@ -3918,7 +4103,9 @@ const styles =
 
       flexShrink: 1,
 
-      fontSize: 20,
+      // Reduced from 20 so long Arabic category names no longer
+      // dominate the header or truncate as aggressively.
+      fontSize: 16,
 
       fontWeight:
         '700',
@@ -3957,7 +4144,7 @@ const styles =
       borderColor:
         '#EAEAEA',
 
-      borderRadius: 23,
+      borderRadius: 20,
 
       borderWidth: 1,
 
@@ -3968,10 +4155,11 @@ const styles =
 
       gap: 7,
 
-      minHeight: 46,
+      // Keep search mode aligned with the compact 40px header controls.
+      minHeight: 40,
 
       paddingHorizontal:
-        16,
+        13,
     },
 
     searchInput: {
@@ -3980,9 +4168,9 @@ const styles =
 
       flex: 1,
 
-      fontSize: 14,
+      fontSize: 13,
 
-      minHeight: 44,
+      minHeight: 38,
 
       writingDirection:
         'rtl',
@@ -4103,6 +4291,15 @@ const styles =
      * ========================================================
      */
 
+    fixedFiltersContainer: {
+      backgroundColor:
+        '#FFFFFF',
+
+      flexGrow: 0,
+
+      zIndex: 10,
+    },
+
     filtersScroll: {
       flexGrow: 0,
     },
@@ -4127,7 +4324,7 @@ const styles =
         'flex-end',
 
       paddingBottom:
-        17,
+        6,
 
       paddingHorizontal:
         18,
@@ -4200,7 +4397,7 @@ const styles =
 
       marginTop: 6,
 
-      minHeight: 34,
+      minHeight: 17,
 
       textAlign:
         'center',
@@ -4250,22 +4447,8 @@ const styles =
       backgroundColor:
         '#F0F0F0',
 
-      elevation: 2,
-
-      height: 7,
-
-      shadowColor:
-        '#000000',
-
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-
-      shadowOpacity:
-        0.04,
-
-      shadowRadius: 3,
+      height:
+        StyleSheet.hairlineWidth,
     },
 
     /* ========================================================
@@ -4308,37 +4491,33 @@ const styles =
     },
 
     /* ========================================================
-     * PRODUCTS HEADER
-     * ========================================================
-     */
-
-    productsHeader: {
-      alignItems:
-        'flex-end',
-
-      paddingHorizontal:
-        16,
-
-      paddingTop: 15,
-    },
-
-    productsCount: {
-      color:
-        '#8A8A8A',
-
-      fontSize: 12,
-
-      textAlign:
-        'right',
-
-      writingDirection:
-        'rtl',
-    },
-
-    /* ========================================================
      * PRODUCT GRID
      * ========================================================
      */
+
+    productsListRow: {
+      flexDirection:
+        'row',
+
+      gap:
+        PRODUCT_GAP,
+
+      paddingHorizontal:
+        HORIZONTAL_PADDING,
+    },
+
+    offersProductsListRow: {
+      flexDirection:
+        'row-reverse',
+    },
+
+    productsGridTopSpacer: {
+      height: 6,
+    },
+
+    offersProductsGridTopSpacer: {
+      height: 12,
+    },
 
     productsGrid: {
       flexDirection:

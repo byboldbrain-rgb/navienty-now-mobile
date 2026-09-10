@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -8,6 +9,7 @@ import {
 } from 'react';
 import {
   Animated,
+  FlatList,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -48,6 +50,9 @@ import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 const CATEGORY_ROWS = 3;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
 const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
+
+const PROMOTION_PRODUCT_GAP = 7;
+const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
 
 type SupermarketCategoryDefinition = {
   key: string;
@@ -394,10 +399,10 @@ function formatMoney(
   amount: number,
   currencyCode: string,
 ) {
-  return `${getArabicCurrencyLabel(
-    currencyCode,
-  )} ${amount.toFixed(
+  return `${amount.toFixed(
     2,
+  )} ${getArabicCurrencyLabel(
+    currencyCode,
   )}`;
 }
 
@@ -517,23 +522,13 @@ function makeCategoryColumns(
 
 function BackArrowIcon() {
   return (
-    <View style={styles.backArrowCanvas}>
-      <View style={styles.backArrowStem} />
-
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowTop,
-        ]}
-      />
-
-      <View
-        style={[
-          styles.backArrowDiagonal,
-          styles.backArrowBottom,
-        ]}
-      />
-    </View>
+    <Ionicons
+      color={
+        NAVIENTY_NOW_COLORS.text
+      }
+      name="arrow-back-outline"
+      size={20}
+    />
   );
 }
 
@@ -1474,8 +1469,9 @@ function FeaturedProductCard({
         }
         numberOfLines={2}
       >
-        {product.nameEn?.trim() ||
-          product.name}
+        {product.name?.trim() ||
+          product.nameEn?.trim() ||
+          ''}
       </Text>
 
       <View
@@ -1596,20 +1592,33 @@ export default function SupermarketScreen() {
         state.locationServiceAreaId,
     );
 
-  const cartStore =
-    useCartStore();
+  const carts =
+    useCartStore(
+      (state) => state.carts,
+    );
 
   const addItem =
-    cartStore.addItem;
+    useCartStore(
+      (state) => state.addItem,
+    );
 
   const increaseStoreItem =
-    cartStore.increaseStoreItem;
+    useCartStore(
+      (state) =>
+        state.increaseStoreItem,
+    );
 
   const decreaseStoreItem =
-    cartStore.decreaseStoreItem;
+    useCartStore(
+      (state) =>
+        state.decreaseStoreItem,
+    );
 
   const setActiveCart =
-    cartStore.setActiveCart;
+    useCartStore(
+      (state) =>
+        state.setActiveCart,
+    );
 
   async function loadSupermarket() {
     try {
@@ -1978,12 +1987,18 @@ export default function SupermarketScreen() {
       560,
     );
 
+  /*
+   * Larger promotional product cards to match the
+   * reference layout: roughly three large cards fill
+   * the viewport, with the outer card allowed to crop
+   * slightly at the edge like the target design.
+   */
   const featuredCardWidth =
     Math.min(
-      116,
+      136,
       Math.max(
-        92,
-        pageWidth * 0.3,
+        108,
+        pageWidth * 0.34,
       ),
     );
 
@@ -2002,16 +2017,22 @@ export default function SupermarketScreen() {
       1,
     );
 
+  /*
+   * Slightly taller banner plus a deeper product-card
+   * overlap. This keeps the banner feeling large while
+   * letting the bigger cards sit inside its lower area,
+   * like the first reference screenshot.
+   */
   const promotionBannerHeight =
     Math.round(
       promotionBannerWidth *
-        0.64,
+        0.66,
     );
 
   const promotionProductsOverlap =
     Math.round(
       promotionBannerHeight *
-        0.49,
+        0.55,
     );
 
   if (isLoading) {
@@ -2115,12 +2136,12 @@ export default function SupermarketScreen() {
   /*
    * IMPORTANT:
    *
-   * cart-store is multi-cart now. Reading cartStore.items uses the
-   * legacy active-cart snapshot, which can point at another store.
-   * The supermarket screen must always read its own cart directly.
+   * cart-store is multi-cart now. The supermarket screen subscribes
+   * only to the carts slice and always reads the current store cart.
+   * This avoids subscribing the whole screen to unrelated store state.
    */
   const cartItems =
-    cartStore.carts[
+    carts[
       currentStore.id
     ]?.items ?? [];
 
@@ -2392,6 +2413,12 @@ export default function SupermarketScreen() {
           >
             <BackArrowIcon />
           </Pressable>
+
+          <CategorySearchEntry
+            scope="supermarket"
+            suggestions={searchSuggestions}
+            style={styles.headerSearchEntry}
+          />
         </View>
 
         <ScrollView
@@ -2410,11 +2437,6 @@ export default function SupermarketScreen() {
             false
           }
         >
-          <CategorySearchEntry
-            scope="supermarket"
-            suggestions={searchSuggestions}
-          />
-
           <View
             style={
               styles.categoriesSection
@@ -2614,9 +2636,71 @@ export default function SupermarketScreen() {
                 {banner.products
                   .length >
                   0 && (
-                  <ScrollView
+                  <FlatList
                     horizontal
                     nestedScrollEnabled
+                    data={
+                      banner.products
+                    }
+                    keyExtractor={(product) =>
+                      `${banner.id}-${product.id}`
+                    }
+                    renderItem={({
+                      item: product,
+                    }) => (
+                      <FeaturedProductCard
+                        product={
+                          product
+                        }
+                        currencyCode={
+                          currencyCode
+                        }
+                        cardWidth={
+                          featuredCardWidth
+                        }
+                        quantity={getProductQuantity(
+                          product.id,
+                        )}
+                        isStoreClosed={
+                          isStoreClosed
+                        }
+                        onAdd={() =>
+                          addFeaturedProduct(
+                            product,
+                          )
+                        }
+                        onIncrease={() =>
+                          increaseFeaturedProduct(
+                            product,
+                          )
+                        }
+                        onDecrease={() =>
+                          decreaseFeaturedProduct(
+                            product.id,
+                          )
+                        }
+                      />
+                    )}
+                    initialNumToRender={4}
+                    maxToRenderPerBatch={4}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={3}
+                    getItemLayout={(
+                      _data,
+                      index,
+                    ) => ({
+                      length:
+                        featuredCardWidth +
+                        PROMOTION_PRODUCT_GAP,
+
+                      offset:
+                        PROMOTION_PRODUCT_HORIZONTAL_PADDING +
+                        (featuredCardWidth +
+                          PROMOTION_PRODUCT_GAP) *
+                          index,
+
+                      index,
+                    })}
                     showsHorizontalScrollIndicator={
                       false
                     }
@@ -2632,47 +2716,7 @@ export default function SupermarketScreen() {
                           -promotionProductsOverlap,
                       },
                     ]}
-                  >
-                    {banner.products.map(
-                      (
-                        product,
-                      ) => (
-                        <FeaturedProductCard
-                          key={`${banner.id}-${product.id}`}
-                          product={
-                            product
-                          }
-                          currencyCode={
-                            currencyCode
-                          }
-                          cardWidth={
-                            featuredCardWidth
-                          }
-                          quantity={getProductQuantity(
-                            product.id,
-                          )}
-                          isStoreClosed={
-                            isStoreClosed
-                          }
-                          onAdd={() =>
-                            addFeaturedProduct(
-                              product,
-                            )
-                          }
-                          onIncrease={() =>
-                            increaseFeaturedProduct(
-                              product,
-                            )
-                          }
-                          onDecrease={() =>
-                            decreaseFeaturedProduct(
-                              product.id,
-                            )
-                          }
-                        />
-                      ),
-                    )}
-                  </ScrollView>
+                  />
                 )}
               </View>
             ),
@@ -2731,11 +2775,18 @@ const styles =
       backgroundColor:
         '#FFFFFF',
 
+      /*
+       * Header layout:
+       * Back button stays at the FAR LEFT.
+       * Search fills the remaining space immediately to its RIGHT.
+       */
       flexDirection:
         'row',
 
+      gap: 10,
+
       paddingBottom:
-        12,
+        10,
 
       paddingHorizontal:
         16,
@@ -2743,6 +2794,20 @@ const styles =
       paddingTop: 10,
 
       zIndex: 10,
+    },
+
+    headerSearchEntry: {
+      flex: 1,
+
+      /*
+       * CategorySearchEntry has page-level margins by default.
+       * Remove them here because it now lives inside the header row.
+       */
+      marginBottom: 0,
+
+      marginHorizontal: 0,
+
+      marginTop: 0,
     },
 
     backButton: {
@@ -2753,18 +2818,19 @@ const styles =
         '#FFFFFF',
 
       borderColor:
-        '#E1E1E1',
+        '#E6E6E6',
 
-      borderRadius: 24,
+      borderRadius: 999,
 
-      borderWidth: 1,
+      borderWidth:
+        StyleSheet.hairlineWidth,
 
-      height: 46,
+      height: 40,
 
       justifyContent:
         'center',
 
-      width: 46,
+      width: 40,
     },
 
     headerButtonPressed: {
@@ -2778,70 +2844,10 @@ const styles =
       ],
     },
 
-    backArrowCanvas: {
-      height: 23,
 
-      position:
-        'relative',
 
-      width: 24,
-    },
 
-    backArrowStem: {
-      backgroundColor:
-        '#242424',
 
-      borderRadius: 2,
-
-      height: 2.2,
-
-      left: 3,
-
-      position:
-        'absolute',
-
-      top: 10.3,
-
-      width: 19,
-    },
-
-    backArrowDiagonal: {
-      backgroundColor:
-        '#242424',
-
-      borderRadius: 2,
-
-      height: 2.2,
-
-      left: 2,
-
-      position:
-        'absolute',
-
-      width: 10,
-    },
-
-    backArrowTop: {
-      top: 7,
-
-      transform: [
-        {
-          rotate:
-            '-42deg',
-        },
-      ],
-    },
-
-    backArrowBottom: {
-      top: 14,
-
-      transform: [
-        {
-          rotate:
-            '42deg',
-        },
-      ],
-    },
 
     mainScrollView: {
       flex: 1,
@@ -2884,6 +2890,18 @@ const styles =
 
       paddingHorizontal:
         16,
+
+      /*
+       * Force the Arabic section title to the RIGHT regardless
+       * of the device/layout direction.
+       */
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+
+      width: '100%',
     },
 
     categoriesScroll: {
@@ -3104,12 +3122,13 @@ const styles =
       alignItems:
         'flex-start',
 
-      gap: 7,
+      gap:
+        PROMOTION_PRODUCT_GAP,
 
       paddingBottom: 7,
 
       paddingHorizontal:
-        21,
+        PROMOTION_PRODUCT_HORIZONTAL_PADDING,
 
       paddingTop: 0,
     },
@@ -3127,13 +3146,13 @@ const styles =
         'center',
 
       backgroundColor:
-        '#F4F4F4',
+        '#F7F7F7',
 
       borderColor:
         '#E8E8E8',
 
       borderRadius:
-        12,
+        14,
 
       borderWidth:
         1,
@@ -3213,19 +3232,19 @@ const styles =
         '#E7E7E7',
 
       borderRadius:
-        18,
+        20,
 
       borderWidth:
         1,
 
       bottom:
-        6,
+        8,
 
       elevation:
         2,
 
       height:
-        34,
+        38,
 
       justifyContent:
         'center',
@@ -3234,7 +3253,7 @@ const styles =
         'absolute',
 
       right:
-        6,
+        8,
 
       shadowColor:
         '#000000',
@@ -3254,7 +3273,7 @@ const styles =
         2,
 
       width:
-        34,
+        38,
 
       zIndex:
         8,
@@ -3281,13 +3300,13 @@ const styles =
         NAVIENTY_NOW_COLORS.primary,
 
       fontSize:
-        25,
+        27,
 
       fontWeight:
         '300',
 
       lineHeight:
-        27,
+        29,
 
       marginTop:
         -2,
@@ -3304,13 +3323,13 @@ const styles =
         '#E7E7E7',
 
       borderRadius:
-        18,
+        20,
 
       borderWidth:
         1,
 
       bottom:
-        6,
+        8,
 
       elevation:
         2,
@@ -3319,13 +3338,13 @@ const styles =
         'row',
 
       height:
-        34,
+        38,
 
       position:
         'absolute',
 
       right:
-        6,
+        8,
 
       shadowColor:
         '#000000',
@@ -3353,13 +3372,13 @@ const styles =
         'center',
 
       height:
-        32,
+        36,
 
       justifyContent:
         'center',
 
       width:
-        25,
+        28,
     },
 
     featuredQuantityButtonText: {
@@ -3367,13 +3386,13 @@ const styles =
         NAVIENTY_NOW_COLORS.primary,
 
       fontSize:
-        18,
+        20,
 
       fontWeight:
         '500',
 
       lineHeight:
-        20,
+        22,
     },
 
     featuredQuantityValue: {
@@ -3381,13 +3400,13 @@ const styles =
         '#202020',
 
       fontSize:
-        10,
+        11,
 
       fontWeight:
         '700',
 
       minWidth:
-        14,
+        16,
 
       textAlign:
         'center',
@@ -3398,25 +3417,33 @@ const styles =
         '#202020',
 
       fontSize:
-        12.5,
+        13.5,
 
       fontWeight:
         '500',
 
       letterSpacing:
-        -0.15,
+        -0.1,
 
       lineHeight:
-        15,
+        17,
 
       marginTop:
-        6,
+        8,
+
+      minHeight:
+        34,
+
+      paddingHorizontal:
+        2,
 
       textAlign:
-        'left',
+        'center',
+
+      width: '100%',
 
       writingDirection:
-        'ltr',
+        'rtl',
     },
 
     featuredPriceRow: {
@@ -3424,22 +3451,30 @@ const styles =
         'center',
 
       alignSelf:
-        'flex-start',
+        'center',
 
       flexDirection:
         'row',
 
+      flexWrap:
+        'wrap',
+
       gap:
         4,
 
+      justifyContent:
+        'center',
+
       marginTop:
-        1,
+        4,
+
+      width: '100%',
     },
 
 
     featuredCurrentPriceWrap: {
       alignSelf:
-        'flex-start',
+        'center',
 
       borderBottomColor:
         '#BFFF00',
@@ -3454,16 +3489,16 @@ const styles =
         '#202020',
 
       fontSize:
-        10.5,
+        11.5,
 
       fontWeight:
         '500',
 
       lineHeight:
-        13,
+        14,
 
       textAlign:
-        'left',
+        'center',
 
       writingDirection:
         'ltr',
@@ -3475,13 +3510,13 @@ const styles =
         '#858585',
 
       fontSize:
-        9,
+        9.5,
 
       lineHeight:
-        11,
+        12,
 
       textAlign:
-        'left',
+        'center',
 
       textDecorationLine:
         'line-through',

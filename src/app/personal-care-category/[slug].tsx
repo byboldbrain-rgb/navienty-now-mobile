@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import {
   useLocalSearchParams,
   useRouter,
@@ -11,7 +12,7 @@ import {
   useState,
 } from 'react';
 import {
-  Image,
+  FlatList,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -722,6 +723,42 @@ function getProductImage(
   );
 }
 
+function prefetchPersonalCareCategoryImages(
+  urls: Array<
+    string | null | undefined
+  >,
+) {
+  const uniqueUrls =
+    Array.from(
+      new Set(
+        urls.filter(
+          (
+            url,
+          ): url is string =>
+            Boolean(
+              url?.trim(),
+            ),
+        ),
+      ),
+    );
+
+  if (
+    uniqueUrls.length === 0
+  ) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    uniqueUrls,
+    'memory-disk',
+  ).catch(() => {
+    /*
+     * Prefetch is only a performance optimization.
+     * A network/cache failure must never block the page.
+     */
+  });
+}
+
 function getDiscountPercent(
   product: CatalogProduct,
 ): number | null {
@@ -1367,28 +1404,35 @@ function CategoryFilterVisual({
 }) {
   if (remoteImageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: remoteImageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
+        transition={120}
       />
     );
   }
 
   if (section?.imageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: section.imageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
+        recyclingKey={`personal-care-filter-${section.id}`}
+        transition={120}
       />
     );
   }
@@ -1414,12 +1458,15 @@ function CategoryFilterVisual({
 
   if (localSubcategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={localSubcategoryImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory"
+        priority="high"
+        recyclingKey={`personal-care-subcategory-${localImageKey}`}
       />
     );
   }
@@ -1451,12 +1498,15 @@ function CategoryFilterVisual({
 
       if (categoryImage) {
         return (
-          <Image
+          <ExpoImage
             source={categoryImage}
             style={
               styles.filterCategoryImage
             }
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory"
+            priority="high"
+            recyclingKey={`personal-care-root-${imageKey}`}
           />
         );
       }
@@ -1474,12 +1524,15 @@ function CategoryFilterVisual({
    */
   if (isRoot) {
     return (
-      <Image
+      <ExpoImage
         source={PERSONAL_CARE_CATEGORY_IMAGE}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory"
+        priority="high"
+        recyclingKey="personal-care-generic-root"
       />
     );
   }
@@ -1511,6 +1564,8 @@ type ProductCardProps = {
 
   mode: ProductCardMode;
 
+  priority?: 'high' | 'normal' | 'low';
+
   onAdd: () => void;
 
   onIncrease: () => void;
@@ -1525,6 +1580,7 @@ function ProductCard({
   quantity,
   isStoreClosed,
   mode,
+  priority = 'normal',
   onAdd,
   onIncrease,
   onDecrease,
@@ -1565,14 +1621,18 @@ function ProductCard({
         ]}
       >
         {imageUrl ? (
-          <Image
+          <ExpoImage
             source={{
               uri: imageUrl,
             }}
             style={
               styles.productImage
             }
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            priority={priority}
+            recyclingKey={`personal-care-product-${product.id}`}
+            transition={120}
           />
         ) : (
           <Text
@@ -1832,6 +1892,18 @@ export default function PersonalCareCategoryScreen() {
   const hasPositionedFiltersRef =
     useRef(false);
 
+  /*
+   * Product list reference.
+   *
+   * Used to reset the vertical products position whenever the user
+   * changes the active Subcategory, so the newly selected products
+   * always start from the beginning of the list.
+   */
+  const productsListRef =
+    useRef<FlatList<CatalogProduct> | null>(
+      null,
+    );
+
   const {
     width: windowWidth,
   } = useWindowDimensions();
@@ -2064,6 +2136,17 @@ export default function PersonalCareCategoryScreen() {
         remoteCategoryImages,
       );
 
+      /*
+       * Start warming remote category/subcategory artwork immediately.
+       * This overlaps image downloads with the catalog request.
+       */
+      prefetchPersonalCareCategoryImages([
+        remoteRootImageUrl,
+        ...Object.values(
+          remoteCategoryImages,
+        ),
+      ]);
+
       const serviceAreaId =
         savedServiceAreaId ??
         bootstrap.settings
@@ -2112,6 +2195,43 @@ export default function PersonalCareCategoryScreen() {
           storeId,
           serviceAreaId,
         );
+
+      /*
+       * Warm the first product images before React commits the loaded
+       * screen, so the initial FlatList cells can hit memory/disk cache.
+       */
+      const prefetchSection =
+        isOffersPage
+          ? null
+          : findCatalogSectionByRouteParams(
+              loadedCatalog,
+              sectionSlug,
+              passedCategoryKey,
+              passedLabel,
+            );
+
+      const initialProductsToPrefetch =
+        isOffersPage
+          ? getAllCatalogOffers(
+              loadedCatalog,
+            )
+          : prefetchSection
+            ? getCatalogSectionProducts(
+                prefetchSection,
+                true,
+              )
+            : fallbackCategory
+              ? getFallbackCategoryProducts(
+                  loadedCatalog,
+                  fallbackCategory,
+                )
+              : [];
+
+      prefetchPersonalCareCategoryImages(
+        initialProductsToPrefetch
+          .slice(0, 12)
+          .map(getProductImage),
+      );
 
       /*
        * العروض ليست Category حقيقية.
@@ -2437,6 +2557,26 @@ export default function PersonalCareCategoryScreen() {
       [offerCategoryTabs],
     );
 
+  useEffect(() => {
+    prefetchPersonalCareCategoryImages([
+      rootCategoryImageUrl,
+      ...Object.values(
+        categoryImageOverrides,
+      ),
+      selectedSection?.imageUrl,
+      ...categoryFilterItems.map(
+        (item) =>
+          item.section?.imageUrl ??
+          null,
+      ),
+    ]);
+  }, [
+    rootCategoryImageUrl,
+    categoryImageOverrides,
+    selectedSection?.id,
+    categoryFilterItems,
+  ]);
+
   /* ==========================================================
    * PRODUCTS
    * ==========================================================
@@ -2623,6 +2763,16 @@ export default function PersonalCareCategoryScreen() {
       offerCategoryTabs,
       fallbackCategory?.key,
     ]);
+
+  useEffect(() => {
+    prefetchPersonalCareCategoryImages(
+      filteredProducts
+        .slice(0, 8)
+        .map(getProductImage),
+    );
+  }, [
+    filteredProducts,
+  ]);
 
   /* ==========================================================
    * LOADING
@@ -2824,9 +2974,28 @@ export default function PersonalCareCategoryScreen() {
    * ==========================================================
    */
 
+  function scrollProductsToStart() {
+    /*
+     * The selected filter changes the FlatList data immediately.
+     * Moving the list on the next animation frame guarantees that
+     * React Native applies offset 0 after the new filter is selected,
+     * even if the user was deep down in the previous Subcategory.
+     */
+    requestAnimationFrame(() => {
+      productsListRef.current?.scrollToOffset(
+        {
+          offset: 0,
+          animated: false,
+        },
+      );
+    });
+  }
+
   function openChildCategory(
     item: PersonalCareFilterItem,
   ) {
+    scrollProductsToStart();
+
     const child =
       item.section;
 
@@ -3048,10 +3217,7 @@ export default function PersonalCareCategoryScreen() {
   return (
     <SafeAreaView
       style={styles.screen}
-      edges={[
-        'top',
-        'bottom',
-      ]}
+      edges={['top']}
     >
       <StatusBar
         style="dark"
@@ -3080,7 +3246,7 @@ export default function PersonalCareCategoryScreen() {
             >
               <Ionicons
                 name="search-outline"
-                size={18}
+                size={17}
                 color="#222222"
               />
 
@@ -3114,7 +3280,7 @@ export default function PersonalCareCategoryScreen() {
               >
                 <Ionicons
                   name="close"
-                  size={20}
+                  size={18}
                   color="#222222"
                 />
               </Pressable>
@@ -3137,7 +3303,7 @@ export default function PersonalCareCategoryScreen() {
               >
                 <Ionicons
                   name="arrow-back"
-                  size={22}
+                  size={20}
                   color="#202020"
                 />
               </Pressable>
@@ -3175,7 +3341,7 @@ export default function PersonalCareCategoryScreen() {
               >
                 <Ionicons
                   name="search-outline"
-                  size={21}
+                  size={19}
                   color="#202020"
                 />
               </Pressable>
@@ -3322,242 +3488,299 @@ export default function PersonalCareCategoryScreen() {
         )}
 
         {/* =====================================================
+         * FIXED NORMAL CATEGORY FILTERS
+         *
+         * This rail lives OUTSIDE the FlatList on purpose.
+         * The header + subcategories stay visible while only
+         * the products list scrolls vertically.
+         * =====================================================
+         */}
+
+        {!isOffersPage &&
+          (selectedSection ||
+            fallbackCategory) && (
+          <View
+            style={
+              styles.fixedFiltersContainer
+            }
+          >
+            <ScrollView
+              ref={
+                filtersScrollRef
+              }
+              horizontal
+              showsHorizontalScrollIndicator={
+                false
+              }
+              directionalLockEnabled
+              contentContainerStyle={
+                styles.filtersRail
+              }
+              style={
+                styles.filtersScroll
+              }
+              onContentSizeChange={() => {
+                /*
+                 * When the route changes to another category,
+                 * React Native can retain the old x offset.
+                 * Position once after the new content is measured.
+                 */
+                if (
+                  hasPositionedFiltersRef.current
+                ) {
+                  return;
+                }
+
+                requestAnimationFrame(
+                  () => {
+                    filtersScrollRef.current?.scrollToEnd(
+                      {
+                        animated:
+                          false,
+                      },
+                    );
+
+                    hasPositionedFiltersRef.current =
+                      true;
+                  },
+                );
+              }}
+            >
+              {/* CHILD CATEGORIES
+               *
+               * Reversed only for display because this ScrollView
+               * uses a normal row. The visible Arabic order starts:
+               * الكل → أول Subcategory → ثاني Subcategory → ...
+               */}
+
+              {categoryFilterItemsForDisplay.map(
+                (item) => {
+                  const isSelected =
+                    selectedFilterKey ===
+                    item.key;
+
+                  return (
+                    <Pressable
+                      key={
+                        item.key
+                      }
+                      style={
+                        styles.filterItem
+                      }
+                      onPress={() =>
+                        openChildCategory(
+                          item,
+                        )
+                      }
+                    >
+                      <View
+                        style={[
+                          styles.filterImageCircle,
+
+                          isSelected &&
+                            styles.filterImageCircleSelected,
+                        ]}
+                      >
+                        <CategoryFilterVisual
+                          section={
+                            item.section
+                          }
+                          definitionKey={
+                            item.definition?.key
+                          }
+                          remoteImageUrl={
+                            categoryImageOverrides[
+                              normalizeSlug(
+                                item.definition?.key ??
+                                item.section?.slug,
+                              )
+                            ] ??
+                            null
+                          }
+                        />
+
+                        {item.section &&
+                          item.section.children.length >
+                          0 && (
+                          <View
+                            style={
+                              styles.hasChildrenBadge
+                            }
+                          >
+                            <Ionicons
+                              name="chevron-forward"
+                              size={
+                                10
+                              }
+                              color="#FFFFFF"
+                            />
+                          </View>
+                        )}
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.filterLabel,
+
+                          isSelected &&
+                            styles.filterLabelSelected,
+                        ]}
+                        numberOfLines={
+                          2
+                        }
+                      >
+                        {
+                          item.label
+                        }
+                      </Text>
+                    </Pressable>
+                  );
+                },
+              )}
+
+
+              {/* ALL — rightmost / selected by default */}
+
+              <Pressable
+                style={
+                  styles.filterItem
+                }
+                onPress={() => {
+                  scrollProductsToStart();
+
+                  setSelectedFilterKey(
+                    'all',
+                  );
+
+                  setSearchQuery(
+                    '',
+                  );
+                }}
+              >
+                <View
+                  style={[
+                    styles.filterImageCircle,
+
+                    selectedFilterKey ===
+                      'all' &&
+                      styles.filterImageCircleSelected,
+                  ]}
+                >
+                  <CategoryFilterVisual
+                    section={
+                      selectedSection
+                    }
+                    definitionKey={
+                      fallbackCategory?.key
+                    }
+                    categoryKey={
+                      passedCategoryKey ??
+                      fallbackCategory?.key ??
+                      selectedSection?.slug
+                    }
+                    isRoot
+                    remoteImageUrl={
+                      rootCategoryImageUrl
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={[
+                    styles.filterLabel,
+
+                    selectedFilterKey ===
+                      'all' &&
+                      styles.filterLabelSelected,
+                  ]}
+                  numberOfLines={2}
+                >
+                  الكل
+                </Text>
+              </Pressable>
+            </ScrollView>
+
+            <View
+              style={
+                styles.sectionDivider
+              }
+            />
+          </View>
+        )}
+
+
+        {/* =====================================================
          * CONTENT
          * =====================================================
          */}
 
-        <ScrollView
+        <FlatList
+          ref={
+            productsListRef
+          }
           style={
             styles.scrollView
           }
-          contentContainerStyle={[
-            styles.scrollContent,
-
-            {
-              paddingBottom:
-                shouldShowNormalCartDock
-                  ? 180
-                  : 30,
-            },
-          ]}
-          onScroll={handleCartDockScroll}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={
-            false
-          }
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* ===================================================
-           * NORMAL CATEGORY FILTERS
-           * ===================================================
-           */}
-
-          {!isOffersPage &&
-            (selectedSection ||
-              fallbackCategory) && (
-            <>
-              <ScrollView
-                ref={
-                  filtersScrollRef
-                }
-                horizontal
-                showsHorizontalScrollIndicator={
-                  false
-                }
-                directionalLockEnabled
-                contentContainerStyle={
-                  styles.filtersRail
-                }
-                style={
-                  styles.filtersScroll
-                }
-                onContentSizeChange={() => {
-                  /*
-                   * When the route changes to another category,
-                   * React Native can retain the old x offset.
-                   * Position once after the new content is measured.
-                   */
-                  if (
-                    hasPositionedFiltersRef.current
-                  ) {
-                    return;
-                  }
-
-                  requestAnimationFrame(
-                    () => {
-                      filtersScrollRef.current?.scrollToEnd(
-                        {
-                          animated:
-                            false,
-                        },
-                      );
-
-                      hasPositionedFiltersRef.current =
-                        true;
-                    },
-                  );
-                }}
-              >
-                {/* CHILD CATEGORIES
-                 *
-                 * Reversed only for display because this ScrollView
-                 * uses a normal row. The visible Arabic order starts:
-                 * الكل → أول Subcategory → ثاني Subcategory → ...
-                 */}
-
-                {categoryFilterItemsForDisplay.map(
-                  (item) => {
-                    const isSelected =
-                      selectedFilterKey ===
-                      item.key;
-
-                    return (
-                      <Pressable
-                        key={
-                          item.key
-                        }
-                        style={
-                          styles.filterItem
-                        }
-                        onPress={() =>
-                          openChildCategory(
-                            item,
-                          )
-                        }
-                      >
-                        <View
-                          style={[
-                            styles.filterImageCircle,
-
-                            isSelected &&
-                              styles.filterImageCircleSelected,
-                          ]}
-                        >
-                          <CategoryFilterVisual
-                            section={
-                              item.section
-                            }
-                            definitionKey={
-                              item.definition?.key
-                            }
-                            remoteImageUrl={
-                              categoryImageOverrides[
-                                normalizeSlug(
-                                  item.definition?.key ??
-                                  item.section?.slug,
-                                )
-                              ] ??
-                              null
-                            }
-                          />
-
-                          {item.section &&
-                            item.section.children.length >
-                            0 && (
-                            <View
-                              style={
-                                styles.hasChildrenBadge
-                              }
-                            >
-                              <Ionicons
-                                name="chevron-forward"
-                                size={
-                                  10
-                                }
-                                color="#FFFFFF"
-                              />
-                            </View>
-                          )}
-                        </View>
-
-                        <Text
-                          style={[
-                            styles.filterLabel,
-
-                            isSelected &&
-                              styles.filterLabelSelected,
-                          ]}
-                          numberOfLines={
-                            2
-                          }
-                        >
-                          {
-                            item.label
-                          }
-                        </Text>
-                      </Pressable>
-                    );
-                  },
-                )}
-
-
-                {/* ALL — rightmost / selected by default */}
-
-                <Pressable
-                  style={
-                    styles.filterItem
-                  }
-                  onPress={() => {
-                    setSelectedFilterKey(
-                      'all',
-                    );
-
-                    setSearchQuery(
-                      '',
-                    );
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.filterImageCircle,
-
-                      selectedFilterKey ===
-                        'all' &&
-                        styles.filterImageCircleSelected,
-                    ]}
-                  >
-                    <CategoryFilterVisual
-                      section={
-                        selectedSection
-                      }
-                      definitionKey={
-                        fallbackCategory?.key
-                      }
-                      categoryKey={
-                        passedCategoryKey ??
-                        fallbackCategory?.key ??
-                        selectedSection?.slug
-                      }
-                      isRoot
-                      remoteImageUrl={
-                        rootCategoryImageUrl
-                      }
-                    />
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.filterLabel,
-
-                      selectedFilterKey ===
-                        'all' &&
-                        styles.filterLabelSelected,
-                    ]}
-                    numberOfLines={2}
-                  >
-                    الكل
-                  </Text>
-                </Pressable>
-              </ScrollView>
-
-              <View
-                style={
-                  styles.sectionDivider
-                }
-              />
-            </>
+          data={filteredProducts}
+          keyExtractor={(
+            product,
+          ) => product.id}
+          numColumns={2}
+          renderItem={({
+            item: product,
+            index,
+          }) => (
+            <ProductCard
+              product={product}
+              cardWidth={
+                productCardWidth
+              }
+              currencyCode={
+                currencyCode
+              }
+              quantity={
+                getProductQuantity(
+                  product.id,
+                )
+              }
+              isStoreClosed={
+                isStoreClosed
+              }
+              mode={
+                isOffersPage
+                  ? 'offers'
+                  : 'category'
+              }
+              priority={
+                index < 6
+                  ? 'high'
+                  : 'normal'
+              }
+              onAdd={() =>
+                addProduct(
+                  product,
+                )
+              }
+              onIncrease={() =>
+                increaseProduct(
+                  product,
+                )
+              }
+              onDecrease={() =>
+                decreaseProduct(
+                  product.id,
+                )
+              }
+            />
           )}
+          columnWrapperStyle={[
+            styles.productsListRow,
 
+            isOffersPage &&
+              styles.offersProductsListRow,
+          ]}
+          ListHeaderComponent={
+            <>
           {/* ===================================================
            * CLOSED
            * ===================================================
@@ -3580,93 +3803,19 @@ export default function PersonalCareCategoryScreen() {
             </View>
           )}
 
-          {/* ===================================================
-           * NORMAL PAGE RESULTS COUNT
-           * ===================================================
-           */}
+              {filteredProducts.length > 0 && (
+                <View
+                  style={[
+                    styles.productsTopSpacer,
 
-          {!isOffersPage &&
-            filteredProducts.length >
-              0 && (
-              <View
-                style={
-                  styles.productsHeader
-                }
-              >
-                <Text
-                  style={
-                    styles.productsCount
-                  }
-                >
-                  {
-                    filteredProducts.length
-                  }{' '}
-                  منتج
-                </Text>
-              </View>
-            )}
-
-          {/* ===================================================
-           * PRODUCTS
-           * ===================================================
-           */}
-
-          {filteredProducts.length >
-          0 ? (
-            <View
-              style={[
-                styles.productsGrid,
-
-                isOffersPage &&
-                  styles.offersProductsGrid,
-              ]}
-            >
-              {filteredProducts.map(
-                (product) => (
-                  <ProductCard
-                    key={
-                      product.id
-                    }
-                    product={
-                      product
-                    }
-                    cardWidth={
-                      productCardWidth
-                    }
-                    currencyCode={
-                      currencyCode
-                    }
-                    quantity={getProductQuantity(
-                      product.id,
-                    )}
-                    isStoreClosed={
-                      isStoreClosed
-                    }
-                    mode={
-                      isOffersPage
-                        ? 'offers'
-                        : 'category'
-                    }
-                    onAdd={() =>
-                      addProduct(
-                        product,
-                      )
-                    }
-                    onIncrease={() =>
-                      increaseProduct(
-                        product,
-                      )
-                    }
-                    onDecrease={() =>
-                      decreaseProduct(
-                        product.id,
-                      )
-                    }
-                  />
-                ),
+                    isOffersPage &&
+                      styles.offersProductsTopSpacer,
+                  ]}
+                />
               )}
-            </View>
-          ) : (
+            </>
+          }
+          ListEmptyComponent={
             <View
               style={
                 styles.emptyState
@@ -3696,8 +3845,29 @@ export default function PersonalCareCategoryScreen() {
                 {getEmptyMessage()}
               </Text>
             </View>
-          )}
-        </ScrollView>
+          }
+          contentContainerStyle={[
+            styles.scrollContent,
+
+            {
+              paddingBottom:
+                shouldShowNormalCartDock
+                  ? 180
+                  : 30,
+            },
+          ]}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews
+          onScroll={handleCartDockScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={
+            false
+          }
+          keyboardShouldPersistTaps="handled"
+        />
 
         {/* =====================================================
          * NORMAL CATEGORY CART
@@ -3712,8 +3882,8 @@ export default function PersonalCareCategoryScreen() {
           subtotal={currentStoreSubtotal}
           minimumOrder={minimumOrder}
           currencyCode={currencyCode}
-          accentColor={NAVIENTY_NOW_GREEN}
-          accentDarkColor={NAVIENTY_NOW_GREEN_DARK}
+          accentColor="#00B956"
+          accentDarkColor="#009D49" 
           isScrollingDown={isCartDockScrollingDown}
           onPress={openCart}
         />
@@ -3772,13 +3942,15 @@ const styles =
       justifyContent:
         'space-between',
 
-      minHeight: 68,
+      // Compact header to match the cleaner proportions used
+      // by the supermarket category-list screen.
+      minHeight: 56,
 
       paddingHorizontal:
-        18,
+        16,
 
       paddingVertical:
-        10,
+        6,
     },
 
     headerCircleButton: {
@@ -3791,16 +3963,16 @@ const styles =
       borderColor:
         '#E1E1E1',
 
-      borderRadius: 24,
+      borderRadius: 20,
 
       borderWidth: 1,
 
-      height: 48,
+      height: 40,
 
       justifyContent:
         'center',
 
-      width: 48,
+      width: 40,
     },
 
     headerTitleGroup: {
@@ -3813,7 +3985,7 @@ const styles =
         'center',
 
       paddingHorizontal:
-        12,
+        10,
     },
 
     headerTitle: {
@@ -3822,7 +3994,9 @@ const styles =
 
       flexShrink: 1,
 
-      fontSize: 20,
+      // Reduced from 20 so long Arabic category names no longer
+      // dominate the header or truncate as aggressively.
+      fontSize: 16,
 
       fontWeight:
         '700',
@@ -3861,7 +4035,7 @@ const styles =
       borderColor:
         '#EAEAEA',
 
-      borderRadius: 23,
+      borderRadius: 20,
 
       borderWidth: 1,
 
@@ -3872,10 +4046,11 @@ const styles =
 
       gap: 7,
 
-      minHeight: 46,
+      // Keep search mode aligned with the compact 40px header controls.
+      minHeight: 40,
 
       paddingHorizontal:
-        16,
+        13,
     },
 
     searchInput: {
@@ -3884,9 +4059,9 @@ const styles =
 
       flex: 1,
 
-      fontSize: 14,
+      fontSize: 13,
 
-      minHeight: 44,
+      minHeight: 38,
 
       writingDirection:
         'rtl',
@@ -4007,6 +4182,15 @@ const styles =
      * ========================================================
      */
 
+    fixedFiltersContainer: {
+      backgroundColor:
+        '#FFFFFF',
+
+      flexGrow: 0,
+
+      zIndex: 10,
+    },
+
     filtersScroll: {
       flexGrow: 0,
     },
@@ -4031,7 +4215,7 @@ const styles =
         'flex-end',
 
       paddingBottom:
-        17,
+        6,
 
       paddingHorizontal:
         18,
@@ -4104,7 +4288,7 @@ const styles =
 
       marginTop: 6,
 
-      minHeight: 34,
+      minHeight: 17,
 
       textAlign:
         'center',
@@ -4154,22 +4338,8 @@ const styles =
       backgroundColor:
         '#F0F0F0',
 
-      elevation: 2,
-
-      height: 7,
-
-      shadowColor:
-        '#000000',
-
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-
-      shadowOpacity:
-        0.04,
-
-      shadowRadius: 3,
+      height:
+        StyleSheet.hairlineWidth,
     },
 
     /* ========================================================
@@ -4212,37 +4382,33 @@ const styles =
     },
 
     /* ========================================================
-     * PRODUCTS HEADER
-     * ========================================================
-     */
-
-    productsHeader: {
-      alignItems:
-        'flex-end',
-
-      paddingHorizontal:
-        16,
-
-      paddingTop: 15,
-    },
-
-    productsCount: {
-      color:
-        '#8A8A8A',
-
-      fontSize: 12,
-
-      textAlign:
-        'right',
-
-      writingDirection:
-        'rtl',
-    },
-
-    /* ========================================================
      * PRODUCT GRID
      * ========================================================
      */
+
+    productsListRow: {
+      flexDirection:
+        'row',
+
+      gap:
+        PRODUCT_GAP,
+
+      paddingHorizontal:
+        HORIZONTAL_PADDING,
+    },
+
+    offersProductsListRow: {
+      flexDirection:
+        'row-reverse',
+    },
+
+    productsTopSpacer: {
+      height: 6,
+    },
+
+    offersProductsTopSpacer: {
+      height: 12,
+    },
 
     productsGrid: {
       flexDirection:

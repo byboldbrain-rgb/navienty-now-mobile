@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import {
   useLocalSearchParams,
   useRouter,
@@ -9,13 +10,13 @@ import {
   useState,
 } from 'react';
 import {
-  Image,
-  ImageBackground,
-  LayoutChangeEvent,
   Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   View,
@@ -95,6 +96,100 @@ function getProductImage(
   return firstImage?.imageUrl ?? null;
 }
 
+function getCatalogProductImageUrls(
+  catalog: StoreCatalog,
+) {
+  return catalog.sections
+    .flatMap((section) =>
+      section.products.map(
+        (product) =>
+          getProductImage(product),
+      ),
+    )
+    .filter(
+      (url): url is string =>
+        Boolean(url),
+    );
+}
+
+function prefetchStoreCatalogImages(
+  catalog: StoreCatalog,
+) {
+  const storeCover =
+    isImageUri(
+      catalog.store.coverImageUrl,
+    )
+      ? catalog.store.coverImageUrl
+      : null;
+
+  const storeLogo =
+    isImageUri(
+      catalog.store.logoUrl,
+    )
+      ? catalog.store.logoUrl
+      : null;
+
+  const productUrls =
+    getCatalogProductImageUrls(
+      catalog,
+    );
+
+  const urls = Array.from(
+    new Set(
+      [
+        storeCover,
+        storeLogo,
+        ...productUrls.slice(0, 12),
+      ].filter(
+        (url): url is string =>
+          Boolean(url),
+      ),
+    ),
+  );
+
+  if (urls.length === 0) {
+    return;
+  }
+
+  void ExpoImage.prefetch(
+    urls,
+    'memory-disk',
+  ).catch(() => {});
+}
+
+type StoreRatingFields = {
+  rating?: number | null;
+  averageRating?: number | null;
+  average_rating?: number | null;
+};
+
+function getStoreRating(
+  store: StoreCatalog['store'],
+): number | null {
+  const ratingStore =
+    store as StoreCatalog['store'] &
+      StoreRatingFields;
+
+  const candidates = [
+    ratingStore.averageRating,
+    ratingStore.average_rating,
+    ratingStore.rating,
+  ];
+
+  for (const value of candidates) {
+    if (
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value > 0 &&
+      value <= 5
+    ) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function BackArrowIcon() {
   return (
     <View style={styles.backArrowCanvas}>
@@ -144,12 +239,12 @@ export default function StoreScreen() {
     : params.id;
 
   const scrollRef =
-    useRef<ScrollView>(null);
-
-  const sectionPositions =
-    useRef<Record<string, number>>(
-      {},
+    useRef<SectionList<CatalogProduct>>(
+      null,
     );
+
+  const pendingSectionIndexRef =
+    useRef<number | null>(null);
 
   const [catalog, setCatalog] =
     useState<StoreCatalog | null>(
@@ -216,6 +311,52 @@ export default function StoreScreen() {
   );
 
   const [
+    isCompactHeaderVisible,
+    setIsCompactHeaderVisible,
+  ] = useState(false);
+
+  const compactHeaderVisibleRef =
+    useRef(false);
+
+  const productViewabilityConfig =
+    useRef({
+      itemVisiblePercentThreshold: 35,
+    }).current;
+
+  const handleProductViewabilityChanged =
+    useRef(
+      ({
+        viewableItems,
+      }: {
+        viewableItems: Array<{
+          section?: {
+            id?: string;
+          };
+        }>;
+      }) => {
+        const visibleSectionId =
+          viewableItems.find(
+            (token) =>
+              Boolean(
+                token.section?.id,
+              ),
+          )?.section?.id ?? null;
+
+        if (!visibleSectionId) {
+          return;
+        }
+
+        setActiveSectionId(
+          (currentSectionId) =>
+            currentSectionId ===
+            visibleSectionId
+              ? currentSectionId
+              : visibleSectionId,
+        );
+      },
+    ).current;
+
+  const [
     failedProductImages,
     setFailedProductImages,
   ] = useState<Record<string, boolean>>(
@@ -278,6 +419,10 @@ export default function StoreScreen() {
           serviceAreaId,
         );
 
+      prefetchStoreCatalogImages(
+        loadedCatalog,
+      );
+
       setCatalog(loadedCatalog);
 
       setCurrencySymbol(
@@ -309,6 +454,63 @@ export default function StoreScreen() {
   useEffect(() => {
     void loadStoreData();
   }, [rawId, savedServiceAreaId]);
+
+  useEffect(() => {
+    if (
+      !catalog ||
+      !activeSectionId
+    ) {
+      return;
+    }
+
+    const currentSectionIndex =
+      catalog.sections.findIndex(
+        (section) =>
+          section.id === activeSectionId,
+      );
+
+    if (
+      currentSectionIndex < 0
+    ) {
+      return;
+    }
+
+    const nearbySections =
+      catalog.sections.slice(
+        currentSectionIndex,
+        currentSectionIndex + 2,
+      );
+
+    const urls = Array.from(
+      new Set(
+        nearbySections
+          .flatMap((section) =>
+            section.products.map(
+              (product) =>
+                getProductImage(
+                  product,
+                ),
+            ),
+          )
+          .filter(
+            (url): url is string =>
+              Boolean(url),
+          ),
+      ),
+    );
+
+    if (urls.length === 0) {
+      return;
+    }
+
+    void ExpoImage.prefetch(
+      urls,
+      'memory-disk',
+    ).catch(() => {});
+  }, [
+    activeSectionId,
+    catalog,
+  ]);
 
 
   if (isLoading) {
@@ -446,6 +648,9 @@ export default function StoreScreen() {
     )
       ? currentStore.logoUrl
       : null;
+
+  const storeRating =
+    getStoreRating(currentStore);
 
   const selectedVariant =
     selectedProduct?.variants.find(
@@ -782,71 +987,444 @@ export default function StoreScreen() {
     });
   }
 
-  function handleSectionLayout(
-    sectionId: string,
-    event: LayoutChangeEvent,
-  ) {
-    sectionPositions.current[
-      sectionId
-    ] =
-      event.nativeEvent.layout.y;
-  }
-
   function scrollToSection(
     sectionId: string,
   ) {
     setActiveSectionId(sectionId);
 
-    const sectionY =
-      sectionPositions.current[
-        sectionId
-      ];
+    const sectionIndex =
+      productSections.findIndex(
+        (section) =>
+          section.id === sectionId,
+      );
 
-    if (
-      typeof sectionY !==
-      'number'
-    ) {
+    if (sectionIndex < 0) {
       return;
     }
 
-    scrollRef.current?.scrollTo({
-      y: Math.max(
-        0,
-        sectionY - 70,
-      ),
+    pendingSectionIndexRef.current =
+      sectionIndex;
+
+    const compactHeaderOffset =
+      Math.max(
+        insets.top,
+        Platform.OS === 'android'
+          ? 24
+          : 0,
+      ) + 148;
+
+    scrollRef.current?.scrollToLocation({
       animated: true,
+      itemIndex: 0,
+      sectionIndex,
+      viewOffset:
+        compactHeaderOffset,
     });
+  }
+
+  function handleStoreScroll(
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) {
+    handleCartDockScroll(event);
+
+    const scrollY =
+      event.nativeEvent.contentOffset.y;
+
+    const nextCompactHeaderVisible =
+      scrollY >= 190;
+
+    if (
+      compactHeaderVisibleRef.current !==
+      nextCompactHeaderVisible
+    ) {
+      compactHeaderVisibleRef.current =
+        nextCompactHeaderVisible;
+
+      setIsCompactHeaderVisible(
+        nextCompactHeaderVisible,
+      );
+    }
+  }
+
+  function handleScrollToIndexFailed() {
+    const sectionIndex =
+      pendingSectionIndexRef.current;
+
+    if (sectionIndex === null) {
+      return;
+    }
+
+    setTimeout(() => {
+      scrollRef.current?.scrollToLocation({
+        animated: true,
+        itemIndex: 0,
+        sectionIndex,
+        viewOffset:
+          Math.max(
+            insets.top,
+            Platform.OS === 'android'
+              ? 24
+              : 0,
+          ) + 148,
+      });
+    }, 80);
+  }
+
+  function renderProductRow(
+    product: CatalogProduct,
+    index: number,
+    sectionProductCount: number,
+  ) {
+    const cartItem =
+      cartItems.find(
+        (item) =>
+          item.id ===
+            product.id &&
+          item.variantId ===
+            null,
+      );
+
+    const quantity =
+      cartItem?.quantity ??
+      0;
+
+    const productImage =
+      getProductImage(
+        product,
+      );
+
+    const hasVariants =
+      product.variants.length >
+      0;
+
+    const displayPrice =
+      getProductDisplayPrice(
+        product,
+      );
+
+    return (
+      <Pressable
+        key={
+          product.id
+        }
+        disabled={
+          storeIsClosed
+        }
+        onPress={() => {
+          if (
+            hasVariants
+          ) {
+            openProductDetails(
+              product,
+            );
+          }
+        }}
+        style={({ pressed }) => [
+          styles.productRow,
+
+          pressed &&
+            hasVariants &&
+            !storeIsClosed &&
+            styles.productRowPressed,
+
+          index ===
+            sectionProductCount -
+              1 &&
+            styles.productRowLast,
+        ]}
+      >
+        {/* PRODUCT MEDIA */}
+
+        <View
+          style={
+            styles.productMediaColumn
+          }
+        >
+          <View
+            style={
+              styles.productImageWrapper
+            }
+          >
+            {canDisplayProductImage(
+              productImage,
+            ) ? (
+              <ExpoImage
+                cachePolicy="memory-disk"
+                contentFit="cover"
+                priority="normal"
+                recyclingKey={`product-${product.id}`}
+                source={{
+                  uri: productImage!,
+                }}
+                style={
+                  styles.productImage
+                }
+                transition={100}
+                onError={() => {
+                  markProductImageAsFailed(
+                    productImage!,
+                  );
+                }}
+              />
+            ) : (
+              <View
+                style={
+                  styles.productImageFallback
+                }
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={30}
+                  color="#b9b9b9"
+                />
+              </View>
+            )}
+
+            {/* ADD / VARIANT / QUANTITY */}
+
+            {hasVariants ? (
+              <Pressable
+                disabled={
+                  storeIsClosed
+                }
+                onPress={(
+                  event,
+                ) => {
+                  event.stopPropagation();
+
+                  openProductDetails(
+                    product,
+                  );
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.productVariantButton,
+
+                  storeIsClosed &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !storeIsClosed &&
+                    styles.productAddButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={18}
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                />
+              </Pressable>
+            ) : quantity ===
+              0 ? (
+              <Pressable
+                disabled={
+                  storeIsClosed
+                }
+                onPress={(
+                  event,
+                ) => {
+                  event.stopPropagation();
+
+                  addProductToCart(
+                    product,
+                  );
+                }}
+                style={({
+                  pressed,
+                }) => [
+                  styles.productAddButton,
+
+                  storeIsClosed &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !storeIsClosed &&
+                    styles.productAddButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="add"
+                  size={18}
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                />
+              </Pressable>
+            ) : (
+              <View
+                style={
+                  styles.productQuantityContainer
+                }
+              >
+                <Pressable
+                  disabled={
+                    storeIsClosed
+                  }
+                  onPress={(
+                    event,
+                  ) => {
+                    event.stopPropagation();
+
+                    increaseProductQuantity(
+                      product,
+                    );
+                  }}
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.productQuantityButton,
+
+                    pressed &&
+                      styles.buttonPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="add"
+                    size={15}
+                    color="#ffffff"
+                  />
+                </Pressable>
+
+                <Text
+                  style={
+                    styles.productQuantityText
+                  }
+                >
+                  {
+                    quantity
+                  }
+                </Text>
+
+                <Pressable
+                  onPress={(
+                    event,
+                  ) => {
+                    event.stopPropagation();
+
+                    decreaseProductQuantity(
+                      product.id,
+                    );
+                  }}
+                  style={({
+                    pressed,
+                  }) => [
+                    styles.productQuantityButton,
+
+                    pressed &&
+                      styles.buttonPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="remove"
+                    size={15}
+                    color="#ffffff"
+                  />
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          {hasVariants && (
+            <Text
+              style={
+                styles.productVariantHint
+              }
+              numberOfLines={1}
+            >
+              يمكن تخصيصه
+            </Text>
+          )}
+        </View>
+
+        {/* PRODUCT TEXT */}
+
+        <View
+          style={
+            styles.productContent
+          }
+        >
+          <Text
+            style={
+              styles.productName
+            }
+            numberOfLines={
+              2
+            }
+          >
+            {
+              product.name
+            }
+          </Text>
+
+          {!!product.description && (
+            <Text
+              style={
+                styles.productDescription
+              }
+              numberOfLines={
+                3
+              }
+            >
+              {
+                product.description
+              }
+            </Text>
+          )}
+
+          <View
+            style={
+              styles.productBottomContent
+            }
+          >
+            <Text
+              style={
+                styles.productPrice
+              }
+            >
+              {hasVariants
+                ? `من ${formatPrice(
+                    displayPrice,
+                  )}`
+                : formatPrice(
+                    displayPrice,
+                  )}
+            </Text>
+
+            {product.isAgeRestricted && (
+              <View
+                style={
+                  styles.warningBadge
+                }
+              >
+                <Text
+                  style={
+                    styles.warningBadgeText
+                  }
+                >
+                  مقيّد
+                  بالعمر
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    );
   }
 
   return (
     <View style={styles.screen}>
-      <View
-        style={[
-          styles.topHeader,
-          Platform.OS === 'android' && {
-            minHeight:
-              Math.max(insets.top, 24) + 76,
-            paddingTop:
-              Math.max(insets.top, 24) + 10,
-          },
-        ]}
-      >
-        <Pressable
-          accessibilityLabel="العودة"
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed &&
-              styles.headerButtonPressed,
-          ]}
-          onPress={() => router.back()}
-        >
-          <BackArrowIcon />
-        </Pressable>
-      </View>
-
-      <ScrollView
+      <SectionList
         ref={scrollRef}
+        sections={productSections.map(
+          (section) => ({
+            ...section,
+            data: section.products,
+          }),
+        )}
         contentContainerStyle={[
           styles.pageContent,
 
@@ -859,33 +1437,43 @@ export default function StoreScreen() {
                 180 + Math.max(insets.bottom, 0),
             },
         ]}
-        onScroll={handleCartDockScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={
-          false
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+        updateCellsBatchingPeriod={40}
+        removeClippedSubviews={
+          Platform.OS === 'android'
         }
-      >
+        stickySectionHeadersEnabled={false}
+        keyExtractor={(product) =>
+          product.id
+        }
+        ListHeaderComponent={
+          <>
         <View style={styles.container}>
         {/* HERO */}
 
         <View style={styles.hero}>
           {storeCoverImage ? (
-            <ImageBackground
-              source={{
-                uri: storeCoverImage,
-              }}
-              resizeMode="cover"
-              style={
-                styles.heroBackground
-              }
-              imageStyle={
-                styles.heroImage
-              }
-            >
+            <>
+              <ExpoImage
+                cachePolicy="memory-disk"
+                contentFit="cover"
+                priority="high"
+                recyclingKey={`store-cover-${currentStore.id}`}
+                source={{
+                  uri: storeCoverImage,
+                }}
+                style={
+                  styles.heroBackground
+                }
+                transition={120}
+              />
+
               <View
                 style={styles.heroOverlay}
               />
-            </ImageBackground>
+            </>
           ) : (
             <View
               style={
@@ -915,62 +1503,96 @@ export default function StoreScreen() {
             </View>
           )}
 
+          <Pressable
+            accessibilityLabel="العودة"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.backButton,
+              styles.heroBackButton,
+              {
+                top:
+                  Math.max(
+                    insets.top,
+                    Platform.OS === 'android'
+                      ? 24
+                      : 12,
+                  ) + 10,
+              },
+              pressed &&
+                styles.headerButtonPressed,
+            ]}
+            onPress={() => router.back()}
+          >
+            <BackArrowIcon />
+          </Pressable>
+
+          {storeRating !== null && (
+            <View style={styles.ratingBadge}>
+              <Ionicons
+                name="star"
+                size={17}
+                color="#F5B400"
+              />
+
+              <Text
+                style={
+                  styles.ratingBadgeText
+                }
+              >
+                {storeRating.toFixed(1)}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* STORE CARD */}
+        {/* STORE IDENTITY */}
 
-        <View
-          style={
-            styles.storeCardWrapper
-          }
-        >
-          <View style={styles.storeCard}>
+        <View style={styles.storeInfoSection}>
+          <View style={styles.storeMainRow}>
             <View
               style={
-                styles.storeMainRow
+                styles.storeLogoContainer
               }
             >
-              <View
-                style={
-                  styles.storeLogoContainer
-                }
-              >
-                {storeLogoImage ? (
-                  <Image
-                    source={{
-                      uri: storeLogoImage,
-                    }}
-                    style={
-                      styles.storeLogoImage
-                    }
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <Text
-                    style={
-                      styles.storeLogoFallback
-                    }
-                  >
-                    {currentStore.icon ||
-                      '🍽️'}
-                  </Text>
-                )}
-              </View>
-
-              <View
-                style={
-                  styles.storeMainContent
-                }
-              >
+              {storeLogoImage ? (
+                <ExpoImage
+                  cachePolicy="memory-disk"
+                  contentFit="cover"
+                  priority="high"
+                  recyclingKey={`store-logo-${currentStore.id}`}
+                  source={{
+                    uri: storeLogoImage,
+                  }}
+                  style={
+                    styles.storeLogoImage
+                  }
+                  transition={100}
+                />
+              ) : (
                 <Text
                   style={
-                    styles.storeName
+                    styles.storeLogoFallback
                   }
-                  numberOfLines={1}
                 >
-                  {currentStore.name}
+                  {currentStore.icon ||
+                    '🍽️'}
                 </Text>
-              </View>
+              )}
+            </View>
+
+            <View
+              style={
+                styles.storeMainContent
+              }
+            >
+              <Text
+                style={
+                  styles.storeName
+                }
+                numberOfLines={1}
+              >
+                {currentStore.name}
+              </Text>
             </View>
           </View>
         </View>
@@ -1041,9 +1663,11 @@ export default function StoreScreen() {
                           section.id,
                         )
                       }
-                      style={
-                        styles.categoryTab
-                      }
+                      style={[
+                        styles.categoryTab,
+                        isActive &&
+                          styles.categoryTabActive,
+                      ]}
                     >
                       <Text
                         style={[
@@ -1060,15 +1684,6 @@ export default function StoreScreen() {
                           section.name
                         }
                       </Text>
-
-                      <View
-                        style={[
-                          styles.categoryUnderline,
-
-                          isActive &&
-                            styles.categoryUnderlineActive,
-                        ]}
-                      />
                     </Pressable>
                   );
                 },
@@ -1076,11 +1691,14 @@ export default function StoreScreen() {
             </ScrollView>
           </View>
         )}
-
-        {/* PRODUCTS */}
-
-        {productSections.length ===
-        0 ? (
+        </View>
+          </>
+        }
+        ListEmptyComponent={
+          <>
+        <View
+          style={styles.container}
+        >
           <View
             style={
               styles.emptyCatalog
@@ -1114,381 +1732,154 @@ export default function StoreScreen() {
               {'لم تتم إضافة منتجات مفعّلة لهذا المطعم بعد.'}
             </Text>
           </View>
-        ) : (
-          productSections.map(
-            (section) => (
-              <View
-                key={section.id}
-                style={
-                  styles.productsSection
+        </View>
+          </>
+        }
+        renderSectionHeader={({
+          section,
+        }) => (
+          <View
+            style={[
+              styles.container,
+              styles.productsSection,
+            ]}
+          >
+            <Text
+              style={
+                styles.productsSectionTitle
+              }
+            >
+              {section.name}
+            </Text>
+          </View>
+        )}
+        renderItem={({
+          item: product,
+          index,
+          section,
+        }) => (
+          <View
+            style={styles.container}
+          >
+            {renderProductRow(
+              product,
+              index,
+              section.data.length,
+            )}
+          </View>
+        )}
+        onScroll={handleStoreScroll}
+        onViewableItemsChanged={
+          handleProductViewabilityChanged
+        }
+        viewabilityConfig={
+          productViewabilityConfig
+        }
+        onScrollToIndexFailed={
+          handleScrollToIndexFailed
+        }
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      />
+
+      {isCompactHeaderVisible && (
+        <View
+          style={[
+            styles.compactHeader,
+            {
+              paddingTop: Math.max(
+                insets.top,
+                Platform.OS === 'android'
+                  ? 24
+                  : 0,
+              ),
+            },
+          ]}
+        >
+          <View
+            style={
+              styles.compactHeaderMainRow
+            }
+          >
+            <Pressable
+              accessibilityLabel="العودة"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed &&
+                  styles.headerButtonPressed,
+              ]}
+              onPress={() => router.back()}
+            >
+              <BackArrowIcon />
+            </Pressable>
+
+            <Text
+              numberOfLines={1}
+              style={
+                styles.compactHeaderStoreName
+              }
+            >
+              {currentStore.name}
+            </Text>
+          </View>
+
+          {productSections.length > 0 && (
+            <View
+              style={
+                styles.compactCategoryNavigation
+              }
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={
+                  false
                 }
-                onLayout={(event) =>
-                  handleSectionLayout(
-                    section.id,
-                    event,
-                  )
+                contentContainerStyle={
+                  styles.compactCategoryScrollContent
                 }
               >
-                <Text
-                  style={
-                    styles.productsSectionTitle
-                  }
-                >
-                  {section.name}
-                </Text>
+                {productSections.map(
+                  (section) => {
+                    const isActive =
+                      activeSectionId ===
+                      section.id;
 
-                <View
-                  style={
-                    styles.productsList
-                  }
-                >
-                  {section.products.map(
-                    (
-                      product,
-                      index,
-                    ) => {
-                      const cartItem =
-                        cartItems.find(
-                          (item) =>
-                            item.id ===
-                              product.id &&
-                            item.variantId ===
-                              null,
-                        );
-
-                      const quantity =
-                        cartItem?.quantity ??
-                        0;
-
-                      const productImage =
-                        getProductImage(
-                          product,
-                        );
-
-                      const hasVariants =
-                        product.variants.length >
-                        0;
-
-                      const displayPrice =
-                        getProductDisplayPrice(
-                          product,
-                        );
-
-                      return (
-                        <Pressable
-                          key={
-                            product.id
-                          }
-                          disabled={
-                            storeIsClosed
-                          }
-                          onPress={() => {
-                            if (
-                              hasVariants
-                            ) {
-                              openProductDetails(
-                                product,
-                              );
-                            }
-                          }}
-                          style={({ pressed }) => [
-                            styles.productRow,
-
-                            pressed &&
-                              hasVariants &&
-                              !storeIsClosed &&
-                              styles.productRowPressed,
-
-                            index ===
-                              section
-                                .products
-                                .length -
-                                1 &&
-                              styles.productRowLast,
+                    return (
+                      <Pressable
+                        key={`sticky-${section.id}`}
+                        accessibilityRole="button"
+                        onPress={() =>
+                          scrollToSection(
+                            section.id,
+                          )
+                        }
+                        style={[
+                          styles.categoryTab,
+                          styles.compactCategoryTab,
+                          isActive &&
+                            styles.categoryTabActive,
+                        ]}
+                      >
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.categoryTabText,
+                            isActive &&
+                              styles.categoryTabTextActive,
                           ]}
                         >
-                          {/* PRODUCT TEXT */}
-
-                          <View
-                            style={
-                              styles.productContent
-                            }
-                          >
-                            <Text
-                              style={
-                                styles.productName
-                              }
-                              numberOfLines={
-                                2
-                              }
-                            >
-                              {
-                                product.name
-                              }
-                            </Text>
-
-                            {!!product.description && (
-                              <Text
-                                style={
-                                  styles.productDescription
-                                }
-                                numberOfLines={
-                                  3
-                                }
-                              >
-                                {
-                                  product.description
-                                }
-                              </Text>
-                            )}
-
-                            <View
-                              style={
-                                styles.productBottomContent
-                              }
-                            >
-                              <Text
-                                style={
-                                  styles.productPrice
-                                }
-                              >
-                                {hasVariants
-                                  ? `من ${formatPrice(
-                                      displayPrice,
-                                    )}`
-                                  : formatPrice(
-                                      displayPrice,
-                                    )}
-                              </Text>
-
-                              {hasVariants && (
-                                <Text
-                                  style={
-                                    styles.productVariantHint
-                                  }
-                                >
-                                  اختر الحجم
-                                </Text>
-                              )}
-
-                              {product.isAgeRestricted && (
-                                <View
-                                  style={
-                                    styles.warningBadge
-                                  }
-                                >
-                                  <Text
-                                    style={
-                                      styles.warningBadgeText
-                                    }
-                                  >
-                                    مقيّد
-                                    بالعمر
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </View>
-
-                          {/* PRODUCT IMAGE */}
-
-                          <View
-                            style={
-                              styles.productImageWrapper
-                            }
-                          >
-                            {canDisplayProductImage(
-                              productImage,
-                            ) ? (
-                              <Image
-                                source={{
-                                  uri: productImage!,
-                                }}
-                                style={
-                                  styles.productImage
-                                }
-                                resizeMode="cover"
-                                onError={() => {
-                                  markProductImageAsFailed(
-                                    productImage!,
-                                  );
-                                }}
-                              />
-                            ) : (
-                              <View
-                                style={
-                                  styles.productImageFallback
-                                }
-                              >
-                                <Ionicons
-                                  name="image-outline"
-                                  size={34}
-                                  color="#b9b9b9"
-                                />
-                              </View>
-                            )}
-
-                            {/* ADD / VARIANT / QUANTITY */}
-
-                            {hasVariants ? (
-                              <Pressable
-                                disabled={
-                                  storeIsClosed
-                                }
-                                onPress={(
-                                  event,
-                                ) => {
-                                  event.stopPropagation();
-
-                                  openProductDetails(
-                                    product,
-                                  );
-                                }}
-                                style={({
-                                  pressed,
-                                }) => [
-                                  styles.productVariantButton,
-
-                                  storeIsClosed &&
-                                    styles.disabledButton,
-
-                                  pressed &&
-                                    !storeIsClosed &&
-                                    styles.productAddButtonPressed,
-                                ]}
-                              >
-                                <Ionicons
-                                  name="chevron-forward"
-                                  size={22}
-                                  color={
-                                    NAVIENTY_NOW_COLORS.primary
-                                  }
-                                />
-                              </Pressable>
-                            ) : quantity ===
-                              0 ? (
-                              <Pressable
-                                disabled={
-                                  storeIsClosed
-                                }
-                                onPress={(
-                                  event,
-                                ) => {
-                                  event.stopPropagation();
-
-                                  addProductToCart(
-                                    product,
-                                  );
-                                }}
-                                style={({
-                                  pressed,
-                                }) => [
-                                  styles.productAddButton,
-
-                                  storeIsClosed &&
-                                    styles.disabledButton,
-
-                                  pressed &&
-                                    !storeIsClosed &&
-                                    styles.productAddButtonPressed,
-                                ]}
-                              >
-                                <Ionicons
-                                  name="add"
-                                  size={22}
-                                  color={
-                                    NAVIENTY_NOW_COLORS.primary
-                                  }
-                                />
-                              </Pressable>
-                            ) : (
-                              <View
-                                style={
-                                  styles.productQuantityContainer
-                                }
-                              >
-                                <Pressable
-                                  disabled={
-                                    storeIsClosed
-                                  }
-                                  onPress={(
-                                    event,
-                                  ) => {
-                                    event.stopPropagation();
-
-                                    increaseProductQuantity(
-                                      product,
-                                    );
-                                  }}
-                                  style={({
-                                    pressed,
-                                  }) => [
-                                    styles.productQuantityButton,
-
-                                    pressed &&
-                                      styles.buttonPressed,
-                                  ]}
-                                >
-                                  <Ionicons
-                                    name="add"
-                                    size={
-                                      17
-                                    }
-                                    color="#ffffff"
-                                  />
-                                </Pressable>
-
-                                <Text
-                                  style={
-                                    styles.productQuantityText
-                                  }
-                                >
-                                  {
-                                    quantity
-                                  }
-                                </Text>
-
-                                <Pressable
-                                  onPress={(
-                                    event,
-                                  ) => {
-                                    event.stopPropagation();
-
-                                    decreaseProductQuantity(
-                                      product.id,
-                                    );
-                                  }}
-                                  style={({
-                                    pressed,
-                                  }) => [
-                                    styles.productQuantityButton,
-
-                                    pressed &&
-                                      styles.buttonPressed,
-                                  ]}
-                                >
-                                  <Ionicons
-                                    name="remove"
-                                    size={
-                                      17
-                                    }
-                                    color="#ffffff"
-                                  />
-                                </Pressable>
-                              </View>
-                            )}
-                          </View>
-                        </Pressable>
-                      );
-                    },
-                  )}
-                </View>
-              </View>
-            ),
-          )
-        )}
+                          {section.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  },
+                )}
+              </ScrollView>
+            </View>
+          )}
         </View>
-      </ScrollView>
+      )}
 
       {/* PRODUCT OPTIONS MODAL */}
 
@@ -1531,7 +1922,11 @@ export default function StoreScreen() {
                       selectedProduct,
                     ),
                   ) ? (
-                    <Image
+                    <ExpoImage
+                      cachePolicy="memory-disk"
+                      contentFit="cover"
+                      priority="high"
+                      recyclingKey={`product-modal-${selectedProduct.id}`}
                       source={{
                         uri:
                           getProductImage(
@@ -1541,7 +1936,7 @@ export default function StoreScreen() {
                       style={
                         styles.productModalImage
                       }
-                      resizeMode="cover"
+                      transition={100}
                       onError={() => {
                         const imageUrl =
                           getProductImage(
@@ -1640,7 +2035,7 @@ export default function StoreScreen() {
                               styles.variantSectionTitle
                             }
                           >
-                            اختر الحجم:
+                            اختر الحجم
                           </Text>
 
                           <Text
@@ -1648,8 +2043,7 @@ export default function StoreScreen() {
                               styles.variantSectionSubtitle
                             }
                           >
-                            اختر اختيارًا
-                            واحدًا
+                            اختر اختيارًا واحدًا
                           </Text>
                         </View>
 
@@ -1668,22 +2062,21 @@ export default function StoreScreen() {
                         </View>
                       </View>
 
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={
-                          false
-                        }
-                        contentContainerStyle={
-                          styles.variantCardsContainer
+                      <View
+                        style={
+                          styles.variantChoicesList
                         }
                       >
                         {selectedProduct.variants.map(
-                          (
-                            variant,
-                          ) => {
+                          (variant) => {
                             const isSelected =
                               selectedVariantId ===
                               variant.id;
+
+                            const variantCurrency =
+                              currencySymbol === 'EGP'
+                                ? 'ج.م'
+                                : currencySymbol;
 
                             return (
                               <Pressable
@@ -1708,20 +2101,37 @@ export default function StoreScreen() {
                                 ]}
                               >
                                 <View
-                                  style={[
-                                    styles.variantRadio,
-
-                                    isSelected &&
-                                      styles.variantRadioSelected,
-                                  ]}
+                                  style={
+                                    styles.variantChoiceLeft
+                                  }
                                 >
-                                  {isSelected && (
-                                    <View
-                                      style={
-                                        styles.variantRadioDot
-                                      }
-                                    />
-                                  )}
+                                  <View
+                                    style={[
+                                      styles.variantRadio,
+
+                                      isSelected &&
+                                        styles.variantRadioSelected,
+                                    ]}
+                                  >
+                                    {isSelected && (
+                                      <View
+                                        style={
+                                          styles.variantRadioDot
+                                        }
+                                      />
+                                    )}
+                                  </View>
+
+                                  <Text
+                                    style={
+                                      styles.variantPrice
+                                    }
+                                    numberOfLines={1}
+                                  >
+                                    {`(+${Number(
+                                      variant.price,
+                                    ).toFixed(2)} ${variantCurrency})`}
+                                  </Text>
                                 </View>
 
                                 <Text
@@ -1729,28 +2139,18 @@ export default function StoreScreen() {
                                     styles.variantName
                                   }
                                   numberOfLines={
-                                    1
+                                    2
                                   }
                                 >
                                   {
                                     variant.name
                                   }
                                 </Text>
-
-                                <Text
-                                  style={
-                                    styles.variantPrice
-                                  }
-                                >
-                                  {formatPrice(
-                                    variant.price,
-                                  )}
-                                </Text>
                               </Pressable>
                             );
                           },
                         )}
-                      </ScrollView>
+                      </View>
                     </View>
                   )}
                 </View>
@@ -1973,28 +2373,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  topHeader: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderBottomColor: '#ECECEF',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 100,
-    paddingBottom: 14,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 34,
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    zIndex: 10,
-  },
-
   backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -2004,6 +2382,23 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     width: 40,
+  },
+
+  heroBackButton: {
+    left:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    position: 'absolute',
+    zIndex: 20,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+
+    elevation: 5,
   },
 
   headerButtonPressed: {
@@ -2058,6 +2453,65 @@ const styles = StyleSheet.create({
     ],
   },
 
+  compactHeader: {
+    backgroundColor: '#FFFFFF',
+    borderBottomColor: '#ECEEEF',
+    borderBottomWidth:
+      StyleSheet.hairlineWidth,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    top: 0,
+    zIndex: 100,
+    elevation: 10,
+  },
+
+  compactHeaderMainRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    minHeight: 50,
+    paddingBottom: 2,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingTop: 4,
+  },
+
+  compactHeaderStoreName: {
+    color: '#1E1E1E',
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 22,
+    marginLeft: 12,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+
+  compactCategoryNavigation: {
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 8,
+    paddingTop: 44,
+  },
+
+  compactCategoryScrollContent: {
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+  },
+
+  compactCategoryTab: {
+    height: 40,
+    minWidth: 88,
+  },
+
   container: {
     alignSelf: 'center',
     maxWidth:
@@ -2079,7 +2533,8 @@ const styles = StyleSheet.create({
   /* ---------------------------------- */
 
   hero: {
-    height: 355,
+    aspectRatio: 2.2,
+    minHeight: 210,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -2094,14 +2549,13 @@ const styles = StyleSheet.create({
   },
 
   heroOverlay: {
+    backgroundColor:
+      'rgba(0,0,0,0.05)',
     bottom: 0,
     left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
-
-    backgroundColor:
-      'rgba(0,0,0,0.13)',
   },
 
   heroFallback: {
@@ -2139,6 +2593,38 @@ const styles = StyleSheet.create({
     fontSize: 90,
   },
 
+  ratingBadge: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 13,
+    bottom: 18,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    position: 'absolute',
+    right:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
+    zIndex: 15,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.10,
+    shadowRadius: 5,
+
+    elevation: 4,
+  },
+
+  ratingBadgeText: {
+    color: '#242424',
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+
   topCircleButtonPressed: {
     opacity: 0.88,
     transform: [
@@ -2149,33 +2635,14 @@ const styles = StyleSheet.create({
   },
 
   /* ---------------------------------- */
-  /* STORE CARD                         */
+  /* STORE IDENTITY                     */
   /* ---------------------------------- */
 
-  storeCardWrapper: {
-    marginHorizontal:
+  storeInfoSection: {
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 8,
+    paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
-    marginTop: -72,
-  },
-
-  storeCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ECECEF',
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingBottom: 19,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-
-    elevation: 5,
   },
 
   storeMainRow: {
@@ -2185,14 +2652,25 @@ const styles = StyleSheet.create({
 
   storeLogoContainer: {
     alignItems: 'center',
-    backgroundColor: '#fafafa',
-    borderColor: '#eeeeee',
-    borderRadius: 17,
+    backgroundColor: '#FAFAFA',
+    borderColor: '#EEEEEE',
+    borderRadius: 18,
     borderWidth: 1,
-    height: 72,
+    height: 86,
     justifyContent: 'center',
+    marginTop: -43,
     overflow: 'hidden',
-    width: 72,
+    width: 86,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      height: 2,
+      width: 0,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+
+    elevation: 4,
   },
 
   storeLogoImage: {
@@ -2201,18 +2679,22 @@ const styles = StyleSheet.create({
   },
 
   storeLogoFallback: {
-    fontSize: 34,
+    fontSize: 36,
   },
 
   storeMainContent: {
+    alignSelf: 'flex-start',
     flex: 1,
-    marginLeft: 15,
+    justifyContent: 'flex-start',
+    marginLeft: 5,
+    paddingTop: 0,
   },
 
   storeName: {
-    color: '#1e1e1e',
-    fontSize: 21,
-    fontWeight: '900',
+    color: '#1E1E1E',
+    fontSize: 22,
+    fontWeight: '800',
+    lineHeight: 29,
   },
 
   /* ---------------------------------- */
@@ -2255,24 +2737,10 @@ const styles = StyleSheet.create({
   /* ---------------------------------- */
 
   categoryNavigation: {
-    alignItems: 'stretch',
-    backgroundColor: '#ffffff',
-    borderBottomColor: '#e8e8e8',
-    borderBottomWidth: 1,
-    borderTopColor: '#efefef',
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    marginTop: 22,
-
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-
-    elevation: 2,
+    backgroundColor: '#FFFFFF',
+    marginTop: 4,
+    paddingBottom: 10,
+    paddingTop: 6,
   },
 
   categoryScroll: {
@@ -2281,38 +2749,44 @@ const styles = StyleSheet.create({
 
   categoryScrollContent: {
     alignItems: 'center',
-    paddingHorizontal: 10,
+    gap: 10,
+    paddingHorizontal:
+      NAVIENTY_NOW_LAYOUT.pageGutter,
   },
 
   categoryTab: {
     alignItems: 'center',
-    height: 58,
-    justifyContent: 'flex-end',
-    marginHorizontal: 9,
-    minWidth: 78,
+    backgroundColor: '#F1F5F2',
+    borderRadius: 18,
+    height: 44,
+    justifyContent: 'center',
+    minWidth: 92,
+    paddingHorizontal: 18,
+  },
+
+  categoryTabActive: {
+    backgroundColor:
+      NAVIENTY_NOW_COLORS.primary,
   },
 
   categoryTabText: {
-    color: '#7d7d7d',
+    color: '#176548',
     fontSize: 14,
-    fontWeight: '600',
-    paddingBottom: 13,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 
   categoryTabTextActive: {
-    color: '#242424',
+    color: '#FFFFFF',
     fontWeight: '800',
   },
 
   categoryUnderline: {
-    backgroundColor: 'transparent',
-    borderRadius: 2,
-    height: 3,
-    width: '100%',
+    display: 'none',
   },
 
   categoryUnderlineActive: {
-    backgroundColor: '#222222',
+    display: 'none',
   },
 
   /* ---------------------------------- */
@@ -2321,32 +2795,32 @@ const styles = StyleSheet.create({
 
   productsSection: {
     backgroundColor: '#ffffff',
-    paddingTop: 24,
+    paddingTop: 18,
   },
 
   productsSectionTitle: {
     color: '#242424',
-    fontSize: 20,
-    fontWeight: '900',
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
     textAlign: 'right',
   },
 
   productsList: {
-    marginTop: 2,
+    marginTop: 0,
   },
 
   productRow: {
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
     borderBottomColor: '#ececec',
     borderBottomWidth: 1,
+    direction: 'ltr',
     flexDirection: 'row',
-    minHeight: 190,
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingVertical: 18,
+    paddingVertical: 10,
   },
 
   productRowLast: {
@@ -2358,47 +2832,49 @@ const styles = StyleSheet.create({
   },
 
   productContent: {
+    alignSelf: 'flex-start',
+    direction: 'rtl',
     flex: 1,
     justifyContent: 'flex-start',
-    paddingRight: 17,
+    paddingLeft: 14,
   },
 
   productName: {
     color: '#252525',
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 22,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
     textAlign: 'right',
   },
 
   productDescription: {
-    color: '#858585',
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 7,
+    color: '#7F7F7F',
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 4,
     textAlign: 'right',
   },
 
   productBottomContent: {
     alignItems: 'flex-end',
-    flex: 1,
-    justifyContent: 'flex-end',
-    marginTop: 16,
+    justifyContent: 'flex-start',
+    marginTop: 9,
   },
 
   productPrice: {
-    color: '#303030',
-    fontSize: 15,
-    fontWeight: '600',
+    color: '#252525',
+    fontSize: 14,
+    fontWeight: '700',
     textAlign: 'right',
   },
 
   productVariantHint: {
-    color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 11,
-    fontWeight: '800',
+    color: '#7F7F7F',
+    fontSize: 11.5,
+    fontWeight: '500',
+    lineHeight: 16,
     marginTop: 5,
-    textAlign: 'right',
+    textAlign: 'center',
   },
 
   warningBadge: {
@@ -2419,15 +2895,22 @@ const styles = StyleSheet.create({
   /* PRODUCT IMAGE                      */
   /* ---------------------------------- */
 
+  productMediaColumn: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexShrink: 0,
+    width: 112,
+  },
+
   productImageWrapper: {
-    height: 150,
+    height: 112,
     position: 'relative',
-    width: 150,
+    width: 112,
   },
 
   productImage: {
     backgroundColor: '#f2f2f2',
-    borderRadius: 21,
+    borderRadius: 18,
     height: '100%',
     width: '100%',
   },
@@ -2435,7 +2918,7 @@ const styles = StyleSheet.create({
   productImageFallback: {
     alignItems: 'center',
     backgroundColor: '#f4f4f4',
-    borderRadius: 21,
+    borderRadius: 18,
     height: '100%',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -2446,25 +2929,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#efefef',
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
-    bottom: -2,
-    height: 44,
+    bottom: 6,
+    height: 36,
     justifyContent: 'center',
+    left: 6,
     position: 'absolute',
-    right: 8,
 
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 2,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    shadowOpacity: 0.13,
+    shadowRadius: 5,
 
-    elevation: 5,
+    elevation: 4,
 
-    width: 44,
+    width: 36,
   },
 
   productAddButtonPressed: {
@@ -2479,61 +2962,61 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderColor: '#efefef',
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
-    bottom: -2,
-    height: 44,
+    bottom: 6,
+    height: 36,
     justifyContent: 'center',
+    left: 6,
     position: 'absolute',
-    right: 8,
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 2,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 5,
-    width: 44,
+    shadowOpacity: 0.13,
+    shadowRadius: 5,
+    elevation: 4,
+    width: 36,
   },
 
   productQuantityContainer: {
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 22,
-    bottom: -2,
+    borderRadius: 18,
+    bottom: 6,
     flexDirection: 'row',
-    height: 44,
+    height: 36,
     justifyContent: 'center',
-    paddingHorizontal: 5,
+    left: 3,
+    paddingHorizontal: 3,
     position: 'absolute',
-    right: 4,
 
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 2,
     },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.15,
     shadowRadius: 5,
 
-    elevation: 5,
+    elevation: 4,
   },
 
   productQuantityButton: {
     alignItems: 'center',
-    borderRadius: 18,
-    height: 34,
+    borderRadius: 14,
+    height: 28,
     justifyContent: 'center',
-    width: 34,
+    width: 28,
   },
 
   productQuantityText: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-    minWidth: 26,
+    fontSize: 12.5,
+    fontWeight: '800',
+    minWidth: 20,
     textAlign: 'center',
   },
 
@@ -2556,7 +3039,7 @@ const styles = StyleSheet.create({
 
   productModalHero: {
     backgroundColor: '#f4f4f4',
-    height: 360,
+    height: 270,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -2597,101 +3080,109 @@ const styles = StyleSheet.create({
   },
 
   productModalBody: {
-    paddingHorizontal: 22,
-    paddingTop: 25,
+    paddingHorizontal: 18,
+    paddingTop: 18,
   },
 
   productModalTitle: {
     color: '#202020',
-    fontSize: 22,
-    fontWeight: '900',
-    lineHeight: 30,
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 25,
     textAlign: 'right',
   },
 
   productModalDescription: {
     color: '#7a7a7a',
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 7,
     textAlign: 'right',
   },
 
   variantSection: {
-    marginTop: 35,
+    marginTop: 20,
   },
 
   variantSectionHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
+    marginBottom: 7,
   },
 
   variantSectionTitle: {
     color: '#202020',
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   variantSectionSubtitle: {
-    color: '#888888',
-    fontSize: 13,
-    marginTop: 5,
+    color: '#8A8A8A',
+    fontSize: 10.5,
+    lineHeight: 15,
+    marginTop: 2,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   requiredBadge: {
     backgroundColor: '#252525',
-    borderRadius: 7,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
 
   requiredBadgeText: {
     color: '#ffffff',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
   },
 
-  variantCardsContainer: {
-    flexDirection: 'row-reverse',
-    gap: 12,
-    paddingBottom: 8,
-    paddingTop: 20,
+  variantChoicesList: {
+    borderTopColor: '#E8E8E8',
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 
   variantCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#e1e1e1',
-    borderRadius: 17,
-    borderWidth: 2,
-    minHeight: 116,
-    padding: 13,
-    position: 'relative',
-    width: 155,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderBottomColor: '#E5E5E5',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    direction: 'ltr',
+    flexDirection: 'row',
+    minHeight: 64,
+    paddingHorizontal: 2,
+    paddingVertical: 10,
+    width: '100%',
   },
 
   variantCardSelected: {
-    borderColor: NAVIENTY_NOW_COLORS.primary,
-    backgroundColor: '#EAF8F0',
+    backgroundColor: '#F8FCFA',
   },
 
   variantCardPressed: {
-    opacity: 0.83,
+    backgroundColor: '#F7F7F7',
+  },
+
+  variantChoiceLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 0,
+    gap: 9,
+    minWidth: 132,
   },
 
   variantRadio: {
     alignItems: 'center',
-    borderColor: '#e5e5e5',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    height: 20,
+    borderColor: '#C9C9C9',
+    borderRadius: 11,
+    borderWidth: 1.7,
+    height: 22,
     justifyContent: 'center',
-    left: 10,
-    position: 'absolute',
-    top: 10,
-    width: 20,
+    width: 22,
   },
 
   variantRadioSelected: {
@@ -2700,24 +3191,29 @@ const styles = StyleSheet.create({
 
   variantRadioDot: {
     backgroundColor: NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 4,
-    height: 8,
-    width: 8,
+    borderRadius: 5,
+    height: 10,
+    width: 10,
   },
 
   variantName: {
-    color: '#252525',
+    color: '#242424',
+    flex: 1,
     fontSize: 14,
-    fontWeight: '800',
-    marginTop: 38,
+    fontWeight: '700',
+    lineHeight: 20,
+    marginLeft: 14,
     textAlign: 'right',
+    writingDirection: 'rtl',
   },
 
   variantPrice: {
-    color: '#929292',
+    color: '#8A8A8A',
     fontSize: 12,
-    marginTop: 5,
-    textAlign: 'right',
+    fontWeight: '500',
+    lineHeight: 17,
+    textAlign: 'left',
+    writingDirection: 'ltr',
   },
 
   productModalBottomBar: {

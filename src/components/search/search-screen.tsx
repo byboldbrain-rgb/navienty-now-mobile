@@ -3,69 +3,69 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-    type ReactNode,
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    type ImageSourcePropType,
-    Keyboard,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Image,
+  type ImageSourcePropType,
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-    getSearchScopeForCategorySlug,
-    SEARCH_SCOPE_TABS,
-    SEARCH_SCOPES,
-    type SearchScopeKey,
+  getSearchScopeForCategorySlug,
+  SEARCH_SCOPE_TABS,
+  SEARCH_SCOPES,
+  type SearchScopeKey,
 } from '../../config/search-scopes';
 
 import { publicSupabase } from '../../lib/supabase';
 
 import {
-    createAnalyticsCorrelationId,
-    sanitizeSearchQueryForAnalytics,
-    trackBehaviorEvent,
+  createAnalyticsCorrelationId,
+  sanitizeSearchQueryForAnalytics,
+  trackBehaviorEvent,
 } from '../../services/behavioral-analytics-service';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
-    getStoreCatalog,
-    listStores,
-    type StoreCatalog,
-    type StoreSummary,
+  getStoreCatalog,
+  listStores,
+  type StoreCatalog,
+  type StoreSummary,
 } from '../../services/catalog-service';
 import {
-    type GlobalSearchResult,
-    type GlobalSearchServiceKey,
-    prepareGlobalSearchIndex,
-    searchGlobalCatalog,
+  type GlobalSearchResult,
+  type GlobalSearchServiceKey,
+  prepareGlobalSearchIndex,
+  searchGlobalCatalog,
 } from '../../services/global-search-service';
 import {
-    recordRecentlyViewed,
+  recordRecentlyViewed,
 } from '../../services/recently-viewed-service';
 import {
-    setSearchAttribution,
+  setSearchAttribution,
 } from '../../services/search-attribution-service';
 import {
-    clearRecentSearches as clearRecentSearchHistory,
-    getRecentSearches,
-    saveRecentSearch as persistRecentSearch,
+  clearRecentSearches as clearRecentSearchHistory,
+  getRecentSearches,
+  saveRecentSearch as persistRecentSearch,
 } from '../../services/search-history-service';
 import { useCustomerStore } from '../../store/customer-store';
 import {
-    NAVIENTY_NOW_COLORS,
-    NAVIENTY_NOW_LAYOUT,
+  NAVIENTY_NOW_COLORS,
+  NAVIENTY_NOW_LAYOUT,
 } from '../../theme/navienty-now-theme';
 
 const MAX_RECENT_SEARCHES = 6;
@@ -2321,7 +2321,7 @@ export default function SearchScreen({
             color={
               NAVIENTY_NOW_COLORS.text
             }
-            name="arrow-forward-outline"
+            name="arrow-back-outline"
             size={20}
           />
         </Pressable>
@@ -2826,7 +2826,11 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    flexDirection: 'row-reverse',
+
+    // Keep the Back button at the far LEFT,
+    // with the Search Bar filling the space to its right.
+    flexDirection: 'row',
+
     gap: 7,
     paddingBottom: 7,
     paddingHorizontal:

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import {
   useLocalSearchParams,
   useRouter,
@@ -11,7 +12,7 @@ import {
   useState,
 } from 'react';
 import {
-  Image,
+  FlatList,
   type ImageSourcePropType,
   Pressable,
   ScrollView,
@@ -19,7 +20,7 @@ import {
   Text,
   TextInput,
   useWindowDimensions,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -553,28 +554,32 @@ function CategoryFilterVisual({
 }) {
   if (remoteImageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: remoteImageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={120}
       />
     );
   }
 
   if (section.imageUrl) {
     return (
-      <Image
+      <ExpoImage
         source={{
           uri: section.imageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        transition={120}
       />
     );
   }
@@ -603,12 +608,14 @@ function CategoryFilterVisual({
    */
   if (localSubcategoryImage) {
     return (
-      <Image
+      <ExpoImage
         source={localSubcategoryImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory"
+        transition={120}
       />
     );
   }
@@ -619,12 +626,14 @@ function CategoryFilterVisual({
    */
   if (localRootImage) {
     return (
-      <Image
+      <ExpoImage
         source={localRootImage}
         style={
           styles.filterCategoryImage
         }
-        resizeMode="cover"
+        contentFit="cover"
+        cachePolicy="memory"
+        transition={120}
       />
     );
   }
@@ -714,14 +723,16 @@ function ProductCard({
         ]}
       >
         {imageUrl ? (
-          <Image
+          <ExpoImage
             source={{
               uri: imageUrl,
             }}
             style={
               styles.productImage
             }
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={120}
           />
         ) : (
           <Text
@@ -981,6 +992,17 @@ export default function SupermarketCategoryScreen() {
   const hasPositionedFiltersRef =
     useRef(false);
 
+  /*
+   * Products list.
+   *
+   * Keep a direct ref so changing the selected Subcategory can
+   * always return the vertical products list to its beginning.
+   */
+  const productsListRef =
+    useRef<FlatList<CatalogProduct> | null>(
+      null,
+    );
+
   const {
     width: windowWidth,
   } = useWindowDimensions();
@@ -1190,6 +1212,39 @@ export default function SupermarketCategoryScreen() {
           getStorefrontTileCategoryImages(
             remoteTile,
           );
+
+        /*
+         * Start warming the remote category-image cache immediately.
+         * This happens before getStoreCatalog() finishes, so the
+         * subcategory artwork is already in memory/disk cache when
+         * the actual screen replaces the loading skeleton.
+         */
+        const remoteCategoryImageUrls = [
+          remoteRootImageUrl,
+          ...Object.values(
+            remoteCategoryImages,
+          ),
+        ].filter(
+          (
+            imageUrl,
+          ): imageUrl is string =>
+            Boolean(imageUrl),
+        );
+
+        if (
+          remoteCategoryImageUrls.length >
+          0
+        ) {
+          void ExpoImage.prefetch(
+            remoteCategoryImageUrls,
+            'memory-disk',
+          ).catch(() => {
+            /*
+             * Prefetch is an optimization only.
+             * A failed prefetch must never block catalog loading.
+             */
+          });
+        }
       } catch {
         /*
          * Remote artwork configuration is optional.
@@ -1407,6 +1462,54 @@ export default function SupermarketCategoryScreen() {
       ].reverse(),
       [childCategories],
     );
+
+  /*
+   * Warm any category images that come from the catalog itself.
+   * Remote storefront overrides are prefetched earlier inside
+   * loadCategory(); this effect covers section.imageUrl fallbacks
+   * and keeps the category-image pipeline aligned with products.
+   */
+  useEffect(() => {
+    const catalogCategoryImageUrls = [
+      selectedSection?.imageUrl ??
+        null,
+      ...childCategories.map(
+        (child) =>
+          child.imageUrl,
+      ),
+    ].filter(
+      (
+        imageUrl,
+      ): imageUrl is string =>
+        Boolean(imageUrl),
+    );
+
+    const uniqueImageUrls =
+      Array.from(
+        new Set(
+          catalogCategoryImageUrls,
+        ),
+      );
+
+    if (
+      uniqueImageUrls.length === 0
+    ) {
+      return;
+    }
+
+    void ExpoImage.prefetch(
+      uniqueImageUrls,
+      'memory-disk',
+    ).catch(() => {
+      /*
+       * Prefetch is an optimization only.
+       * A failed prefetch must never block the category UI.
+       */
+    });
+  }, [
+    selectedSection?.imageUrl,
+    childCategories,
+  ]);
 
   /*
    * Reset the normal subcategory rail whenever the actual category
@@ -1627,6 +1730,42 @@ export default function SupermarketCategoryScreen() {
       offerCategoryTabs,
     ]);
 
+  /*
+   * Warm the cache for the first visible rows only.
+   * The rest of the images are loaded lazily by FlatList as they
+   * approach the viewport, so we avoid firing dozens of requests
+   * at the same time.
+   */
+  useEffect(() => {
+    const initialImageUrls =
+      filteredProducts
+        .slice(0, 8)
+        .map(getProductImage)
+        .filter(
+          (
+            imageUrl,
+          ): imageUrl is string =>
+            Boolean(imageUrl),
+        );
+
+    if (
+      initialImageUrls.length ===
+      0
+    ) {
+      return;
+    }
+
+    void ExpoImage.prefetch(
+      initialImageUrls,
+      'memory-disk',
+    ).catch(() => {
+      /*
+       * Prefetch is an optimization only.
+       * A failed prefetch must never block the catalog.
+       */
+    });
+  }, [filteredProducts]);
+
   /* ==========================================================
    * LOADING
    * ==========================================================
@@ -1817,9 +1956,28 @@ export default function SupermarketCategoryScreen() {
    * ==========================================================
    */
 
+  function scrollProductsToStart() {
+    /*
+     * The selected filter changes the FlatList data immediately.
+     * Moving the list on the next animation frame guarantees that
+     * React Native applies offset 0 after the new filter is selected,
+     * even if the user was deep down in the previous Subcategory.
+     */
+    requestAnimationFrame(() => {
+      productsListRef.current?.scrollToOffset(
+        {
+          offset: 0,
+          animated: false,
+        },
+      );
+    });
+  }
+
   function openChildCategory(
     child: CatalogSection,
   ) {
+    scrollProductsToStart();
+
     if (
       child.children.length > 0
     ) {
@@ -2047,10 +2205,7 @@ export default function SupermarketCategoryScreen() {
   return (
     <SafeAreaView
       style={styles.screen}
-      edges={[
-        'top',
-        'bottom',
-      ]}
+      edges={['top']}
     >
       <StatusBar
         style="dark"
@@ -2079,7 +2234,7 @@ export default function SupermarketCategoryScreen() {
             >
               <Ionicons
                 name="search-outline"
-                size={18}
+                size={17}
                 color="#222222"
               />
 
@@ -2113,7 +2268,7 @@ export default function SupermarketCategoryScreen() {
               >
                 <Ionicons
                   name="close"
-                  size={20}
+                  size={18}
                   color="#222222"
                 />
               </Pressable>
@@ -2136,7 +2291,7 @@ export default function SupermarketCategoryScreen() {
               >
                 <Ionicons
                   name="arrow-back"
-                  size={22}
+                  size={20}
                   color="#202020"
                 />
               </Pressable>
@@ -2174,7 +2329,7 @@ export default function SupermarketCategoryScreen() {
               >
                 <Ionicons
                   name="search-outline"
-                  size={21}
+                  size={19}
                   color="#202020"
                 />
               </Pressable>
@@ -2321,14 +2476,279 @@ export default function SupermarketCategoryScreen() {
         )}
 
         {/* =====================================================
+         * FIXED NORMAL CATEGORY FILTERS
+         *
+         * This rail lives OUTSIDE the FlatList on purpose.
+         * The header + subcategories stay visible while only
+         * the products list scrolls vertically.
+         * =====================================================
+         */}
+
+        {!isOffersPage &&
+          selectedSection && (
+          <View
+            style={
+              styles.fixedFiltersContainer
+            }
+          >
+            <ScrollView
+              ref={
+                filtersScrollRef
+              }
+              horizontal
+              showsHorizontalScrollIndicator={
+                false
+              }
+              directionalLockEnabled
+              contentContainerStyle={
+                styles.filtersRail
+              }
+              style={
+                styles.filtersScroll
+              }
+              onContentSizeChange={() => {
+                /*
+                 * When the route changes to another category,
+                 * React Native can retain the old x offset.
+                 * Position once after the new content is measured.
+                 */
+                if (
+                  hasPositionedFiltersRef.current
+                ) {
+                  return;
+                }
+
+                requestAnimationFrame(
+                  () => {
+                    filtersScrollRef.current?.scrollToEnd(
+                      {
+                        animated:
+                          false,
+                      },
+                    );
+
+                    hasPositionedFiltersRef.current =
+                      true;
+                  },
+                );
+              }}
+            >
+              {/* CHILD CATEGORIES
+               *
+               * Reversed only for display because this ScrollView
+               * uses a normal row. The ALL item is rendered last in the
+               * underlying LTR row so the visible Arabic order starts:
+               * الكل → أول Subcategory → ثاني Subcategory → ...
+               */}
+
+              {childCategoriesForDisplay.map(
+                (child) => {
+                  const isSelected =
+                    selectedFilterKey ===
+                    child.id;
+
+                  return (
+                    <Pressable
+                      key={
+                        child.id
+                      }
+                      style={
+                        styles.filterItem
+                      }
+                      onPress={() =>
+                        openChildCategory(
+                          child,
+                        )
+                      }
+                    >
+                      <View
+                        style={[
+                          styles.filterImageCircle,
+
+                          isSelected &&
+                            styles.filterImageCircleSelected,
+                        ]}
+                      >
+                        <CategoryFilterVisual
+                          section={
+                            child
+                          }
+                          remoteImageUrl={
+                            categoryImageOverrides[
+                              normalizeSlug(
+                                child.slug,
+                              )
+                            ] ??
+                            null
+                          }
+                        />
+
+                        {child
+                          .children
+                          .length >
+                          0 && (
+                          <View
+                            style={
+                              styles.hasChildrenBadge
+                            }
+                          >
+                            <Ionicons
+                              name="chevron-forward"
+                              size={
+                                10
+                              }
+                              color="#FFFFFF"
+                            />
+                          </View>
+                        )}
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.filterLabel,
+
+                          isSelected &&
+                            styles.filterLabelSelected,
+                        ]}
+                        numberOfLines={
+                          2
+                        }
+                      >
+                        {
+                          child.name
+                        }
+                      </Text>
+                    </Pressable>
+                  );
+                },
+              )}
+
+
+              {/* ALL — rightmost / selected by default */}
+
+              <Pressable
+                style={
+                  styles.filterItem
+                }
+                onPress={() => {
+                  scrollProductsToStart();
+
+                  setSelectedFilterKey(
+                    'all',
+                  );
+
+                  setSearchQuery(
+                    '',
+                  );
+                }}
+              >
+                <View
+                  style={[
+                    styles.filterImageCircle,
+
+                    selectedFilterKey ===
+                      'all' &&
+                      styles.filterImageCircleSelected,
+                  ]}
+                >
+                  <CategoryFilterVisual
+                    section={
+                      selectedSection
+                    }
+                    fallbackKey={
+                      categoryKey
+                    }
+                    remoteImageUrl={
+                      rootCategoryImageUrl
+                    }
+                  />
+                </View>
+
+                <Text
+                  style={[
+                    styles.filterLabel,
+
+                    selectedFilterKey ===
+                      'all' &&
+                      styles.filterLabelSelected,
+                  ]}
+                  numberOfLines={2}
+                >
+                  الكل
+                </Text>
+              </Pressable>
+            </ScrollView>
+
+            <View
+              style={
+                styles.sectionDivider
+              }
+            />
+          </View>
+        )}
+
+        {/* =====================================================
          * CONTENT
          * =====================================================
          */}
 
-        <ScrollView
+        <FlatList
+          ref={
+            productsListRef
+          }
           style={
             styles.scrollView
           }
+          data={filteredProducts}
+          keyExtractor={(product) =>
+            product.id
+          }
+          numColumns={2}
+          renderItem={({
+            item: product,
+          }) => (
+            <ProductCard
+              product={product}
+              cardWidth={
+                productCardWidth
+              }
+              currencyCode={
+                currencyCode
+              }
+              quantity={getProductQuantity(
+                product.id,
+              )}
+              isStoreClosed={
+                isStoreClosed
+              }
+              mode={
+                isOffersPage
+                  ? 'offers'
+                  : 'category'
+              }
+              onAdd={() =>
+                addProduct(
+                  product,
+                )
+              }
+              onIncrease={() =>
+                increaseProduct(
+                  product,
+                )
+              }
+              onDecrease={() =>
+                decreaseProduct(
+                  product.id,
+                )
+              }
+            />
+          )}
+          columnWrapperStyle={[
+            styles.productsListRow,
+
+            isOffersPage &&
+              styles.offersProductsListRow,
+          ]}
           contentContainerStyle={[
             styles.scrollContent,
 
@@ -2339,324 +2759,55 @@ export default function SupermarketCategoryScreen() {
                   : 30,
             },
           ]}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          removeClippedSubviews
           onScroll={handleCartDockScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={
             false
           }
           keyboardShouldPersistTaps="handled"
-        >
-          {/* ===================================================
-           * NORMAL CATEGORY FILTERS
-           * ===================================================
-           */}
-
-          {!isOffersPage &&
-            selectedSection && (
+          ListHeaderComponent={
             <>
-              <ScrollView
-                ref={
-                  filtersScrollRef
-                }
-                horizontal
-                showsHorizontalScrollIndicator={
-                  false
-                }
-                directionalLockEnabled
-                contentContainerStyle={
-                  styles.filtersRail
-                }
-                style={
-                  styles.filtersScroll
-                }
-                onContentSizeChange={() => {
-                  /*
-                   * When the route changes to another category,
-                   * React Native can retain the old x offset.
-                   * Position once after the new content is measured.
-                   */
-                  if (
-                    hasPositionedFiltersRef.current
-                  ) {
-                    return;
-                  }
+              {/* ===================================================
+               * CLOSED
+               * ===================================================
+               */}
 
-                  requestAnimationFrame(
-                    () => {
-                      filtersScrollRef.current?.scrollToEnd(
-                        {
-                          animated:
-                            false,
-                        },
-                      );
-
-                      hasPositionedFiltersRef.current =
-                        true;
-                    },
-                  );
-                }}
-              >
-                {/* CHILD CATEGORIES
-                 *
-                 * Reversed only for display because this ScrollView
-                 * uses a normal row. The ALL item is rendered last in the
-                 * underlying LTR row so the visible Arabic order starts:
-                 * الكل → أول Subcategory → ثاني Subcategory → ...
-                 */}
-
-                {childCategoriesForDisplay.map(
-                  (child) => {
-                    const isSelected =
-                      selectedFilterKey ===
-                      child.id;
-
-                    return (
-                      <Pressable
-                        key={
-                          child.id
-                        }
-                        style={
-                          styles.filterItem
-                        }
-                        onPress={() =>
-                          openChildCategory(
-                            child,
-                          )
-                        }
-                      >
-                        <View
-                          style={[
-                            styles.filterImageCircle,
-
-                            isSelected &&
-                              styles.filterImageCircleSelected,
-                          ]}
-                        >
-                          <CategoryFilterVisual
-                            section={
-                              child
-                            }
-                            remoteImageUrl={
-                              categoryImageOverrides[
-                                normalizeSlug(
-                                  child.slug,
-                                )
-                              ] ??
-                              null
-                            }
-                          />
-
-                          {child
-                            .children
-                            .length >
-                            0 && (
-                            <View
-                              style={
-                                styles.hasChildrenBadge
-                              }
-                            >
-                              <Ionicons
-                                name="chevron-forward"
-                                size={
-                                  10
-                                }
-                                color="#FFFFFF"
-                              />
-                            </View>
-                          )}
-                        </View>
-
-                        <Text
-                          style={[
-                            styles.filterLabel,
-
-                            isSelected &&
-                              styles.filterLabelSelected,
-                          ]}
-                          numberOfLines={
-                            2
-                          }
-                        >
-                          {
-                            child.name
-                          }
-                        </Text>
-                      </Pressable>
-                    );
-                  },
-                )}
-
-
-                {/* ALL — rightmost / selected by default */}
-
-                <Pressable
+              {isStoreClosed && (
+                <View
                   style={
-                    styles.filterItem
+                    styles.closedBox
                   }
-                  onPress={() => {
-                    setSelectedFilterKey(
-                      'all',
-                    );
-
-                    setSearchQuery(
-                      '',
-                    );
-                  }}
                 >
-                  <View
-                    style={[
-                      styles.filterImageCircle,
-
-                      selectedFilterKey ===
-                        'all' &&
-                        styles.filterImageCircleSelected,
-                    ]}
-                  >
-                    <CategoryFilterVisual
-                      section={
-                        selectedSection
-                      }
-                      fallbackKey={
-                        categoryKey
-                      }
-                      remoteImageUrl={
-                        rootCategoryImageUrl
-                      }
-                    />
-                  </View>
-
                   <Text
-                    style={[
-                      styles.filterLabel,
-
-                      selectedFilterKey ===
-                        'all' &&
-                        styles.filterLabelSelected,
-                    ]}
-                    numberOfLines={2}
+                    style={
+                      styles.closedText
+                    }
                   >
-                    الكل
+                    {currentStore.manualClosedNote ??
+                      'السوبر ماركت مغلق حالياً'}
                   </Text>
-                </Pressable>
-              </ScrollView>
-
-              <View
-                style={
-                  styles.sectionDivider
-                }
-              />
-            </>
-          )}
-
-          {/* ===================================================
-           * CLOSED
-           * ===================================================
-           */}
-
-          {isStoreClosed && (
-            <View
-              style={
-                styles.closedBox
-              }
-            >
-              <Text
-                style={
-                  styles.closedText
-                }
-              >
-                {currentStore.manualClosedNote ??
-                  'السوبر ماركت مغلق حالياً'}
-              </Text>
-            </View>
-          )}
-
-          {/* ===================================================
-           * NORMAL PAGE RESULTS COUNT
-           * ===================================================
-           */}
-
-          {!isOffersPage &&
-            filteredProducts.length >
-              0 && (
-              <View
-                style={
-                  styles.productsHeader
-                }
-              >
-                <Text
-                  style={
-                    styles.productsCount
-                  }
-                >
-                  {
-                    filteredProducts.length
-                  }{' '}
-                  منتج
-                </Text>
-              </View>
-            )}
-
-          {/* ===================================================
-           * PRODUCTS
-           * ===================================================
-           */}
-
-          {filteredProducts.length >
-          0 ? (
-            <View
-              style={[
-                styles.productsGrid,
-
-                isOffersPage &&
-                  styles.offersProductsGrid,
-              ]}
-            >
-              {filteredProducts.map(
-                (product) => (
-                  <ProductCard
-                    key={
-                      product.id
-                    }
-                    product={
-                      product
-                    }
-                    cardWidth={
-                      productCardWidth
-                    }
-                    currencyCode={
-                      currencyCode
-                    }
-                    quantity={getProductQuantity(
-                      product.id,
-                    )}
-                    isStoreClosed={
-                      isStoreClosed
-                    }
-                    mode={
-                      isOffersPage
-                        ? 'offers'
-                        : 'category'
-                    }
-                    onAdd={() =>
-                      addProduct(
-                        product,
-                      )
-                    }
-                    onIncrease={() =>
-                      increaseProduct(
-                        product,
-                      )
-                    }
-                    onDecrease={() =>
-                      decreaseProduct(
-                        product.id,
-                      )
-                    }
-                  />
-                ),
+                </View>
               )}
-            </View>
-          ) : (
+
+              {filteredProducts.length >
+                0 && (
+                <View
+                  style={[
+                    styles.productsTopSpacer,
+
+                    isOffersPage &&
+                      styles.offersProductsTopSpacer,
+                  ]}
+                />
+              )}
+            </>
+          }
+          ListEmptyComponent={
             <View
               style={
                 styles.emptyState
@@ -2686,8 +2837,8 @@ export default function SupermarketCategoryScreen() {
                 {getEmptyMessage()}
               </Text>
             </View>
-          )}
-        </ScrollView>
+          }
+        />
 
         {/* =====================================================
          * NORMAL CATEGORY CART
@@ -2700,10 +2851,10 @@ export default function SupermarketCategoryScreen() {
               : 0
           }
           subtotal={currentStoreSubtotal}
-          minimumOrder={minimumOrder}
+          minimumOrder={delivery.minimumOrder}
           currencyCode={currencyCode}
-          accentColor={NAVIENTY_NOW_GREEN}
-          accentDarkColor={NAVIENTY_NOW_GREEN_DARK}
+          accentColor="#00B956"
+          accentDarkColor="#009D49"
           isScrollingDown={isCartDockScrollingDown}
           onPress={openCart}
         />
@@ -2762,13 +2913,15 @@ const styles =
       justifyContent:
         'space-between',
 
-      minHeight: 68,
+      // Compact header to match the cleaner proportions used
+      // by the supermarket category-list screen.
+      minHeight: 56,
 
       paddingHorizontal:
-        18,
+        16,
 
       paddingVertical:
-        10,
+        6,
     },
 
     headerCircleButton: {
@@ -2781,16 +2934,16 @@ const styles =
       borderColor:
         '#E1E1E1',
 
-      borderRadius: 24,
+      borderRadius: 20,
 
       borderWidth: 1,
 
-      height: 48,
+      height: 40,
 
       justifyContent:
         'center',
 
-      width: 48,
+      width: 40,
     },
 
     headerTitleGroup: {
@@ -2803,7 +2956,7 @@ const styles =
         'center',
 
       paddingHorizontal:
-        12,
+        10,
     },
 
     headerTitle: {
@@ -2812,7 +2965,9 @@ const styles =
 
       flexShrink: 1,
 
-      fontSize: 20,
+      // Reduced from 20 so long Arabic category names no longer
+      // dominate the header or truncate as aggressively.
+      fontSize: 16,
 
       fontWeight:
         '700',
@@ -2851,7 +3006,7 @@ const styles =
       borderColor:
         '#EAEAEA',
 
-      borderRadius: 23,
+      borderRadius: 20,
 
       borderWidth: 1,
 
@@ -2862,10 +3017,11 @@ const styles =
 
       gap: 7,
 
-      minHeight: 46,
+      // Keep search mode aligned with the compact 40px header controls.
+      minHeight: 40,
 
       paddingHorizontal:
-        16,
+        13,
     },
 
     searchInput: {
@@ -2874,9 +3030,9 @@ const styles =
 
       flex: 1,
 
-      fontSize: 14,
+      fontSize: 13,
 
-      minHeight: 44,
+      minHeight: 38,
 
       writingDirection:
         'rtl',
@@ -2997,6 +3153,15 @@ const styles =
      * ========================================================
      */
 
+    fixedFiltersContainer: {
+      backgroundColor:
+        '#FFFFFF',
+
+      flexGrow: 0,
+
+      zIndex: 10,
+    },
+
     filtersScroll: {
       flexGrow: 0,
     },
@@ -3021,7 +3186,7 @@ const styles =
         'flex-end',
 
       paddingBottom:
-        17,
+        6,
 
       paddingHorizontal:
         18,
@@ -3094,7 +3259,7 @@ const styles =
 
       marginTop: 6,
 
-      minHeight: 34,
+      minHeight: 17,
 
       textAlign:
         'center',
@@ -3144,22 +3309,8 @@ const styles =
       backgroundColor:
         '#F0F0F0',
 
-      elevation: 2,
-
-      height: 7,
-
-      shadowColor:
-        '#000000',
-
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-
-      shadowOpacity:
-        0.04,
-
-      shadowRadius: 3,
+      height:
+        StyleSheet.hairlineWidth,
     },
 
     /* ========================================================
@@ -3202,37 +3353,39 @@ const styles =
     },
 
     /* ========================================================
-     * PRODUCTS HEADER
-     * ========================================================
-     */
-
-    productsHeader: {
-      alignItems:
-        'flex-end',
-
-      paddingHorizontal:
-        16,
-
-      paddingTop: 15,
-    },
-
-    productsCount: {
-      color:
-        '#8A8A8A',
-
-      fontSize: 12,
-
-      textAlign:
-        'right',
-
-      writingDirection:
-        'rtl',
-    },
-
-    /* ========================================================
      * PRODUCT GRID
      * ========================================================
      */
+
+    productsTopSpacer: {
+      height: 6,
+    },
+
+    offersProductsTopSpacer: {
+      height: 12,
+    },
+
+    productsListRow: {
+      flexDirection:
+        'row',
+
+      gap:
+        PRODUCT_GAP,
+
+      paddingHorizontal:
+        HORIZONTAL_PADDING,
+
+      width: '100%',
+    },
+
+    /*
+     * Keep the existing offers-page visual order:
+     * the first product appears on the right.
+     */
+    offersProductsListRow: {
+      flexDirection:
+        'row-reverse',
+    },
 
     productsGrid: {
       flexDirection:
@@ -3421,7 +3574,7 @@ const styles =
         '#000000',
 
       shadowOffset: {
-        width: 42,
+        width: 44,
         height: 2,
       },
 
@@ -3765,10 +3918,18 @@ const styles =
       color:
         '#202020',
 
+      flex: 1,
+
       fontSize: 17,
 
       fontWeight:
-        '700',
+        '800',
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'rtl',
 
       marginTop: 15,
     },
@@ -3787,175 +3948,6 @@ const styles =
 
       textAlign:
         'center',
-    },
-
-    /* ========================================================
-     * NORMAL CART DOCK
-     * ========================================================
-     */
-
-    cartDock: {
-      backgroundColor:
-        '#FFFFFF',
-
-      borderTopColor:
-        '#EEEEEE',
-
-      borderTopWidth:
-        StyleSheet.hairlineWidth,
-
-      bottom: 0,
-
-      elevation: 12,
-
-      left: 0,
-
-      paddingBottom: 12,
-
-      paddingHorizontal:
-        16,
-
-      paddingTop: 11,
-
-      position:
-        'absolute',
-
-      right: 0,
-
-      shadowColor:
-        '#000000',
-
-      shadowOffset: {
-        width: 0,
-        height: -2,
-      },
-
-      shadowOpacity:
-        0.08,
-
-      shadowRadius: 8,
-    },
-
-    cartMessage: {
-      color:
-        '#242424',
-
-      fontSize: 12.5,
-
-      fontWeight:
-        '500',
-
-      textAlign:
-        'center',
-
-      writingDirection:
-        'rtl',
-    },
-
-    progressTrack: {
-      backgroundColor:
-        '#E7E7E7',
-
-      borderRadius: 4,
-
-      height: 4,
-
-      marginTop: 10,
-
-      overflow:
-        'hidden',
-    },
-
-    progressValue: {
-      backgroundColor:
-        '#202020',
-
-      borderRadius: 4,
-
-      height: 4,
-    },
-
-    basketButton: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        NAVIENTY_NOW_GREEN,
-
-      borderRadius: 28,
-
-      flexDirection:
-        'row',
-
-      height: 56,
-
-      justifyContent:
-        'space-between',
-
-      marginTop: 11,
-
-      paddingHorizontal:
-        18,
-    },
-
-    basketButtonPressed: {
-      opacity: 0.9,
-
-      transform: [
-        {
-          scale:
-            0.985,
-        },
-      ],
-    },
-
-    basketTotal: {
-      color:
-        '#FFFFFF',
-
-      fontSize: 14,
-
-      fontWeight:
-        '700',
-
-      minWidth: 78,
-    },
-
-    basketButtonTitle: {
-      color:
-        '#FFFFFF',
-
-      fontSize: 17,
-
-      fontWeight:
-        '700',
-    },
-
-    basketCount: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        NAVIENTY_NOW_GREEN_DARK,
-
-      borderRadius: 21,
-
-      height: 42,
-
-      justifyContent:
-        'center',
-
-      width: 42,
-    },
-
-    basketCountText: {
-      color:
-        '#FFFFFF',
-
-      fontSize: 15,
-
-      fontWeight:
-        '700',
     },
 
     /* ========================================================

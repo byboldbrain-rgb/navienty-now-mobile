@@ -133,7 +133,7 @@ function getDefaultSideOption(
 function OptionIcon({
   name,
   color,
-  size = 22,
+  size = 20,
   fallback =
     'document-text-outline',
 }: {
@@ -586,8 +586,6 @@ export default function PrintingJobBuilder({
           />
         </View>
 
-    
-
         <Text style={styles.stateDescription}>
           بنجهز لك الخيارات والأسعار المتاحة.
         </Text>
@@ -613,7 +611,7 @@ export default function PrintingJobBuilder({
         <View style={styles.stateIcon}>
           <Ionicons
             name="print-outline"
-            size={30}
+            size={26}
             color={
               NAVIENTY_NOW_COLORS.primary
             }
@@ -714,7 +712,7 @@ export default function PrintingJobBuilder({
         >
           <Ionicons
             name="arrow-back"
-            size={22}
+            size={20}
             color={
               NAVIENTY_NOW_COLORS.text
             }
@@ -744,7 +742,7 @@ export default function PrintingJobBuilder({
             <View style={styles.closedIcon}>
               <Ionicons
                 name="time-outline"
-                size={18}
+                size={16}
                 color="#8A5A12"
               />
             </View>
@@ -838,7 +836,7 @@ export default function PrintingJobBuilder({
             <View style={styles.inlineErrorRow}>
               <Ionicons
                 name="alert-circle-outline"
-                size={15}
+                size={14}
                 color={
                   NAVIENTY_NOW_COLORS.error
                 }
@@ -930,7 +928,7 @@ export default function PrintingJobBuilder({
             >
               <Ionicons
                 name="add"
-                size={23}
+                size={20}
                 color={
                   NAVIENTY_NOW_COLORS.primary
                 }
@@ -971,7 +969,7 @@ export default function PrintingJobBuilder({
             >
               <Ionicons
                 name="remove"
-                size={23}
+                size={20}
                 color={
                   NAVIENTY_NOW_COLORS.primary
                 }
@@ -1031,7 +1029,7 @@ export default function PrintingJobBuilder({
           <View style={styles.submitErrorCard}>
             <Ionicons
               name="alert-circle-outline"
-              size={18}
+              size={16}
               color={
                 NAVIENTY_NOW_COLORS.error
               }
@@ -1048,7 +1046,7 @@ export default function PrintingJobBuilder({
             <OptionIcon
               name={config.uiIcons.fileNotice}
               fallback="logo-whatsapp"
-              size={21}
+              size={18}
               color="#FFFFFF"
             />
           </View>
@@ -1068,7 +1066,7 @@ export default function PrintingJobBuilder({
           <View style={styles.submitErrorCard}>
             <Ionicons
               name="alert-circle-outline"
-              size={18}
+              size={16}
               color={
                 NAVIENTY_NOW_COLORS.error
               }
@@ -1088,7 +1086,7 @@ export default function PrintingJobBuilder({
             paddingBottom:
               Math.max(
                 insets.bottom,
-                12,
+                10,
               ),
           },
         ]}
@@ -1155,7 +1153,7 @@ export default function PrintingJobBuilder({
                         ? 'checkmark'
                         : 'bag-add-outline'
                     }
-                    size={20}
+                    size={18}
                     color="#FFFFFF"
                   />
                 </View>
@@ -1237,7 +1235,6 @@ function OptionSection<
               <Text style={styles.optionLabel}>
                 {option.label}
               </Text>
-
             </Pressable>
           );
         })}
@@ -1279,35 +1276,35 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.page,
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
 
   loadingIcon: {
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryUltraPale,
-    borderRadius: 28,
-    height: 56,
+    borderRadius: 24,
+    height: 48,
     justifyContent: 'center',
-    width: 56,
+    width: 48,
   },
 
   stateIcon: {
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryPale,
-    borderRadius: 32,
-    height: 64,
+    borderRadius: 28,
+    height: 56,
     justifyContent: 'center',
-    width: 64,
+    width: 56,
   },
 
   stateTitle: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 14,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
@@ -1315,10 +1312,10 @@ const styles = StyleSheet.create({
   stateDescription: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 12,
-    lineHeight: 20,
-    marginTop: 7,
-    maxWidth: 300,
+    fontSize: 11.5,
+    lineHeight: 18,
+    marginTop: 6,
+    maxWidth: 290,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
@@ -1329,49 +1326,46 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.primary,
     borderRadius: 999,
     justifyContent: 'center',
-    marginTop: 20,
-    minHeight: 50,
-    minWidth: 170,
-    paddingHorizontal: 24,
+    marginTop: 18,
+    minHeight: 44,
+    minWidth: 150,
+    paddingHorizontal: 20,
   },
 
   retryButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
   },
 
   stateBackButton: {
-    marginTop: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    marginTop: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
   },
 
   stateBackText: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
+
+  /* ============================================================
+   * COMPACT UNIFIED HEADER
+   * ============================================================
+   */
 
   header: {
     alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.page,
-    borderBottomColor: '#ECECEF',
+    backgroundColor: '#FFFFFF',
+    borderBottomColor: '#EEEEEE',
     borderBottomWidth:
       StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    minHeight: 78,
-    paddingBottom: 12,
+    minHeight: 56,
+    paddingBottom: 6,
     paddingHorizontal: 16,
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
     zIndex: 10,
   },
 
@@ -1379,16 +1373,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#E1E1E1',
-    borderRadius: 23,
+    borderRadius: 20,
     borderWidth: 1,
-    height: 46,
+    height: 40,
     justifyContent: 'center',
-    width: 46,
+    width: 40,
   },
 
   headerButtonPressed: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.surface,
+    backgroundColor: '#F6F6F6',
     transform: [
       {
         scale: 0.97,
@@ -1400,16 +1393,16 @@ const styles = StyleSheet.create({
     color:
       NAVIENTY_NOW_COLORS.text,
     flex: 1,
-    fontSize: 17,
-    fontWeight: '900',
-    paddingHorizontal: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 10,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
 
   headerSpacer: {
-    height: 46,
-    width: 46,
+    height: 40,
+    width: 40,
   },
 
   scrollView: {
@@ -1420,9 +1413,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     maxWidth:
       NAVIENTY_NOW_LAYOUT.contentMaxWidth,
-    paddingBottom: 28,
+    paddingBottom: 20,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 10,
     width: '100%',
   },
 
@@ -1430,31 +1423,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FFF8E8',
     borderColor: '#F0DFC0',
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.controlRadius,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row-reverse',
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
   },
 
   closedIcon: {
     alignItems: 'center',
     backgroundColor: '#FFF0C9',
-    borderRadius: 15,
-    height: 30,
+    borderRadius: 13,
+    height: 26,
     justifyContent: 'center',
-    width: 30,
+    width: 26,
   },
 
   closedText: {
     color: '#735414',
     flex: 1,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
-    lineHeight: 18,
-    marginRight: 9,
+    lineHeight: 16,
+    marginRight: 8,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -1463,11 +1455,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor:
       NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
+    borderRadius: 16,
     borderWidth: 1,
-    marginTop: 14,
-    padding: 15,
+    marginTop: 10,
+    padding: 12,
   },
 
   sectionHeading: {
@@ -1478,18 +1469,17 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
 
-
   optionsGrid: {
     alignItems: 'stretch',
     flexDirection: 'row-reverse',
-    gap: 10,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 10,
   },
 
   optionsGridWithoutTitle: {
@@ -1502,13 +1492,13 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.surface,
     borderColor:
       NAVIENTY_NOW_COLORS.border,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 1.25,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 68,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
+    minHeight: 54,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
   },
 
   optionCardSelected: {
@@ -1521,15 +1511,14 @@ const styles = StyleSheet.create({
   optionLabel: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 12.5,
+    fontWeight: '800',
     includeFontPadding: false,
-    lineHeight: 20,
+    lineHeight: 18,
     textAlign: 'center',
     width: '100%',
     writingDirection: 'rtl',
   },
-
 
   pageInputCard: {
     alignItems: 'center',
@@ -1537,13 +1526,12 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.surface,
     borderColor:
       NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.controlRadius,
-    borderWidth: 1.5,
+    borderRadius: 14,
+    borderWidth: 1.25,
     flexDirection: 'row-reverse',
-    marginTop: 14,
-    minHeight: 64,
-    paddingHorizontal: 12,
+    marginTop: 10,
+    minHeight: 52,
+    paddingHorizontal: 10,
   },
 
   pageInputCardFocused: {
@@ -1562,33 +1550,33 @@ const styles = StyleSheet.create({
     color:
       NAVIENTY_NOW_COLORS.text,
     flex: 1,
-    fontSize: 22,
-    fontWeight: '900',
-    minHeight: 58,
-    paddingHorizontal: 11,
+    fontSize: 18,
+    fontWeight: '800',
+    minHeight: 46,
+    paddingHorizontal: 9,
     paddingVertical: 0,
   },
 
   pageInputSuffix: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 11.5,
-    fontWeight: '800',
+    fontSize: 10.5,
+    fontWeight: '700',
     writingDirection: 'rtl',
   },
 
   inlineErrorRow: {
     alignItems: 'flex-start',
     flexDirection: 'row-reverse',
-    marginTop: 8,
+    marginTop: 7,
   },
 
   errorText: {
     color:
       NAVIENTY_NOW_COLORS.error,
     flex: 1,
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 9.5,
+    lineHeight: 15,
     marginRight: 6,
     textAlign: 'right',
     writingDirection: 'rtl',
@@ -1597,8 +1585,8 @@ const styles = StyleSheet.create({
   presetsRow: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    gap: 7,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 9,
   },
 
   presetChip: {
@@ -1610,9 +1598,9 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 36,
-    minWidth: 52,
-    paddingHorizontal: 12,
+    minHeight: 32,
+    minWidth: 46,
+    paddingHorizontal: 10,
   },
 
   presetChipSelected: {
@@ -1625,8 +1613,8 @@ const styles = StyleSheet.create({
   presetText: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 12,
-    fontWeight: '800',
+    fontSize: 11.5,
+    fontWeight: '700',
   },
 
   presetTextSelected: {
@@ -1639,25 +1627,24 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.surface,
     borderColor:
       NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.controlRadius,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
-    marginTop: 14,
-    minHeight: 66,
-    padding: 7,
+    marginTop: 10,
+    minHeight: 54,
+    padding: 6,
   },
 
   stepperButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderColor: '#DCDCE0',
-    borderRadius: 23,
+    borderRadius: 19,
     borderWidth: 1,
-    height: 46,
+    height: 38,
     justifyContent: 'center',
-    width: 46,
+    width: 38,
   },
 
   stepperButtonPressed: {
@@ -1685,9 +1672,9 @@ const styles = StyleSheet.create({
   copyValue: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 21,
-    fontWeight: '900',
-    minWidth: 36,
+    fontSize: 18,
+    fontWeight: '800',
+    minWidth: 32,
     textAlign: 'center',
   },
 
@@ -1695,22 +1682,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor:
       NAVIENTY_NOW_COLORS.border,
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
+    borderRadius: 16,
     borderWidth: 1,
-    marginTop: 14,
-    padding: 15,
+    marginTop: 10,
+    padding: 12,
   },
 
   summaryHeader: {
-    marginBottom: 12,
+    marginBottom: 9,
   },
 
   summaryTitle: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 14,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -1718,23 +1704,23 @@ const styles = StyleSheet.create({
   summaryRows: {
     backgroundColor:
       NAVIENTY_NOW_COLORS.surface,
-    borderRadius: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    borderRadius: 13,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
 
   summaryRow: {
     alignItems: 'center',
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
-    minHeight: 40,
+    minHeight: 34,
   },
 
   summaryLabel: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
     flex: 1,
-    fontSize: 10.5,
+    fontSize: 10,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -1742,9 +1728,9 @@ const styles = StyleSheet.create({
   summaryValue: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 12,
-    fontWeight: '900',
-    marginRight: 12,
+    fontSize: 11.5,
+    fontWeight: '800',
+    marginRight: 10,
     textAlign: 'left',
   },
 
@@ -1759,28 +1745,28 @@ const styles = StyleSheet.create({
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryUltraPale,
     borderColor: '#DDF3E6',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     justifyContent: 'space-between',
-    marginTop: 10,
-    minHeight: 58,
-    paddingHorizontal: 13,
+    marginTop: 8,
+    minHeight: 48,
+    paddingHorizontal: 11,
   },
 
   totalLabel: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 13,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '800',
     writingDirection: 'rtl',
   },
 
   totalValue: {
     color:
       NAVIENTY_NOW_COLORS.primaryDark,
-    fontSize: 19,
-    fontWeight: '900',
+    fontSize: 17,
+    fontWeight: '800',
     textAlign: 'left',
   },
 
@@ -1789,35 +1775,34 @@ const styles = StyleSheet.create({
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryUltraPale,
     borderColor: '#DDF3E6',
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.cardRadius,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row-reverse',
-    marginTop: 14,
-    padding: 13,
+    marginTop: 10,
+    padding: 10,
   },
 
   fileNoticeIcon: {
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 17,
-    height: 44,
+    borderRadius: 15,
+    height: 38,
     justifyContent: 'center',
-    width: 44,
+    width: 38,
   },
 
   fileNoticeCopy: {
     alignItems: 'flex-end',
     flex: 1,
-    marginRight: 11,
+    marginRight: 9,
   },
 
   fileNoticeTitle: {
     color:
       NAVIENTY_NOW_COLORS.text,
-    fontSize: 12.5,
-    fontWeight: '900',
+    fontSize: 11.5,
+    fontWeight: '800',
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -1825,9 +1810,9 @@ const styles = StyleSheet.create({
   fileNoticeBody: {
     color:
       NAVIENTY_NOW_COLORS.textSecondary,
-    fontSize: 10,
-    lineHeight: 16,
-    marginTop: 3,
+    fontSize: 9.5,
+    lineHeight: 15,
+    marginTop: 2,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -1836,20 +1821,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     backgroundColor: '#FFF5F5',
     borderColor: '#F0D0D0',
-    borderRadius:
-      NAVIENTY_NOW_LAYOUT.controlRadius,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row-reverse',
-    marginTop: 12,
-    padding: 11,
+    marginTop: 9,
+    padding: 9,
   },
 
   submitErrorText: {
     color: '#A53636',
     flex: 1,
-    fontSize: 10.5,
-    lineHeight: 17,
-    marginRight: 7,
+    fontSize: 10,
+    lineHeight: 16,
+    marginRight: 6,
     textAlign: 'right',
     writingDirection: 'rtl',
   },
@@ -1861,14 +1845,14 @@ const styles = StyleSheet.create({
       StyleSheet.hairlineWidth,
     elevation: 18,
     paddingHorizontal: 16,
-    paddingTop: 11,
+    paddingTop: 8,
     shadowColor: '#000000',
     shadowOffset: {
       width: 0,
       height: -3,
     },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
+    shadowOpacity: 0.05,
+    shadowRadius: 7,
   },
 
   bottomBarContent: {
@@ -1884,9 +1868,9 @@ const styles = StyleSheet.create({
       NAVIENTY_NOW_COLORS.primary,
     borderRadius: 999,
     flexDirection: 'row',
-    height: 56,
+    height: 50,
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
   },
 
   submitButtonDisabled: {
@@ -1905,19 +1889,19 @@ const styles = StyleSheet.create({
 
   submitTotal: {
     color: '#FFFFFF',
-    fontSize: 13.5,
-    fontWeight: '900',
-    minWidth: 88,
-    paddingLeft: 9,
+    fontSize: 12.5,
+    fontWeight: '800',
+    minWidth: 80,
+    paddingLeft: 8,
     textAlign: 'left',
   },
 
   submitLabel: {
     color: '#FFFFFF',
     flex: 1,
-    fontSize: 15.5,
-    fontWeight: '900',
-    paddingHorizontal: 6,
+    fontSize: 14,
+    fontWeight: '800',
+    paddingHorizontal: 5,
     textAlign: 'center',
     writingDirection: 'rtl',
   },
@@ -1926,10 +1910,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor:
       NAVIENTY_NOW_COLORS.primaryDark,
-    borderRadius: 22,
-    height: 44,
+    borderRadius: 19,
+    height: 38,
     justifyContent: 'center',
-    width: 44,
+    width: 38,
   },
 
   buttonPressed: {

@@ -1,15 +1,15 @@
 import {
-    useEffect,
-    useRef,
-    type ReactNode,
+  useEffect,
+  useRef,
+  type ReactNode,
 } from 'react';
 import {
-    Animated,
-    Easing,
-    StyleSheet,
-    View,
-    type StyleProp,
-    type ViewStyle,
+  Animated,
+  Easing,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 
 type SkeletonBlockProps = {

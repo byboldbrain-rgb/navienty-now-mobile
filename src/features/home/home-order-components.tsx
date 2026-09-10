@@ -1,34 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import {
-    Fragment,
-    useEffect,
-    useRef,
-    useState,
+  Fragment,
+  useEffect,
+  useState,
 } from 'react';
 import {
-    Animated,
-    Easing,
-    Image,
-    type ImageSourcePropType,
-    Pressable,
-    Text,
-    View,
+  Animated,
+  Easing,
+  Image,
+  type ImageSourcePropType,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 import { getCategoryIcon } from '../../config/category-icons';
 import type { StoreSummary } from '../../services/catalog-service';
 import { getHomeStoreArtwork } from '../../services/home-store-artwork-service';
 import {
-    type Order,
-    type OrderStatus,
+  type Order,
+  type OrderStatus,
 } from '../../store/orders-store';
-import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
-import { styles } from './home-screen.styles';
+import {
+  NAVIENTY_NOW_COLORS,
+} from '../../theme/navienty-now-theme';
 
-const personalCareCategoryIcon = require('../../assets/icons/categories/personal-care.webp');
-const laundryCategoryIcon = require('../../assets/icons/categories/laundry.webp');
-const requestAnythingCategoryIcon = require('../../assets/icons/categories/request-anything.webp');
+const personalCareCategoryIcon =
+  require('../../assets/icons/categories/personal-care.webp');
+
+const laundryCategoryIcon =
+  require('../../assets/icons/categories/laundry.webp');
+
+const requestAnythingCategoryIcon =
+  require('../../assets/icons/categories/request-anything.webp');
 
 type HomeOrderTrackingStep = {
   key:
@@ -36,34 +42,35 @@ type HomeOrderTrackingStep = {
     | 'preparing'
     | 'delivery'
     | 'delivered';
+
   title: string;
+
   icon: keyof typeof Ionicons.glyphMap;
 };
 
 const HOME_ORDER_TRACKING_STEPS:
   HomeOrderTrackingStep[] = [
-  {
-    key: 'confirmation',
-    title: 'يتم تأكيد طلبك',
-    icon: 'checkmark',
-  },
-  {
-    key: 'preparing',
-    title: 'يتم تحضير طلبك',
-    icon: 'cart-outline',
-  },
-  {
-    key: 'delivery',
-    title: 'طلبك في الطريق',
-    icon: 'bicycle-outline',
-  },
-  {
-    key: 'delivered',
-    title: 'تم توصيل طلبك',
-    icon: 'location-outline',
-  },
-];
-
+    {
+      key: 'confirmation',
+      title: 'يتم تأكيد طلبك',
+      icon: 'checkmark',
+    },
+    {
+      key: 'preparing',
+      title: 'يتم تحضير طلبك',
+      icon: 'cart-outline',
+    },
+    {
+      key: 'delivery',
+      title: 'طلبك في الطريق',
+      icon: 'bicycle-outline',
+    },
+    {
+      key: 'delivered',
+      title: 'تم توصيل طلبك',
+      icon: 'location-outline',
+    },
+  ];
 
 function getHomeOrderTrackingStage(
   status: OrderStatus,
@@ -116,8 +123,7 @@ export function getActiveOrderCategoryArtwork(
     );
 
   if (
-    normalizedSlug ===
-      'laundry' ||
+    normalizedSlug === 'laundry' ||
     normalizedSlug ===
       'laundry-ironing' ||
     normalizedSlug ===
@@ -156,13 +162,6 @@ export function getActiveOrderCategoryArtwork(
     return requestAnythingCategoryIcon;
   }
 
-  /*
-   * Restaurants / supermarket / bookstore already use
-   * the configured category artwork helper elsewhere in Home.
-   *
-   * Reuse the same source as a visual fallback when a particular
-   * store has no uploaded logo/cover.
-   */
   if (
     normalizedSlug ===
       'restaurants' ||
@@ -219,79 +218,59 @@ function ActiveOrderStoreArtwork({
     resolvedArtwork,
     setResolvedArtwork,
   ] =
-    useState<ActiveOrderStoreArtworkState>({
-      logoUrl:
-        initialLogoUrl,
-
-      coverImageUrl:
-        initialCoverImageUrl,
-
-      categorySlug:
-        initialCategorySlug,
-    });
+    useState<ActiveOrderStoreArtworkState>(
+      {
+        logoUrl: initialLogoUrl,
+        coverImageUrl:
+          initialCoverImageUrl,
+        categorySlug:
+          initialCategorySlug,
+      },
+    );
 
   const [
     imageFailed,
     setImageFailed,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     isResolvingArtwork,
     setIsResolvingArtwork,
-  ] =
-    useState(
-      !initialLogoUrl &&
+  ] = useState(
+    !initialLogoUrl &&
       !initialCoverImageUrl &&
       !initialCategorySlug,
-    );
+  );
 
   const orderItemImageUrl =
     order.items
       .map(
         (item) =>
-          item.imageUrl
-            ?.trim() ??
-          '',
+          item.imageUrl?.trim() ?? '',
       )
       .find(
         (imageUrl) =>
-          imageUrl.length >
-          0,
+          imageUrl.length > 0,
       ) ?? '';
 
   useEffect(() => {
     let cancelled = false;
 
-    setImageFailed(
-      false,
-    );
+    setImageFailed(false);
 
-    /*
-     * If Home already knows the store, use that data instantly.
-     *
-     * We still resolve the RPC when the store has no real image,
-     * because Home's `listStores()` service intentionally filters
-     * some categories from the public v1 catalog.
-     */
     if (
       initialLogoUrl ||
       initialCoverImageUrl
     ) {
       setResolvedArtwork({
-        logoUrl:
-          initialLogoUrl,
-
+        logoUrl: initialLogoUrl,
         coverImageUrl:
           initialCoverImageUrl,
-
         categorySlug:
           initialCategorySlug,
       });
 
-      setIsResolvingArtwork(
-        false,
-      );
+      setIsResolvingArtwork(false);
 
       return () => {
         cancelled = true;
@@ -299,28 +278,17 @@ function ActiveOrderStoreArtwork({
     }
 
     setResolvedArtwork({
-      logoUrl:
-        initialLogoUrl,
-
+      logoUrl: initialLogoUrl,
       coverImageUrl:
         initialCoverImageUrl,
-
       categorySlug:
         initialCategorySlug,
     });
 
-    setIsResolvingArtwork(
-      true,
-    );
+    setIsResolvingArtwork(true);
 
     async function resolveStoreArtworkDirectly() {
       try {
-        /*
-         * Resolve through the Home artwork service instead of issuing an RPC
-         * from the component. The service preserves the direct RPC behavior
-         * required for internal/service categories and deduplicates concurrent
-         * requests for the same store.
-         */
         const artwork =
           await getHomeStoreArtwork(
             order.storeId,
@@ -348,11 +316,13 @@ function ActiveOrderStoreArtwork({
           return;
         }
 
-        console.warn(
-          'Unable to resolve active-order store artwork directly.',
-          order.storeId,
-          error,
-        );
+        if (__DEV__) {
+          console.warn(
+            'Unable to resolve active-order store artwork directly.',
+            order.storeId,
+            error,
+          );
+        }
       } finally {
         if (!cancelled) {
           setIsResolvingArtwork(
@@ -381,30 +351,19 @@ function ActiveOrderStoreArtwork({
     resolvedArtwork.coverImageUrl;
 
   const remoteStoreImageUrl =
-    logoUrl ||
-    coverImageUrl;
+    logoUrl || coverImageUrl;
 
   const categoryArtwork =
     getActiveOrderCategoryArtwork(
       resolvedArtwork.categorySlug,
     );
 
-  /*
-   * Priority:
-   *
-   * 1. Real uploaded store logo.
-   * 2. Real uploaded store cover.
-   * 3. Product/order snapshot image.
-   * 4. Category artwork already bundled in the app.
-   * 5. Emoji only as a true final fallback.
-   */
   const remoteImageUrl =
     remoteStoreImageUrl ||
     orderItemImageUrl;
 
   const canShowRemoteImage =
-    remoteImageUrl.length >
-      0 &&
+    remoteImageUrl.length > 0 &&
     !imageFailed;
 
   const localImageSource =
@@ -415,34 +374,31 @@ function ActiveOrderStoreArtwork({
   return (
     <View
       style={
-        styles.activeOrderStoreArtwork
+        trackingStyles.storeArtwork
       }
     >
       {canShowRemoteImage ? (
         <ExpoImage
-          cachePolicy="memory-disk"
           accessibilityIgnoresInvertColors
           accessibilityLabel={
             `صورة ${order.storeName}`
           }
+          cachePolicy="memory-disk"
           contentFit={
             logoUrl
               ? 'contain'
               : 'cover'
           }
           source={{
-            uri:
-              remoteImageUrl,
+            uri: remoteImageUrl,
           }}
           style={
-            styles.activeOrderStoreImage
+            trackingStyles.storeImage
           }
+          transition={0}
           onError={() => {
-            setImageFailed(
-              true,
-            );
+            setImageFailed(true);
           }}
-        transition={0}
         />
       ) : localImageSource ? (
         <Image
@@ -451,27 +407,24 @@ function ActiveOrderStoreArtwork({
             `صورة ${order.storeName}`
           }
           resizeMode="contain"
-          source={
-            localImageSource
-          }
+          source={localImageSource}
           style={
-            styles.activeOrderStoreImage
+            trackingStyles.storeImage
           }
         />
       ) : isResolvingArtwork ? (
         <View
           style={
-            styles.activeOrderStoreImageLoading
+            trackingStyles.storeImageLoading
           }
         />
       ) : (
         <Text
           style={
-            styles.activeOrderStoreFallback
+            trackingStyles.storeFallback
           }
         >
-          {order.storeIcon ||
-            '🏪'}
+          {order.storeIcon || '🏪'}
         </Text>
       )}
     </View>
@@ -499,29 +452,36 @@ export function ActiveOrderTrackingCard({
   const currentStep =
     HOME_ORDER_TRACKING_STEPS[
       currentStage
-    ] ?? HOME_ORDER_TRACKING_STEPS[0];
+    ] ??
+    HOME_ORDER_TRACKING_STEPS[0];
 
-  const [cardEntrance] = useState(
-    () => new Animated.Value(0),
-  );
+  const [cardEntrance] =
+    useState(
+      () =>
+        new Animated.Value(0),
+    );
 
-  const [activePulse] = useState(
-    () => new Animated.Value(0),
-  );
+  const [activePulse] =
+    useState(
+      () =>
+        new Animated.Value(0),
+    );
 
-  const [routePulse] = useState(
-    () => new Animated.Value(0),
-  );
+  const [routePulse] =
+    useState(
+      () =>
+        new Animated.Value(0),
+    );
 
   useEffect(() => {
     cardEntrance.setValue(0);
 
-    const entranceAnimation =
+    const animation =
       Animated.timing(
         cardEntrance,
         {
           toValue: 1,
-          duration: 420,
+          duration: 360,
           easing:
             Easing.out(
               Easing.cubic,
@@ -531,10 +491,10 @@ export function ActiveOrderTrackingCard({
         },
       );
 
-    entranceAnimation.start();
+    animation.start();
 
     return () => {
-      entranceAnimation.stop();
+      animation.stop();
     };
   }, [cardEntrance]);
 
@@ -542,14 +502,14 @@ export function ActiveOrderTrackingCard({
     activePulse.setValue(0);
     routePulse.setValue(0);
 
-    const activePulseAnimation =
+    const activeAnimation =
       Animated.loop(
         Animated.sequence([
           Animated.timing(
             activePulse,
             {
               toValue: 1,
-              duration: 760,
+              duration: 800,
               easing:
                 Easing.inOut(
                   Easing.sin,
@@ -558,11 +518,12 @@ export function ActiveOrderTrackingCard({
               isInteraction: false,
             },
           ),
+
           Animated.timing(
             activePulse,
             {
               toValue: 0,
-              duration: 760,
+              duration: 800,
               easing:
                 Easing.inOut(
                   Easing.sin,
@@ -574,14 +535,14 @@ export function ActiveOrderTrackingCard({
         ]),
       );
 
-    const routePulseAnimation =
+    const routeAnimation =
       Animated.loop(
         Animated.sequence([
           Animated.timing(
             routePulse,
             {
               toValue: 1,
-              duration: 920,
+              duration: 900,
               easing:
                 Easing.inOut(
                   Easing.quad,
@@ -590,11 +551,12 @@ export function ActiveOrderTrackingCard({
               isInteraction: false,
             },
           ),
+
           Animated.timing(
             routePulse,
             {
               toValue: 0,
-              duration: 920,
+              duration: 900,
               easing:
                 Easing.inOut(
                   Easing.quad,
@@ -606,12 +568,12 @@ export function ActiveOrderTrackingCard({
         ]),
       );
 
-    activePulseAnimation.start();
-    routePulseAnimation.start();
+    activeAnimation.start();
+    routeAnimation.start();
 
     return () => {
-      activePulseAnimation.stop();
-      routePulseAnimation.stop();
+      activeAnimation.stop();
+      routeAnimation.stop();
     };
   }, [
     activePulse,
@@ -619,58 +581,70 @@ export function ActiveOrderTrackingCard({
     routePulse,
   ]);
 
-  const cardTranslateY =
+  const translateY =
     cardEntrance.interpolate({
       inputRange: [0, 1],
-      outputRange: [12, 0],
+      outputRange: [6, 0],
     });
 
   const activeScale =
     activePulse.interpolate({
       inputRange: [0, 1],
-      outputRange: [1, 1.105],
+      outputRange: [1, 1.06],
     });
 
   const activeHaloOpacity =
     activePulse.interpolate({
       inputRange: [0, 1],
-      outputRange: [0.08, 0.24],
+      outputRange: [0.03, 0.1],
     });
 
   const routePulseOpacity =
     routePulse.interpolate({
       inputRange: [0, 1],
-      outputRange: [0.48, 1],
+      outputRange: [0.5, 1],
     });
 
   return (
     <Animated.View
       style={[
-        styles.activeOrderCardShell,
+        trackingStyles.cardShell,
         {
-          opacity: cardEntrance,
+          width: cardWidth,
+
+          opacity:
+            cardEntrance,
+
           transform: [
             {
-              translateY:
-                cardTranslateY,
+              translateY,
             },
           ],
-          width: cardWidth,
         },
       ]}
     >
       <Pressable
-        accessibilityLabel={`${currentStep.title}. متابعة الطلب الحالي من ${order.storeName}`}
+        accessibilityLabel={
+          `${currentStep.title}. متابعة الطلب الحالي من ${order.storeName}`
+        }
         accessibilityRole="button"
         style={({ pressed }) => [
-          styles.activeOrderCard,
+          trackingStyles.card,
+
           pressed &&
-            styles.activeOrderCardPressed,
+            trackingStyles.cardPressed,
         ]}
         onPress={onPress}
       >
+        {/*
+         * Logo + tracking progress
+         * now sit together on the
+         * exact same horizontal row.
+         */}
         <View
-          style={styles.activeOrderTopRow}
+          style={
+            trackingStyles.mainRow
+          }
         >
           <ActiveOrderStoreArtwork
             order={order}
@@ -678,150 +652,405 @@ export function ActiveOrderTrackingCard({
           />
 
           <View
-            style={styles.activeOrderStoreNameWrap}
-          >
-            <Text
-              numberOfLines={2}
-              style={styles.activeOrderStoreName}
-            >
-              {order.storeName}
-            </Text>
-          </View>
-        </View>
-
-        <View
-          style={styles.activeOrderFlow}
-        >
-          <View
-            style={styles.activeOrderFlowRow}
-          >
-            {HOME_ORDER_TRACKING_STEPS.map(
-              (step, index) => {
-                const completed =
-                  currentStage > index;
-
-                const active =
-                  currentStage === index;
-
-                const reached =
-                  currentStage >= index;
-
-                const isConfirmation =
-                  step.key ===
-                  'confirmation';
-
-                const iconSize =
-                  step.key === 'preparing'
-                    ? 29
-                    : step.key ===
-                        'delivery'
-                      ? 27
-                      : step.key ===
-                          'delivered'
-                        ? 29
-                        : 19;
-
-                const iconColor =
-                  isConfirmation
-                    ? reached
-                      ? NAVIENTY_NOW_COLORS.white
-                      : '#C9CDCB'
-                    : reached
-                      ? NAVIENTY_NOW_COLORS.primary
-                      : '#D3D6D4';
-
-                return (
-                  <Fragment
-                    key={step.key}
-                  >
-                    <View
-                      style={
-                        styles.activeOrderFlowStep
-                      }
-                    >
-                      <Animated.View
-                        style={[
-                          styles.activeOrderStepIconWrap,
-                          isConfirmation &&
-                            styles.activeOrderConfirmationIcon,
-                          isConfirmation &&
-                            reached &&
-                            styles.activeOrderConfirmationIconReached,
-                          active && {
-                            transform: [
-                              {
-                                scale:
-                                  activeScale,
-                              },
-                            ],
-                          },
-                        ]}
-                      >
-                        {active ? (
-                          <Animated.View
-                            pointerEvents="none"
-                            style={[
-                              styles.activeOrderActiveHalo,
-                              {
-                                opacity:
-                                  activeHaloOpacity,
-                              },
-                            ]}
-                          />
-                        ) : null}
-
-                        <Ionicons
-                          color={
-                            iconColor
-                          }
-                          name={step.icon}
-                          size={iconSize}
-                        />
-                      </Animated.View>
-                    </View>
-
-                    {index <
-                    HOME_ORDER_TRACKING_STEPS.length -
-                      1 ? (
-                      <View
-                        style={
-                          styles.activeOrderConnector
-                        }
-                      >
-                        {completed ? (
-                          <View
-                            style={
-                              styles.activeOrderConnectorFill
-                            }
-                          />
-                        ) : active ? (
-                          <Animated.View
-                            style={[
-                              styles.activeOrderConnectorCurrentFill,
-                              {
-                                opacity:
-                                  routePulseOpacity,
-                              },
-                            ]}
-                          />
-                        ) : null}
-                      </View>
-                    ) : null}
-                  </Fragment>
-                );
-              },
-            )}
-          </View>
-
-          <Text
             style={
-              styles.activeOrderCurrentStatus
+              trackingStyles.progressContainer
             }
           >
-            {currentStep.title}
-          </Text>
+            <View
+              style={
+                trackingStyles.flowRow
+              }
+            >
+              {HOME_ORDER_TRACKING_STEPS.map(
+                (step, index) => {
+                  const completed =
+                    currentStage >
+                    index;
+
+                  const active =
+                    currentStage ===
+                    index;
+
+                  const reached =
+                    currentStage >=
+                    index;
+
+                  const isConfirmation =
+                    step.key ===
+                    'confirmation';
+
+                  const iconSize =
+                    step.key ===
+                    'preparing'
+                      ? 25
+                      : step.key ===
+                          'delivery'
+                        ? 24
+                        : step.key ===
+                            'delivered'
+                          ? 25
+                          : 18;
+
+                  const iconColor =
+                    isConfirmation
+                      ? reached
+                        ? NAVIENTY_NOW_COLORS.white
+                        : '#D2D6D4'
+                      : reached
+                        ? NAVIENTY_NOW_COLORS.primary
+                        : '#D4D8D6';
+
+                  return (
+                    <Fragment
+                      key={step.key}
+                    >
+                      <View
+                        style={
+                          trackingStyles.flowStep
+                        }
+                      >
+                        <Animated.View
+                          style={[
+                            trackingStyles.iconWrap,
+
+                            isConfirmation &&
+                              trackingStyles.confirmationCircle,
+
+                            isConfirmation &&
+                              reached &&
+                              trackingStyles.confirmationCircleReached,
+
+                            active && {
+                              transform: [
+                                {
+                                  scale:
+                                    activeScale,
+                                },
+                              ],
+                            },
+                          ]}
+                        >
+                          {active ? (
+                            <Animated.View
+                              pointerEvents="none"
+                              style={[
+                                trackingStyles.activeHalo,
+
+                                {
+                                  opacity:
+                                    activeHaloOpacity,
+                                },
+                              ]}
+                            />
+                          ) : null}
+
+                          <Ionicons
+                            color={
+                              iconColor
+                            }
+                            name={
+                              step.icon
+                            }
+                            size={
+                              iconSize
+                            }
+                          />
+                        </Animated.View>
+                      </View>
+
+                      {index <
+                      HOME_ORDER_TRACKING_STEPS.length -
+                        1 ? (
+                        <View
+                          style={
+                            trackingStyles.connector
+                          }
+                        >
+                          {completed ? (
+                            <View
+                              style={
+                                trackingStyles.connectorCompleted
+                              }
+                            />
+                          ) : active ? (
+                            <Animated.View
+                              style={[
+                                trackingStyles.connectorCurrent,
+
+                                {
+                                  opacity:
+                                    routePulseOpacity,
+                                },
+                              ]}
+                            />
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </Fragment>
+                  );
+                },
+              )}
+            </View>
+          </View>
         </View>
+
+        <Text
+          style={
+            trackingStyles.statusText
+          }
+        >
+          {currentStep.title}
+        </Text>
       </Pressable>
     </Animated.View>
   );
 }
+
+const trackingStyles =
+  StyleSheet.create({
+    cardShell: {
+      flexShrink: 0,
+    },
+
+    card: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.white,
+
+      borderColor: '#E1E5E3',
+
+      borderRadius: 22,
+
+      borderWidth: 1,
+
+      minHeight: 112,
+
+      paddingHorizontal: 14,
+
+      paddingVertical: 13,
+
+      shadowColor: '#000000',
+
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+
+      shadowOpacity: 0.02,
+
+      shadowRadius: 3,
+
+      elevation: 0,
+    },
+
+    cardPressed: {
+      opacity: 0.95,
+
+      transform: [
+        {
+          scale: 0.995,
+        },
+      ],
+    },
+
+    /*
+     * The important change:
+     * logo + progress line are
+     * in one compact row.
+     */
+    mainRow: {
+      alignItems: 'center',
+
+      flexDirection: 'row-reverse',
+
+      gap: 10,
+
+      width: '100%',
+    },
+
+    storeArtwork: {
+      alignItems: 'center',
+
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.white,
+
+      borderColor: '#ECEEED',
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      flexShrink: 0,
+
+      height: 48,
+
+      justifyContent: 'center',
+
+      overflow: 'hidden',
+
+      width: 48,
+    },
+
+    storeImage: {
+      height: '100%',
+
+      width: '100%',
+    },
+
+    storeImageLoading: {
+      backgroundColor: '#F2F4F3',
+
+      height: '100%',
+
+      width: '100%',
+    },
+
+    storeFallback: {
+      fontSize: 22,
+    },
+
+    progressContainer: {
+      flex: 1,
+
+      justifyContent: 'center',
+
+      minWidth: 0,
+    },
+
+    flowRow: {
+      alignItems: 'center',
+
+      flexDirection: 'row-reverse',
+
+      height: 36,
+
+      width: '100%',
+    },
+
+    flowStep: {
+      alignItems: 'center',
+
+      height: 34,
+
+      justifyContent: 'center',
+
+      width: 31,
+    },
+
+    iconWrap: {
+      alignItems: 'center',
+
+      height: 30,
+
+      justifyContent: 'center',
+
+      position: 'relative',
+
+      width: 30,
+
+      zIndex: 2,
+    },
+
+    confirmationCircle: {
+      backgroundColor:
+        '#EFF2F0',
+
+      borderRadius: 15,
+    },
+
+    confirmationCircleReached: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+    },
+
+    activeHalo: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius: 19,
+
+      bottom: -4,
+
+      left: -4,
+
+      position: 'absolute',
+
+      right: -4,
+
+      top: -4,
+    },
+
+    connector: {
+      backgroundColor:
+        '#E4E7E5',
+
+      borderRadius: 999,
+
+      flex: 1,
+
+      height: 4,
+
+      marginHorizontal: 3,
+
+      minWidth: 12,
+
+      overflow: 'hidden',
+
+      position: 'relative',
+    },
+
+    connectorCompleted: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      bottom: 0,
+
+      left: 0,
+
+      position: 'absolute',
+
+      right: 0,
+
+      top: 0,
+    },
+
+    connectorCurrent: {
+      backgroundColor:
+        NAVIENTY_NOW_COLORS.primary,
+
+      borderRadius: 999,
+
+      bottom: 0,
+
+      position: 'absolute',
+
+      right: 0,
+
+      top: 0,
+
+      width: '20%',
+    },
+
+    /*
+     * Very small separation from
+     * progress line — removes the
+     * large empty area.
+     */
+    statusText: {
+      color:
+        NAVIENTY_NOW_COLORS.text,
+
+      fontSize: 16,
+
+      fontWeight: '900',
+
+      lineHeight: 22,
+
+      marginTop: 7,
+
+      textAlign: 'center',
+
+      width: '100%',
+
+      writingDirection: 'rtl',
+    },
+  });

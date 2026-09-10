@@ -52,15 +52,13 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#00B14F",
-          "image": "./assets/images/navienty-now-splash.png",
-          "imageWidth": 220,
+          "image": "./assets/images/navienty-now-native-splash.png",
+          "imageWidth": 100,
           "resizeMode": "contain"
         }
       ],
 
       "expo-web-browser",
-
-     
 
       [
         "expo-location",
