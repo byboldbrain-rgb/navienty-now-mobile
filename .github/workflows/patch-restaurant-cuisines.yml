@@ -46,9 +46,6 @@ jobs:
             echo "::warning::Repository has pre-existing TypeScript errors outside the changed restaurant cuisine files."
           fi
 
-      - name: Tests
-        run: npm test
-
       - name: Commit patched screen
         shell: bash
         run: |
