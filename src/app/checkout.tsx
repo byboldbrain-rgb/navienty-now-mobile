@@ -43,6 +43,13 @@ import {
 } from '../services/order-service';
 
 import {
+  attachPrescriptionToOrder,
+  getMyOpenPrescriptionSubmission,
+  pickAndUploadPrescription,
+  type PrescriptionSubmission,
+} from '../services/prescription-service';
+
+import {
   ensureAppSession,
 } from '../services/anonymous-auth-service';
 
@@ -355,6 +362,24 @@ function StoreCheckoutScreen() {
     checkoutCart?.storeIcon ??
     null;
 
+  const isPharmacyCart =
+    checkoutCart?.categorySlug ===
+      'pharmacy';
+
+  const requiresPrescription =
+    isPharmacyCart &&
+    items.some(
+      (item) =>
+        item.requiresPrescription,
+    );
+
+  const hasAgeRestrictedItems =
+    isPharmacyCart &&
+    items.some(
+      (item) =>
+        item.isAgeRestricted,
+    );
+
   const itemCount =
     items.reduce(
       (totalCount, item) =>
@@ -527,6 +552,33 @@ function StoreCheckoutScreen() {
     setStoreImageFailed,
   ] = useState(false);
 
+  const [
+    prescriptionSubmission,
+    setPrescriptionSubmission,
+  ] = useState<PrescriptionSubmission | null>(
+    null,
+  );
+
+  const [
+    prescriptionFileName,
+    setPrescriptionFileName,
+  ] = useState<string | null>(null);
+
+  const [
+    isLoadingPrescription,
+    setIsLoadingPrescription,
+  ] = useState(false);
+
+  const [
+    isUploadingPrescription,
+    setIsUploadingPrescription,
+  ] = useState(false);
+
+  const [
+    prescriptionError,
+    setPrescriptionError,
+  ] = useState<string | null>(null);
+
   /* -------------------------------- */
   /* LOAD CHECKOUT DATA               */
   /* -------------------------------- */
@@ -637,6 +689,63 @@ function StoreCheckoutScreen() {
       cancelled = true;
     };
   }, [storeId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPrescription() {
+      if (
+        !requiresPrescription ||
+        !storeId
+      ) {
+        setPrescriptionSubmission(null);
+        setPrescriptionFileName(null);
+        setPrescriptionError(null);
+        setIsLoadingPrescription(false);
+        return;
+      }
+
+      try {
+        setIsLoadingPrescription(true);
+        setPrescriptionError(null);
+
+        const current =
+          await getMyOpenPrescriptionSubmission(
+            storeId,
+          );
+
+        if (!cancelled) {
+          setPrescriptionSubmission(current);
+          setPrescriptionFileName(
+            current?.status === 'submitted'
+              ? 'روشتة مرفوعة'
+              : null,
+          );
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPrescriptionError(
+            error instanceof Error
+              ? error.message
+              : 'تعذر تحميل حالة الروشتة.',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingPrescription(false);
+        }
+      }
+    }
+
+    void loadPrescription();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    requiresPrescription,
+    storeId,
+  ]);
 
   /* -------------------------------- */
   /* DERIVED DATA                     */
@@ -811,6 +920,52 @@ function StoreCheckoutScreen() {
     });
   }
 
+  async function uploadPrescription() {
+    if (
+      !storeId ||
+      isUploadingPrescription
+    ) {
+      return;
+    }
+
+    try {
+      setIsUploadingPrescription(true);
+      setPrescriptionError(null);
+
+      const result =
+        await pickAndUploadPrescription(
+          storeId,
+        );
+
+      if (
+        result.status ===
+        'submitted'
+      ) {
+        setPrescriptionSubmission(
+          result.submission,
+        );
+        setPrescriptionFileName(
+          result.fileName,
+        );
+      }
+    } catch (error) {
+      setPrescriptionError(
+        error instanceof Error
+          ? error.message
+          : 'تعذر رفع الروشتة.',
+      );
+    } finally {
+      setIsUploadingPrescription(false);
+    }
+  }
+
+  const prescriptionIsReady =
+    !requiresPrescription ||
+    prescriptionSubmission?.status ===
+      'submitted' ||
+    prescriptionSubmission?.status ===
+      'approved';
+
   /* -------------------------------- */
   /* VALIDATION                       */
   /* -------------------------------- */
@@ -836,6 +991,9 @@ function StoreCheckoutScreen() {
 
     paymentMethod:
       paymentMethod !== null,
+
+    prescription:
+      prescriptionIsReady,
   };
 
   const deliveryIsAvailable =
@@ -1194,11 +1352,25 @@ function StoreCheckoutScreen() {
               productId:
                 item.id,
 
+              variantId:
+                item.variantId ?? null,
+
               quantity:
                 item.quantity,
             }),
           ),
         });
+
+      if (
+        requiresPrescription &&
+        prescriptionSubmission?.status ===
+          'submitted'
+      ) {
+        await attachPrescriptionToOrder(
+          createdOrder.id,
+          prescriptionSubmission.id,
+        );
+      }
 
       /**
        * Open WhatsApp with a very short, ready-to-send confirmation
@@ -1897,6 +2069,213 @@ function StoreCheckoutScreen() {
             </View>
           </View>
         </View>
+
+        {(requiresPrescription ||
+          hasAgeRestrictedItems) && (
+          <View style={styles.section}>
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
+              متطلبات الصيدلية
+            </Text>
+
+            {requiresPrescription && (
+              <View
+                style={
+                  styles.prescriptionCard
+                }
+              >
+                <View
+                  style={
+                    styles.prescriptionHeader
+                  }
+                >
+                  <View
+                    style={
+                      styles.prescriptionIcon
+                    }
+                  >
+                    <Ionicons
+                      name="document-text-outline"
+                      size={22}
+                      color="#8A5A18"
+                    />
+                  </View>
+
+                  <View
+                    style={
+                      styles.prescriptionCopy
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.prescriptionTitle
+                      }
+                    >
+                      هذا الطلب يحتاج روشتة
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.prescriptionDescription
+                      }
+                    >
+                      ارفع صورة واضحة أو PDF
+                      للروشتة قبل إرسال الطلب.
+                      الملف خاص ولا يظهر في
+                      الكتالوج أو لأي مستخدم آخر.
+                    </Text>
+                  </View>
+                </View>
+
+                {isLoadingPrescription ? (
+                  <View
+                    style={
+                      styles.prescriptionLoading
+                    }
+                  >
+                    <ActivityIndicator
+                      size="small"
+                      color="#8A5A18"
+                    />
+                  </View>
+                ) : prescriptionIsReady ? (
+                  <View
+                    style={
+                      styles.prescriptionReadyRow
+                    }
+                  >
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={BRAND_GREEN}
+                    />
+
+                    <Text
+                      style={
+                        styles.prescriptionReadyText
+                      }
+                      numberOfLines={1}
+                    >
+                      {prescriptionFileName ??
+                        'تم رفع الروشتة'}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <Pressable
+                  disabled={
+                    isUploadingPrescription ||
+                    isLoadingPrescription
+                  }
+                  style={({ pressed }) => [
+                    styles.prescriptionButton,
+                    (isUploadingPrescription ||
+                      isLoadingPrescription) &&
+                      styles.prescriptionButtonDisabled,
+                    pressed &&
+                      !isUploadingPrescription &&
+                      !isLoadingPrescription &&
+                      styles.buttonPressed,
+                  ]}
+                  onPress={() => {
+                    void uploadPrescription();
+                  }}
+                >
+                  {isUploadingPrescription ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffffff"
+                    />
+                  ) : (
+                    <Ionicons
+                      name={
+                        prescriptionIsReady
+                          ? 'refresh-outline'
+                          : 'cloud-upload-outline'
+                      }
+                      size={19}
+                      color="#ffffff"
+                    />
+                  )}
+
+                  <Text
+                    style={
+                      styles.prescriptionButtonText
+                    }
+                  >
+                    {prescriptionIsReady
+                      ? 'استبدال الروشتة'
+                      : 'رفع الروشتة'}
+                  </Text>
+                </Pressable>
+
+                {prescriptionError && (
+                  <Text
+                    style={
+                      styles.prescriptionError
+                    }
+                  >
+                    {prescriptionError}
+                  </Text>
+                )}
+
+                {submitted &&
+                  !validation.prescription && (
+                    <Text
+                      style={
+                        styles.prescriptionError
+                      }
+                    >
+                      ارفع الروشتة قبل إرسال
+                      الطلب.
+                    </Text>
+                  )}
+              </View>
+            )}
+
+            {hasAgeRestrictedItems && (
+              <View
+                style={
+                  styles.ageVerificationCard
+                }
+              >
+                <Ionicons
+                  name="card-outline"
+                  size={22}
+                  color="#7B4B14"
+                />
+
+                <View
+                  style={
+                    styles.ageVerificationCopy
+                  }
+                >
+                  <Text
+                    style={
+                      styles.ageVerificationTitle
+                    }
+                  >
+                    التحقق من السن عند التسليم
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.ageVerificationText
+                    }
+                  >
+                    قد يطلب المندوب أو فريق
+                    الصيدلية بطاقة هوية قبل
+                    تسليم المنتجات المقيدة
+                    بالعمر.
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* PAYMENT */}
 
@@ -2858,6 +3237,133 @@ const styles =
 
       marginTop: 4,
 
+      textAlign: 'right',
+    },
+
+    prescriptionCard: {
+      backgroundColor: '#FFF8EB',
+      borderColor: '#F0D8AE',
+      borderRadius: 18,
+      borderWidth: 1,
+      marginBottom: 14,
+      padding: 15,
+    },
+
+    prescriptionHeader: {
+      alignItems: 'flex-start',
+      flexDirection: 'row',
+    },
+
+    prescriptionIcon: {
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+      borderRadius: 20,
+      height: 40,
+      justifyContent: 'center',
+      width: 40,
+    },
+
+    prescriptionCopy: {
+      flex: 1,
+      marginLeft: 12,
+    },
+
+    prescriptionTitle: {
+      color: '#5D3B13',
+      fontSize: 14,
+      fontWeight: '800',
+      textAlign: 'right',
+    },
+
+    prescriptionDescription: {
+      color: '#806543',
+      fontSize: 11,
+      lineHeight: 18,
+      marginTop: 5,
+      textAlign: 'right',
+    },
+
+    prescriptionLoading: {
+      alignItems: 'center',
+      marginTop: 14,
+    },
+
+    prescriptionReadyRow: {
+      alignItems: 'center',
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      flexDirection: 'row',
+      marginTop: 13,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+
+    prescriptionReadyText: {
+      color: '#325E42',
+      flex: 1,
+      fontSize: 11,
+      fontWeight: '700',
+      marginLeft: 8,
+      textAlign: 'right',
+    },
+
+    prescriptionButton: {
+      alignItems: 'center',
+      backgroundColor: '#8A5A18',
+      borderRadius: 14,
+      flexDirection: 'row',
+      gap: 8,
+      justifyContent: 'center',
+      marginTop: 13,
+      minHeight: 48,
+      paddingHorizontal: 16,
+    },
+
+    prescriptionButtonDisabled: {
+      opacity: 0.55,
+    },
+
+    prescriptionButtonText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '800',
+    },
+
+    prescriptionError: {
+      color: '#B44343',
+      fontSize: 11,
+      lineHeight: 17,
+      marginTop: 9,
+      textAlign: 'right',
+    },
+
+    ageVerificationCard: {
+      alignItems: 'flex-start',
+      backgroundColor: '#FFF8EB',
+      borderColor: '#F0D8AE',
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: 'row',
+      padding: 15,
+    },
+
+    ageVerificationCopy: {
+      flex: 1,
+      marginLeft: 12,
+    },
+
+    ageVerificationTitle: {
+      color: '#5D3B13',
+      fontSize: 13,
+      fontWeight: '800',
+      textAlign: 'right',
+    },
+
+    ageVerificationText: {
+      color: '#806543',
+      fontSize: 11,
+      lineHeight: 18,
+      marginTop: 5,
       textAlign: 'right',
     },
 

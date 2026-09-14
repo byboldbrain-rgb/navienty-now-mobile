@@ -1226,6 +1226,12 @@ export default function PharmacyCategoryScreen() {
 
         variantName:
           null,
+
+        requiresPrescription:
+          product.requiresPrescription,
+
+        isAgeRestricted:
+          product.isAgeRestricted,
       },
     );
   }

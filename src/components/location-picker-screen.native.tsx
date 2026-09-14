@@ -418,7 +418,7 @@ export default function LocationPickerScreen() {
     return granted;
   }
 
-  async function useCurrentLocation(
+  async function moveToCurrentLocation(
     options?: {
       silentPermissionFailure?: boolean;
 
@@ -497,7 +497,7 @@ export default function LocationPickerScreen() {
     if (
       !hasSavedCoordinate
     ) {
-      void useCurrentLocation({
+      void moveToCurrentLocation({
         silentPermissionFailure:
           true,
 
@@ -1241,7 +1241,7 @@ export default function LocationPickerScreen() {
               manualSelectionRef.current =
                 false;
 
-              void useCurrentLocation();
+              void moveToCurrentLocation();
             }}
           >
             {isLocating ? (

@@ -88,7 +88,7 @@ async function getServicePackageById(
     return null;
   }
 
-  const row = data as ServicePackageRow;
+  const row = data as unknown as ServicePackageRow;
   const price = toNumber(row.price);
 
   if (price === null || price < 0) {

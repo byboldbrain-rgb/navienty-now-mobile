@@ -5,6 +5,7 @@ import {
   type PromoCampaignContent,
   type PromoCampaignTheme,
   type PromoImageFit,
+  type PromoImageBlockAction,
   type PromoPresentationType,
   type PromoSectionStyle,
 } from '../types/promo-campaign';
@@ -226,7 +227,7 @@ function normalizeContent(
         'action',
       );
 
-      const action =
+      const action: PromoImageBlockAction =
         rawAction === 'primary'
           ? 'primary'
           : 'none';
@@ -625,7 +626,7 @@ async function listHomeBannerImages(
   }
 
   return (
-    (data ?? []) as HomeBannerImageRow[]
+    (data ?? []) as unknown as HomeBannerImageRow[]
   )
     .filter(
       (row) =>
@@ -673,7 +674,7 @@ async function listHomeBanners(
 
   const currentTime = Date.now();
 
-  return ((data ?? []) as HomeBannerRow[])
+  return ((data ?? []) as unknown as HomeBannerRow[])
     .filter(
       (banner) =>
         banner.image_url.trim().length > 0 &&
@@ -723,7 +724,7 @@ async function getHomeBannerById(
     return null;
   }
 
-  const banner = data as HomeBannerRow;
+  const banner = data as unknown as HomeBannerRow;
 
   if (
     !banner.image_url.trim() ||

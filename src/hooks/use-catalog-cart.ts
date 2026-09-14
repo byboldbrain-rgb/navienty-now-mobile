@@ -113,7 +113,7 @@ export default function useCatalogCart(
       },
     );
 
-    if (result === 'different-store') {
+    if (result === 'different-restaurant') {
       setPendingProduct(product);
     }
   }

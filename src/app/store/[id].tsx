@@ -556,6 +556,12 @@ export default function StoreScreen() {
 
       variantName:
         variant?.name ?? null,
+
+      requiresPrescription:
+        product.requiresPrescription,
+
+      isAgeRestricted:
+        product.isAgeRestricted,
     };
   }
 
@@ -587,6 +593,10 @@ export default function StoreScreen() {
         icon: product.icon,
         variantId: null,
         variantName: null,
+        requiresPrescription:
+          product.requiresPrescription,
+        isAgeRestricted:
+          product.isAgeRestricted,
       },
     );
 
@@ -1943,10 +1953,10 @@ export default function StoreScreen() {
             </Text>
 
             <Text style={styles.modalDescription}>
-              عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من "
+              عند بدء طلب جديد، سيتم إزالة سلة مشترياتك من “
               {conflictingRestaurantCart?.storeName ??
                 'المطعم السابق'}
-              ".
+              ”.
             </Text>
 
             <View style={styles.modalActions}>

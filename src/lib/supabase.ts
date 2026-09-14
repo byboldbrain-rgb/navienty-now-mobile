@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     createClient,
     processLock,
@@ -8,6 +7,8 @@ import {
     Platform,
 } from 'react-native';
 import 'react-native-url-polyfill/auto';
+
+import { secureAuthStorage } from './secure-auth-storage';
 
 const supabaseUrl =
   process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -38,16 +39,18 @@ export const supabase = createClient(
 
     auth: {
       /*
-       * Expo Router renders web routes in a Node.js
-       * environment where `window` does not exist.
+       * Native sessions are persisted through SecureStore-backed chunked
+       * storage. Existing AsyncStorage sessions migrate lazily on first read
+       * so an app update does not sign current customers out.
        *
-       * AsyncStorage must therefore be provided only
-       * on Android and iOS. On the browser, Supabase
-       * uses its normal browser storage.
+       * Expo Router also renders web routes in environments where the native
+       * SecureStore API is unavailable. On web, omit the custom adapter and
+       * let Supabase use its normal browser storage behavior.
        */
       ...(Platform.OS !== 'web'
         ? {
-            storage: AsyncStorage,
+            storage:
+              secureAuthStorage,
           }
         : {}),
 

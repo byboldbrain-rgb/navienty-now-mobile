@@ -965,6 +965,10 @@ export default function PharmacyScreen() {
         icon: product.icon,
         variantId: null,
         variantName: null,
+        requiresPrescription:
+          product.requiresPrescription,
+        isAgeRestricted:
+          product.isAgeRestricted,
       },
     );
   }
