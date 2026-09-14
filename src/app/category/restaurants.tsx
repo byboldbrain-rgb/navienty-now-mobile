@@ -27,6 +27,9 @@ import {
   listStores,
   type StoreSummary,
 } from '../../services/catalog-service';
+import listRestaurantCuisines, {
+  type RestaurantCuisine,
+} from '../../services/restaurant-cuisines-service';
 import { useCustomerStore } from '../../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -43,6 +46,7 @@ type CuisineItem = {
   label: string;
   image: ImageSourcePropType;
   keywords: string[];
+  storeIds: string[];
 };
 
 /**
@@ -87,265 +91,157 @@ type StoreRatingInfo = {
 
 const RESTAURANTS_SLUG = 'restaurants';
 
-const CUISINES: CuisineItem[] = [
-  {
-    key: 'arabic',
-    label: 'أكل عربي',
-    image: require('../../assets/cuisines/arabic.png'),
-    keywords: [
-      'عربي',
-      'شامي',
-      'سوري',
-      'لبناني',
-    ],
-  },
-  {
-    key: 'arabic-sweets',
-    label: 'حلويات شرقية',
-    image: require('../../assets/cuisines/arabic-sweets.png'),
-    keywords: [
-      'حلويات شرقية',
-      'بقلاوة',
-      'كنافة',
-    ],
-  },
-  {
-    key: 'bakery',
-    label: 'مخبوزات',
-    image: require('../../assets/cuisines/bakery.png'),
-    keywords: [
-      'مخبوزات',
-      'مخبز',
-      'باتيه',
-      'كرواسون',
-    ],
-  },
-  {
-    key: 'beverages',
-    label: 'مشروبات',
-    image: require('../../assets/cuisines/beverages.png'),
-    keywords: [
-      'مشروبات',
-      'عصير',
-      'كوكتيل',
-    ],
-  },
-  {
-    key: 'breakfast',
-    label: 'فطار',
-    image: require('../../assets/cuisines/breakfast.png'),
-    keywords: [
-      'فطار',
-      'إفطار',
-      'بيض',
-    ],
-  },
-  {
-    key: 'burgers',
-    label: 'برجر',
-    image: require('../../assets/cuisines/burgers.png'),
-    keywords: [
-      'برجر',
-      'burger',
-    ],
-  },
-  {
-    key: 'cakes',
-    label: 'كيك',
-    image: require('../../assets/cuisines/cakes.png'),
-    keywords: [
-      'كيك',
-      'تورتة',
-      'cake',
-    ],
-  },
-  {
-    key: 'chicken',
-    label: 'فراخ',
-    image: require('../../assets/cuisines/chicken.png'),
-    keywords: [
-      'فراخ',
-      'دجاج',
-      'chicken',
-    ],
-  },
-  {
-    key: 'chocolate',
-    label: 'شوكولاتة',
-    image: require('../../assets/cuisines/chocolate.png'),
-    keywords: [
-      'شوكولاتة',
-      'chocolate',
-    ],
-  },
-  {
-    key: 'coffee',
-    label: 'قهوة وشاي',
-    image: require('../../assets/cuisines/coffee.png'),
-    keywords: [
-      'قهوة',
-      'شاي',
-      'كافيه',
-      'coffee',
-    ],
-  },
-  {
-    key: 'crepes',
-    label: 'كريب',
-    image: require('../../assets/cuisines/crepes.png'),
-    keywords: [
-      'كريب',
-      'crepe',
-    ],
-  },
-  {
-    key: 'desserts',
-    label: 'حلويات',
-    image: require('../../assets/cuisines/desserts.png'),
-    keywords: [
-      'حلويات',
-      'ديسرت',
-      'dessert',
-    ],
-  },
-  {
-    key: 'egyptian',
-    label: 'أكل مصري',
-    image: require('../../assets/cuisines/egyptian.png'),
-    keywords: [
-      'مصري',
-      'طواجن',
-      'محشي',
-    ],
-  },
-  {
-    key: 'fast-food',
-    label: 'وجبات سريعة',
-    image: require('../../assets/cuisines/fast-food.png'),
-    keywords: [
-      'وجبات سريعة',
-      'fast food',
-    ],
-  },
-  {
-    key: 'foul-falafel',
-    label: 'فول وطعمية',
-    image: require('../../assets/cuisines/foul-falafel.png'),
-    keywords: [
-      'فول',
-      'طعمية',
-      'فلافل',
-    ],
-  },
-  {
-    key: 'fried-chicken',
-    label: 'فراخ مقلية',
-    image: require('../../assets/cuisines/fried-chicken.png'),
-    keywords: [
-      'فراخ مقلية',
-      'بروست',
-      'fried chicken',
-    ],
-  },
-  {
-    key: 'grills',
-    label: 'مشويات',
-    image: require('../../assets/cuisines/grills.png'),
-    keywords: [
-      'مشويات',
-      'كباب',
-      'كفتة',
-      'grill',
-    ],
-  },
-  {
-    key: 'healthy',
-    label: 'أكل صحي',
-    image: require('../../assets/cuisines/healthy.png'),
-    keywords: [
-      'صحي',
-      'دايت',
-      'سلطة',
-      'healthy',
-    ],
-  },
-  {
-    key: 'koshary',
-    label: 'كشري',
-    image: require('../../assets/cuisines/koshary.png'),
-    keywords: [
-      'كشري',
-      'koshary',
-    ],
-  },
-  {
-    key: 'pasta',
-    label: 'مكرونة',
-    image: require('../../assets/cuisines/pasta.png'),
-    keywords: [
-      'مكرونة',
-      'باستا',
-      'pasta',
-    ],
-  },
-  {
-    key: 'pies',
-    label: 'فطير',
-    image: require('../../assets/cuisines/pies.png'),
-    keywords: [
-      'فطير',
-      'فطائر',
-      'pie',
-    ],
-  },
-  {
-    key: 'pizza',
-    label: 'بيتزا',
-    image: require('../../assets/cuisines/pizza.png'),
-    keywords: [
-      'بيتزا',
-      'pizza',
-    ],
-  },
-  {
-    key: 'sandwiches',
-    label: 'ساندوتشات',
-    image: require('../../assets/cuisines/sandwiches.png'),
-    keywords: [
-      'ساندوتش',
-      'سندوتش',
-      'sandwich',
-    ],
-  },
-  {
-    key: 'seafood',
-    label: 'مأكولات بحرية',
-    image: require('../../assets/cuisines/seafood.png'),
-    keywords: [
-      'سمك',
-      'سي فود',
-      'مأكولات بحرية',
-      'seafood',
-    ],
-  },
-  {
-    key: 'shawarma',
-    label: 'شاورما',
-    image: require('../../assets/cuisines/shawarma.png'),
-    keywords: [
-      'شاورما',
-      'shawarma',
-    ],
-  },
-];
+const CUISINE_KEYWORDS: Record<string, string[]> = {
+  arabic: [
+    'عربي',
+    'شامي',
+    'سوري',
+    'لبناني',
+  ],
+  'arabic-sweets': [
+    'حلويات شرقية',
+    'بقلاوة',
+    'كنافة',
+  ],
+  bakery: [
+    'مخبوزات',
+    'مخبز',
+    'باتيه',
+    'كرواسون',
+  ],
+  beverages: [
+    'مشروبات',
+    'عصير',
+    'كوكتيل',
+  ],
+  breakfast: [
+    'فطار',
+    'إفطار',
+    'بيض',
+  ],
+  burgers: [
+    'برجر',
+    'burger',
+  ],
+  cakes: [
+    'كيك',
+    'تورتة',
+    'cake',
+  ],
+  chicken: [
+    'فراخ',
+    'دجاج',
+    'chicken',
+  ],
+  chocolate: [
+    'شوكولاتة',
+    'chocolate',
+  ],
+  coffee: [
+    'قهوة',
+    'شاي',
+    'كافيه',
+    'coffee',
+  ],
+  crepes: [
+    'كريب',
+    'crepe',
+  ],
+  desserts: [
+    'حلويات',
+    'ديسرت',
+    'dessert',
+  ],
+  egyptian: [
+    'مصري',
+    'طواجن',
+    'محشي',
+  ],
+  'fast-food': [
+    'وجبات سريعة',
+    'fast food',
+  ],
+  'foul-falafel': [
+    'فول',
+    'طعمية',
+    'فلافل',
+  ],
+  'fried-chicken': [
+    'فرايد تشيكن',
+    'فراخ مقلية',
+    'بروست',
+    'fried chicken',
+  ],
+  grills: [
+    'مشويات',
+    'كباب',
+    'كفتة',
+    'grill',
+  ],
+  healthy: [
+    'صحي',
+    'دايت',
+    'سلطة',
+    'healthy',
+  ],
+  koshary: [
+    'كشري',
+    'koshary',
+  ],
+  pasta: [
+    'مكرونة',
+    'باستا',
+    'pasta',
+  ],
+  pies: [
+    'فطير',
+    'فطائر',
+    'pie',
+  ],
+  pizza: [
+    'بيتزا',
+    'pizza',
+  ],
+  sandwiches: [
+    'ساندوتش',
+    'سندوتش',
+    'sandwich',
+  ],
+  seafood: [
+    'سمك',
+    'سي فود',
+    'مأكولات بحرية',
+    'seafood',
+  ],
+  shawarma: [
+    'شاورما',
+    'shawarma',
+  ],
+  sushi: [
+    'سوشي',
+    'sushi',
+  ],
+};
 
-const PREVIEW_CUISINE_KEYS = [
-  'grills',
-  'desserts',
-  'sandwiches',
-  'crepes',
-  'pizza',
-];
+function toCuisineItem(
+  cuisine: RestaurantCuisine,
+): CuisineItem {
+  const keywords = [
+    cuisine.nameAr,
+    cuisine.nameEn ?? '',
+    ...(CUISINE_KEYWORDS[cuisine.slug] ?? []),
+  ].filter(Boolean);
+
+  return {
+    key: cuisine.slug,
+    label: cuisine.nameAr,
+    image: cuisine.imageUrl
+      ? { uri: cuisine.imageUrl }
+      : require('../../assets/cuisines/view-all.png'),
+    keywords,
+    storeIds: cuisine.storeIds,
+  };
+}
 
 function getStoreSearchText(
   store: StoreSummary,
@@ -633,6 +529,9 @@ export default function RestaurantsScreen() {
   const [stores, setStores] =
     useState<StoreSummary[]>([]);
 
+  const [cuisines, setCuisines] =
+    useState<CuisineItem[]>([]);
+
   const [
     selectedCuisineKeys,
     setSelectedCuisineKeys,
@@ -666,6 +565,7 @@ export default function RestaurantsScreen() {
       const [
         bootstrap,
         loadedStores,
+        loadedCuisines,
       ] = await Promise.all([
         getAppBootstrap(),
         listStores({
@@ -675,6 +575,7 @@ export default function RestaurantsScreen() {
             savedServiceAreaId ??
             undefined,
         }),
+        listRestaurantCuisines(),
       ]);
 
       const loadedCategory =
@@ -689,9 +590,13 @@ export default function RestaurantsScreen() {
 
       setCategory(loadedCategory);
       setStores(loadedStores);
+      setCuisines(
+        loadedCuisines.map(toCuisineItem),
+      );
     } catch (error) {
       setCategory(null);
       setStores([]);
+      setCuisines([]);
 
       setErrorMessage(
         error instanceof Error
@@ -709,26 +614,14 @@ export default function RestaurantsScreen() {
 
   const previewCuisines =
     useMemo(
-      () =>
-        PREVIEW_CUISINE_KEYS.map(
-          (key) =>
-            CUISINES.find(
-              (cuisine) =>
-                cuisine.key === key,
-            ),
-        ).filter(
-          (
-            cuisine,
-          ): cuisine is CuisineItem =>
-            Boolean(cuisine),
-        ),
-      [],
+      () => cuisines.slice(0, 5),
+      [cuisines],
     );
 
   const visibleStores =
     useMemo(() => {
       const selectedCuisines =
-        CUISINES.filter(
+        cuisines.filter(
           (cuisine) =>
             selectedCuisineKeys.includes(
               cuisine.key,
@@ -750,6 +643,9 @@ export default function RestaurantsScreen() {
               const matchesCuisine =
                 selectedCuisines.some(
                   (cuisine) =>
+                    cuisine.storeIds.includes(
+                      store.id,
+                    ) ||
                     cuisine.keywords.some(
                       (keyword) =>
                         storeSearchText.includes(
@@ -796,6 +692,7 @@ export default function RestaurantsScreen() {
         },
       );
     }, [
+      cuisines,
       selectedCuisineKeys,
       stores,
     ]);
@@ -989,6 +886,7 @@ export default function RestaurantsScreen() {
                 label: 'عرض الكل',
                 image: require('../../assets/cuisines/view-all.png'),
                 keywords: [],
+                storeIds: [],
               }}
               onPress={
                 openCuisinesModal
@@ -1217,6 +1115,7 @@ export default function RestaurantsScreen() {
       </ScrollView>
 
       <CuisinesModal
+        cuisines={cuisines}
         draftCuisineKeys={
           draftCuisineKeys
         }
@@ -1292,6 +1191,7 @@ function CuisinePreviewItem({
 }
 
 function CuisinesModal({
+  cuisines,
   draftCuisineKeys,
   onApply,
   onClose,
@@ -1299,6 +1199,7 @@ function CuisinesModal({
   onToggleCuisine,
   visible,
 }: {
+  cuisines: CuisineItem[];
   draftCuisineKeys: string[];
   onApply: () => void;
   onClose: () => void;
@@ -1613,7 +1514,7 @@ function CuisinesModal({
             bounces
             overScrollMode="never"
           >
-            {CUISINES.map(
+            {cuisines.map(
               (cuisine) => {
                 const active =
                   draftCuisineKeys.includes(

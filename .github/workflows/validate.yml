@@ -1,0 +1,68 @@
+name: validate
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate changed TypeScript files
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          mapfile -t changed_files < <(
+            git diff --name-only origin/main...HEAD \
+              | grep -E '\.(ts|tsx)$' \
+              || true
+          )
+
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            echo "No changed TypeScript files."
+            exit 0
+          fi
+
+          printf 'Changed TypeScript files:\n'
+          printf ' - %s\n' "${changed_files[@]}"
+
+          set +e
+          npx tsc --noEmit 2>&1 | tee /tmp/tsc.log
+          tsc_status=${PIPESTATUS[0]}
+          set -e
+
+          failed=0
+          for file in "${changed_files[@]}"; do
+            if grep -F "${file}(" /tmp/tsc.log; then
+              echo "TypeScript error found in changed file: ${file}"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+
+          if [ "$tsc_status" -ne 0 ]; then
+            echo "::warning::TypeScript has pre-existing errors outside the changed files."
+          fi
