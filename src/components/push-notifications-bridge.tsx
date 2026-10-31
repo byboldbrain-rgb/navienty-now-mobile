@@ -10,6 +10,7 @@ import { AppState } from 'react-native';
 
 import { supabase } from '../lib/supabase';
 import {
+  flushPendingNotificationOpens,
   trackNotificationEvent,
 } from '../services/notification-analytics-service';
 import {
@@ -547,6 +548,26 @@ export default function PushNotificationsBridge({
     shouldAutoRegisterPushNotifications();
 
   /**
+   * Retry any unacknowledged notification taps after Auth/bootstrap and every
+   * time the app returns to the foreground. This also recovers cold-start
+   * events that failed due to an interrupted network request.
+   */
+  useEffect(() => {
+    if (!enabled) return;
+
+    void flushPendingNotificationOpens();
+    const appStateListener = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void flushPendingNotificationOpens();
+      }
+    });
+
+    return () => {
+      appStateListener.remove();
+    };
+  }, [enabled]);
+
+  /**
    * Notification response routing stays enabled in every native build.
    *
    * It does not request notification permission and does not register a
@@ -577,18 +598,14 @@ export default function PushNotificationsBridge({
             lastResponse.actionIdentifier,
           launch: 'cold-start',
         },
-      );
+      ).finally(() => {
+        // Do not clear the native tap until the durable enqueue has run.
+        Notifications.clearLastNotificationResponse();
+      });
 
       redirectFromNotification(
         lastResponse.notification,
       );
-
-      /**
-       * Never replay the same notification navigation during a later React
-       * remount/application launch.
-       */
-      Notifications
-        .clearLastNotificationResponse();
     }
 
     const responseSubscription =
@@ -603,14 +620,13 @@ export default function PushNotificationsBridge({
                   response.actionIdentifier,
                 launch: 'response-listener',
               },
-            );
+            ).finally(() => {
+              Notifications.clearLastNotificationResponse();
+            });
 
             redirectFromNotification(
               response.notification,
             );
-
-            Notifications
-              .clearLastNotificationResponse();
           },
         );
 
