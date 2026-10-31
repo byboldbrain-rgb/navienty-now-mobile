@@ -32,6 +32,8 @@ import {
   submitServiceBookingForConfirmation,
   type ServiceBooking,
 } from '../../services/service-bookings-service';
+import { trackRememberedNotificationConversion } from '../../services/notification-analytics-service';
+
 import getServicePackageById, {
   type ServicePackage,
 } from '../../services/service-packages-service';
@@ -349,6 +351,12 @@ export default function ServicePackageCheckout({
 
         return;
       }
+
+      void trackRememberedNotificationConversion({
+        type: 'service_booking_created',
+        resourceId: createdBooking.id,
+        valueEgp: servicePackage.price,
+      });
 
       router.replace({
         pathname: '/order-success',
