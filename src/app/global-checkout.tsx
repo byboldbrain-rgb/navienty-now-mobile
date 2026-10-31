@@ -34,8 +34,6 @@ import {
   createGlobalOrderGroup,
   submitGlobalOrderGroup,
 } from '../services/global-order-service';
-import { trackRememberedNotificationConversion } from '../services/notification-analytics-service';
-
 import {
   isPrintJobCartItem,
   selectAllCartItemCount,
@@ -215,12 +213,6 @@ export default function GlobalCheckoutScreen() {
       });
 
       const submitted = await submitGlobalOrderGroup(created.accessToken);
-      // Attribute this single multi-store checkout only once.
-      void trackRememberedNotificationConversion({
-        type: 'order_created',
-        resourceId: submitted.id,
-        valueEgp: submitted.total,
-      });
       clearAllCarts();
       router.replace({
         pathname: '/global-order-success',
