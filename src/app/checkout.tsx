@@ -59,6 +59,8 @@ import {
   createWhatsAppOrder,
   submitOrderForConfirmation,
 } from '../services/order-service';
+import { trackRememberedNotificationConversion } from '../services/notification-analytics-service';
+
 import {
   validateVoucher,
 } from '../services/voucher-service';
@@ -1940,6 +1942,14 @@ function StoreCheckoutScreen() {
 
         return;
       }
+
+      // Count an order as a campaign conversion only after server submission.
+      // This is best effort and must never block checkout.
+      void trackRememberedNotificationConversion({
+        type: 'order_created',
+        resourceId: submittedOrder.id,
+        valueEgp: submittedOrder.total,
+      });
 
       confirmPendingOrder({
         ...submittedOrder,
