@@ -1,4 +1,4 @@
-import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
+import { getGlobalCartDeliveryFee } from '../config/global-cart';
 import {
   useCartStore as useBaseCartStore,
   type CartState,
@@ -45,7 +45,7 @@ function aggregateCart(
 
   return {
     ...anchor,
-    deliveryFee: GLOBAL_CART_DELIVERY_FEE,
+    deliveryFee: getGlobalCartDeliveryFee(groups),
     minimumOrder: 0,
     items: groups.flatMap(
       (group) => group.items,
@@ -258,9 +258,7 @@ function facadeState(
   const facade: CartState = {
     ...state,
     carts: cartFacade(state),
-    deliveryFee: aggregate
-      ? GLOBAL_CART_DELIVERY_FEE
-      : 0,
+    deliveryFee: aggregate?.deliveryFee ?? 0,
     minimumOrder: 0,
     increaseStoreItem,
     decreaseStoreItem,
