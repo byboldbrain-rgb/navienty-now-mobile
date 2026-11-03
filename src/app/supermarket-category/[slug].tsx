@@ -1,18 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-  useFocusEffect,
   useLocalSearchParams,
   useRouter,
 } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Image as ExpoImage } from 'expo-image';
 import {
-  useCallback,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
 import {
-  AppState,
   Image,
   type ImageSourcePropType,
   Pressable,
@@ -305,17 +302,15 @@ function CategoryFilterVisual({
       : undefined);
 
   if (section.imageUrl) {
-    // Expo Image reliably renders WebP artwork and bypasses stale native image caches.
     return (
-      <ExpoImage
+      <Image
         source={{
           uri: section.imageUrl,
         }}
         style={
           styles.filterCategoryImage
         }
-        contentFit="contain"
-        cachePolicy="none"
+        resizeMode="contain"
       />
     );
   }
@@ -843,28 +838,12 @@ export default function SupermarketCategoryScreen() {
     }
   }
 
-  // Always reload category artwork when this screen regains focus or the app resumes.
-  // Otherwise, the mounted screen can retain stale category image URLs.
-  useFocusEffect(
-    useCallback(() => {
-      void loadCategory();
-
-      const subscription = AppState.addEventListener(
-        'change',
-        (state) => {
-          if (state === 'active') {
-            void loadCategory();
-          }
-        },
-      );
-
-      return () => subscription.remove();
-    }, [
-      requestedStoreId,
-      sectionSlug,
-      savedServiceAreaId,
-    ]),
-  );
+  useEffect(() => {
+    void loadCategory();
+  }, [
+    requestedStoreId,
+    sectionSlug,
+  ]);
 
   /* ==========================================================
    * CHILD CATEGORIES
