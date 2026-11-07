@@ -26,23 +26,16 @@ import CategoryCartDock, {
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
-import getAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
   type CatalogSection,
-  getStoreCatalog,
-  listStores,
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
-import {
-  listStorefrontCategoryTiles,
-  type StorefrontCategoryTile,
-} from '../../services/storefront-category-service';
-import {
-  listSupermarketPromotionBanners,
-  type SupermarketPromotionBanner,
-} from '../../services/supermarket-banner-service';
+import { type StorefrontCategoryTile } from '../../services/storefront-category-service';
+import { type SupermarketPromotionBanner } from '../../services/supermarket-banner-service';
+import { useSupermarketHomeQuery } from '../../hooks/use-supermarket-queries';
+import { getUserFacingCatalogError } from '../../lib/user-facing-error';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
@@ -1529,53 +1522,21 @@ export default function SupermarketScreen() {
   const [categoryViewportWidth, setCategoryViewportWidth] = useState(0);
   const [categoryContentWidth, setCategoryContentWidth] = useState(0);
 
-  const [
-    catalog,
-    setCatalog,
-  ] =
-    useState<StoreCatalog | null>(
-      null,
-    );
-
-  const [
-    promotionBanners,
-    setPromotionBanners,
-  ] = useState<
-    SupermarketPromotionBanner[]
-  >([]);
-
-  const [
-    storefrontCategoryTiles,
-    setStorefrontCategoryTiles,
-  ] = useState<
-    StorefrontCategoryTile[] | null
-  >(null);
-
-  const [
-    currencyCode,
-    setCurrencyCode,
-  ] =
-    useState('EGP');
-
-  const [
-    isLoading,
-    setIsLoading,
-  ] =
-    useState(true);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] =
-    useState<string | null>(
-      null,
-    );
-
   const savedServiceAreaId =
     useCustomerStore(
       (state) =>
         state.locationServiceAreaId,
     );
+
+  const supermarketQuery = useSupermarketHomeQuery(savedServiceAreaId);
+  const catalog = supermarketQuery.data?.catalog ?? null;
+  const promotionBanners = supermarketQuery.data?.promotionBanners ?? [];
+  const storefrontCategoryTiles = supermarketQuery.data?.storefrontCategoryTiles ?? null;
+  const currencyCode = supermarketQuery.data?.currencyCode ?? 'EGP';
+  const isLoading = supermarketQuery.isPending;
+  const errorMessage = supermarketQuery.error
+    ? getUserFacingCatalogError(supermarketQuery.error)
+    : null;
 
   const carts =
     useCartStore(
@@ -1605,125 +1566,9 @@ export default function SupermarketScreen() {
         state.setActiveCart,
     );
 
-  async function loadSupermarket() {
-    try {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      const bootstrap =
-        await getAppBootstrap();
-
-      const defaultServiceAreaId =
-        savedServiceAreaId ??
-        bootstrap.settings
-          .default_service_area_id ??
-        undefined;
-
-      const supermarketStores =
-        await listStores({
-          categorySlug:
-            'supermarket',
-
-          serviceAreaId:
-            defaultServiceAreaId,
-        });
-
-      if (
-        supermarketStores.length ===
-        0
-      ) {
-        throw new Error(
-          'لا يوجد سوبر ماركت متاح حاليًا.',
-        );
-      }
-
-      const supermarket =
-        supermarketStores.find(
-          (store) =>
-            store.isFeatured &&
-            !store.isManuallyClosed,
-        ) ??
-        supermarketStores.find(
-          (store) =>
-            !store.isManuallyClosed,
-        ) ??
-        supermarketStores[0];
-
-      const [
-        loadedCatalog,
-        loadedPromotionBanners,
-        loadedStorefrontCategoryTiles,
-      ] = await Promise.all([
-        getStoreCatalog(
-          supermarket.id,
-          defaultServiceAreaId,
-        ),
-
-        listSupermarketPromotionBanners({
-          storeId:
-            supermarket.id,
-        }).catch(
-          (bannerError) => {
-            console.warn(
-              'Unable to load supermarket banners:',
-              bannerError,
-            );
-
-            return [];
-          },
-        ),
-
-        listStorefrontCategoryTiles(
-          'supermarket',
-        ).catch((categoryError) => {
-          console.warn(
-            'Unable to load supermarket category configuration:',
-            categoryError,
-          );
-
-          return null;
-        }),
-      ]);
-
-      setCatalog(
-        loadedCatalog,
-      );
-
-      setPromotionBanners(
-        loadedPromotionBanners,
-      );
-
-      setStorefrontCategoryTiles(
-        loadedStorefrontCategoryTiles,
-      );
-
-      setCurrencyCode(
-        bootstrap.settings
-          .currency_code ||
-          'EGP',
-      );
-    } catch (error) {
-      setCatalog(null);
-
-      setPromotionBanners([]);
-
-      setStorefrontCategoryTiles(
-        null,
-      );
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل السوبر ماركت.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadSupermarket();
-  }, [savedServiceAreaId]);
+  const loadSupermarket = () => {
+    void supermarketQuery.refetch();
+  };
 
   const categories =
     useMemo<
@@ -2020,10 +1865,7 @@ export default function SupermarketScreen() {
     );
   }
 
-  if (
-    !catalog ||
-    errorMessage
-  ) {
+  if (!catalog) {
     return (
       <SafeAreaView
         style={

@@ -28,22 +28,15 @@ import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
 import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton';
-import getAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
   type CatalogSection,
-  findCatalogSectionBySlug,
   getCatalogSectionOffers,
   getCatalogSectionProducts,
-  getStoreCatalog,
-  listStores,
   type StoreCatalog,
 } from '../../services/catalog-service';
-import {
-  findStorefrontCategoryTile,
-  getStorefrontTileCategoryImages,
-  listStorefrontCategoryTiles,
-} from '../../services/storefront-category-service';
+import { useSupermarketCategoryQuery } from '../../hooks/use-supermarket-queries';
+import { getUserFacingCatalogError } from '../../lib/user-facing-error';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 
@@ -1067,77 +1060,27 @@ export default function SupermarketCategoryScreen() {
    * ==========================================================
    */
 
-  const [
-    catalog,
-    setCatalog,
-  ] =
-    useState<StoreCatalog | null>(
-      null,
-    );
+  const [selectedFilterKey, setSelectedFilterKey] =
+    useState<ProductFilterKey>('all');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const [
-    selectedSection,
-    setSelectedSection,
-  ] =
-    useState<CatalogSection | null>(
-      null,
-    );
+  const categoryQuery = useSupermarketCategoryQuery({
+    serviceAreaId: savedServiceAreaId,
+    requestedStoreId,
+    sectionSlug,
+    categoryKey: passedCategoryKey,
+  });
 
-  const [
-    currencyCode,
-    setCurrencyCode,
-  ] =
-    useState('EGP');
-
-  const [
-    selectedFilterKey,
-    setSelectedFilterKey,
-  ] =
-    useState<ProductFilterKey>(
-      'all',
-    );
-
-  const [
-    isSearchVisible,
-    setIsSearchVisible,
-  ] =
-    useState(false);
-
-  const [
-    searchQuery,
-    setSearchQuery,
-  ] =
-    useState('');
-
-  const [
-    isLoading,
-    setIsLoading,
-  ] =
-    useState(true);
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] =
-    useState<string | null>(
-      null,
-    );
-
-  const [
-    rootCategoryImageUrl,
-    setRootCategoryImageUrl,
-  ] =
-    useState<string | null>(
-      null,
-    );
-
-  const [
-    categoryImageOverrides,
-    setCategoryImageOverrides,
-  ] =
-    useState<Record<string, string>>(
-      {},
-    );
+  const catalog = categoryQuery.data?.catalog ?? null;
+  const selectedSection = categoryQuery.data?.selectedSection ?? null;
+  const currencyCode = categoryQuery.data?.currencyCode ?? 'EGP';
+  const rootCategoryImageUrl = categoryQuery.data?.rootCategoryImageUrl ?? null;
+  const categoryImageOverrides = categoryQuery.data?.categoryImageOverrides ?? {};
+  const isLoading = categoryQuery.isPending;
+  const errorMessage = categoryQuery.error
+    ? getUserFacingCatalogError(categoryQuery.error)
+    : null;
 
   /* ==========================================================
    * CART
@@ -1178,243 +1121,28 @@ export default function SupermarketCategoryScreen() {
    * ==========================================================
    */
 
-  async function loadCategory() {
-    try {
-      setIsLoading(true);
-
-      setErrorMessage(null);
-
-      const bootstrap =
-        await getAppBootstrap();
-
-      let remoteRootImageUrl:
-        string | null =
-        null;
-
-      let remoteCategoryImages:
-        Record<string, string> =
-        {};
-
-      try {
-        const remoteTiles =
-          await listStorefrontCategoryTiles(
-            'supermarket',
-          );
-
-        const remoteTile =
-          findStorefrontCategoryTile(
-            remoteTiles,
-            [
-              passedCategoryKey,
-              sectionSlug,
-            ],
-          );
-
-        remoteRootImageUrl =
-          remoteTile?.imageUrl ??
-          null;
-
-        remoteCategoryImages =
-          getStorefrontTileCategoryImages(
-            remoteTile,
-          );
-
-        /*
-         * Start warming the remote category-image cache immediately.
-         * This happens before getStoreCatalog() finishes, so the
-         * subcategory artwork is already in memory/disk cache when
-         * the actual screen replaces the loading skeleton.
-         */
-        const remoteCategoryImageUrls = [
-          remoteRootImageUrl,
-          ...Object.values(
-            remoteCategoryImages,
-          ),
-        ].filter(
-          (
-            imageUrl,
-          ): imageUrl is string =>
-            Boolean(imageUrl),
-        );
-
-        if (
-          remoteCategoryImageUrls.length >
-          0
-        ) {
-          void ExpoImage.prefetch(
-            remoteCategoryImageUrls,
-            'memory-disk',
-          ).catch(() => {
-            /*
-             * Prefetch is an optimization only.
-             * A failed prefetch must never block catalog loading.
-             */
-          });
-        }
-      } catch {
-        /*
-         * Remote artwork configuration is optional.
-         * Catalog/local images remain the fallback.
-         */
-      }
-
-      setRootCategoryImageUrl(
-        remoteRootImageUrl,
-      );
-
-      setCategoryImageOverrides(
-        remoteCategoryImages,
-      );
-
-      const serviceAreaId =
-        savedServiceAreaId ??
-        bootstrap.settings
-          .default_service_area_id ??
-        undefined;
-
-      let storeId =
-        requestedStoreId;
-
-      if (!storeId) {
-        const supermarkets =
-          await listStores({
-            categorySlug:
-              'supermarket',
-
-            serviceAreaId,
-          });
-
-        if (
-          supermarkets.length ===
-          0
-        ) {
-          throw new Error(
-            'لا يوجد سوبر ماركت متاح حاليًا.',
-          );
-        }
-
-        const supermarket =
-          supermarkets.find(
-            (store) =>
-              store.isFeatured &&
-              !store.isManuallyClosed,
-          ) ??
-          supermarkets.find(
-            (store) =>
-              !store.isManuallyClosed,
-          ) ??
-          supermarkets[0];
-
-        storeId =
-          supermarket.id;
-      }
-
-      const loadedCatalog =
-        await getStoreCatalog(
-          storeId,
-          serviceAreaId,
-        );
-
-      /*
-       * العروض ليست Category حقيقية.
-       *
-       * هي صفحة Virtual تجمع المنتجات
-       * التي عليها compareAtPrice > price
-       * من كل أقسام السوبرماركت.
-       */
-      if (isOffersPage) {
-        setCatalog(
-          loadedCatalog,
-        );
-
-        setSelectedSection(
-          null,
-        );
-
-        setCurrencyCode(
-          bootstrap.settings
-            .currency_code ||
-            'EGP',
-        );
-
-        setSelectedFilterKey(
-          'all',
-        );
-
-        setSearchQuery('');
-
-        return;
-      }
-
-      const section =
-        findCatalogSectionBySlug(
-          loadedCatalog,
-          sectionSlug,
-        );
-
-      if (!section) {
-        throw new Error(
-          'لم يتم العثور على فئة السوبر ماركت المطلوبة.',
-        );
-      }
-
-      setCatalog(
-        loadedCatalog,
-      );
-
-      setSelectedSection(
-        section,
-      );
-
-      setCurrencyCode(
-        bootstrap.settings
-          .currency_code ||
-          'EGP',
-      );
-
-      setSelectedFilterKey(
-        'all',
-      );
-
-      setSearchQuery('');
-    } catch (error) {
-      setCatalog(null);
-
-      setRootCategoryImageUrl(
-        null,
-      );
-
-      setCategoryImageOverrides(
-        {},
-      );
-
-      setSelectedSection(
-        null,
-      );
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل هذه الفئة.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const loadCategory = () => {
+    void categoryQuery.refetch();
+  };
 
   useEffect(() => {
-    hasPositionedOffersTabsRef.current =
-      false;
+    hasPositionedOffersTabsRef.current = false;
+    hasPositionedFiltersRef.current = false;
+    setSelectedFilterKey('all');
+    setSearchQuery('');
+  }, [requestedStoreId, sectionSlug, savedServiceAreaId, passedCategoryKey]);
 
-    hasPositionedFiltersRef.current =
-      false;
-
-    void loadCategory();
-  }, [
-    requestedStoreId,
-    sectionSlug,
-    savedServiceAreaId,
-  ]);
+  useEffect(() => {
+    const imageUrls = [
+      rootCategoryImageUrl,
+      ...Object.values(categoryImageOverrides),
+    ].filter((url): url is string => Boolean(url));
+    if (imageUrls.length > 0) {
+      void ExpoImage.prefetch(imageUrls, 'memory-disk').catch(() => {
+        // Artwork prefetch must never prevent category navigation.
+      });
+    }
+  }, [rootCategoryImageUrl, categoryImageOverrides]);
 
   /* ==========================================================
    * NORMAL CATEGORY CHILDREN
@@ -1793,7 +1521,6 @@ export default function SupermarketCategoryScreen() {
 
   if (
     !catalog ||
-    errorMessage ||
     (!isOffersPage &&
       !selectedSection)
   ) {

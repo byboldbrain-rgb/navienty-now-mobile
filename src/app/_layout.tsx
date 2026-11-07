@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 
 import AppLaunchBlockScreen from '../components/app-launch-block-screen';
+import AppQueryProvider from '../providers/app-query-provider';
 import GlobalCartDockBridge from '../components/cart/global-cart-dock-bridge';
 import OrderRealtimeBridge from '../components/order-realtime-bridge';
 import PaymentProofRouteBridge from '../components/payment-proof-route-bridge';
@@ -1281,11 +1282,12 @@ export default function RootLayout() {
     ]);
 
   return (
-    <View
-      style={
-        styles.root
-      }
-    >
+    <AppQueryProvider>
+      <View
+        style={
+          styles.root
+        }
+      >
       <StatusBar
         style={
           showBootstrapScreen
@@ -1448,7 +1450,8 @@ export default function RootLayout() {
           }
         />
       ) : null}
-    </View>
+      </View>
+    </AppQueryProvider>
   );
 }
 
