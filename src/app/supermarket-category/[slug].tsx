@@ -38,6 +38,8 @@ import {
 import { useSupermarketCategoryQuery } from '../../hooks/use-supermarket-queries';
 import { getUserFacingCatalogError } from '../../lib/user-facing-error';
 import { useCartStore } from '../../store/cart-store';
+
+const EMPTY_CATEGORY_IMAGE_OVERRIDES: Record<string, string> = {};
 import { useCustomerStore } from '../../store/customer-store';
 
 /* ============================================================
@@ -1076,7 +1078,7 @@ export default function SupermarketCategoryScreen() {
   const selectedSection = categoryQuery.data?.selectedSection ?? null;
   const currencyCode = categoryQuery.data?.currencyCode ?? 'EGP';
   const rootCategoryImageUrl = categoryQuery.data?.rootCategoryImageUrl ?? null;
-  const categoryImageOverrides = categoryQuery.data?.categoryImageOverrides ?? {};
+  const categoryImageOverrides = categoryQuery.data?.categoryImageOverrides ?? EMPTY_CATEGORY_IMAGE_OVERRIDES;
   const isLoading = categoryQuery.isPending;
   const errorMessage = categoryQuery.error
     ? getUserFacingCatalogError(categoryQuery.error)

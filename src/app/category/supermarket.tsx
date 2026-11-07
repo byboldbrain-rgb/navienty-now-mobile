@@ -40,6 +40,8 @@ import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
+const EMPTY_PROMOTION_BANNERS: SupermarketPromotionBanner[] = [];
+
 // Match the card dimensions in supermarket-category/[slug].tsx.
 // Display 3 category cards VERTICALLY per column and swipe for more columns.
 const CATEGORY_COLUMNS_VISIBLE = 3;
@@ -1530,7 +1532,7 @@ export default function SupermarketScreen() {
 
   const supermarketQuery = useSupermarketHomeQuery(savedServiceAreaId);
   const catalog = supermarketQuery.data?.catalog ?? null;
-  const promotionBanners = supermarketQuery.data?.promotionBanners ?? [];
+  const promotionBanners = supermarketQuery.data?.promotionBanners ?? EMPTY_PROMOTION_BANNERS;
   const storefrontCategoryTiles = supermarketQuery.data?.storefrontCategoryTiles ?? null;
   const currencyCode = supermarketQuery.data?.currencyCode ?? 'EGP';
   const isLoading = supermarketQuery.isPending;

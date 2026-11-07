@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import getAppBootstrap from '../services/bootstrap-service';
 import {
@@ -25,6 +26,12 @@ type SupermarketHomeData = {
   promotionBanners: SupermarketPromotionBanner[];
   storefrontCategoryTiles: StorefrontCategoryTile[] | null;
   currencyCode: string;
+};
+
+type SupermarketCategoryContext = {
+  catalog: StoreCatalog;
+  currencyCode: string;
+  tiles: StorefrontCategoryTile[] | null;
 };
 
 type SupermarketCategoryData = {
@@ -85,16 +92,14 @@ async function fetchSupermarketHome(
   return { catalog, promotionBanners, storefrontCategoryTiles, currencyCode };
 }
 
-async function fetchSupermarketCategory({
+async function fetchSupermarketCategoryContext({
   serviceAreaId,
   requestedStoreId,
-  sectionSlug,
-  categoryKey,
-}: CategoryQueryOptions): Promise<SupermarketCategoryData> {
+}: Pick<CategoryQueryOptions, 'serviceAreaId' | 'requestedStoreId'>):
+  Promise<SupermarketCategoryContext> {
   const { effectiveServiceAreaId, currencyCode } =
     await getDefaultStoreContext(serviceAreaId);
 
-  // Artwork is optional; do not block product loading when it is unavailable.
   const tilesPromise = listStorefrontCategoryTiles('supermarket').catch(() => null);
 
   let storeId = requestedStoreId;
@@ -111,23 +116,7 @@ async function fetchSupermarketCategory({
     tilesPromise,
   ]);
 
-  const tile = findStorefrontCategoryTile(tiles ?? [], [categoryKey, sectionSlug]);
-  const isOffersPage = sectionSlug.trim().toLowerCase() === 'offers';
-  const selectedSection = isOffersPage
-    ? null
-    : findCatalogSectionBySlug(catalog, sectionSlug);
-
-  if (!isOffersPage && !selectedSection) {
-    throw new Error('لم يتم العثور على فئة السوبر ماركت المطلوبة.');
-  }
-
-  return {
-    catalog,
-    selectedSection,
-    currencyCode,
-    rootCategoryImageUrl: tile?.imageUrl ?? null,
-    categoryImageOverrides: getStorefrontTileCategoryImages(tile),
-  };
+  return { catalog, currencyCode, tiles };
 }
 
 /**
@@ -144,15 +133,37 @@ export function useSupermarketHomeQuery(serviceAreaId: string | null) {
 }
 
 export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
-  return useQuery({
+  // All category screens for the same store/area share one cached catalog
+  // rather than persisting duplicate product lists for every subcategory.
+  const query = useQuery({
     queryKey: [
-      'public', 'supermarket', 'category',
+      'public', 'supermarket', 'category-catalog',
       options.serviceAreaId ?? '*',
       options.requestedStoreId ?? '*',
-      options.sectionSlug,
-      options.categoryKey ?? '*',
     ],
-    queryFn: () => fetchSupermarketCategory(options),
+    queryFn: () => fetchSupermarketCategoryContext(options),
     meta: { persist: true },
   });
+
+  const data = useMemo<SupermarketCategoryData | undefined>(() => {
+    if (!query.data) return undefined;
+
+    const { catalog, currencyCode, tiles } = query.data;
+    const tile = findStorefrontCategoryTile(
+      tiles ?? [],
+      [options.categoryKey, options.sectionSlug],
+    );
+    const isOffersPage = options.sectionSlug.trim().toLowerCase() === 'offers';
+    return {
+      catalog,
+      currencyCode,
+      selectedSection: isOffersPage
+        ? null
+        : findCatalogSectionBySlug(catalog, options.sectionSlug),
+      rootCategoryImageUrl: tile?.imageUrl ?? null,
+      categoryImageOverrides: getStorefrontTileCategoryImages(tile),
+    };
+  }, [query.data, options.sectionSlug, options.categoryKey]);
+
+  return { ...query, data };
 }
