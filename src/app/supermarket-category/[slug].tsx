@@ -1069,9 +1069,9 @@ export default function SupermarketCategoryScreen() {
 
   const categoryQuery = useSupermarketCategoryQuery({
     serviceAreaId: savedServiceAreaId,
-    requestedStoreId,
+    requestedStoreId: requestedStoreId ?? null,
     sectionSlug,
-    categoryKey: passedCategoryKey,
+    categoryKey: passedCategoryKey ?? null,
   });
 
   const catalog = categoryQuery.data?.catalog ?? null;
