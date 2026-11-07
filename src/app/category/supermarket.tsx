@@ -24,6 +24,7 @@ import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
 import CategorySearchEntry from '../../components/search/category-search-entry';
+import SupermarketMediaCarousel from '../../components/supermarket-media-carousel';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
@@ -35,6 +36,7 @@ import {
 import { type StorefrontCategoryTile } from '../../services/storefront-category-service';
 import { type SupermarketPromotionBanner } from '../../services/supermarket-banner-service';
 import { useSupermarketHomeQuery } from '../../hooks/use-supermarket-queries';
+import { useSupermarketMediaCardsQuery } from '../../hooks/use-supermarket-media-cards';
 import { getUserFacingCatalogError } from '../../lib/user-facing-error';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
@@ -1532,6 +1534,8 @@ export default function SupermarketScreen() {
 
   const supermarketQuery = useSupermarketHomeQuery(savedServiceAreaId);
   const catalog = supermarketQuery.data?.catalog ?? null;
+  const mediaQuery = useSupermarketMediaCardsQuery(catalog?.store.id ?? null);
+  const mediaCards = mediaQuery.data ?? [];
   const promotionBanners = supermarketQuery.data?.promotionBanners ?? EMPTY_PROMOTION_BANNERS;
   const storefrontCategoryTiles = supermarketQuery.data?.storefrontCategoryTiles ?? null;
   const currencyCode = supermarketQuery.data?.currencyCode ?? 'EGP';
@@ -2050,6 +2054,13 @@ export default function SupermarketScreen() {
     });
   }
 
+  function openMediaCategory(key: string) {
+    const matching = categories.find(
+      (item) => item.key === key || item.section?.slug === key,
+    );
+    if (matching) openCategory(matching);
+  }
+
   function addFeaturedProduct(
     product: CatalogProduct,
   ) {
@@ -2260,6 +2271,15 @@ export default function SupermarketScreen() {
             false
           }
         >
+          {/* DB media carousel always goes ABOVE 'تسوق حسب الفئة'. */}
+          {mediaCards.length > 0 ? (
+            <SupermarketMediaCarousel
+              cards={mediaCards}
+              viewportWidth={pageWidth}
+              onCategoryPress={openMediaCategory}
+            />
+          ) : null}
+
           <View
             style={
               styles.categoriesSection
