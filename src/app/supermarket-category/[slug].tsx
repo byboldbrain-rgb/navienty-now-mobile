@@ -56,6 +56,12 @@ const PAGE_MAX_WIDTH = 560;
 const HORIZONTAL_PADDING = 16;
 const PRODUCT_GAP = 10;
 
+// Breadfast-inspired subcategory card proportions:
+// Three portrait cards fit across the screen (3:4 width/height).
+const SUBCATEGORY_COLUMNS = 3;
+const SUBCATEGORY_GAP = 9;
+const SUBCATEGORY_ASPECT_RATIO = 3 / 4;
+
 type ProductFilterKey =
   | 'all'
   | 'offers'
@@ -1939,6 +1945,17 @@ export default function SupermarketCategoryScreen() {
       PRODUCT_GAP) /
     2;
 
+  // Keep the same visible three-card proportion as the reference,
+  // while respecting the screen width and the existing horizontal rail.
+  const subcategoryCardWidth =
+    (pageWidth -
+      HORIZONTAL_PADDING * 2 -
+      SUBCATEGORY_GAP * (SUBCATEGORY_COLUMNS - 1)) /
+    SUBCATEGORY_COLUMNS;
+
+  const subcategoryCardHeight =
+    subcategoryCardWidth / SUBCATEGORY_ASPECT_RATIO;
+
   const categoryKey =
     passedCategoryKey ??
     selectedSection?.slug ??
@@ -2577,6 +2594,9 @@ export default function SupermarketCategoryScreen() {
                       accessibilityRole="button"
                       style={({ pressed }) => [
                         styles.filterItem,
+                        {
+                          width: subcategoryCardWidth,
+                        },
                         pressed &&
                           styles.pressed,
                       ]}
@@ -2589,6 +2609,11 @@ export default function SupermarketCategoryScreen() {
                       <View
                         style={[
                           styles.filterImageCircle,
+
+                          {
+                            width: subcategoryCardWidth,
+                            height: subcategoryCardHeight,
+                          },
 
                           isSelected &&
                             styles.filterImageCircleSelected,
@@ -3136,7 +3161,7 @@ const styles =
 
       flexGrow: 1,
 
-      gap: 9,
+      gap: SUBCATEGORY_GAP,
 
       justifyContent:
         'flex-end',
@@ -3145,7 +3170,7 @@ const styles =
         12,
 
       paddingHorizontal:
-        16,
+        HORIZONTAL_PADDING,
 
       paddingTop: 12,
     },
@@ -3167,8 +3192,6 @@ const styles =
       shadowOpacity: 0.06,
 
       shadowRadius: 3,
-
-      width: 76,
     },
 
     filterImageCircle: {
@@ -3183,15 +3206,12 @@ const styles =
       borderWidth:
         StyleSheet.hairlineWidth,
 
-      height: 108,
-
+      // Height and width are responsive and provided at render time.
       overflow:
         'hidden',
 
       position:
         'relative',
-
-      width: 76,
     },
 
     filterImageCircleSelected: {

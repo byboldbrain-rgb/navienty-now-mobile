@@ -5,7 +5,10 @@ import {
   useRouter,
 } from 'expo-router';
 import {
+  memo,
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -30,9 +33,7 @@ import {
   getStoreCatalog,
 } from '../../services/catalog-service';
 
-import CategoryCartDock, {
-  useCartDockScrollBehavior,
-} from '../../components/cart/category-cart-dock';
+import CategoryCartDock from '../../components/cart/category-cart-dock';
 import { StoreScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
   isRestaurantCartCategory,
@@ -96,22 +97,6 @@ function getProductImage(
   return firstImage?.imageUrl ?? null;
 }
 
-function getCatalogProductImageUrls(
-  catalog: StoreCatalog,
-) {
-  return catalog.sections
-    .flatMap((section) =>
-      section.products.map(
-        (product) =>
-          getProductImage(product),
-      ),
-    )
-    .filter(
-      (url): url is string =>
-        Boolean(url),
-    );
-}
-
 function prefetchStoreCatalogImages(
   catalog: StoreCatalog,
 ) {
@@ -129,18 +114,9 @@ function prefetchStoreCatalogImages(
       ? catalog.store.logoUrl
       : null;
 
-  const productUrls =
-    getCatalogProductImageUrls(
-      catalog,
-    );
-
   const urls = Array.from(
     new Set(
-      [
-        storeCover,
-        storeLogo,
-        ...productUrls.slice(0, 12),
-      ].filter(
+      [storeCover, storeLogo].filter(
         (url): url is string =>
           Boolean(url),
       ),
@@ -212,14 +188,360 @@ function BackArrowIcon() {
   );
 }
 
+function formatPriceValue(
+  currencySymbol: string,
+  value:
+    | number
+    | string
+    | null
+    | undefined,
+) {
+  const numericValue = Number(value ?? 0);
+
+  return `${currencySymbol} ${numericValue.toFixed(
+    2,
+  )}`;
+}
+
+function getProductDisplayPrice(
+  product: CatalogProduct,
+) {
+  if (
+    !product.variants ||
+    product.variants.length === 0
+  ) {
+    return product.price;
+  }
+
+  return Math.min(
+    ...product.variants.map(
+      (variant) => variant.price,
+    ),
+  );
+}
+
+type ProductRowProps = {
+  product: CatalogProduct;
+  index: number;
+  sectionProductCount: number;
+  quantity: number;
+  storeIsClosed: boolean;
+  currencySymbol: string;
+  onOpenProductDetails: (
+    product: CatalogProduct,
+  ) => void;
+  onAddProduct: (
+    product: CatalogProduct,
+  ) => void;
+  onIncreaseExistingProduct: (
+    productId: string,
+  ) => void;
+  onDecreaseProduct: (
+    productId: string,
+  ) => void;
+};
+
+const ProductRow = memo(
+  function ProductRow({
+    product,
+    index,
+    sectionProductCount,
+    quantity,
+    storeIsClosed,
+    currencySymbol,
+    onOpenProductDetails,
+    onAddProduct,
+    onIncreaseExistingProduct,
+    onDecreaseProduct,
+  }: ProductRowProps) {
+    const productImage =
+      getProductImage(product);
+
+    const [imageFailed, setImageFailed] =
+      useState(false);
+
+    useEffect(() => {
+      setImageFailed(false);
+    }, [productImage]);
+
+    const hasVariants =
+      product.variants.length > 0;
+
+    const displayPrice =
+      getProductDisplayPrice(product);
+
+    const hasOldPrice =
+      product.compareAtPrice !== null &&
+      product.compareAtPrice >
+        displayPrice;
+
+    const canDisplayImage =
+      !!productImage && !imageFailed;
+
+    return (
+      <Pressable
+        disabled={storeIsClosed}
+        onPress={() => {
+          if (hasVariants) {
+            onOpenProductDetails(product);
+          }
+        }}
+        style={({ pressed }) => [
+          styles.productRow,
+
+          pressed &&
+            hasVariants &&
+            !storeIsClosed &&
+            styles.productRowPressed,
+
+          index ===
+            sectionProductCount - 1 &&
+            styles.productRowLast,
+        ]}
+      >
+        {/* PRODUCT MEDIA */}
+
+        <View
+          style={styles.productMediaColumn}
+        >
+          <View
+            style={styles.productImageWrapper}
+          >
+            {canDisplayImage ? (
+              <ExpoImage
+                cachePolicy="memory-disk"
+                contentFit="cover"
+                priority="normal"
+                recyclingKey={`product-${product.id}`}
+                source={{
+                  uri: productImage,
+                }}
+                style={styles.productImage}
+                onError={() => {
+                  setImageFailed(true);
+                }}
+              />
+            ) : (
+              <View
+                style={
+                  styles.productImageFallback
+                }
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={30}
+                  color="#b9b9b9"
+                />
+              </View>
+            )}
+
+            {/* ADD / VARIANT / QUANTITY */}
+
+            {hasVariants ? (
+              <Pressable
+                disabled={storeIsClosed}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onOpenProductDetails(
+                    product,
+                  );
+                }}
+                style={({ pressed }) => [
+                  styles.productVariantButton,
+
+                  storeIsClosed &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !storeIsClosed &&
+                    styles.productAddButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={18}
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                />
+              </Pressable>
+            ) : quantity === 0 ? (
+              <Pressable
+                disabled={storeIsClosed}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onAddProduct(product);
+                }}
+                style={({ pressed }) => [
+                  styles.productAddButton,
+
+                  storeIsClosed &&
+                    styles.disabledButton,
+
+                  pressed &&
+                    !storeIsClosed &&
+                    styles.productAddButtonPressed,
+                ]}
+              >
+                <Ionicons
+                  name="add"
+                  size={18}
+                  color={
+                    NAVIENTY_NOW_COLORS.primary
+                  }
+                />
+              </Pressable>
+            ) : (
+              <View
+                style={
+                  styles.productQuantityContainer
+                }
+              >
+                <Pressable
+                  disabled={storeIsClosed}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onIncreaseExistingProduct(
+                      product.id,
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.productQuantityButton,
+
+                    pressed &&
+                      styles.buttonPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="add"
+                    size={15}
+                    color="#ffffff"
+                  />
+                </Pressable>
+
+                <Text
+                  style={
+                    styles.productQuantityText
+                  }
+                >
+                  {quantity}
+                </Text>
+
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onDecreaseProduct(
+                      product.id,
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.productQuantityButton,
+
+                    pressed &&
+                      styles.buttonPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="remove"
+                    size={15}
+                    color="#ffffff"
+                  />
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          {hasVariants && (
+            <Text
+              style={
+                styles.productVariantHint
+              }
+              numberOfLines={1}
+            >
+              يمكن تخصيصه
+            </Text>
+          )}
+        </View>
+
+        {/* PRODUCT TEXT */}
+
+        <View style={styles.productContent}>
+          <Text
+            style={styles.productName}
+            numberOfLines={2}
+          >
+            {product.name}
+          </Text>
+
+          {!!product.description && (
+            <Text
+              style={
+                styles.productDescription
+              }
+              numberOfLines={3}
+            >
+              {product.description}
+            </Text>
+          )}
+
+          <View
+            style={
+              styles.productBottomContent
+            }
+          >
+            <View
+              style={styles.priceColumn}
+            >
+              <Text
+                style={styles.currentPrice}
+              >
+                {hasVariants
+                  ? `من ${formatPriceValue(
+                      currencySymbol,
+                      displayPrice,
+                    )}`
+                  : formatPriceValue(
+                      currencySymbol,
+                      displayPrice,
+                    )}
+              </Text>
+
+              {hasOldPrice && (
+                <Text
+                  style={styles.oldPrice}
+                >
+                  {formatPriceValue(
+                    currencySymbol,
+                    product.compareAtPrice!,
+                  )}
+                </Text>
+              )}
+            </View>
+
+            {product.isAgeRestricted && (
+              <View
+                style={styles.warningBadge}
+              >
+                <Text
+                  style={
+                    styles.warningBadgeText
+                  }
+                >
+                  مقيّد
+                  بالعمر
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    );
+  },
+);
+
 export default function StoreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  const {
-    isScrollingDown: isCartDockScrollingDown,
-    onScroll: handleCartDockScroll,
-  } = useCartDockScrollBehavior();
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -242,9 +564,6 @@ export default function StoreScreen() {
     useRef<SectionList<CatalogProduct>>(
       null,
     );
-
-  const pendingSectionIndexRef =
-    useRef<number | null>(null);
 
   const [catalog, setCatalog] =
     useState<StoreCatalog | null>(
@@ -304,57 +623,12 @@ export default function StoreScreen() {
   ] = useState(1);
 
   const [
-    activeSectionId,
-    setActiveSectionId,
-  ] = useState<string | null>(
-    null,
-  );
-
-  const [
-    isCompactHeaderVisible,
-    setIsCompactHeaderVisible,
+    isScrollHeaderVisible,
+    setIsScrollHeaderVisible,
   ] = useState(false);
 
-  const compactHeaderVisibleRef =
+  const scrollHeaderVisibleRef =
     useRef(false);
-
-  const productViewabilityConfig =
-    useRef({
-      itemVisiblePercentThreshold: 35,
-    }).current;
-
-  const handleProductViewabilityChanged =
-    useRef(
-      ({
-        viewableItems,
-      }: {
-        viewableItems: Array<{
-          section?: {
-            id?: string;
-          };
-        }>;
-      }) => {
-        const visibleSectionId =
-          viewableItems.find(
-            (token) =>
-              Boolean(
-                token.section?.id,
-              ),
-          )?.section?.id ?? null;
-
-        if (!visibleSectionId) {
-          return;
-        }
-
-        setActiveSectionId(
-          (currentSectionId) =>
-            currentSectionId ===
-            visibleSectionId
-              ? currentSectionId
-              : visibleSectionId,
-        );
-      },
-    ).current;
 
   const [
     failedProductImages,
@@ -386,6 +660,166 @@ export default function StoreScreen() {
   const setActiveCart = useCartStore(
     (state) => state.setActiveCart,
   );
+
+  const catalogSections =
+    catalog?.sections ?? null;
+
+  const currentStoreForActions =
+    catalog?.store ?? null;
+
+  const deliveryForActions =
+    catalog?.delivery ?? null;
+
+  const currentStoreId =
+    currentStoreForActions?.id ?? null;
+
+  const sectionListData = useMemo(
+    () =>
+      (catalogSections ?? []).map(
+        (section) => ({
+          ...section,
+          data: section.products,
+        }),
+      ),
+    [catalogSections],
+  );
+
+  const cartQuantityByProductId =
+    useMemo(() => {
+      const quantityMap =
+        new Map<string, number>();
+
+      if (!currentStoreId) {
+        return quantityMap;
+      }
+
+      const currentItems =
+        carts[currentStoreId]?.items ?? [];
+
+      for (const item of currentItems) {
+        if (item.variantId === null) {
+          quantityMap.set(
+            item.id,
+            item.quantity,
+          );
+        }
+      }
+
+      return quantityMap;
+    }, [carts, currentStoreId]);
+
+  const openProductDetails = useCallback(
+    (product: CatalogProduct) => {
+      if (
+        !currentStoreForActions ||
+        currentStoreForActions.isManuallyClosed ||
+        product.variants.length === 0
+      ) {
+        return;
+      }
+
+      setSelectedProduct(product);
+      setSelectedProductQuantity(1);
+
+      if (product.variants.length === 1) {
+        setSelectedVariantId(
+          product.variants[0].id,
+        );
+      } else {
+        setSelectedVariantId(null);
+      }
+    },
+    [currentStoreForActions],
+  );
+
+  const addProductToCart = useCallback(
+    (product: CatalogProduct) => {
+      if (
+        !currentStoreForActions ||
+        !deliveryForActions ||
+        currentStoreForActions.isManuallyClosed
+      ) {
+        return;
+      }
+
+      const result = addItem(
+        {
+          id: currentStoreForActions.id,
+          name: currentStoreForActions.name,
+          icon: currentStoreForActions.icon,
+          categorySlug:
+            currentStoreForActions.categorySlug,
+          deliveryFee:
+            deliveryForActions.deliveryFee,
+          minimumOrder:
+            deliveryForActions.minimumOrder,
+        },
+        {
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          icon: product.icon,
+          variantId: null,
+          variantName: null,
+        },
+      );
+
+      if (
+        result === 'different-restaurant'
+      ) {
+        setPendingProduct(product);
+        setPendingVariantId(null);
+        setPendingQuantity(1);
+      }
+    },
+    [
+      addItem,
+      currentStoreForActions,
+      deliveryForActions,
+    ],
+  );
+
+  const increaseExistingProduct =
+    useCallback(
+      (productId: string) => {
+        if (
+          !currentStoreForActions ||
+          currentStoreForActions.isManuallyClosed
+        ) {
+          return;
+        }
+
+        increaseStoreItem(
+          currentStoreForActions.id,
+          productId,
+          null,
+        );
+      },
+      [
+        currentStoreForActions,
+        increaseStoreItem,
+      ],
+    );
+
+  const decreaseProductQuantity =
+    useCallback(
+      (productId: string) => {
+        if (!currentStoreForActions) {
+          return;
+        }
+
+        decreaseStoreItem(
+          currentStoreForActions.id,
+          productId,
+          null,
+        );
+      },
+      [
+        currentStoreForActions,
+        decreaseStoreItem,
+      ],
+    );
 
   async function loadStoreData() {
     if (!rawId) {
@@ -429,15 +863,6 @@ export default function StoreScreen() {
         loadedBootstrap.settings
           .currency_symbol || 'EGP',
       );
-
-      if (
-        loadedCatalog.sections.length >
-        0
-      ) {
-        setActiveSectionId(
-          loadedCatalog.sections[0].id,
-        );
-      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -454,63 +879,6 @@ export default function StoreScreen() {
   useEffect(() => {
     void loadStoreData();
   }, [rawId, savedServiceAreaId]);
-
-  useEffect(() => {
-    if (
-      !catalog ||
-      !activeSectionId
-    ) {
-      return;
-    }
-
-    const currentSectionIndex =
-      catalog.sections.findIndex(
-        (section) =>
-          section.id === activeSectionId,
-      );
-
-    if (
-      currentSectionIndex < 0
-    ) {
-      return;
-    }
-
-    const nearbySections =
-      catalog.sections.slice(
-        currentSectionIndex,
-        currentSectionIndex + 2,
-      );
-
-    const urls = Array.from(
-      new Set(
-        nearbySections
-          .flatMap((section) =>
-            section.products.map(
-              (product) =>
-                getProductImage(
-                  product,
-                ),
-            ),
-          )
-          .filter(
-            (url): url is string =>
-              Boolean(url),
-          ),
-      ),
-    );
-
-    if (urls.length === 0) {
-      return;
-    }
-
-    void ExpoImage.prefetch(
-      urls,
-      'memory-disk',
-    ).catch(() => {});
-  }, [
-    activeSectionId,
-    catalog,
-  ]);
 
 
   if (isLoading) {
@@ -693,51 +1061,10 @@ export default function StoreScreen() {
       | null
       | undefined,
   ) {
-    const numericValue =
-      Number(value ?? 0);
-
-    return `${currencySymbol} ${numericValue.toFixed(
-      2,
-    )}`;
-  }
-
-  function getProductDisplayPrice(
-    product: CatalogProduct,
-  ) {
-    if (
-      !product.variants ||
-      product.variants.length === 0
-    ) {
-      return product.price;
-    }
-
-    return Math.min(
-      ...product.variants.map(
-        (variant) => variant.price,
-      ),
+    return formatPriceValue(
+      currencySymbol,
+      value,
     );
-  }
-
-  function openProductDetails(
-    product: CatalogProduct,
-  ) {
-    if (
-      storeIsClosed ||
-      product.variants.length === 0
-    ) {
-      return;
-    }
-
-    setSelectedProduct(product);
-    setSelectedProductQuantity(1);
-
-    if (product.variants.length === 1) {
-      setSelectedVariantId(
-        product.variants[0].id,
-      );
-    } else {
-      setSelectedVariantId(null);
-    }
   }
 
   function closeProductDetails() {
@@ -773,47 +1100,6 @@ export default function StoreScreen() {
       variantName:
         variant?.name ?? null,
     };
-  }
-
-  function addProductToCart(
-    product: CatalogProduct,
-  ) {
-    if (storeIsClosed) {
-      return;
-    }
-
-    const result = addItem(
-      {
-        id: currentStore.id,
-        name: currentStore.name,
-        icon: currentStore.icon,
-        categorySlug:
-          currentStore.categorySlug,
-        deliveryFee:
-          delivery.deliveryFee,
-        minimumOrder:
-          delivery.minimumOrder,
-      },
-      {
-        id: product.id,
-        name: product.name,
-        description:
-          product.description,
-        price: product.price,
-        icon: product.icon,
-        variantId: null,
-        variantName: null,
-      },
-    );
-
-    if (
-      result ===
-      'different-restaurant'
-    ) {
-      setPendingProduct(product);
-      setPendingVariantId(null);
-      setPendingQuantity(1);
-    }
   }
 
   function addConfiguredProductToCart() {
@@ -880,43 +1166,6 @@ export default function StoreScreen() {
     }
 
     closeProductDetails();
-  }
-
-  function increaseProductQuantity(
-    product: CatalogProduct,
-  ) {
-    if (storeIsClosed) {
-      return;
-    }
-
-    const itemExistsInCurrentStore =
-      cartItems.some(
-        (item) =>
-          item.id === product.id &&
-          item.variantId === null,
-      );
-
-    if (itemExistsInCurrentStore) {
-      increaseStoreItem(
-        currentStore.id,
-        product.id,
-        null,
-      );
-
-      return;
-    }
-
-    addProductToCart(product);
-  }
-
-  function decreaseProductQuantity(
-    productId: string,
-  ) {
-    decreaseStoreItem(
-      currentStore.id,
-      productId,
-      null,
-    );
   }
 
   function replaceCartAndAddProduct() {
@@ -987,444 +1236,29 @@ export default function StoreScreen() {
     });
   }
 
-  function scrollToSection(
-    sectionId: string,
-  ) {
-    setActiveSectionId(sectionId);
-
-    const sectionIndex =
-      productSections.findIndex(
-        (section) =>
-          section.id === sectionId,
-      );
-
-    if (sectionIndex < 0) {
-      return;
-    }
-
-    pendingSectionIndexRef.current =
-      sectionIndex;
-
-    const compactHeaderOffset =
-      Math.max(
-        insets.top,
-        Platform.OS === 'android'
-          ? 24
-          : 0,
-      ) + 148;
-
-    scrollRef.current?.scrollToLocation({
-      animated: true,
-      itemIndex: 0,
-      sectionIndex,
-      viewOffset:
-        compactHeaderOffset,
-    });
-  }
-
   function handleStoreScroll(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
-    handleCartDockScroll(event);
-
     const scrollY =
       event.nativeEvent.contentOffset.y;
 
-    const nextCompactHeaderVisible =
-      scrollY >= 190;
+    const nextVisible = scrollY >= 170;
 
     if (
-      compactHeaderVisibleRef.current !==
-      nextCompactHeaderVisible
+      scrollHeaderVisibleRef.current !==
+      nextVisible
     ) {
-      compactHeaderVisibleRef.current =
-        nextCompactHeaderVisible;
-
-      setIsCompactHeaderVisible(
-        nextCompactHeaderVisible,
-      );
+      scrollHeaderVisibleRef.current =
+        nextVisible;
+      setIsScrollHeaderVisible(nextVisible);
     }
-  }
-
-  function handleScrollToIndexFailed() {
-    const sectionIndex =
-      pendingSectionIndexRef.current;
-
-    if (sectionIndex === null) {
-      return;
-    }
-
-    setTimeout(() => {
-      scrollRef.current?.scrollToLocation({
-        animated: true,
-        itemIndex: 0,
-        sectionIndex,
-        viewOffset:
-          Math.max(
-            insets.top,
-            Platform.OS === 'android'
-              ? 24
-              : 0,
-          ) + 148,
-      });
-    }, 80);
-  }
-
-  function renderProductRow(
-    product: CatalogProduct,
-    index: number,
-    sectionProductCount: number,
-  ) {
-    const cartItem =
-      cartItems.find(
-        (item) =>
-          item.id ===
-            product.id &&
-          item.variantId ===
-            null,
-      );
-
-    const quantity =
-      cartItem?.quantity ??
-      0;
-
-    const productImage =
-      getProductImage(
-        product,
-      );
-
-    const hasVariants =
-      product.variants.length >
-      0;
-
-    const displayPrice =
-      getProductDisplayPrice(
-        product,
-      );
-
-    return (
-      <Pressable
-        key={
-          product.id
-        }
-        disabled={
-          storeIsClosed
-        }
-        onPress={() => {
-          if (
-            hasVariants
-          ) {
-            openProductDetails(
-              product,
-            );
-          }
-        }}
-        style={({ pressed }) => [
-          styles.productRow,
-
-          pressed &&
-            hasVariants &&
-            !storeIsClosed &&
-            styles.productRowPressed,
-
-          index ===
-            sectionProductCount -
-              1 &&
-            styles.productRowLast,
-        ]}
-      >
-        {/* PRODUCT MEDIA */}
-
-        <View
-          style={
-            styles.productMediaColumn
-          }
-        >
-          <View
-            style={
-              styles.productImageWrapper
-            }
-          >
-            {canDisplayProductImage(
-              productImage,
-            ) ? (
-              <ExpoImage
-                cachePolicy="memory-disk"
-                contentFit="cover"
-                priority="normal"
-                recyclingKey={`product-${product.id}`}
-                source={{
-                  uri: productImage!,
-                }}
-                style={
-                  styles.productImage
-                }
-                transition={100}
-                onError={() => {
-                  markProductImageAsFailed(
-                    productImage!,
-                  );
-                }}
-              />
-            ) : (
-              <View
-                style={
-                  styles.productImageFallback
-                }
-              >
-                <Ionicons
-                  name="image-outline"
-                  size={30}
-                  color="#b9b9b9"
-                />
-              </View>
-            )}
-
-            {/* ADD / VARIANT / QUANTITY */}
-
-            {hasVariants ? (
-              <Pressable
-                disabled={
-                  storeIsClosed
-                }
-                onPress={(
-                  event,
-                ) => {
-                  event.stopPropagation();
-
-                  openProductDetails(
-                    product,
-                  );
-                }}
-                style={({
-                  pressed,
-                }) => [
-                  styles.productVariantButton,
-
-                  storeIsClosed &&
-                    styles.disabledButton,
-
-                  pressed &&
-                    !storeIsClosed &&
-                    styles.productAddButtonPressed,
-                ]}
-              >
-                <Ionicons
-                  name="chevron-back"
-                  size={18}
-                  color={
-                    NAVIENTY_NOW_COLORS.primary
-                  }
-                />
-              </Pressable>
-            ) : quantity ===
-              0 ? (
-              <Pressable
-                disabled={
-                  storeIsClosed
-                }
-                onPress={(
-                  event,
-                ) => {
-                  event.stopPropagation();
-
-                  addProductToCart(
-                    product,
-                  );
-                }}
-                style={({
-                  pressed,
-                }) => [
-                  styles.productAddButton,
-
-                  storeIsClosed &&
-                    styles.disabledButton,
-
-                  pressed &&
-                    !storeIsClosed &&
-                    styles.productAddButtonPressed,
-                ]}
-              >
-                <Ionicons
-                  name="add"
-                  size={18}
-                  color={
-                    NAVIENTY_NOW_COLORS.primary
-                  }
-                />
-              </Pressable>
-            ) : (
-              <View
-                style={
-                  styles.productQuantityContainer
-                }
-              >
-                <Pressable
-                  disabled={
-                    storeIsClosed
-                  }
-                  onPress={(
-                    event,
-                  ) => {
-                    event.stopPropagation();
-
-                    increaseProductQuantity(
-                      product,
-                    );
-                  }}
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.productQuantityButton,
-
-                    pressed &&
-                      styles.buttonPressed,
-                  ]}
-                >
-                  <Ionicons
-                    name="add"
-                    size={15}
-                    color="#ffffff"
-                  />
-                </Pressable>
-
-                <Text
-                  style={
-                    styles.productQuantityText
-                  }
-                >
-                  {
-                    quantity
-                  }
-                </Text>
-
-                <Pressable
-                  onPress={(
-                    event,
-                  ) => {
-                    event.stopPropagation();
-
-                    decreaseProductQuantity(
-                      product.id,
-                    );
-                  }}
-                  style={({
-                    pressed,
-                  }) => [
-                    styles.productQuantityButton,
-
-                    pressed &&
-                      styles.buttonPressed,
-                  ]}
-                >
-                  <Ionicons
-                    name="remove"
-                    size={15}
-                    color="#ffffff"
-                  />
-                </Pressable>
-              </View>
-            )}
-          </View>
-
-          {hasVariants && (
-            <Text
-              style={
-                styles.productVariantHint
-              }
-              numberOfLines={1}
-            >
-              يمكن تخصيصه
-            </Text>
-          )}
-        </View>
-
-        {/* PRODUCT TEXT */}
-
-        <View
-          style={
-            styles.productContent
-          }
-        >
-          <Text
-            style={
-              styles.productName
-            }
-            numberOfLines={
-              2
-            }
-          >
-            {
-              product.name
-            }
-          </Text>
-
-          {!!product.description && (
-            <Text
-              style={
-                styles.productDescription
-              }
-              numberOfLines={
-                3
-              }
-            >
-              {
-                product.description
-              }
-            </Text>
-          )}
-
-          <View
-            style={
-              styles.productBottomContent
-            }
-          >
-            <Text
-              style={
-                styles.productPrice
-              }
-            >
-              {hasVariants
-                ? `من ${formatPrice(
-                    displayPrice,
-                  )}`
-                : formatPrice(
-                    displayPrice,
-                  )}
-            </Text>
-
-            {product.isAgeRestricted && (
-              <View
-                style={
-                  styles.warningBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.warningBadgeText
-                  }
-                >
-                  مقيّد
-                  بالعمر
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Pressable>
-    );
   }
 
   return (
     <View style={styles.screen}>
       <SectionList
         ref={scrollRef}
-        sections={productSections.map(
-          (section) => ({
-            ...section,
-            data: section.products,
-          }),
-        )}
+        sections={sectionListData}
         contentContainerStyle={[
           styles.pageContent,
 
@@ -1437,10 +1271,10 @@ export default function StoreScreen() {
                 180 + Math.max(insets.bottom, 0),
             },
         ]}
-        initialNumToRender={6}
-        maxToRenderPerBatch={6}
-        windowSize={7}
-        updateCellsBatchingPeriod={40}
+        initialNumToRender={5}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+        updateCellsBatchingPeriod={60}
         removeClippedSubviews={
           Platform.OS === 'android'
         }
@@ -1628,69 +1462,6 @@ export default function StoreScreen() {
           </View>
         )}
 
-        {/* CATEGORY NAVIGATION */}
-
-        {productSections.length >
-          0 && (
-          <View
-            style={
-              styles.categoryNavigation
-            }
-          >
-            <ScrollView
-              horizontal
-              style={styles.categoryScroll}
-              showsHorizontalScrollIndicator={
-                false
-              }
-              contentContainerStyle={
-                styles.categoryScrollContent
-              }
-            >
-              {productSections.map(
-                (section) => {
-                  const isActive =
-                    activeSectionId ===
-                    section.id;
-
-                  return (
-                    <Pressable
-                      key={
-                        section.id
-                      }
-                      onPress={() =>
-                        scrollToSection(
-                          section.id,
-                        )
-                      }
-                      style={[
-                        styles.categoryTab,
-                        isActive &&
-                          styles.categoryTabActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.categoryTabText,
-
-                          isActive &&
-                            styles.categoryTabTextActive,
-                        ]}
-                        numberOfLines={
-                          1
-                        }
-                      >
-                        {
-                          section.name
-                        }
-                      </Text>
-                    </Pressable>
-                  );
-                },
-              )}
-            </ScrollView>
-          </View>
-        )}
         </View>
           </>
         }
@@ -1761,31 +1532,41 @@ export default function StoreScreen() {
           <View
             style={styles.container}
           >
-            {renderProductRow(
-              product,
-              index,
-              section.data.length,
-            )}
+            <ProductRow
+              product={product}
+              index={index}
+              sectionProductCount={
+                section.data.length
+              }
+              quantity={
+                cartQuantityByProductId.get(
+                  product.id,
+                ) ?? 0
+              }
+              storeIsClosed={storeIsClosed}
+              currencySymbol={currencySymbol}
+              onOpenProductDetails={
+                openProductDetails
+              }
+              onAddProduct={addProductToCart}
+              onIncreaseExistingProduct={
+                increaseExistingProduct
+              }
+              onDecreaseProduct={
+                decreaseProductQuantity
+              }
+            />
           </View>
         )}
         onScroll={handleStoreScroll}
-        onViewableItemsChanged={
-          handleProductViewabilityChanged
-        }
-        viewabilityConfig={
-          productViewabilityConfig
-        }
-        onScrollToIndexFailed={
-          handleScrollToIndexFailed
-        }
-        scrollEventThrottle={16}
+        scrollEventThrottle={32}
         showsVerticalScrollIndicator={false}
       />
 
-      {isCompactHeaderVisible && (
+      {isScrollHeaderVisible && (
         <View
           style={[
-            styles.compactHeader,
+            styles.scrollHeader,
             {
               paddingTop: Math.max(
                 insets.top,
@@ -1796,11 +1577,7 @@ export default function StoreScreen() {
             },
           ]}
         >
-          <View
-            style={
-              styles.compactHeaderMainRow
-            }
-          >
+          <View style={styles.scrollHeaderRow}>
             <Pressable
               accessibilityLabel="العودة"
               accessibilityRole="button"
@@ -1813,71 +1590,7 @@ export default function StoreScreen() {
             >
               <BackArrowIcon />
             </Pressable>
-
-            <Text
-              numberOfLines={1}
-              style={
-                styles.compactHeaderStoreName
-              }
-            >
-              {currentStore.name}
-            </Text>
           </View>
-
-          {productSections.length > 0 && (
-            <View
-              style={
-                styles.compactCategoryNavigation
-              }
-            >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={
-                  false
-                }
-                contentContainerStyle={
-                  styles.compactCategoryScrollContent
-                }
-              >
-                {productSections.map(
-                  (section) => {
-                    const isActive =
-                      activeSectionId ===
-                      section.id;
-
-                    return (
-                      <Pressable
-                        key={`sticky-${section.id}`}
-                        accessibilityRole="button"
-                        onPress={() =>
-                          scrollToSection(
-                            section.id,
-                          )
-                        }
-                        style={[
-                          styles.categoryTab,
-                          styles.compactCategoryTab,
-                          isActive &&
-                            styles.categoryTabActive,
-                        ]}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            styles.categoryTabText,
-                            isActive &&
-                              styles.categoryTabTextActive,
-                          ]}
-                        >
-                          {section.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  },
-                )}
-              </ScrollView>
-            </View>
-          )}
         </View>
       )}
 
@@ -2304,7 +2017,7 @@ export default function StoreScreen() {
         currencyCode={currencySymbol}
         accentColor={NAVIENTY_NOW_COLORS.primary}
         accentDarkColor="#009245"
-        isScrollingDown={isCartDockScrollingDown}
+        isScrollingDown={false}
         onPress={openCart}
       />
 
@@ -2453,7 +2166,7 @@ const styles = StyleSheet.create({
     ],
   },
 
-  compactHeader: {
+  scrollHeader: {
     backgroundColor: '#FFFFFF',
     borderBottomColor: '#ECEEEF',
     borderBottomWidth:
@@ -2461,55 +2174,24 @@ const styles = StyleSheet.create({
     left: 0,
     position: 'absolute',
     right: 0,
-    shadowColor: '#000000',
-    shadowOffset: {
-      height: 2,
-      width: 0,
-    },
-    shadowOpacity: 0.07,
-    shadowRadius: 6,
     top: 0,
     zIndex: 100,
-    elevation: 10,
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
   },
 
-  compactHeaderMainRow: {
+  scrollHeaderRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    minHeight: 50,
-    paddingBottom: 2,
+    height: 56,
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
-    paddingTop: 4,
-  },
-
-  compactHeaderStoreName: {
-    color: '#1E1E1E',
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    lineHeight: 22,
-    marginLeft: 12,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
-
-  compactCategoryNavigation: {
-    backgroundColor: '#FFFFFF',
-    paddingBottom: 8,
-    paddingTop: 44,
-  },
-
-  compactCategoryScrollContent: {
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-  },
-
-  compactCategoryTab: {
-    height: 40,
-    minWidth: 88,
   },
 
   container: {
@@ -2733,63 +2415,6 @@ const styles = StyleSheet.create({
   },
 
   /* ---------------------------------- */
-  /* CATEGORIES                         */
-  /* ---------------------------------- */
-
-  categoryNavigation: {
-    backgroundColor: '#FFFFFF',
-    marginTop: 4,
-    paddingBottom: 10,
-    paddingTop: 6,
-  },
-
-  categoryScroll: {
-    flex: 1,
-  },
-
-  categoryScrollContent: {
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
-  },
-
-  categoryTab: {
-    alignItems: 'center',
-    backgroundColor: '#F1F5F2',
-    borderRadius: 18,
-    height: 44,
-    justifyContent: 'center',
-    minWidth: 92,
-    paddingHorizontal: 18,
-  },
-
-  categoryTabActive: {
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.primary,
-  },
-
-  categoryTabText: {
-    color: '#176548',
-    fontSize: 14,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-
-  categoryTabTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-
-  categoryUnderline: {
-    display: 'none',
-  },
-
-  categoryUnderlineActive: {
-    display: 'none',
-  },
-
-  /* ---------------------------------- */
   /* PRODUCT SECTIONS                   */
   /* ---------------------------------- */
 
@@ -2861,11 +2486,22 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
 
-  productPrice: {
-    color: '#252525',
+  priceColumn: {
+    alignItems: 'flex-end',
+  },
+
+  currentPrice: {
+    color: '#202020',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'right',
+  },
+
+  oldPrice: {
+    color: '#969696',
+    fontSize: 11.5,
+    marginTop: 3,
+    textDecorationLine: 'line-through',
   },
 
   productVariantHint: {
@@ -2937,15 +2573,6 @@ const styles = StyleSheet.create({
     left: 6,
     position: 'absolute',
 
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.13,
-    shadowRadius: 5,
-
-    elevation: 4,
 
     width: 36,
   },
@@ -2969,14 +2596,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     left: 6,
     position: 'absolute',
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.13,
-    shadowRadius: 5,
-    elevation: 4,
     width: 36,
   },
 
@@ -2993,15 +2612,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     position: 'absolute',
 
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-
-    elevation: 4,
   },
 
   productQuantityButton: {

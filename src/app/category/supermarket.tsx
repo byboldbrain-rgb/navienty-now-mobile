@@ -47,7 +47,13 @@ import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
+// Match the card dimensions in supermarket-category/[slug].tsx.
+// Display 3 category cards VERTICALLY per column and swipe for more columns.
+const CATEGORY_COLUMNS_VISIBLE = 3;
 const CATEGORY_ROWS = 3;
+const CATEGORY_HORIZONTAL_PADDING = 16;
+const CATEGORY_CARD_GAP = 9;
+const CATEGORY_CARD_ASPECT_RATIO = 3 / 4;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
 const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
 
@@ -498,23 +504,14 @@ function findSectionForStorefrontTile(
   );
 }
 
+// Group categories in columns of three, preserving their order.
 function makeCategoryColumns(
   categories: CategoryDisplayItem[],
-) {
-  const columns: CategoryDisplayItem[][] =
-    [];
+): CategoryDisplayItem[][] {
+  const columns: CategoryDisplayItem[][] = [];
 
-  for (
-    let index = 0;
-    index < categories.length;
-    index += CATEGORY_ROWS
-  ) {
-    columns.push(
-      categories.slice(
-        index,
-        index + CATEGORY_ROWS,
-      ),
-    );
+  for (let index = 0; index < categories.length; index += CATEGORY_ROWS) {
+    columns.push(categories.slice(index, index + CATEGORY_ROWS));
   }
 
   return columns;
@@ -1527,22 +1524,10 @@ export default function SupermarketScreen() {
   const { width: windowWidth } =
     useWindowDimensions();
 
-  const categoryScrollX = useRef(
-    new Animated.Value(0),
-  ).current;
-
-  const categoryScrollRef =
-    useRef<ScrollView | null>(null);
-
-  const [
-    categoryViewportWidth,
-    setCategoryViewportWidth,
-  ] = useState(0);
-
-  const [
-    categoryContentWidth,
-    setCategoryContentWidth,
-  ] = useState(0);
+  const categoryScrollX = useRef(new Animated.Value(0)).current;
+  const categoryScrollRef = useRef<ScrollView | null>(null);
+  const [categoryViewportWidth, setCategoryViewportWidth] = useState(0);
+  const [categoryContentWidth, setCategoryContentWidth] = useState(0);
 
   const [
     catalog,
@@ -1870,14 +1855,12 @@ export default function SupermarketScreen() {
       storefrontCategoryTiles,
     ]);
 
-  const categoryColumns =
-    useMemo(
-      () =>
-        makeCategoryColumns(
-          categories,
-        ).reverse(),
-      [categories],
-    );
+  // The first three categories stay on the right (Arabic layout),
+  // followed by more columns revealed when swiping horizontally.
+  const categoryColumns = useMemo(
+    () => makeCategoryColumns(categories).reverse(),
+    [categories],
+  );
 
   const searchSuggestions =
     useMemo(
@@ -1888,32 +1871,18 @@ export default function SupermarketScreen() {
       [categories],
     );
 
-  const categoryMaxScroll =
-    Math.max(
-      categoryContentWidth -
-        categoryViewportWidth,
-      1,
-    );
-
-  const categoryIndicatorTravel =
-    CATEGORY_INDICATOR_TRACK_WIDTH -
-    CATEGORY_INDICATOR_THUMB_WIDTH;
-
-  const categoryIndicatorTranslateX =
-    categoryScrollX.interpolate({
-      inputRange: [
-        0,
-        categoryMaxScroll,
-      ],
-
-      outputRange: [
-        0,
-        categoryIndicatorTravel,
-      ],
-
-      extrapolate:
-        'clamp',
-    });
+  const categoryMaxScroll = Math.max(
+    categoryContentWidth - categoryViewportWidth,
+    1,
+  );
+  const categoryIndicatorTranslateX = categoryScrollX.interpolate({
+    inputRange: [0, categoryMaxScroll],
+    outputRange: [
+      0,
+      CATEGORY_INDICATOR_TRACK_WIDTH - CATEGORY_INDICATOR_THUMB_WIDTH,
+    ],
+    extrapolate: 'clamp',
+  });
 
   const catalogProductsById =
     useMemo(() => {
@@ -1986,6 +1955,16 @@ export default function SupermarketScreen() {
       windowWidth,
       560,
     );
+
+  // Identical dimensions to [slug].tsx, but laid out in scrolling columns.
+  const categoryCardWidth =
+    (pageWidth -
+      CATEGORY_HORIZONTAL_PADDING * 2 -
+      CATEGORY_CARD_GAP * (CATEGORY_COLUMNS_VISIBLE - 1)) /
+    CATEGORY_COLUMNS_VISIBLE;
+
+  const categoryCardHeight =
+    categoryCardWidth / CATEGORY_CARD_ASPECT_RATIO;
 
   /*
    * Larger promotional product cards to match the
@@ -2451,137 +2430,76 @@ export default function SupermarketScreen() {
             </Text>
 
             <Animated.ScrollView
+              key="supermarket-categories-three-rows"
               horizontal
-              key="supermarket-categories-offers-first"
-              ref={
-                categoryScrollRef
-              }
-              showsHorizontalScrollIndicator={
-                false
-              }
-              scrollEventThrottle={
-                16
-              }
-              contentContainerStyle={
-                styles.categoriesRail
-              }
-              style={
-                styles.categoriesScroll
-              }
-              onLayout={(
-                event,
-              ) => {
-                setCategoryViewportWidth(
-                  event.nativeEvent
-                    .layout.width,
-                );
+              ref={categoryScrollRef}
+              showsHorizontalScrollIndicator={false}
+              scrollEventThrottle={16}
+              style={styles.categoriesScroll}
+              contentContainerStyle={styles.categoriesRail}
+              onLayout={(event) => {
+                setCategoryViewportWidth(event.nativeEvent.layout.width);
               }}
-              onContentSizeChange={(
-                width,
-              ) => {
-                setCategoryContentWidth(
-                  width,
-                );
-
-                requestAnimationFrame(
-                  () => {
-                    categoryScrollRef.current?.scrollToEnd(
-                      {
-                        animated: false,
-                      },
-                    );
-                  },
-                );
+              onContentSizeChange={(width) => {
+                setCategoryContentWidth(width);
+                // Keep the initial three categories on the right, as before.
+                requestAnimationFrame(() => {
+                  categoryScrollRef.current?.scrollToEnd({ animated: false });
+                });
               }}
               onScroll={Animated.event(
                 [
                   {
                     nativeEvent: {
-                      contentOffset: {
-                        x: categoryScrollX,
-                      },
+                      contentOffset: { x: categoryScrollX },
                     },
                   },
                 ],
-                {
-                  useNativeDriver:
-                    true,
-                },
+                { useNativeDriver: true },
               )}
             >
-              {categoryColumns.map(
-                (
-                  column,
-                  columnIndex,
-                ) => (
-                  <View
-                    key={`category-column-${columnIndex}`}
-                    style={
-                      styles.categoryColumn
-                    }
-                  >
-                    {column.map(
-                      (item) => (
-                        <Pressable
-                          key={
-                            item.key
-                          }
-                          style={({
-                            pressed,
-                          }) => [
-                            styles.categoryItem,
-
-                            pressed &&
-                              styles.categoryItemPressed,
-                          ]}
-                          onPress={() =>
-                            openCategory(
-                              item,
-                            )
-                          }
-                        >
-                          <CategoryVisual
-                            item={
-                              item
-                            }
-                          />
-
-                          <Text
-                            style={
-                              styles.categoryLabel
-                            }
-                            numberOfLines={
-                              2
-                            }
-                          >
-                            {
-                              item.label
-                            }
-                          </Text>
-                        </Pressable>
-                      ),
-                    )}
-                  </View>
-                ),
-              )}
+              {categoryColumns.map((column, columnIndex) => (
+                <View
+                  key={`category-column-${columnIndex}`}
+                  style={[
+                    styles.categoryColumn,
+                    { width: categoryCardWidth },
+                  ]}
+                >
+                  {column.map((item) => (
+                    <Pressable
+                      key={item.key}
+                      accessibilityRole="button"
+                      accessibilityLabel={item.label}
+                      style={({ pressed }) => [
+                        styles.categoryItem,
+                        {
+                          width: categoryCardWidth,
+                          height: categoryCardHeight,
+                        },
+                        pressed && styles.categoryItemPressed,
+                      ]}
+                      onPress={() => openCategory(item)}
+                    >
+                      <CategoryVisual item={item} />
+                      <Text
+                        style={styles.categoryLabel}
+                        numberOfLines={2}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ))}
             </Animated.ScrollView>
 
-            <View
-              style={
-                styles.categoryPagination
-              }
-            >
+            <View style={styles.categoryPagination}>
               <Animated.View
                 style={[
                   styles.categoryPaginationActive,
-
                   {
-                    transform: [
-                      {
-                        translateX:
-                          categoryIndicatorTranslateX,
-                      },
-                    ],
+                    transform: [{ translateX: categoryIndicatorTranslateX }],
                   },
                 ]}
               />
@@ -2904,150 +2822,102 @@ const styles =
       width: '100%',
     },
 
+    // Horizontal carousel of columns; each column contains exactly 3 cards.
     categoriesScroll: {
-      direction:
-        'ltr',
+      direction: 'ltr',
     },
 
     categoriesRail: {
-      direction:
-        'ltr',
-
-      flexDirection:
-        'row',
-
-      gap: 7,
-
-      paddingHorizontal:
-        16,
+      direction: 'ltr',
+      flexDirection: 'row',
+      gap: CATEGORY_CARD_GAP,
+      paddingHorizontal: CATEGORY_HORIZONTAL_PADDING,
     },
 
     categoryColumn: {
-      gap: 15,
-
-      width: 85,
+      gap: CATEGORY_CARD_GAP,
     },
 
-    categoryItem: {
-      alignItems:
-        'center',
+    categoryPagination: {
+      alignSelf: 'center',
+      backgroundColor: '#E6E6E6',
+      borderRadius: 3,
+      height: 5,
+      marginBottom: 22,
+      marginTop: 18,
+      overflow: 'hidden',
+      position: 'relative',
+      width: CATEGORY_INDICATOR_TRACK_WIDTH,
+    },
 
-      width: 85,
+    categoryPaginationActive: {
+      backgroundColor: '#151515',
+      borderRadius: 3,
+      height: 5,
+      left: 0,
+      position: 'absolute',
+      top: 0,
+      width: CATEGORY_INDICATOR_THUMB_WIDTH,
+    },
+
+    // Same surface and corner radius as [slug].tsx filterImageCircle.
+    categoryItem: {
+      backgroundColor: '#F5F0E9',
+      borderColor: '#ECE9E5',
+      borderRadius: 15,
+      borderWidth: StyleSheet.hairlineWidth,
+      flexShrink: 0,
+      overflow: 'hidden',
+      position: 'relative',
+      shadowColor: '#111111',
+      shadowOffset: { height: 1, width: 0 },
+      shadowOpacity: 0.06,
+      shadowRadius: 3,
     },
 
     categoryItemPressed: {
-      opacity: 0.68,
-
-      transform: [
-        {
-          scale: 0.97,
-        },
-      ],
+      opacity: 0.75,
+      transform: [{ scale: 0.97 }],
     },
 
+    // Full-bleed image: [slug].tsx filterCategoryImage is 100% x 100%.
+    // Previously this image container was just 67% of the card height.
     categoryImageBox: {
-      alignItems:
-        'center',
-
-      backgroundColor:
-        '#F5F5F5',
-
-      borderRadius:
-        13,
-
-      height:
-        80,
-
-      justifyContent:
-        'center',
-
-      overflow:
-        'hidden',
-
-      width:
-        80,
+      alignItems: 'center',
+      bottom: 0,
+      height: '100%',
+      justifyContent: 'center',
+      left: 0,
+      overflow: 'hidden',
+      position: 'absolute',
+      right: 0,
+      top: 0,
+      width: '100%',
     },
 
     categoryFallbackIcon: {
       fontSize: 32,
+      marginBottom: 14,
     },
 
     categoryImage: {
       height: '100%',
-
       width: '100%',
     },
 
+    // Same title typography/offset as [slug].tsx filterLabel/filterTitleArea.
     categoryLabel: {
-      color:
-        '#202020',
-
-      fontSize: 13.5,
-
-      fontWeight:
-        '400',
-
-      letterSpacing:
-        -0.2,
-
-      lineHeight: 18,
-
-      marginTop: 8,
-
-      minHeight: 36,
-
-      textAlign:
-        'center',
-
-      writingDirection:
-        'rtl',
-
-      width: 85,
-    },
-
-    categoryPagination: {
-      alignSelf:
-        'center',
-
-      backgroundColor:
-        '#E6E6E6',
-
-      borderRadius: 3,
-
-      height: 5,
-
-      marginBottom:
-        22,
-
-      marginTop: 18,
-
-      overflow:
-        'hidden',
-
-      position:
-        'relative',
-
-      width:
-        CATEGORY_INDICATOR_TRACK_WIDTH,
-    },
-
-    categoryPaginationActive: {
-      backgroundColor:
-        '#151515',
-
-      borderRadius: 3,
-
-      height: 5,
-
-      left: 0,
-
-      position:
-        'absolute',
-
-      top: 0,
-
-      width:
-        CATEGORY_INDICATOR_THUMB_WIDTH,
+      color: '#171717',
+      fontSize: 12,
+      fontWeight: '600',
+      lineHeight: 15,
+      textAlign: 'center',
+      writingDirection: 'rtl',
+      position: 'absolute',
+      left: 5,
+      right: 5,
+      top: 8,
+      zIndex: 2,
     },
 
     /* ========================================================

@@ -3,6 +3,7 @@
     "version": ">= 21.8.0",
     "appVersionSource": "remote"
   },
+
   "build": {
     "development": {
       "developmentClient": true,
@@ -12,6 +13,7 @@
         "APP_VARIANT": "development"
       }
     },
+
     "internal-test": {
       "distribution": "internal",
       "environment": "development",
@@ -23,14 +25,20 @@
         "buildType": "apk"
       }
     },
+
     "preview": {
       "distribution": "internal",
       "environment": "preview"
     },
+
     "production": {
       "autoIncrement": true,
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "APP_VARIANT": "production"
+      }
     },
+
     "production-test": {
       "distribution": "internal",
       "environment": "production",
@@ -44,6 +52,7 @@
       }
     }
   },
+
   "submit": {
     "production": {
       "ios": {
