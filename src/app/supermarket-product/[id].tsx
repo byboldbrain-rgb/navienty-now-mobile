@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomActionSlot } from '../../components/cart/bottom-action-provider';
+import CategorySearchEntry from '../../components/search/category-search-entry';
 
 import { supabase } from '../../lib/supabase';
 import getAppBootstrap from '../../services/bootstrap-service';
@@ -469,6 +470,14 @@ export default function SupermarketProductDetailScreen() {
     return () => { active = false; };
   }, [product?.id, storeId]);
 
+  // Share the supermarket search bar and its rotating category suggestions.
+  const searchSuggestions = useMemo(
+    () => catalog?.sections
+      .filter(section => section.depth === 0)
+      .map(section => section.name) ?? [],
+    [catalog],
+  );
+
   const images = useMemo(() => product ? imagesForProduct(product) : [], [product]);
   const selectedVariant: ProductVariant | null = useMemo(
     () => product?.variants.find(v => v.id === selectedVariantId) ?? null,
@@ -605,6 +614,29 @@ export default function SupermarketProductDetailScreen() {
       <Stack.Screen options={{ headerShown: false, animation: 'slide_from_bottom', gestureEnabled: true }} />
       <StatusBar style="dark" />
       <View style={[styles.page, { width: pageWidth }]}>
+        {/* Same header structure, spacing, and shared search as category/supermarket.tsx. */}
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="رجوع"
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.headerButtonPressed,
+            ]}
+            onPress={() => router.back()}
+          >
+            <Ionicons
+              color={NAVIENTY_NOW_COLORS.text}
+              name="arrow-back-outline"
+              size={20}
+            />
+          </Pressable>
+          <CategorySearchEntry
+            scope="supermarket"
+            suggestions={searchSuggestions}
+            style={styles.headerSearchEntry}
+          />
+        </View>
         {loading ? (
           <View style={styles.loadingPanel}>
             <View style={[styles.skeletonHero, { height: heroHeight }]}>
@@ -661,14 +693,6 @@ export default function SupermarketProductDetailScreen() {
                 ) : (
                   <Text style={styles.emoji}>{product.icon || '🛒'}</Text>
                 )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="رجوع"
-                  onPress={() => router.back()}
-                  style={styles.backButton}
-                >
-                  <Ionicons name="chevron-forward" size={24} color="#1A1A1A" />
-                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`عرض السلة، ${storeCartCount} منتجات`}
@@ -784,11 +808,6 @@ export default function SupermarketProductDetailScreen() {
 
           </>
         )}
-        {(loading || failed || !product || !catalog) && (
-          <Pressable onPress={() => router.back()} accessibilityLabel="رجوع" accessibilityRole="button" style={styles.backOverlay}>
-            <Ionicons name="chevron-forward" size={24} color="#1A1A1A" />
-          </Pressable>
-        )}
 
         {/* Always register ownership, including loading: never show the fallback cart here. */}
         <BottomActionSlot kind="product-purchase" priority={300}>
@@ -866,7 +885,36 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 24 },
   hero: { position: 'relative', backgroundColor: PRODUCT_BG, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   emoji: { fontSize: 100 },
-  backButton: { position: 'absolute', top: 20, right: 20, width: 46, height: 46, borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9', backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 4 },
+  header: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    gap: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    zIndex: 10,
+  },
+  headerSearchEntry: {
+    flex: 1,
+    marginBottom: 0,
+    marginHorizontal: 0,
+    marginTop: 0,
+  },
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E6E6E6',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  headerButtonPressed: {
+    backgroundColor: '#F7F7F7',
+    transform: [{ scale: 0.97 }],
+  },
   heroCartButton: {
     position: 'absolute', top: 20, left: 20, width: 46, height: 46,
     borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9',
@@ -878,7 +926,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   heroCartBadgeText: { fontSize: 10, fontWeight: '800', color: '#1A1A1A' },
-  backOverlay: { position: 'absolute', top: 20, right: 20, width: 46, height: 46, borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9', backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 4 },
   pagination: { flexDirection: 'row', position: 'absolute', bottom: 23, alignSelf: 'center', gap: 6, backgroundColor: 'rgba(40,40,40,0.18)', borderRadius: 30, paddingHorizontal: 10, paddingVertical: 8 },
   pageDot: { width: 6, height: 6, borderRadius: 6, backgroundColor: '#D1D1D1' },
   pageDotActive: { backgroundColor: '#FFFFFF', width: 9 },
