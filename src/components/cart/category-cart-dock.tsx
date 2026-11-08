@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomActionSlot, useHasBottomActionProvider } from './bottom-action-provider';
 
 const DEFAULT_ACCENT = '#00B14F';
 const DEFAULT_ACCENT_DARK = '#009245';
@@ -117,7 +118,7 @@ export function useCartDockScrollBehavior() {
   };
 }
 
-export default function CategoryCartDock({
+export function CategoryCartDockView({
   itemCount,
   subtotal,
   currencyCode = 'EGP',
@@ -348,3 +349,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+
+/**
+ * Legacy callers can keep using <CategoryCartDock /> without drawing an
+ * independent overlay. Their dock is registered at the root host.
+ */
+export default function CategoryCartDock(props: CategoryCartDockProps) {
+  const hasHost = useHasBottomActionProvider();
+
+  if (!hasHost) {
+    return <CategoryCartDockView {...props} />;
+  }
+
+  return (
+    <BottomActionSlot kind="cart-summary" priority={100}>
+      <CategoryCartDockView {...props} />
+    </BottomActionSlot>
+  );
+}
