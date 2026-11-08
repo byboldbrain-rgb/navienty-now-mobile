@@ -18,6 +18,10 @@ import { BottomActionSlot } from '../../components/cart/bottom-action-provider';
 import { supabase } from '../../lib/supabase';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
+  getSupermarketProductBrand,
+  type SupermarketProductBrand,
+} from '../../services/supermarket-brand-service';
+import {
     getStoreCatalog,
     type CatalogProduct,
     type ProductVariant,
@@ -318,6 +322,7 @@ export default function SupermarketProductDetailScreen() {
   const decreaseStoreItem = useCartStore(state => state.decreaseStoreItem);
   const setActiveCart = useCartStore(state => state.setActiveCart);
   const [catalog, setCatalog] = useState<StoreCatalog | null>(null);
+  const [productBrand, setProductBrand] = useState<SupermarketProductBrand | null>(null);
   const [product, setProduct] = useState<CatalogProduct | null>(null);
   const [currency, setCurrency] = useState('EGP');
   const [loading, setLoading] = useState(true);
@@ -445,6 +450,25 @@ export default function SupermarketProductDetailScreen() {
       .slice(0, RECOMMENDATION_LIMIT);
   }, [catalogProducts, frequentlyBought, product, productId]);
 
+  // Brand comes from products.brand_id, not by guessing text in product names.
+  // Loading brand metadata separately keeps the product screen fast even if
+  // the optional brand lookup is unavailable.
+  useEffect(() => {
+    let active = true;
+    setProductBrand(null);
+    if (!product?.id || !storeId) return () => { active = false; };
+
+    void getSupermarketProductBrand(storeId, product.id)
+      .then(brand => {
+        if (active) setProductBrand(brand);
+      })
+      .catch(error => {
+        console.warn('Unable to load supermarket product brand:', error);
+      });
+
+    return () => { active = false; };
+  }, [product?.id, storeId]);
+
   const images = useMemo(() => product ? imagesForProduct(product) : [], [product]);
   const selectedVariant: ProductVariant | null = useMemo(
     () => product?.variants.find(v => v.id === selectedVariantId) ?? null,
@@ -559,6 +583,18 @@ export default function SupermarketProductDetailScreen() {
     decreaseStoreItem(storeId, item.id, priceInfoFor(item).variant?.id ?? null);
   };
 
+  const openProductBrand = () => {
+    if (!productBrand) return;
+    router.push({
+      pathname: '/supermarket-campaign/[id]',
+      params: {
+        id: productBrand.id,
+        storeId,
+        view: 'catalog-brand',
+      },
+    });
+  };
+
   const openCart = () => {
     setActiveCart(storeId);
     router.push({ pathname: '/cart', params: { storeId } });
@@ -656,7 +692,18 @@ export default function SupermarketProductDetailScreen() {
               </View>
 
               <View style={styles.details}>
-                <Text style={styles.storeLine}>{catalog.store.name}</Text>
+                {productBrand ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`عرض جميع منتجات ${productBrand.name}`}
+                    onPress={openProductBrand}
+                    hitSlop={8}
+                    style={styles.brandLink}
+                  >
+                    <Text style={styles.brandLinkText} numberOfLines={1}>{productBrand.name}</Text>
+                    <Ionicons name="chevron-back" size={15} color={GREEN} />
+                  </Pressable>
+                ) : null}
                 <Text style={styles.productTitle}>{product.name}</Text>
                 {product.unitLabelAr ? (
                   <Text style={styles.unitLine}>{product.unitLabelAr}</Text>
@@ -704,13 +751,7 @@ export default function SupermarketProductDetailScreen() {
                   </View>
                 ) : null}
 
-                {/* Current catalog does not expose structured ingredient or nutrition data. */}
-                {product.sku ? (
-                  <View style={styles.skuLine}>
-                    <Text style={styles.skuLabel}>كود المنتج</Text>
-                    <Text style={styles.skuValue}>{product.sku}</Text>
-                  </View>
-                ) : null}
+
               </View>
 
               <View style={styles.recommendationCollection}>
@@ -842,8 +883,18 @@ const styles = StyleSheet.create({
   pageDot: { width: 6, height: 6, borderRadius: 6, backgroundColor: '#D1D1D1' },
   pageDotActive: { backgroundColor: '#FFFFFF', width: 9 },
   details: { paddingHorizontal: 20, paddingTop: 25, paddingBottom: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -12, backgroundColor: '#FFFFFF' },
-  storeLine: { fontSize: 13, fontWeight: '700', color: GREEN, textAlign: 'right', writingDirection: 'rtl', marginBottom: 10 },
-  productTitle: { fontSize: 25, fontWeight: '800', color: '#171717', textAlign: 'right', writingDirection: 'rtl', lineHeight: 35 },
+  brandLink: {
+    flexDirection: 'row-reverse', alignItems: 'center', alignSelf: 'flex-end',
+    gap: 4, marginBottom: 10, maxWidth: '100%', minHeight: 28,
+  },
+  brandLinkText: {
+    fontSize: 13, fontWeight: '700', color: GREEN, textAlign: 'right',
+    writingDirection: 'rtl', flexShrink: 1,
+  },
+  productTitle: {
+    fontSize: 19, fontWeight: '700', color: '#171717',
+    textAlign: 'right', writingDirection: 'rtl', lineHeight: 28,
+  },
   unitLine: { marginTop: 9, fontSize: 14, color: '#8A8A8A', textAlign: 'right', writingDirection: 'rtl' },
   descriptionBox: { alignItems: 'flex-end', marginTop: 24, gap: 6 },
   description: { fontSize: 14, color: '#737373', textAlign: 'right', writingDirection: 'rtl', lineHeight: 24 },
@@ -856,9 +907,6 @@ const styles = StyleSheet.create({
   variantName: { color: '#242424', fontSize: 15, fontWeight: '700', textAlign: 'center', writingDirection: 'rtl' },
   variantNameSelected: { color: '#111111' },
   variantPrice: { fontSize: 12, color: '#777777' },
-  skuLine: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 20, marginTop: 28 },
-  skuLabel: { color: '#777777', fontSize: 13 },
-  skuValue: { color: '#333333', fontSize: 13 },
 
   recommendationCollection: { paddingBottom: 20, paddingTop: 8, gap: 28 },
   recommendationSection: { gap: 14 },
