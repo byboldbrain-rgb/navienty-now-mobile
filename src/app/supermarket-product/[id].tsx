@@ -138,7 +138,7 @@ function RecommendationCard({
   // A product with multiple variants or restrictions must open its details
   // instead of changing the quantity of an unselected cart line.
   const canQuickAdjust = product.variants.length <= 1 &&
-    !product.requiresPrescription && !product.isAgeRestricted;
+    !product.isAgeRestricted;
 
   return (
     <Pressable
@@ -395,8 +395,9 @@ export default function SupermarketProductDetailScreen() {
         .map((row: { product_id?: unknown }) => row.product_id)
         .filter((value): value is string => typeof value === 'string');
       setBoughtTogetherIds(ids);
-    }).catch(() => {
-      // Graceful fallback to same-category suggestions.
+    }, () => {
+      // PostgREST RPC builders are PromiseLike, not native Promise;
+      // failure should never block the product page.
     });
     return () => { active = false; };
   }, [product, catalog, storeId]);
@@ -515,7 +516,7 @@ export default function SupermarketProductDetailScreen() {
     if (disabled) return;
     // Multiple sizes need explicit customer choice. Never silently add the
     // default/first variant when the product has multiple variants.
-    if (item.variants.length > 1 || item.requiresPrescription || item.isAgeRestricted) {
+    if (item.variants.length > 1 || item.isAgeRestricted) {
       openRecommendedProduct(item);
       return;
     }
@@ -531,7 +532,7 @@ export default function SupermarketProductDetailScreen() {
 
   const increaseRecommended = (item: CatalogProduct) => {
     if (disabled) return;
-    if (item.variants.length > 1 || item.requiresPrescription || item.isAgeRestricted) {
+    if (item.variants.length > 1 || item.isAgeRestricted) {
       openRecommendedProduct(item);
       return;
     }
@@ -541,7 +542,7 @@ export default function SupermarketProductDetailScreen() {
 
   const decreaseRecommended = (item: CatalogProduct) => {
     if (quantityForRecommendation(item) <= 0) return;
-    if (item.variants.length > 1 || item.requiresPrescription || item.isAgeRestricted) return;
+    if (item.variants.length > 1 || item.isAgeRestricted) return;
     decreaseStoreItem(storeId, item.id, priceInfoFor(item).variant?.id ?? null);
   };
 
