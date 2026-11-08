@@ -42,7 +42,6 @@ import {
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
-<<<<<<< HEAD
 import { getMyOrders } from '../../services/order-service';
 import {
   listStorefrontCategoryTiles,
@@ -56,13 +55,6 @@ import {
   listSupermarketMediaCards,
   type SupermarketMediaCard,
 } from '../../services/supermarket-campaign-service';
-=======
-import { type StorefrontCategoryTile } from '../../services/storefront-category-service';
-import { type SupermarketPromotionBanner } from '../../services/supermarket-banner-service';
-import { useSupermarketHomeQuery } from '../../hooks/use-supermarket-queries';
-import { useSupermarketMediaCardsQuery } from '../../hooks/use-supermarket-media-cards';
-import { getUserFacingCatalogError } from '../../lib/user-facing-error';
->>>>>>> aaa15f380727c04b315bcfedfc6a411ffa8f1109
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
@@ -2109,21 +2101,6 @@ export default function SupermarketScreen() {
         state.locationServiceAreaId,
     );
 
-<<<<<<< HEAD
-=======
-  const supermarketQuery = useSupermarketHomeQuery(savedServiceAreaId);
-  const catalog = supermarketQuery.data?.catalog ?? null;
-  const mediaQuery = useSupermarketMediaCardsQuery(catalog?.store.id ?? null);
-  const mediaCards = mediaQuery.data ?? [];
-  const promotionBanners = supermarketQuery.data?.promotionBanners ?? EMPTY_PROMOTION_BANNERS;
-  const storefrontCategoryTiles = supermarketQuery.data?.storefrontCategoryTiles ?? null;
-  const currencyCode = supermarketQuery.data?.currencyCode ?? 'EGP';
-  const isLoading = supermarketQuery.isPending;
-  const errorMessage = supermarketQuery.error
-    ? getUserFacingCatalogError(supermarketQuery.error)
-    : null;
-
->>>>>>> aaa15f380727c04b315bcfedfc6a411ffa8f1109
   const carts =
     useCartStore(
       (state) => state.carts,
@@ -2821,7 +2798,6 @@ export default function SupermarketScreen() {
     });
   }
 
-<<<<<<< HEAD
   function openSpotlight() {
     if (!spotlightCard) return;
     const key = spotlightCard.categoryKey;
@@ -2873,13 +2849,6 @@ export default function SupermarketScreen() {
         storeId: currentStore.id,
       },
     });
-=======
-  function openMediaCategory(key: string) {
-    const matching = categories.find(
-      (item) => item.key === key || item.section?.slug === key,
-    );
-    if (matching) openCategory(matching);
->>>>>>> aaa15f380727c04b315bcfedfc6a411ffa8f1109
   }
 
   function addFeaturedProduct(
@@ -3109,19 +3078,11 @@ export default function SupermarketScreen() {
             false
           }
         >
-<<<<<<< HEAD
-=======
-          {/* DB media carousel always goes ABOVE 'تسوق حسب الفئة'. */}
->>>>>>> aaa15f380727c04b315bcfedfc6a411ffa8f1109
           {mediaCards.length > 0 ? (
             <SupermarketMediaCarousel
               cards={mediaCards}
               viewportWidth={pageWidth}
-<<<<<<< HEAD
               onCardPress={openMediaCard}
-=======
-              onCategoryPress={openMediaCategory}
->>>>>>> aaa15f380727c04b315bcfedfc6a411ffa8f1109
             />
           ) : null}
 
