@@ -1,14 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   Animated,
+  AppState,
   FlatList,
   type ImageSourcePropType,
   Pressable,
@@ -19,6 +23,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import CategoryCartDock, {
   useCartDockScrollBehavior,
@@ -26,21 +31,32 @@ import CategoryCartDock, {
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
+import { supabase } from '../../lib/supabase';
+import getAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
   type CatalogSection,
+  getStoreCatalog,
+  listStores,
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
-import { type StorefrontCategoryTile } from '../../services/storefront-category-service';
-import { type SupermarketPromotionBanner } from '../../services/supermarket-banner-service';
-import { useSupermarketHomeQuery } from '../../hooks/use-supermarket-queries';
-import { getUserFacingCatalogError } from '../../lib/user-facing-error';
+import { getMyOrders } from '../../services/order-service';
+import {
+  listStorefrontCategoryTiles,
+  type StorefrontCategoryTile,
+} from '../../services/storefront-category-service';
+import {
+  listSupermarketPromotionBanners,
+  type SupermarketPromotionBanner,
+} from '../../services/supermarket-banner-service';
+import {
+  listSupermarketMediaCards,
+  type SupermarketMediaCard,
+} from '../../services/supermarket-campaign-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
-
-const EMPTY_PROMOTION_BANNERS: SupermarketPromotionBanner[] = [];
 
 // Match the card dimensions in supermarket-category/[slug].tsx.
 // Display 3 category cards VERTICALLY per column and swipe for more columns.
@@ -52,8 +68,63 @@ const CATEGORY_CARD_ASPECT_RATIO = 3 / 4;
 const CATEGORY_INDICATOR_TRACK_WIDTH = 84;
 const CATEGORY_INDICATOR_THUMB_WIDTH = 30;
 
+/**
+ * 16:9 cards above "تسوق حسب الفئة".
+ * All slide media/ordering/visibility comes from now.supermarket_media_cards.
+ * There are intentionally NO local promo images or hard-coded video URLs.
+ */
+const MEDIA_CARD_GAP = 10;
+const MEDIA_CARD_SIDE_INSET = 21;
+const MEDIA_CARD_ASPECT_RATIO = 16 / 9;
+const MEDIA_AUTO_SWIPE_MS = 3000;
+const MEDIA_LOOP_RESET_FALLBACK_MS = 750;
+
 const PROMOTION_PRODUCT_GAP = 7;
 const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
+
+// Horizontal preview. "عرض الكل" opens a dedicated full-screen product grid.
+const REORDER_PREVIEW_COUNT = 8;
+
+/**
+ * Independent promotional spotlight BELOW the personal reorder row.
+ * Media, copy, visibility and CTA are fetched from Supabase.
+ */
+type SupermarketSpotlight = {
+  id: string;
+  mediaType: 'image' | 'video';
+  mediaUrl: string;
+  posterUrl: string | null;
+  eyebrowAr: string | null;
+  titleAr: string;
+  buttonLabelAr: string;
+  categoryKey: string;
+};
+
+async function getSupermarketSpotlight(storeId: string): Promise<SupermarketSpotlight | null> {
+  const { data, error } = await supabase
+    .from('supermarket_spotlight_cards')
+    .select('id,media_type,media_url,poster_url,eyebrow_ar,title_ar,button_label_ar,category_key')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row || !row.media_url || !['image', 'video'].includes(row.media_type)) return null;
+
+  return {
+    id: row.id,
+    mediaType: row.media_type as 'image' | 'video',
+    mediaUrl: row.media_url,
+    posterUrl: row.poster_url ?? null,
+    eyebrowAr: row.eyebrow_ar ?? null,
+    titleAr: row.title_ar || 'عروض الماركت',
+    buttonLabelAr: row.button_label_ar || 'تسوق الآن',
+    categoryKey: row.category_key || 'offers',
+  };
+}
 
 type SupermarketCategoryDefinition = {
   key: string;
@@ -83,6 +154,7 @@ type FeaturedProductCardProps = {
   cardWidth: number;
   quantity: number;
   isStoreClosed: boolean;
+  onOpen: () => void;
   onAdd: () => void;
   onIncrease: () => void;
   onDecrease: () => void;
@@ -1267,6 +1339,454 @@ function ClosedSupermarketExperience({
   );
 }
 
+/**
+ * Video banners never render a separate poster image or play icon.
+ * The active video and its immediate neighbours stay mounted: expo-video
+ * buffers neighbouring sources ahead of a swipe, without playing them.
+ * A neutral loading layer stays visible until the native view has rendered
+ * its first real video frame, preventing a poster-to-video visual jump.
+ */
+function BannerMediaVideo({
+  uri,
+  isActive,
+}: {
+  uri: string;
+  isActive: boolean;
+}) {
+  const [hasFirstFrame, setHasFirstFrame] = useState(false);
+  const [hasPlaybackError, setHasPlaybackError] = useState(false);
+
+  const player = useVideoPlayer(uri, (videoPlayer) => {
+    videoPlayer.loop = true;
+    videoPlayer.muted = true;
+    if (isActive) videoPlayer.play();
+  });
+
+  useEffect(() => {
+    const subscription = player.addListener('statusChange', ({ status }) => {
+      if (status === 'error') {
+        setHasPlaybackError(true);
+      } else if (status === 'readyToPlay') {
+        setHasPlaybackError(false);
+        if (isActive) player.play();
+      }
+    });
+
+    if (isActive) {
+      if (player.status !== 'error') player.play();
+    } else {
+      // Pause off-screen videos while retaining their buffered source.
+      player.pause();
+    }
+
+    // Never call pause() from cleanup: the native player may be disposed.
+    return () => subscription.remove();
+  }, [player, isActive]);
+
+  return (
+    <View pointerEvents="none" style={styles.topMediaVideoFill}>
+      <VideoView
+        player={player}
+        style={[
+          styles.topMediaVideo,
+          !hasFirstFrame && styles.topMediaVideoHidden,
+        ]}
+        contentFit="cover"
+        nativeControls={false}
+        surfaceType="textureView"
+        onFirstFrameRender={() => setHasFirstFrame(true)}
+      />
+      {(!hasFirstFrame || hasPlaybackError) && (
+        <View style={styles.topMediaVideoPlaceholder}>
+          {!hasPlaybackError && isActive ? (
+            <ActivityIndicator size="small" color="#00B14F" />
+          ) : null}
+        </View>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Spotlight videos must not depend on fragile ScrollView window measurements.
+ * This screen renders only one spotlight card. Preload/play while the route and
+ * app are active; pause on navigation/background. This also fixes the black card
+ * where 'readyToPlay' was treated as a rendered frame and the loading UI hid.
+ */
+function SpotlightVideo({
+  uri,
+  posterUrl,
+}: {
+  uri: string;
+  posterUrl: string | null;
+}) {
+  const [hasFirstFrame, setHasFirstFrame] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [hasTimedOut, setHasTimedOut] = useState(false);
+  const [isRouteFocused, setIsRouteFocused] = useState(true);
+  const [isAppActive, setIsAppActive] = useState(
+    AppState.currentState !== 'background',
+  );
+
+  // Start playback in the player setup, same as the working top banner.
+  // statusChange provides a second attempt when network buffering completes.
+  const player = useVideoPlayer(uri, video => {
+    video.loop = true;
+    video.muted = true;
+    video.play();
+  });
+
+  useFocusEffect(useCallback(() => {
+    setIsRouteFocused(true);
+    return () => setIsRouteFocused(false);
+  }, []));
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      setIsAppActive(nextState === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    const subscription = player.addListener('statusChange', event => {
+      if (event.status === 'error') {
+        setHasError(true);
+        console.warn('Spotlight video failed to load:', event.error?.message ?? uri);
+      } else if (event.status === 'readyToPlay') {
+        setHasError(false);
+        if (isRouteFocused && isAppActive) player.play();
+      }
+    });
+
+    if (isRouteFocused && isAppActive && player.status !== 'error') {
+      player.play();
+    } else if (!isRouteFocused || !isAppActive) {
+      player.pause();
+    }
+
+    return () => subscription.remove();
+  }, [player, uri, isRouteFocused, isAppActive]);
+
+  // Do not leave the customer staring at an empty, dark surface indefinitely.
+  // A poster is a *fallback*, never shown over an actual decoded frame.
+  useEffect(() => {
+    if (hasFirstFrame || hasError || !isRouteFocused || !isAppActive) return;
+    const timeout = setTimeout(() => setHasTimedOut(true), 6500);
+    return () => clearTimeout(timeout);
+  }, [hasFirstFrame, hasError, isRouteFocused, isAppActive, uri]);
+
+  const showFallback = !hasFirstFrame && (hasError || hasTimedOut);
+
+  return (
+    <View pointerEvents="none" style={styles.spotlightMedia}>
+      <VideoView
+        player={player}
+        nativeControls={false}
+        contentFit="cover"
+        surfaceType="textureView"
+        style={styles.spotlightVideoView}
+        onFirstFrameRender={() => {
+          setHasFirstFrame(true);
+          setHasTimedOut(false);
+          setHasError(false);
+        }}
+      />
+      {!hasFirstFrame && !showFallback ? (
+        <View style={styles.spotlightVideoLoading}>
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        </View>
+      ) : null}
+      {showFallback ? (
+        <View style={styles.spotlightVideoFallback}>
+          {posterUrl ? (
+            <Image
+              source={{ uri: posterUrl }}
+              style={styles.spotlightMedia}
+              resizeMode="cover"
+            />
+          ) : (
+            <Ionicons name="videocam-off-outline" size={28} color="#FFFFFF" />
+          )}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function SupermarketSpotlightCard({
+  card,
+  onPress,
+}: {
+  card: SupermarketSpotlight;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${card.titleAr}، ${card.buttonLabelAr}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.spotlightCard, pressed && styles.spotlightPressed]}
+    >
+      {card.mediaType === 'video' ? (
+        <SpotlightVideo uri={card.mediaUrl} posterUrl={card.posterUrl} />
+      ) : (
+        <Image
+          source={{ uri: card.mediaUrl }}
+          style={styles.spotlightMedia}
+          resizeMode="cover"
+        />
+      )}
+      <Svg pointerEvents="none" style={styles.spotlightGradient} width="100%" height="100%">
+        <Defs>
+          <LinearGradient id="spotlight-shade" x1="0%" y1="0%" x2="0%" y2="100%">
+            <Stop offset="0%" stopColor="#111111" stopOpacity={0.55} />
+            <Stop offset="40%" stopColor="#111111" stopOpacity={0.05} />
+            <Stop offset="68%" stopColor="#111111" stopOpacity={0.04} />
+            <Stop offset="100%" stopColor="#111111" stopOpacity={0.44} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#spotlight-shade)" />
+      </Svg>
+      <View pointerEvents="none" style={styles.spotlightCopy}>
+        {card.eyebrowAr ? (
+          <Text numberOfLines={2} style={styles.spotlightEyebrow}>{card.eyebrowAr}</Text>
+        ) : null}
+        <Text numberOfLines={2} adjustsFontSizeToFit style={styles.spotlightTitle}>
+          {card.titleAr}
+        </Text>
+      </View>
+      <View pointerEvents="none" style={styles.spotlightButton}>
+        <Text numberOfLines={1} style={styles.spotlightButtonText}>{card.buttonLabelAr}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+type MediaCarouselProps = {
+  cards: SupermarketMediaCard[];
+  viewportWidth: number;
+  onCardPress: (card: SupermarketMediaCard) => void;
+};
+
+/**
+ * Prefer the explicit database ordering when the campaign service includes
+ * sortOrder / sort_order. If it doesn't expose that field, preserve the order
+ * returned by listSupermarketMediaCards (which should query sort_order ASC).
+ * Do not move campaign cards to the beginning or impose a client-side priority.
+ */
+function getBannerSortOrder(card: SupermarketMediaCard): number | null {
+  const orderedCard = card as SupermarketMediaCard & {
+    sortOrder?: number | null;
+    sort_order?: number | null;
+  };
+  const value = orderedCard.sortOrder ?? orderedCard.sort_order;
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function SupermarketMediaCarousel({
+  cards,
+  viewportWidth,
+  onCardPress,
+}: MediaCarouselProps) {
+  const orderedCards = useMemo(() => {
+    // Stable sorting also preserves database order between equal sort_order values.
+    if (!cards.every(card => getBannerSortOrder(card) !== null)) return cards;
+    return [...cards].sort(
+      (first, second) => getBannerSortOrder(first)! - getBannerSortOrder(second)!,
+    );
+  }, [cards]);
+
+  const cardCount = orderedCards.length;
+  // One copy of the first card at the end makes the last-to-first swipe seamless.
+  const carouselCards = useMemo(
+    () => cardCount > 1 ? [...orderedCards, orderedCards[0]] : orderedCards,
+    [orderedCards, cardCount],
+  );
+  const cardSequence = orderedCards.map(card => card.id).join('|');
+
+  // Physical index includes the duplicate first slide at index cardCount.
+  const [activeSlide, setActiveSlide] = useState(0);
+  const activeSlideRef = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  const cardWidth = Math.max(1, viewportWidth - MEDIA_CARD_SIDE_INSET * 2);
+  const cardHeight = Math.round(cardWidth / MEDIA_CARD_ASPECT_RATIO);
+  const snapInterval = cardWidth + MEDIA_CARD_GAP;
+
+  // Always start on the first item in database order, not the first campaign.
+  // Reset only when the set/order of cards changes.
+  useEffect(() => {
+    activeSlideRef.current = 0;
+    setActiveSlide(0);
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ x: 0, animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [cardSequence]);
+
+  // Preserve the correct card when the viewport changes size / orientation.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        x: activeSlideRef.current * snapInterval,
+        animated: false,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [snapInterval]);
+
+  // Move one banner forward every 3 seconds. Manual dragging pauses the timer
+  // and restarting after release gives the user a full 3 seconds to read.
+  useEffect(() => {
+    if (cardCount < 2 || isDragging || activeSlide >= cardCount) return;
+    const timer = setTimeout(() => {
+      if (isDraggingRef.current) return;
+      const nextIndex = Math.min(activeSlideRef.current + 1, cardCount);
+      activeSlideRef.current = nextIndex;
+      setActiveSlide(nextIndex);
+      scrollRef.current?.scrollTo({
+        x: nextIndex * snapInterval,
+        animated: true,
+      });
+    }, MEDIA_AUTO_SWIPE_MS);
+    return () => clearTimeout(timer);
+  }, [cardCount, activeSlide, isDragging, snapInterval, cardSequence]);
+
+  // Programmatic scrollTo(animated:true) doesn't consistently emit
+  // onMomentumScrollEnd on all RN versions: this is a safe fallback for the
+  // duplicated first slide. The normal path resets on momentum end instead.
+  useEffect(() => {
+    if (cardCount < 2 || activeSlide !== cardCount || isDragging) return;
+    const timer = setTimeout(() => {
+      if (isDraggingRef.current) return;
+      scrollRef.current?.scrollTo({ x: 0, animated: false });
+      activeSlideRef.current = 0;
+      setActiveSlide(0);
+    }, MEDIA_LOOP_RESET_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [activeSlide, cardCount, isDragging]);
+
+  const updateActiveSlide = (offset: number, hasFinishedMomentum = true) => {
+    if (cardCount === 0) return;
+    const index = Math.min(
+      cardCount > 1 ? cardCount : cardCount - 1,
+      Math.max(0, Math.round(offset / snapInterval)),
+    );
+    if (cardCount > 1 && index === cardCount) {
+      if (!hasFinishedMomentum) {
+        // Don't force a jump while the user's swipe is still decelerating.
+        // onMomentumScrollEnd resets it; the fallback timer covers no momentum.
+        activeSlideRef.current = cardCount;
+        setActiveSlide(cardCount);
+        return;
+      }
+      // At the copy of the first slide. Jump to the real first slide at the
+      // identical visual position, without an animated backwards journey.
+      scrollRef.current?.scrollTo({ x: 0, animated: false });
+      activeSlideRef.current = 0;
+      setActiveSlide(0);
+      return;
+    }
+    activeSlideRef.current = index;
+    setActiveSlide(index);
+  };
+
+  if (cardCount === 0) return null;
+
+  return (
+    <View style={styles.topMediaSection}>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        directionalLockEnabled
+        decelerationRate="fast"
+        snapToInterval={snapInterval}
+        disableIntervalMomentum
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        style={styles.topMediaScroll}
+        contentContainerStyle={[
+          styles.topMediaRail,
+          { paddingHorizontal: MEDIA_CARD_SIDE_INSET },
+        ]}
+        onContentSizeChange={() => {
+          scrollRef.current?.scrollTo({
+            x: activeSlideRef.current * snapInterval,
+            animated: false,
+          });
+        }}
+        onScrollBeginDrag={() => {
+          isDraggingRef.current = true;
+          setIsDragging(true);
+        }}
+        onScrollEndDrag={event => {
+          isDraggingRef.current = false;
+          setIsDragging(false);
+          // Also handle very short manual swipes with no momentum event.
+          updateActiveSlide(event.nativeEvent.contentOffset.x, false);
+        }}
+        onMomentumScrollEnd={event => {
+          isDraggingRef.current = false;
+          setIsDragging(false);
+          updateActiveSlide(event.nativeEvent.contentOffset.x);
+        }}
+      >
+        {carouselCards.map((card, index) => {
+          const isCurrent = index === activeSlide;
+          const isVideoCard = card.mediaType === 'video';
+          // Keep the active and adjacent video sources prepared, including the
+          // duplicate first slide when wrapping from the final banner.
+          const shouldPrepareVideo =
+            isVideoCard &&
+            Boolean(card.videoUrl) &&
+            Math.abs(index - activeSlide) <= 1;
+          const hasAction = card.hasCampaignProducts || Boolean(card.categoryKey);
+          return (
+            <Pressable
+              key={`${card.id}-${index === cardCount ? 'loop' : 'item'}`}
+              accessibilityRole={hasAction ? 'button' : 'image'}
+              accessibilityLabel={card.title || `عرض ${index + 1}`}
+              disabled={!hasAction}
+              onPress={() => onCardPress(card)}
+              style={({ pressed }) => [
+                styles.topMediaCard,
+                { width: cardWidth, height: cardHeight },
+                pressed && hasAction && styles.topMediaCardPressed,
+              ]}
+            >
+              {isVideoCard ? (
+                shouldPrepareVideo && card.videoUrl ? (
+                  <BannerMediaVideo
+                    key={`${card.id}-${index}-${card.videoUrl}`}
+                    uri={card.videoUrl}
+                    isActive={isCurrent}
+                  />
+                ) : (
+                  <View style={styles.topMediaVideoPlaceholder} />
+                )
+              ) : card.imageUrl ? (
+                <Image
+                  source={{ uri: card.imageUrl }}
+                  style={styles.topMediaImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.topMediaFallback}>
+                  <Ionicons name="image-outline" size={38} color="#8B958E" />
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {/* No pagination dots beneath the banner. */}
+    </View>
+  );
+}
+
 function CategoryVisual({
   item,
 }: {
@@ -1305,6 +1825,7 @@ function FeaturedProductCard({
   cardWidth,
   quantity,
   isStoreClosed,
+  onOpen,
   onAdd,
   onIncrease,
   onDecrease,
@@ -1316,12 +1837,14 @@ function FeaturedProductCard({
     getDiscountPercent(product);
 
   return (
-    <View
-      style={[
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`عرض تفاصيل ${product.name}`}
+      onPress={onOpen}
+      style={({ pressed }) => [
         styles.featuredProductCard,
-        {
-          width: cardWidth,
-        },
+        { width: cardWidth },
+        pressed && styles.featuredProductCardPressed,
       ]}
     >
       <View
@@ -1389,7 +1912,7 @@ function FeaturedProductCard({
                 !isStoreClosed &&
                 styles.featuredAddButtonPressed,
             ]}
-            onPress={onAdd}
+            onPress={(event) => { event.stopPropagation(); onAdd(); }}
           >
             <Text
               style={
@@ -1410,9 +1933,7 @@ function FeaturedProductCard({
               style={
                 styles.featuredQuantityButton
               }
-              onPress={
-                onDecrease
-              }
+              onPress={(event) => { event.stopPropagation(); onDecrease(); }}
             >
               <Text
                 style={
@@ -1439,9 +1960,7 @@ function FeaturedProductCard({
               style={
                 styles.featuredQuantityButton
               }
-              onPress={
-                onIncrease
-              }
+              onPress={(event) => { event.stopPropagation(); onIncrease(); }}
             >
               <Text
                 style={
@@ -1504,7 +2023,7 @@ function FeaturedProductCard({
             </Text>
           )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -1521,24 +2040,65 @@ export default function SupermarketScreen() {
 
   const categoryScrollX = useRef(new Animated.Value(0)).current;
   const categoryScrollRef = useRef<ScrollView | null>(null);
+  const reorderScrollRef = useRef<ScrollView | null>(null);
+  const [spotlightCard, setSpotlightCard] = useState<SupermarketSpotlight | null>(null);
   const [categoryViewportWidth, setCategoryViewportWidth] = useState(0);
   const [categoryContentWidth, setCategoryContentWidth] = useState(0);
+
+  const [
+    catalog,
+    setCatalog,
+  ] =
+    useState<StoreCatalog | null>(
+      null,
+    );
+
+  const [
+    promotionBanners,
+    setPromotionBanners,
+  ] = useState<
+    SupermarketPromotionBanner[]
+  >([]);
+
+  const [mediaCards, setMediaCards] = useState<SupermarketMediaCard[]>([]);
+
+  const [reorderedProductIds, setReorderedProductIds] = useState<string[]>([]);
+  const [isReorderLoading, setIsReorderLoading] = useState(false);
+  const [reorderError, setReorderError] = useState(false);
+  const [reorderRetryKey, setReorderRetryKey] = useState(0);
+
+  const [
+    storefrontCategoryTiles,
+    setStorefrontCategoryTiles,
+  ] = useState<
+    StorefrontCategoryTile[] | null
+  >(null);
+
+  const [
+    currencyCode,
+    setCurrencyCode,
+  ] =
+    useState('EGP');
+
+  const [
+    isLoading,
+    setIsLoading,
+  ] =
+    useState(true);
+
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
   const savedServiceAreaId =
     useCustomerStore(
       (state) =>
         state.locationServiceAreaId,
     );
-
-  const supermarketQuery = useSupermarketHomeQuery(savedServiceAreaId);
-  const catalog = supermarketQuery.data?.catalog ?? null;
-  const promotionBanners = supermarketQuery.data?.promotionBanners ?? EMPTY_PROMOTION_BANNERS;
-  const storefrontCategoryTiles = supermarketQuery.data?.storefrontCategoryTiles ?? null;
-  const currencyCode = supermarketQuery.data?.currencyCode ?? 'EGP';
-  const isLoading = supermarketQuery.isPending;
-  const errorMessage = supermarketQuery.error
-    ? getUserFacingCatalogError(supermarketQuery.error)
-    : null;
 
   const carts =
     useCartStore(
@@ -1568,9 +2128,186 @@ export default function SupermarketScreen() {
         state.setActiveCart,
     );
 
-  const loadSupermarket = () => {
-    void supermarketQuery.refetch();
-  };
+  async function loadSupermarket() {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const bootstrap =
+        await getAppBootstrap();
+
+      const defaultServiceAreaId =
+        savedServiceAreaId ??
+        bootstrap.settings
+          .default_service_area_id ??
+        undefined;
+
+      const supermarketStores =
+        await listStores({
+          categorySlug:
+            'supermarket',
+
+          serviceAreaId:
+            defaultServiceAreaId,
+        });
+
+      if (
+        supermarketStores.length ===
+        0
+      ) {
+        throw new Error(
+          'لا يوجد سوبر ماركت متاح حاليًا.',
+        );
+      }
+
+      const supermarket =
+        supermarketStores.find(
+          (store) =>
+            store.isFeatured &&
+            !store.isManuallyClosed,
+        ) ??
+        supermarketStores.find(
+          (store) =>
+            !store.isManuallyClosed,
+        ) ??
+        supermarketStores[0];
+
+      const [
+        loadedCatalog,
+        loadedPromotionBanners,
+        loadedStorefrontCategoryTiles,
+        loadedMediaCards,
+        loadedSpotlightCard,
+      ] = await Promise.all([
+        getStoreCatalog(
+          supermarket.id,
+          defaultServiceAreaId,
+        ),
+
+        listSupermarketPromotionBanners({
+          storeId:
+            supermarket.id,
+        }).catch(
+          (bannerError) => {
+            console.warn(
+              'Unable to load supermarket banners:',
+              bannerError,
+            );
+
+            return [];
+          },
+        ),
+
+        listStorefrontCategoryTiles(
+          'supermarket',
+        ).catch((categoryError) => {
+          console.warn(
+            'Unable to load supermarket category configuration:',
+            categoryError,
+          );
+
+          return null;
+        }),
+
+        listSupermarketMediaCards(supermarket.id).catch((mediaError) => {
+          console.warn('Unable to load now.supermarket_media_cards:', mediaError);
+          return [] as SupermarketMediaCard[];
+        }),
+
+        getSupermarketSpotlight(supermarket.id).catch((spotlightError) => {
+          console.warn('Unable to load supermarket spotlight:', spotlightError);
+          return null;
+        }),
+      ]);
+
+      setSpotlightCard(loadedSpotlightCard);
+
+      setMediaCards(loadedMediaCards);
+
+      setCatalog(
+        loadedCatalog,
+      );
+
+      setPromotionBanners(
+        loadedPromotionBanners,
+      );
+
+      setStorefrontCategoryTiles(
+        loadedStorefrontCategoryTiles,
+      );
+
+      setCurrencyCode(
+        bootstrap.settings
+          .currency_code ||
+          'EGP',
+      );
+    } catch (error) {
+      setCatalog(null);
+
+      setPromotionBanners([]);
+      setMediaCards([]);
+      setSpotlightCard(null);
+
+      setStorefrontCategoryTiles(
+        null,
+      );
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'تعذر تحميل السوبر ماركت.',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSupermarket();
+  }, [savedServiceAreaId]);
+
+  // Reorder is personalized: read the customer's real accepted past orders,
+  // then resolve product IDs against this store's CURRENT active catalog.
+  // Never show an arbitrary product as though the customer bought it.
+  useEffect(() => {
+    const activeStoreId = catalog?.store.id;
+    if (!activeStoreId) return;
+    let alive = true;
+    setIsReorderLoading(true);
+    setReorderError(false);
+    setReorderedProductIds([]);
+
+    void getMyOrders()
+      .then((orders) => {
+        if (!alive) return;
+        const seen = new Set<string>();
+        const ids: string[] = [];
+        const sorted = [...orders].sort(
+          (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+        );
+        for (const order of sorted) {
+          if (order.storeId !== activeStoreId) continue;
+          // Exclude cancelled/unconfirmed orders from repeat purchases.
+          if (!['confirmed', 'preparing', 'out-for-delivery', 'delivered'].includes(order.status)) continue;
+          for (const item of order.items) {
+            const id = item.productId;
+            if (id && !seen.has(id)) {
+              seen.add(id);
+              ids.push(id);
+            }
+          }
+        }
+        setReorderedProductIds(ids);
+      })
+      .catch(() => {
+        if (alive) setReorderError(true);
+      })
+      .finally(() => {
+        if (alive) setIsReorderLoading(false);
+      });
+
+    return () => { alive = false; };
+  }, [catalog?.store.id, reorderRetryKey]);
 
   const categories =
     useMemo<
@@ -1757,6 +2494,13 @@ export default function SupermarketScreen() {
       return productsById;
     }, [catalog]);
 
+  const reorderProducts = useMemo(
+    () => reorderedProductIds
+      .map(id => catalogProductsById.get(id))
+      .filter((product): product is CatalogProduct => Boolean(product)),
+    [reorderedProductIds, catalogProductsById],
+  );
+
   const resolvedPromotionBanners =
     useMemo<
       ResolvedPromotionBanner[]
@@ -1867,7 +2611,10 @@ export default function SupermarketScreen() {
     );
   }
 
-  if (!catalog) {
+  if (
+    !catalog ||
+    errorMessage
+  ) {
     return (
       <SafeAreaView
         style={
@@ -2050,6 +2797,59 @@ export default function SupermarketScreen() {
     });
   }
 
+  function openSpotlight() {
+    if (!spotlightCard) return;
+    const key = spotlightCard.categoryKey;
+    const category = categories.find(item =>
+      item.key === key || item.section?.slug === key,
+    );
+    if (category) {
+      openCategory(category);
+      return;
+    }
+    // Offers can be hidden from the category rail when no discount exists,
+    // but the campaign CTA should still navigate to the offers screen.
+    if (key === 'offers') {
+      router.push({
+        pathname: '/supermarket-category/[slug]',
+        params: {
+          slug: 'offers',
+          storeId: currentStore.id,
+          categoryKey: 'offers',
+          label: 'عروض',
+        },
+      });
+    }
+  }
+
+  function openMediaCard(card: SupermarketMediaCard) {
+    if (card.hasCampaignProducts) {
+      router.push({
+        pathname: '/supermarket-campaign/[id]',
+        params: { id: card.id, storeId: currentStore.id },
+      });
+      return;
+    }
+    if (!card.categoryKey) return;
+    const matchingCategory = categories.find(
+      (category) =>
+        category.key === card.categoryKey ||
+        category.section?.slug === card.categoryKey,
+    );
+    if (matchingCategory) openCategory(matchingCategory);
+  }
+
+  // Open a full product experience while preserving one-tap add on the card.
+  function openProductDetails(product: CatalogProduct) {
+    router.push({
+      pathname: '/supermarket-product/[id]',
+      params: {
+        id: product.id,
+        storeId: currentStore.id,
+      },
+    });
+  }
+
   function addFeaturedProduct(
     product: CatalogProduct,
   ) {
@@ -2153,6 +2953,23 @@ export default function SupermarketScreen() {
           item.id ===
           productId,
       )?.quantity ?? 0
+    );
+  }
+
+  function renderReorderProduct(product: CatalogProduct) {
+    return (
+      <FeaturedProductCard
+        key={`reorder-${product.id}`}
+        product={product}
+        currencyCode={currencyCode}
+        cardWidth={featuredCardWidth}
+        quantity={getProductQuantity(product.id)}
+        isStoreClosed={isStoreClosed}
+        onOpen={() => openProductDetails(product)}
+        onAdd={() => addFeaturedProduct(product)}
+        onIncrease={() => increaseFeaturedProduct(product)}
+        onDecrease={() => decreaseFeaturedProduct(product.id)}
+      />
     );
   }
 
@@ -2260,6 +3077,14 @@ export default function SupermarketScreen() {
             false
           }
         >
+          {mediaCards.length > 0 ? (
+            <SupermarketMediaCarousel
+              cards={mediaCards}
+              viewportWidth={pageWidth}
+              onCardPress={openMediaCard}
+            />
+          ) : null}
+
           <View
             style={
               styles.categoriesSection
@@ -2350,6 +3175,72 @@ export default function SupermarketScreen() {
             </View>
           </View>
 
+          {/* Personalized reorder preview: "عرض الكل" opens its own screen. */}
+          <View style={styles.reorderSection}>
+            <View style={styles.reorderHeader}>
+              {reorderProducts.length > 0 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="عرض كل المنتجات التي طلبتها سابقًا"
+                  hitSlop={10}
+                  onPress={() => router.push({
+                    pathname: '/supermarket-reorder',
+                    params: { storeId: currentStore.id },
+                  })}
+                  style={({ pressed }) => [styles.reorderAllButton, pressed && styles.generalPressed]}
+                >
+                  <Text style={styles.reorderAllText}>عرض الكل</Text>
+                </Pressable>
+              ) : <View />}
+              <Text style={styles.reorderTitle}>اطلب من جديد</Text>
+            </View>
+
+            {isReorderLoading ? (
+              <ActivityIndicator style={styles.reorderLoading} size="small" color="#00B14F" />
+            ) : reorderError ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setReorderRetryKey(value => value + 1)}
+                style={styles.reorderMessageContainer}
+              >
+                <Text style={styles.reorderMessage}>مش قادرين نعرض طلباتك السابقة دلوقتي — اضغط لإعادة المحاولة</Text>
+              </Pressable>
+            ) : reorderProducts.length === 0 ? (
+              <View style={styles.reorderMessageContainer}>
+                <Text style={styles.reorderMessage}>أول ما تطلب من الماركت، المنتجات اللي طلبتها هتظهر هنا.</Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                nestedScrollEnabled
+                directionalLockEnabled
+                showsHorizontalScrollIndicator={false}
+                style={styles.reorderScroll}
+                contentContainerStyle={styles.reorderRail}
+                onContentSizeChange={() => {
+                  reorderScrollRef.current?.scrollToEnd({ animated: false });
+                }}
+                ref={reorderScrollRef}
+              >
+                {[...reorderProducts.slice(0, REORDER_PREVIEW_COUNT)]
+                  .reverse()
+                  .map(renderReorderProduct)}
+              </ScrollView>
+            )}
+          </View>
+
+          {spotlightCard ? (
+            <View
+              style={styles.spotlightSection}
+            >
+              <SupermarketSpotlightCard
+                key={spotlightCard.id}
+                card={spotlightCard}
+                onPress={openSpotlight}
+              />
+            </View>
+          ) : null}
+
           {resolvedPromotionBanners.map(
             (
               banner,
@@ -2426,6 +3317,7 @@ export default function SupermarketScreen() {
                         isStoreClosed={
                           isStoreClosed
                         }
+                        onOpen={() => openProductDetails(product)}
                         onAdd={() =>
                           addFeaturedProduct(
                             product,
@@ -2628,6 +3520,74 @@ const styles =
         180,
     },
 
+    /* Featured 16:9 media cards above "تسوق حسب الفئة". */
+    topMediaSection: {
+      backgroundColor: '#FFFFFF',
+      marginBottom: 17,
+      paddingTop: 5,
+      width: '100%',
+    },
+
+    topMediaScroll: {
+      direction: 'ltr',
+      width: '100%',
+    },
+
+    topMediaRail: {
+      direction: 'ltr',
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: MEDIA_CARD_GAP,
+    },
+
+    topMediaCard: {
+      backgroundColor: '#F5F0E8',
+      borderRadius: 20,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+
+    topMediaCardPressed: {
+      opacity: 0.94,
+    },
+
+    topMediaImage: {
+      width: '100%',
+      height: '100%',
+    },
+
+    topMediaFallback: {
+      alignItems: 'center',
+      backgroundColor: '#E6EDE7',
+      height: '100%',
+      justifyContent: 'center',
+      width: '100%',
+    },
+
+    topMediaVideoFill: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+    },
+
+    topMediaVideo: {
+      height: '100%',
+      width: '100%',
+    },
+
+    topMediaVideoHidden: {
+      opacity: 0,
+    },
+
+    topMediaVideoPlaceholder: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      backgroundColor: '#F5F0E8',
+      justifyContent: 'center',
+    },
+
     categoriesSection: {
       backgroundColor:
         '#FFFFFF',
@@ -2702,6 +3662,139 @@ const styles =
       position: 'absolute',
       top: 0,
       width: CATEGORY_INDICATOR_THUMB_WIDTH,
+    },
+
+    // Reuses FeaturedProductCard: dimensions, image, badge, quantity + price
+    // stay identical to existing supermarket promotional product cards.
+    reorderSection: {
+      backgroundColor: '#FFFFFF',
+      marginBottom: 24,
+      paddingTop: 3,
+    },
+    reorderHeader: {
+      direction: 'ltr',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      marginBottom: 14,
+      minHeight: 31,
+    },
+    reorderTitle: {
+      color: '#202020',
+      fontSize: 21,
+      fontWeight: '800',
+      letterSpacing: -0.45,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    reorderAllButton: {
+      minHeight: 35,
+      justifyContent: 'center',
+      paddingRight: 12,
+    },
+    reorderAllText: {
+      color: '#202020',
+      fontSize: 14,
+      fontWeight: '600',
+      writingDirection: 'rtl',
+    },
+    reorderScroll: {
+      direction: 'ltr',
+      width: '100%',
+    },
+    reorderRail: {
+      direction: 'ltr',
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: PROMOTION_PRODUCT_GAP,
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+    },
+    reorderLoading: { marginVertical: 22 },
+    reorderMessageContainer: {
+      backgroundColor: '#F8F8F8',
+      borderRadius: 13,
+      paddingVertical: 18,
+      paddingHorizontal: 18,
+      marginHorizontal: 16,
+    },
+    reorderMessage: {
+      color: '#777777',
+      fontSize: 13,
+      lineHeight: 21,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    // Independent DB-driven spotlight card below the reorder section.
+    spotlightSection: {
+      marginHorizontal: 16,
+      marginBottom: 26,
+    },
+    spotlightCard: {
+      width: '100%',
+      aspectRatio: 1,
+      borderRadius: 23,
+      overflow: 'hidden',
+      position: 'relative',
+      backgroundColor: '#1F2421',
+    },
+    spotlightPressed: { opacity: 0.96 },
+    spotlightMedia: { ...StyleSheet.absoluteFillObject },
+    spotlightVideoView: { width: '100%', height: '100%' },
+    spotlightVideoLoading: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    spotlightVideoFallback: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#1F2421',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    spotlightGradient: { ...StyleSheet.absoluteFillObject },
+    spotlightCopy: {
+      position: 'absolute',
+      top: 28,
+      right: 23,
+      left: 23,
+      alignItems: 'flex-end',
+    },
+    spotlightEyebrow: {
+      color: '#FFFFFF',
+      fontSize: 19,
+      fontWeight: '600',
+      lineHeight: 26,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    spotlightTitle: {
+      color: '#FFFFFF',
+      fontSize: 40,
+      fontWeight: '900',
+      lineHeight: 49,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+      maxWidth: '100%',
+    },
+    spotlightButton: {
+      position: 'absolute',
+      left: 18,
+      bottom: 18,
+      backgroundColor: NAVIENTY_NOW_COLORS.primary,
+      paddingHorizontal: 26,
+      minHeight: 52,
+      borderRadius: 27,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    spotlightButtonText: {
+      color: '#FFFFFF',
+      fontWeight: '800',
+      fontSize: 18,
+      writingDirection: 'rtl',
     },
 
     // Same surface and corner radius as [slug].tsx filterImageCircle.
@@ -2853,6 +3946,10 @@ const styles =
 
       overflow:
         'visible',
+    },
+
+    featuredProductCardPressed: {
+      opacity: 0.92,
     },
 
     featuredProductImageBox: {

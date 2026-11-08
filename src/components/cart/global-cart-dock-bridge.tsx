@@ -27,6 +27,7 @@ const ROUTES_WITH_LOCAL_CART_DOCK = new Set([
   '/category/personal-care',
   '/category/stationery',
   '/category/supermarket',
+  '/supermarket-reorder', // This page renders its own cart dock.
 ]);
 
 const LOCAL_CART_DOCK_PREFIXES = [
@@ -34,6 +35,8 @@ const LOCAL_CART_DOCK_PREFIXES = [
   '/personal-care-category/',
   '/store/',
   '/supermarket-category/',
+  '/supermarket-campaign/', // Has its own cart dock.
+  '/supermarket-product/', // Has a fixed quantity selector + add-to-cart button.
 ];
 
 const CART_FLOW_PREFIXES = [
@@ -109,12 +112,9 @@ function routeOwnsCartAccess(
 }
 
 /**
- * Global fallback for screens that do not already render their own Cart dock
- * or bottom navigation Cart tab.
- *
- * Product-heavy screens keep their existing scroll-aware Cart dock. Any other
- * screen immediately gains the same customer-facing Cart entry point as soon
- * as the shared Cart contains at least one item.
+ * Global fallback for routes that do not provide their own cart controls.
+ * Product details own a fixed purchase bar. Never draw the global green cart
+ * dock on top of that bar (the root layout renders this bridge above Stack).
  */
 export default function GlobalCartDockBridge({
   enabled = true,
