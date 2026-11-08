@@ -1,4 +1,4 @@
-import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
+import { getGlobalCartDeliveryFee } from '../config/global-cart';
 import {
   getGlobalCartStoreGroups,
 } from '../store/cart-store';
@@ -25,10 +25,8 @@ export async function resolveDeliveryLocation(
     return {
       ...resolution,
       minimumOrder: 0,
-      deliveryFee:
-        groups.length === 1
-          ? GLOBAL_CART_DELIVERY_FEE
-          : resolution.deliveryFee,
+      // Honor an explicit zero fee from the live Supabase resolution.
+      deliveryFee: resolution.deliveryFee,
     };
   }
 
@@ -47,6 +45,12 @@ export async function resolveDeliveryLocation(
       ),
     );
 
+  const sharedDeliveryFee = getGlobalCartDeliveryFee(
+    resolutions.map((resolution) => ({
+      deliveryFee: resolution.deliveryFee ?? Number.NaN,
+    })),
+  );
+
   const unavailable =
     resolutions.find(
       (resolution) =>
@@ -62,8 +66,7 @@ export async function resolveDeliveryLocation(
         input.storeId ??
         unavailable.storeId,
       storeAvailable: false,
-      deliveryFee:
-        GLOBAL_CART_DELIVERY_FEE,
+      deliveryFee: sharedDeliveryFee,
       minimumOrder: 0,
     };
   }
@@ -78,8 +81,7 @@ export async function resolveDeliveryLocation(
       input.storeId ??
       base.storeId,
     storeAvailable: true,
-    deliveryFee:
-      GLOBAL_CART_DELIVERY_FEE,
+    deliveryFee: sharedDeliveryFee,
     minimumOrder: 0,
     estimatedDeliveryMinutes:
       Math.max(
