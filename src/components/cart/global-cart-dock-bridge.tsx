@@ -1,45 +1,26 @@
-import {
-  usePathname,
-  useRouter,
-} from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 
 import {
   selectCartItemCount,
   selectCartSubtotal,
   useCartStore,
 } from '../../store/cart-store';
-import CategoryCartDock from './category-cart-dock';
+import { BottomActionHost } from './bottom-action-provider';
+import { CategoryCartDockView } from './category-cart-dock';
 
 type GlobalCartDockBridgeProps = {
   enabled?: boolean;
 };
 
-const ROUTES_WITH_BOTTOM_CART_ACCESS = new Set([
-  '/',
-  '/account',
-  '/orders',
-]);
+/**
+ * These routes already have non-cart navigation or checkout controls.
+ * This is only a legacy FALLBACK eligibility rule, not a list of screens
+ * with their own cart dock. New screens declare their action via
+ * BottomActionSlot, which wins over the fallback automatically.
+ */
+const ROUTES_WITH_BOTTOM_NAVIGATION = new Set(['/', '/account', '/orders']);
 
-const ROUTES_WITH_LOCAL_CART_DOCK = new Set([
-  '/category/bookstore',
-  '/category/books',
-  '/category/library',
-  '/category/personal-care',
-  '/category/stationery',
-  '/category/supermarket',
-  '/supermarket-reorder', // This page renders its own cart dock.
-]);
-
-const LOCAL_CART_DOCK_PREFIXES = [
-  '/bookstore-category/',
-  '/personal-care-category/',
-  '/store/',
-  '/supermarket-category/',
-  '/supermarket-campaign/', // Has its own cart dock.
-  '/supermarket-product/', // Has a fixed quantity selector + add-to-cart button.
-];
-
-const CART_FLOW_PREFIXES = [
+const CHECKOUT_FLOW_PREFIXES = [
   '/address-details',
   '/cart',
   '/cart-details',
@@ -60,95 +41,45 @@ const CART_FLOW_PREFIXES = [
   '/service-booking-payment-proof',
 ];
 
-function normalizePathname(
-  pathname: string | null,
-): string {
-  if (!pathname) {
-    return '/';
-  }
-
-  if (pathname === '/') {
-    return pathname;
-  }
-
-  const normalized = pathname.replace(
-    /\/+$/,
-    '',
-  );
-
-  return normalized || '/';
+function normalizePathname(pathname: string | null): string {
+  if (!pathname || pathname === '/') return '/';
+  return pathname.replace(/\/+$/, '') || '/';
 }
 
-function routeOwnsCartAccess(
-  pathname: string,
-): boolean {
-  if (
-    ROUTES_WITH_BOTTOM_CART_ACCESS.has(
-      pathname,
-    ) ||
-    ROUTES_WITH_LOCAL_CART_DOCK.has(
-      pathname,
-    )
-  ) {
-    return true;
-  }
+function canShowLegacyCartFallback(pathname: string): boolean {
+  if (ROUTES_WITH_BOTTOM_NAVIGATION.has(pathname)) return false;
 
-  if (
-    LOCAL_CART_DOCK_PREFIXES.some(
-      (prefix) =>
-        pathname.startsWith(prefix),
-    )
-  ) {
-    return true;
-  }
-
-  return CART_FLOW_PREFIXES.some(
-    (prefix) =>
-      pathname === prefix ||
-      pathname.startsWith(
-        `${prefix}/`,
-      ),
+  return !CHECKOUT_FLOW_PREFIXES.some(
+    prefix => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
 
 /**
- * Global fallback for routes that do not provide their own cart controls.
- * Product details own a fixed purchase bar. Never draw the global green cart
- * dock on top of that bar (the root layout renders this bridge above Stack).
+ * One root-level host for ALL bottom actions.
+ *
+ * A screen-owned purchase/checkout/cart-summary/none registration takes
+ * precedence over this global cart fallback. No duplicate overlays.
  */
 export default function GlobalCartDockBridge({
   enabled = true,
 }: GlobalCartDockBridgeProps) {
-  const pathname = normalizePathname(
-    usePathname(),
-  );
+  const pathname = normalizePathname(usePathname());
   const router = useRouter();
+  const itemCount = useCartStore(selectCartItemCount);
+  const subtotal = useCartStore(selectCartSubtotal);
 
-  const itemCount = useCartStore(
-    selectCartItemCount,
-  );
-  const subtotal = useCartStore(
-    selectCartSubtotal,
-  );
+  const fallback = itemCount > 0 && canShowLegacyCartFallback(pathname)
+    ? (
+      <CategoryCartDockView
+        currencyCode="EGP"
+        isScrollingDown={false}
+        itemCount={itemCount}
+        minimumOrder={0}
+        subtotal={subtotal}
+        onPress={() => router.push('/cart')}
+      />
+    )
+    : null;
 
-  if (
-    !enabled ||
-    itemCount <= 0 ||
-    routeOwnsCartAccess(pathname)
-  ) {
-    return null;
-  }
-
-  return (
-    <CategoryCartDock
-      currencyCode="EGP"
-      isScrollingDown={false}
-      itemCount={itemCount}
-      minimumOrder={0}
-      subtotal={subtotal}
-      onPress={() => {
-        router.push('/cart');
-      }}
-    />
-  );
+  return <BottomActionHost enabled={enabled} fallback={fallback} />;
 }

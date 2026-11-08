@@ -12,7 +12,8 @@ import {
     useWindowDimensions,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomActionSlot } from '../../components/cart/bottom-action-provider';
 
 import { supabase } from '../../lib/supabase';
 import getAppBootstrap from '../../services/bootstrap-service';
@@ -137,7 +138,7 @@ function RecommendationCard({
   // A product with multiple variants or restrictions must open its details
   // instead of changing the quantity of an unselected cart line.
   const canQuickAdjust = product.variants.length <= 1 &&
-    !product.requiresPrescription && !product.isAgeRestricted;
+    !product.isAgeRestricted;
 
   return (
     <Pressable
@@ -309,6 +310,7 @@ export default function SupermarketProductDetailScreen() {
   const heroHeight = Math.min(490, Math.max(330, pageWidth * 1.08));
   const recommendationCardWidth = Math.min(190, Math.max(146, pageWidth * 0.41));
   const savedAreaId = useCustomerStore(state => state.locationServiceAreaId);
+  const insets = useSafeAreaInsets();
 
   const carts = useCartStore(state => state.carts);
   const addItem = useCartStore(state => state.addItem);
@@ -393,8 +395,9 @@ export default function SupermarketProductDetailScreen() {
         .map((row: { product_id?: unknown }) => row.product_id)
         .filter((value): value is string => typeof value === 'string');
       setBoughtTogetherIds(ids);
-    }).catch(() => {
-      // Graceful fallback to same-category suggestions.
+    }, () => {
+      // PostgREST RPC builders are PromiseLike, not native Promise;
+      // failure should never block the product page.
     });
     return () => { active = false; };
   }, [product, catalog, storeId]);
@@ -453,6 +456,7 @@ export default function SupermarketProductDetailScreen() {
   const discount = discountFor(price, compareAt);
   const disabled = !catalog || catalog.store.isManuallyClosed || !isOpenNow(catalog.businessHours);
   const cartItems = carts[storeId]?.items ?? [];
+  const storeCartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const selectedTotal = price * selectedQuantity;
   const selectedOldTotal = discount !== null && compareAt !== null
     ? compareAt * selectedQuantity
@@ -512,7 +516,7 @@ export default function SupermarketProductDetailScreen() {
     if (disabled) return;
     // Multiple sizes need explicit customer choice. Never silently add the
     // default/first variant when the product has multiple variants.
-    if (item.variants.length > 1 || item.requiresPrescription || item.isAgeRestricted) {
+    if (item.variants.length > 1 || item.isAgeRestricted) {
       openRecommendedProduct(item);
       return;
     }
@@ -528,7 +532,7 @@ export default function SupermarketProductDetailScreen() {
 
   const increaseRecommended = (item: CatalogProduct) => {
     if (disabled) return;
-    if (item.variants.length > 1 || item.requiresPrescription || item.isAgeRestricted) {
+    if (item.variants.length > 1 || item.isAgeRestricted) {
       openRecommendedProduct(item);
       return;
     }
@@ -538,8 +542,13 @@ export default function SupermarketProductDetailScreen() {
 
   const decreaseRecommended = (item: CatalogProduct) => {
     if (quantityForRecommendation(item) <= 0) return;
-    if (item.variants.length > 1 || item.requiresPrescription || item.isAgeRestricted) return;
+    if (item.variants.length > 1 || item.isAgeRestricted) return;
     decreaseStoreItem(storeId, item.id, priceInfoFor(item).variant?.id ?? null);
+  };
+
+  const openCart = () => {
+    setActiveCart(storeId);
+    router.push({ pathname: '/cart', params: { storeId } });
   };
 
   return (
@@ -572,7 +581,7 @@ export default function SupermarketProductDetailScreen() {
             <ScrollView
               ref={mainScrollRef}
               style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: 130 + insets.bottom }]}
               showsVerticalScrollIndicator={false}
             >
               <View style={[styles.hero, { height: heroHeight }]}>
@@ -610,6 +619,19 @@ export default function SupermarketProductDetailScreen() {
                   style={styles.backButton}
                 >
                   <Ionicons name="chevron-forward" size={24} color="#1A1A1A" />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`عرض السلة، ${storeCartCount} منتجات`}
+                  onPress={openCart}
+                  style={styles.heroCartButton}
+                >
+                  <Ionicons name="bag-handle-outline" size={22} color={GREEN} />
+                  {storeCartCount > 0 ? (
+                    <View style={styles.heroCartBadge}>
+                      <Text style={styles.heroCartBadgeText}>{storeCartCount > 99 ? '99+' : storeCartCount}</Text>
+                    </View>
+                  ) : null}
                 </Pressable>
                 {images.length > 1 && (
                   <View pointerEvents="none" style={styles.pagination}>
@@ -706,8 +728,20 @@ export default function SupermarketProductDetailScreen() {
               </View>
             </ScrollView>
 
+          </>
+        )}
+        {(loading || failed || !product || !catalog) && (
+          <Pressable onPress={() => router.back()} accessibilityLabel="رجوع" accessibilityRole="button" style={styles.backOverlay}>
+            <Ionicons name="chevron-forward" size={24} color="#1A1A1A" />
+          </Pressable>
+        )}
+
+        {/* Always register ownership, including loading: never show the fallback cart here. */}
+        <BottomActionSlot kind="product-purchase" priority={300}>
+          {!loading && !failed && product && catalog ? (
+            <View pointerEvents="box-none" style={styles.purchaseDock}>
             {/* Bottom purchase bar: quantity on the left, one green CTA on the right. */}
-            <View style={styles.footer}>
+            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) } ]}>
               <View style={[styles.footerQuantitySelector, { width: Math.max(116, Math.min(146, Math.round(pageWidth * 0.32))) }]}>
                 <Pressable
                   accessibilityRole="button"
@@ -762,13 +796,10 @@ export default function SupermarketProductDetailScreen() {
                 </View>
               </Pressable>
             </View>
-          </>
-        )}
-        {(loading || failed || !product || !catalog) && (
-          <Pressable onPress={() => router.back()} accessibilityLabel="رجوع" accessibilityRole="button" style={styles.backOverlay}>
-            <Ionicons name="chevron-forward" size={24} color="#1A1A1A" />
-          </Pressable>
-        )}
+
+            </View>
+          ) : null}
+        </BottomActionSlot>
       </View>
     </SafeAreaView>
   );
@@ -782,6 +813,17 @@ const styles = StyleSheet.create({
   hero: { position: 'relative', backgroundColor: PRODUCT_BG, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   emoji: { fontSize: 100 },
   backButton: { position: 'absolute', top: 20, right: 20, width: 46, height: 46, borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9', backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 4 },
+  heroCartButton: {
+    position: 'absolute', top: 20, left: 20, width: 46, height: 46,
+    borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9',
+    backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 4,
+  },
+  heroCartBadge: {
+    position: 'absolute', top: -5, right: -5, minWidth: 19, height: 19,
+    borderRadius: 10, backgroundColor: '#C7FF00', paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  heroCartBadgeText: { fontSize: 10, fontWeight: '800', color: '#1A1A1A' },
   backOverlay: { position: 'absolute', top: 20, right: 20, width: 46, height: 46, borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9', backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 4 },
   pagination: { flexDirection: 'row', position: 'absolute', bottom: 23, alignSelf: 'center', gap: 6, backgroundColor: 'rgba(40,40,40,0.18)', borderRadius: 30, paddingHorizontal: 10, paddingVertical: 8 },
   pageDot: { width: 6, height: 6, borderRadius: 6, backgroundColor: '#D1D1D1' },
@@ -898,8 +940,14 @@ const styles = StyleSheet.create({
   recommendationPrice: { fontSize: 13.5, fontWeight: '800', color: '#202020', writingDirection: 'rtl' },
   recommendationOldPrice: { color: '#919191', fontSize: 11.5, textDecorationLine: 'line-through', writingDirection: 'rtl' },
 
+  purchaseDock: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    alignItems: 'center', backgroundColor: 'transparent',
+  },
   // Physical LTR row to match the reference: white stepper (left), green CTA (right).
   footer: {
+    width: '100%',
+    maxWidth: MAX_PAGE_WIDTH,
     direction: 'ltr',
     flexDirection: 'row',
     alignItems: 'center',

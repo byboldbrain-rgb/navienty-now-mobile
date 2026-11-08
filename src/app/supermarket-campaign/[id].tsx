@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
   heroInList: { marginHorizontal: -HORIZONTAL_PADDING, marginBottom: 16 },
   heroBackground: { width: '100%', height: '100%', backgroundColor: '#DFF4E6' },
   heroImage: { width: '100%', height: '100%' },
-  heroVideo: { ...StyleSheet.absoluteFillObject },
+  heroVideo: { ...StyleSheet.absoluteFill },
 
   productTile: {
     backgroundColor: '#FFFFFF',

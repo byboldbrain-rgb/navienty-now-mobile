@@ -24,6 +24,7 @@ import {
 
 import AppLaunchBlockScreen from '../components/app-launch-block-screen';
 import AppQueryProvider from '../providers/app-query-provider';
+import { BottomActionProvider } from '../components/cart/bottom-action-provider';
 import GlobalCartDockBridge from '../components/cart/global-cart-dock-bridge';
 import OrderRealtimeBridge from '../components/order-realtime-bridge';
 import PaymentProofRouteBridge from '../components/payment-proof-route-bridge';
@@ -1312,8 +1313,9 @@ export default function RootLayout() {
 
           <PaymentProofRouteBridge />
 
-          <Stack
-            screenOptions={{
+          <BottomActionProvider>
+            <Stack
+              screenOptions={{
               animation:
                 'fade',
 
@@ -1414,13 +1416,14 @@ export default function RootLayout() {
                   false,
               }}
             />
-          </Stack>
+            </Stack>
 
-          <GlobalCartDockBridge
-            enabled={
-              !showBootstrapScreen
-            }
-          />
+            <GlobalCartDockBridge
+              enabled={
+                !showBootstrapScreen
+              }
+            />
+          </BottomActionProvider>
         </>
       ) : null}
 
