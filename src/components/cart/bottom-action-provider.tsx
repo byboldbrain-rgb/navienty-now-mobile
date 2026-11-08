@@ -10,6 +10,10 @@ import {
   useState,
 } from 'react';
 import { StyleSheet, View } from 'react-native';
+import {
+  normalizeBottomActionPath,
+  selectActiveBottomAction,
+} from './bottom-action-selection';
 
 /**
  * Bottom actions belong to the active screen, not to a collection of
@@ -39,11 +43,6 @@ type BottomActionControls = {
 // registrations must never rerender because another screen registers.
 const ControlsContext = createContext<BottomActionControls | null>(null);
 const EntriesContext = createContext<BottomActionEntry[]>([]);
-
-function normalizePathname(pathname: string | null): string {
-  if (!pathname || pathname === '/') return '/';
-  return pathname.replace(/\/+$/, '') || '/';
-}
 
 export function BottomActionProvider({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<BottomActionEntry[]>([]);
@@ -111,7 +110,7 @@ export function BottomActionSlot({
 }) {
   const context = useContext(ControlsContext);
   const id = useId();
-  const pathname = normalizePathname(usePathname());
+  const pathname = normalizeBottomActionPath(usePathname());
 
   useLayoutEffect(() => {
     if (!context) return;
@@ -152,24 +151,10 @@ export function BottomActionHost({
   const pathname = normalizePathname(usePathname());
   const entries = useContext(EntriesContext);
 
-  const active = useMemo(() => {
-    let winner: BottomActionEntry | null = null;
-    let winnerIndex = -1;
-
-    entries.forEach((entry, index) => {
-      if (entry.pathname !== pathname) return;
-      if (
-        !winner ||
-        entry.priority > winner.priority ||
-        (entry.priority === winner.priority && index > winnerIndex)
-      ) {
-        winner = entry;
-        winnerIndex = index;
-      }
-    });
-
-    return winner;
-  }, [entries, pathname]);
+  const active = useMemo(
+    () => selectActiveBottomAction(entries, pathname),
+    [entries, pathname],
+  );
 
   if (!enabled || active?.kind === 'none') return null;
 
