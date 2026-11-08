@@ -22,6 +22,10 @@ import CategoryCartDock from '../../components/cart/category-cart-dock';
 import Image from '../../components/ui/app-image';
 import getAppBootstrap from '../../services/bootstrap-service';
 import {
+  getSupermarketBrandProductsById,
+  type SupermarketBrandProductList,
+} from '../../services/supermarket-brand-service';
+import {
   type CatalogProduct,
   getStoreCatalog,
   type StoreBusinessHour,
@@ -266,6 +270,8 @@ export default function SupermarketCampaignScreen() {
   const cardId = readParam(params.id);
   const storeId = readParam(params.storeId);
   const isBrandView = readParam(params.view) === 'brand';
+  const isCatalogBrandView = readParam(params.view) === 'catalog-brand';
+  const showBrandProducts = isBrandView || isCatalogBrandView;
   const { width: screenWidth } = useWindowDimensions();
   const pageWidth = Math.min(560, screenWidth);
   const tileWidth = (pageWidth - HORIZONTAL_PADDING * 2 - COLUMN_GAP) / 2;
@@ -276,6 +282,7 @@ export default function SupermarketCampaignScreen() {
   const decreaseItem = useCartStore(state => state.decreaseStoreItem);
   const setActiveCart = useCartStore(state => state.setActiveCart);
   const [campaign, setCampaign] = useState<SupermarketBrandCampaign | null>(null);
+  const [catalogBrand, setCatalogBrand] = useState<SupermarketBrandProductList | null>(null);
   const [catalog, setCatalog] = useState<StoreCatalog | null>(null);
   const [currency, setCurrency] = useState('EGP');
   const [loading, setLoading] = useState(true);
@@ -298,14 +305,20 @@ export default function SupermarketCampaignScreen() {
       setError(null);
       try {
         if (!cardId || !storeId) throw new Error('رابط العرض غير صحيح.');
-        const [fetchedCampaign, bootstrap] = await Promise.all([
-          getSupermarketBrandCampaign(cardId, storeId),
-          getAppBootstrap(),
-        ]);
+        const bootstrap = await getAppBootstrap();
         const area = serviceAreaId ?? bootstrap.settings.default_service_area_id ?? undefined;
-        const fetchedCatalog = await getStoreCatalog(storeId, area);
+        const [fetchedCatalog, fetchedCampaign, fetchedBrand] = await Promise.all([
+          getStoreCatalog(storeId, area),
+          isCatalogBrandView
+            ? Promise.resolve(null)
+            : getSupermarketBrandCampaign(cardId, storeId),
+          isCatalogBrandView
+            ? getSupermarketBrandProductsById(storeId, cardId)
+            : Promise.resolve(null),
+        ]);
         if (!alive) return;
         setCampaign(fetchedCampaign);
+        setCatalogBrand(fetchedBrand);
         setCatalog(fetchedCatalog);
         setCurrency(bootstrap.settings.currency_code || 'EGP');
       } catch (cause) {
@@ -316,21 +329,30 @@ export default function SupermarketCampaignScreen() {
     }
     void load();
     return () => { alive = false; };
-  }, [cardId, storeId, serviceAreaId, retryKey]);
+  }, [cardId, storeId, serviceAreaId, retryKey, isCatalogBrandView]);
 
   useEffect(() => {
     setSearchQuery('');
     setIsSearchVisible(false);
-  }, [cardId, storeId, isBrandView]);
+  }, [cardId, storeId, isBrandView, isCatalogBrandView]);
 
   const products = useMemo(() => {
-    if (!catalog || !campaign) return [] as CatalogProduct[];
+    if (!catalog || (!campaign && !catalogBrand)) return [] as CatalogProduct[];
 
     // Flat store catalog: de-duplicate products appearing in multiple sections.
     const byId = new Map<string, CatalogProduct>();
     for (const section of catalog.sections) {
       for (const product of section.products) byId.set(product.id, product);
     }
+
+    // Canonical brand catalog: only exact products.brand_id relationships,
+    // never a substring match of the product name.
+    if (isCatalogBrandView && catalogBrand) {
+      return catalogBrand.productIds
+        .map(id => byId.get(id))
+        .filter((item): item is CatalogProduct => Boolean(item));
+    }
+    if (!campaign) return [] as CatalogProduct[];
 
     const companyName = campaign.card.companyName?.trim();
     if (isBrandView && companyName) {
@@ -347,7 +369,7 @@ export default function SupermarketCampaignScreen() {
     return campaign.productIds
       .map(id => byId.get(id))
       .filter((product): product is CatalogProduct => Boolean(product));
-  }, [campaign, catalog, isBrandView]);
+  }, [campaign, catalog, catalogBrand, isBrandView, isCatalogBrandView]);
 
   const filteredProducts = useMemo(() => {
     const query = normalizeBrandName(searchQuery);
@@ -368,7 +390,7 @@ export default function SupermarketCampaignScreen() {
   }, [products, searchQuery]);
 
   useEffect(() => {
-    if (loading || error || !catalog || !campaign) {
+    if (loading || error || !catalog || (!campaign && !catalogBrand)) {
       contentOpacity.setValue(0);
       contentOffset.setValue(12);
       return;
@@ -390,7 +412,7 @@ export default function SupermarketCampaignScreen() {
     ]);
     animation.start();
     return () => animation.stop();
-  }, [loading, error, catalog, campaign, contentOpacity, contentOffset]);
+  }, [loading, error, catalog, campaign, catalogBrand, contentOpacity, contentOffset]);
 
   const items = carts[storeId]?.items ?? [];
   const count = items.reduce((total, item) => total + item.quantity, 0);
@@ -430,9 +452,9 @@ export default function SupermarketCampaignScreen() {
 
   const companyName = campaign?.card.companyName?.trim() || '';
   // Show only the brand or campaign title supplied by the database.
-  const title = companyName || campaign?.card.title?.trim() || '';
+  const title = catalogBrand?.name || companyName || campaign?.card.title?.trim() || '';
   const imageUrl = campaign?.card.imageUrl;
-  const canOpenBrand = Boolean(companyName) && !isBrandView;
+  const canOpenBrand = Boolean(companyName) && !showBrandProducts;
 
   const openBrand = () => {
     if (!canOpenBrand) return;
@@ -464,7 +486,7 @@ export default function SupermarketCampaignScreen() {
                 autoFocus
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder={isBrandView ? 'ابحث في منتجات الشركة' : 'ابحث في العرض'}
+                placeholder={showBrandProducts ? 'ابحث في منتجات الشركة' : 'ابحث في العرض'}
                 placeholderTextColor="#999999"
                 style={styles.searchInput}
                 textAlign="right"
@@ -520,11 +542,11 @@ export default function SupermarketCampaignScreen() {
 
         {loading ? (
           <CampaignLoadingSkeleton
-            showHero={!isBrandView}
+            showHero={!showBrandProducts}
             pageWidth={pageWidth}
             tileWidth={tileWidth}
           />
-        ) : error || !catalog || !campaign ? (
+        ) : error || !catalog || (!campaign && !catalogBrand) ? (
           <View style={styles.state}>
             <Ionicons name="alert-circle-outline" color="#666" size={42} />
             <Text style={styles.stateMessage}>تعذر فتح العرض حاليًا</Text>
@@ -545,17 +567,17 @@ export default function SupermarketCampaignScreen() {
                 columnWrapperStyle={styles.productRow}
                 contentContainerStyle={[
                   styles.productListContent,
-                  isBrandView && styles.brandListContent,
+                  showBrandProducts && styles.brandListContent,
                   count > 0 && styles.contentWithCart,
                 ]}
                 showsVerticalScrollIndicator={false}
                 initialNumToRender={8}
                 maxToRenderPerBatch={10}
                 windowSize={5}
-                ListHeaderComponent={isBrandView ? null : (
+                ListHeaderComponent={showBrandProducts ? null : (
                   <View style={[styles.hero, styles.heroInList, { width: pageWidth, height: Math.round(pageWidth * 0.52) }]}>
                     {imageUrl ? <Image source={{ uri: imageUrl }} resizeMode="cover" style={styles.heroImage} /> : <View style={styles.heroBackground} />}
-                    {campaign.card.mediaType === 'video' && campaign.card.videoUrl ? (
+                    {campaign?.card.mediaType === 'video' && campaign.card.videoUrl ? (
                       <CampaignVideo uri={campaign.card.videoUrl} />
                     ) : null}
                   </View>
@@ -578,7 +600,7 @@ export default function SupermarketCampaignScreen() {
                     <Text style={styles.emptyText}>
                       {searchQuery.trim()
                         ? 'لم نجد منتجًا مطابقًا لبحثك'
-                        : isBrandView
+                        : showBrandProducts
                           ? 'مفيش منتجات متاحة للشركة حاليًا'
                           : 'مفيش منتجات متاحة في العرض دلوقتي'}
                     </Text>
