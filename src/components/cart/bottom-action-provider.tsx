@@ -1,6 +1,7 @@
-import { usePathname } from 'expo-router';
+import { useFocusEffect, usePathname } from 'expo-router';
 import {
   createContext,
+  useRef,
   type ReactNode,
   useCallback,
   useContext,
@@ -111,28 +112,40 @@ export function BottomActionSlot({
   const context = useContext(ControlsContext);
   const id = useId();
   const pathname = normalizeBottomActionPath(usePathname());
+  const isFocusedRef = useRef(false);
+  const entryRef = useRef<BottomActionEntry>({
+    id,
+    pathname,
+    kind,
+    priority,
+    content: children,
+  });
 
+  entryRef.current = { id, pathname, kind, priority, content: children };
+
+  // A stacked screen may stay mounted and still observe the globally changing
+  // pathname. Focus lifecycle prevents its previous action from re-registering
+  // over the current screen during forward/back navigation.
+  useFocusEffect(
+    useCallback(() => {
+      if (!context || !enabled) return undefined;
+      isFocusedRef.current = true;
+      context.register(entryRef.current);
+
+      return () => {
+        isFocusedRef.current = false;
+        context.unregister(id);
+      };
+    }, [context?.register, context?.unregister, enabled, id]),
+  );
+
+  // Update the registered content when price, selected quantity or cart
+  // changes without registering an unfocused route.
   useLayoutEffect(() => {
-    if (!context) return;
-    if (!enabled) {
-      context.unregister(id);
-      return;
+    if (context && enabled && isFocusedRef.current) {
+      context.register(entryRef.current);
     }
-
-    context.register({
-      id,
-      pathname,
-      kind,
-      priority,
-      content: children,
-    });
-  }, [children, context?.register, context?.unregister, enabled, id, kind, pathname, priority]);
-
-  useLayoutEffect(() => {
-    return () => {
-      context?.unregister(id);
-    };
-  }, [context?.unregister, id]);
+  }, [children, context?.register, enabled, kind, pathname, priority]);
 
   return null;
 }
