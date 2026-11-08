@@ -466,7 +466,7 @@ export default function SupermarketProductDetailScreen() {
 
   const addProductToCart = (chosenProduct: CatalogProduct, chosenVariant: ProductVariant | null) => {
     if (!catalog || disabled) return;
-    addItem({
+    const result = addItem({
       id: catalog.store.id,
       name: catalog.store.name,
       icon: catalog.store.icon,
@@ -482,18 +482,31 @@ export default function SupermarketProductDetailScreen() {
       variantId: chosenVariant?.id ?? null,
       variantName: chosenVariant?.name ?? null,
     });
+    if (result !== 'added') return false;
     setActiveCart(storeId);
+    return true;
   };
 
   // A single action adds the requested number of units of the selected variant.
   // The +/- selector edits a draft quantity (minimum 1), not the live cart.
   const addToCart = () => {
     if (!product || !catalog || disabled) return;
-    addProductToCart(product, selectedVariant);
+    // Update the cart before leaving this screen. Do not navigate if
+    // the cart rejected the product (for example, an unsupported category).
+    if (!addProductToCart(product, selectedVariant)) return;
+
     for (let index = 1; index < selectedQuantity; index += 1) {
       increaseStoreItem(storeId, product.id, selectedVariant?.id ?? null);
     }
     setSelectedQuantity(1);
+
+    // Return to the exact list the customer opened this product from,
+    // including campaign and recommendation lists.
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/category/supermarket');
+    }
   };
 
   const increaseMainQuantity = () => {
