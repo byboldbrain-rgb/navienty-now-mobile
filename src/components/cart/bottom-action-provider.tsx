@@ -161,7 +161,7 @@ export function BottomActionHost({
   enabled?: boolean;
   fallback?: ReactNode;
 }) {
-  const pathname = normalizePathname(usePathname());
+  const pathname = normalizeBottomActionPath(usePathname());
   const entries = useContext(EntriesContext);
 
   const active = useMemo(
@@ -183,7 +183,7 @@ export function BottomActionHost({
 
 const styles = StyleSheet.create({
   host: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 30,
     elevation: 30,
   },
