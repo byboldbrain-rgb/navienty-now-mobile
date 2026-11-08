@@ -30,13 +30,15 @@ type BottomActionEntry = {
   content: ReactNode;
 };
 
-type BottomActionContextValue = {
-  entries: BottomActionEntry[];
+type BottomActionControls = {
   register: (entry: BottomActionEntry) => void;
   unregister: (id: string) => void;
 };
 
-const BottomActionContext = createContext<BottomActionContextValue | null>(null);
+// Separate the stable command context from the changing registry. Screen
+// registrations must never rerender because another screen registers.
+const ControlsContext = createContext<BottomActionControls | null>(null);
+const EntriesContext = createContext<BottomActionEntry[]>([]);
 
 function normalizePathname(pathname: string | null): string {
   if (!pathname || pathname === '/') return '/';
@@ -73,20 +75,22 @@ export function BottomActionProvider({ children }: { children: ReactNode }) {
       : current);
   }, []);
 
-  const value = useMemo(
-    () => ({ entries, register, unregister }),
-    [entries, register, unregister],
+  const controls = useMemo(
+    () => ({ register, unregister }),
+    [register, unregister],
   );
 
   return (
-    <BottomActionContext.Provider value={value}>
-      {children}
-    </BottomActionContext.Provider>
+    <ControlsContext.Provider value={controls}>
+      <EntriesContext.Provider value={entries}>
+        {children}
+      </EntriesContext.Provider>
+    </ControlsContext.Provider>
   );
 }
 
 export function useHasBottomActionProvider(): boolean {
-  return useContext(BottomActionContext) !== null;
+  return useContext(ControlsContext) !== null;
 }
 
 /**
@@ -105,7 +109,7 @@ export function BottomActionSlot({
   priority?: number;
   enabled?: boolean;
 }) {
-  const context = useContext(BottomActionContext);
+  const context = useContext(ControlsContext);
   const id = useId();
   const pathname = normalizePathname(usePathname());
 
@@ -146,10 +150,9 @@ export function BottomActionHost({
   fallback?: ReactNode;
 }) {
   const pathname = normalizePathname(usePathname());
-  const context = useContext(BottomActionContext);
+  const entries = useContext(EntriesContext);
 
   const active = useMemo(() => {
-    const entries = context?.entries ?? [];
     let winner: BottomActionEntry | null = null;
     let winnerIndex = -1;
 
@@ -166,7 +169,7 @@ export function BottomActionHost({
     });
 
     return winner;
-  }, [context?.entries, pathname]);
+  }, [entries, pathname]);
 
   if (!enabled || active?.kind === 'none') return null;
 
