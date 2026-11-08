@@ -29,7 +29,6 @@ import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
 import CategorySearchEntry from '../../components/search/category-search-entry';
-import SupermarketMediaCarousel from '../../components/supermarket-media-carousel';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import { supabase } from '../../lib/supabase';
@@ -3583,7 +3582,7 @@ const styles =
     },
 
     topMediaVideoPlaceholder: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       backgroundColor: '#F5F0E8',
       justifyContent: 'center',
@@ -3742,20 +3741,20 @@ const styles =
       backgroundColor: '#1F2421',
     },
     spotlightPressed: { opacity: 0.96 },
-    spotlightMedia: { ...StyleSheet.absoluteFillObject },
+    spotlightMedia: { ...StyleSheet.absoluteFill },
     spotlightVideoView: { width: '100%', height: '100%' },
     spotlightVideoLoading: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       alignItems: 'center',
       justifyContent: 'center',
     },
     spotlightVideoFallback: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: '#1F2421',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    spotlightGradient: { ...StyleSheet.absoluteFillObject },
+    spotlightGradient: { ...StyleSheet.absoluteFill },
     spotlightCopy: {
       position: 'absolute',
       top: 28,
