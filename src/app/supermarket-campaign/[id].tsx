@@ -120,19 +120,25 @@ type ProductTileProps = {
   quantity: number;
   currency: string;
   closed: boolean;
+  onOpen: () => void;
   onAdd: () => void;
   onIncrease: () => void;
   onDecrease: () => void;
 };
 
-function ProductTile({ product, width, quantity, currency, closed, onAdd, onIncrease, onDecrease }: ProductTileProps) {
+function ProductTile({ product, width, quantity, currency, closed, onOpen, onAdd, onIncrease, onDecrease }: ProductTileProps) {
   const images = useMemo(() => productImages(product), [product]);
   const [imageIndex, setImageIndex] = useState(0);
   const discount = discountPercent(product);
   // Category product cards use square image frames.
   const imageHeight = width;
   return (
-    <View style={[styles.productTile, { width }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`عرض تفاصيل ${product.name}`}
+      onPress={onOpen}
+      style={[styles.productTile, { width }]}
+    >
       <View style={[styles.productImageFrame, { height: imageHeight }]}>
         {images.length > 0 ? (
           <ScrollView
@@ -172,18 +178,18 @@ function ProductTile({ product, width, quantity, currency, closed, onAdd, onIncr
             accessibilityRole="button"
             accessibilityLabel={`إضافة ${product.name} إلى السلة`}
             disabled={closed}
-            onPress={onAdd}
+            onPress={event => { event.stopPropagation(); onAdd(); }}
             style={({ pressed }) => [styles.addButton, closed && styles.disabledButton, pressed && !closed && styles.addButtonPressed]}
           >
             <Text style={styles.addButtonText}>+</Text>
           </Pressable>
         ) : (
           <View style={styles.quantityPill}>
-            <Pressable accessibilityRole="button" accessibilityLabel="تقليل الكمية" onPress={onDecrease} style={styles.quantityAction}>
+            <Pressable accessibilityRole="button" accessibilityLabel="تقليل الكمية" onPress={event => { event.stopPropagation(); onDecrease(); }} style={styles.quantityAction}>
               <Text style={styles.quantityActionText}>−</Text>
             </Pressable>
             <Text style={styles.quantityText}>{quantity}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="زيادة الكمية" disabled={closed} onPress={onIncrease} style={styles.quantityAction}>
+            <Pressable accessibilityRole="button" accessibilityLabel="زيادة الكمية" disabled={closed} onPress={event => { event.stopPropagation(); onIncrease(); }} style={styles.quantityAction}>
               <Text style={styles.quantityActionText}>+</Text>
             </Pressable>
           </View>
@@ -197,7 +203,7 @@ function ProductTile({ product, width, quantity, currency, closed, onAdd, onIncr
         </View>
         {discount !== null ? <Text numberOfLines={1} style={styles.oldPrice}>{currencyText(product.compareAtPrice!, currency)}</Text> : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -303,6 +309,8 @@ export default function SupermarketCampaignScreen() {
     async function load() {
       setLoading(true);
       setError(null);
+      setCampaign(null);
+      setCatalogBrand(null);
       try {
         if (!cardId || !storeId) throw new Error('رابط العرض غير صحيح.');
         const bootstrap = await getAppBootstrap();
@@ -589,6 +597,10 @@ export default function SupermarketCampaignScreen() {
                     quantity={quantityFor(product.id)}
                     currency={currency}
                     closed={closed}
+                    onOpen={() => router.push({
+                      pathname: '/supermarket-product/[id]',
+                      params: { id: product.id, storeId },
+                    })}
                     onAdd={() => add(product)}
                     onIncrease={() => increase(product)}
                     onDecrease={() => decrease(product.id)}
