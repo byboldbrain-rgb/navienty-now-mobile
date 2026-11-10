@@ -213,7 +213,7 @@ export default function GlobalCartScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Pressable style={styles.checkoutButton} onPress={() => router.push('/global-location-picker')}>
-          <Text style={styles.checkoutTotal}>{total === null ? money(subtotal) : money(total)}</Text>
+          <Text style={styles.checkoutTotal}>{total === null ? 'حدد الموقع' : money(total)}</Text>
           <Text style={styles.checkoutText}>تابع للدفع</Text>
           <View style={styles.checkoutIcon}>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
