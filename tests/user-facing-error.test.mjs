@@ -27,3 +27,18 @@ test('known customer-safe business messages are preserved', () => {
 test('arbitrary error strings do not reach the UI', () => {
   assert.doesNotMatch(getUserFacingCatalogError('SECRET_TOKEN=123'), /SECRET_TOKEN/);
 });
+
+test('iOS Expo fetch cancellation qualifies for automatic bootstrap retry', () => {
+  const cancelled = new Error(
+    'Supabase bootstrap failed: Error: fetch failed: ' +
+    'FetchRequestCanceledException: Fetch request has been canceled',
+  );
+
+  assert.equal(isRetryablePublicQueryError(cancelled), true);
+  assert.doesNotMatch(getUserFacingCatalogError(cancelled), /Supabase|FetchRequest/i);
+});
+
+test('backend authorization faults are not treated as transient', () => {
+  const forbidden = new Error('Supabase bootstrap failed: permission denied for function get_app_bootstrap');
+  assert.equal(isRetryablePublicQueryError(forbidden), false);
+});
