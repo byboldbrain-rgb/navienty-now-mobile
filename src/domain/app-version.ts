@@ -73,3 +73,31 @@ export function isVersionBelowMinimum(
 
   return comparison === -1;
 }
+
+
+/**
+ * Build codes matter when two store releases share the same marketing version
+ * (for example, both are 1.0.1). Only non-negative integer build codes count.
+ */
+export function isBuildBelowMinimum(
+  currentBuild: string | number | null | undefined,
+  minimumBuild: number | null | undefined,
+): boolean {
+  if (minimumBuild === null || minimumBuild === undefined) {
+    return false;
+  }
+
+  if (!Number.isSafeInteger(minimumBuild) || minimumBuild < 0) {
+    return false;
+  }
+
+  const currentValue = typeof currentBuild === 'number'
+    ? currentBuild
+    : typeof currentBuild === 'string' && /^\d+$/.test(currentBuild.trim())
+      ? Number(currentBuild.trim())
+      : NaN;
+
+  return Number.isSafeInteger(currentValue) &&
+    currentValue >= 0 &&
+    currentValue < minimumBuild;
+}
