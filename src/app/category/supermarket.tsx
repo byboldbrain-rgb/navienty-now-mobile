@@ -3212,13 +3212,16 @@ export default function SupermarketScreen() {
 
             {isReorderLoading || (reorderedProductIds.length > 0 && previewQuery.isPending) ? (
               <ActivityIndicator style={styles.reorderLoading} size="small" color="#00B14F" />
-            ) : reorderError ? (
+            ) : reorderError || (reorderedProductIds.length > 0 && previewQuery.isError) ? (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setReorderRetryKey(value => value + 1)}
+                onPress={() => {
+                  if (reorderError) setReorderRetryKey(value => value + 1);
+                  else void previewQuery.refetch();
+                }}
                 style={styles.reorderMessageContainer}
               >
-                <Text style={styles.reorderMessage}>مش قادرين نعرض طلباتك السابقة دلوقتي — اضغط لإعادة المحاولة</Text>
+                <Text style={styles.reorderMessage}>مش قادرين نعرض المنتجات اللي طلبتها دلوقتي — اضغط لإعادة المحاولة</Text>
               </Pressable>
             ) : reorderProducts.length === 0 ? (
               <View style={styles.reorderMessageContainer}>
