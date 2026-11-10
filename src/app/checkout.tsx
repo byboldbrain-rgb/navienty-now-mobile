@@ -2399,7 +2399,11 @@ function StoreCheckoutScreen() {
         {isMultiStoreCheckout && (
           <View style={styles.multiOrderSection}>
             <Text style={styles.orderSummaryTitle}>
-              تفاصيل الطلبات ({storeOrders.length})
+              تفاصيل {storeOrders.length} أوردرات
+            </Text>
+            <Text style={styles.multiOrderDescription}>
+              كل مطعم أو متجر ليه أوردر مستقل، ورسوم التوصيل بتتحسب
+              لكل مكان لوحده حسب عنوانك.
             </Text>
             {storeOrders.map((group, index) => {
               const storeSubtotal = group.items.reduce(
@@ -2410,7 +2414,7 @@ function StoreCheckoutScreen() {
                 <View key={group.storeId} style={styles.multiOrderCard}>
                   <View style={styles.multiOrderTitleRow}>
                     <Text style={styles.multiOrderStoreName}>{group.storeName}</Text>
-                    <Text style={styles.multiOrderNumber}>الطلب {index + 1}</Text>
+                    <Text style={styles.multiOrderNumber}>الأوردر #{index + 1}</Text>
                   </View>
                   {group.items.map((item) => (
                     <View key={item.lineId} style={styles.summaryRow}>
@@ -2429,13 +2433,13 @@ function StoreCheckoutScreen() {
                     <Text style={styles.summaryValue}>{formatPrice(storeSubtotal)}</Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>توصيل المطعم / المتجر</Text>
+                    <Text style={styles.summaryLabel}>توصيل {group.storeName}</Text>
                     <Text style={styles.summaryValue}>
                       {storeFee === null ? 'جارٍ الحساب' : storeFee === 0 ? 'مجاني' : formatPrice(storeFee)}
                     </Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.multiOrderTotalLabel}>إجمالي الطلب قبل رسوم الدفع</Text>
+                    <Text style={styles.multiOrderTotalLabel}>إجمالي الأوردر #{index + 1} قبل رسوم الدفع</Text>
                     <Text style={styles.multiOrderTotalValue}>
                       {storeFee === null ? '—' : formatPrice(storeSubtotal + storeFee)}
                     </Text>
@@ -2456,7 +2460,7 @@ function StoreCheckoutScreen() {
               styles.orderSummaryTitle
             }
           >
-            تفاصيل الطلب
+            {isMultiStoreCheckout ? 'ملخص دفع كل الأوردرات' : 'تفاصيل الطلب'}
           </Text>
 
           <View
@@ -3271,6 +3275,16 @@ const styles =
       color: '#D64B4B',
       fontSize: 10.5,
       marginTop: 9,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    multiOrderDescription: {
+      color: '#647067',
+      fontSize: 12,
+      lineHeight: 19,
+      marginBottom: 12,
+      marginTop: 2,
       textAlign: 'right',
       writingDirection: 'rtl',
     },
