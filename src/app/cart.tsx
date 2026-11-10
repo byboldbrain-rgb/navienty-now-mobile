@@ -29,6 +29,13 @@ import {
 } from '../services/catalog-service';
 
 import {
+  getDeliveryLocationErrorMessage,
+  resolveDeliveryLocation,
+} from '../services/delivery-location-service';
+import {
+  useCustomerStore,
+} from '../store/customer-store';
+import {
   useCartStore,
 } from '../store/cart-store';
 
@@ -42,6 +49,14 @@ const BRAND_GREEN_SOFT = '#EAF8F0';
  * Delivery fee is store/area-specific and comes from the cart/catalog.
  */
 const FIXED_PAYMENT_PROCESSING_FEE = 10;
+
+function minimumReachedForQuote(
+  items: { quantity: number }[],
+  subtotal: number,
+  minimumOrder: number,
+): boolean {
+  return items.length > 0 && subtotal >= minimumOrder;
+}
 
 /**
  * Multi-cart bottom sheet swipe-to-dismiss settings.
@@ -231,6 +246,16 @@ function StoreCartScreen() {
     setCatalog,
   ] = useState<StoreCatalog | null>(null);
 
+  // A persisted cart is not a trustworthy delivery quote.
+  const [deliveryQuote, setDeliveryQuote] = useState<{
+    key: string;
+    fee: number;
+    minimumOrder: number;
+  } | null>(null);
+  const [deliveryQuoteError, setDeliveryQuoteError] =
+    useState<string | null>(null);
+  const [quoteRetry, setQuoteRetry] = useState(0);
+
   const [
     failedImages,
     setFailedImages,
@@ -277,6 +302,20 @@ function StoreCartScreen() {
 
   const setActiveCart = useCartStore(
     (state) => state.setActiveCart,
+  );
+
+  const updateStoreDeliveryTerms = useCartStore(
+    (state) => state.updateStoreDeliveryTerms,
+  );
+
+  const locationLatitude = useCustomerStore(
+    (state) => state.locationLatitude,
+  );
+  const locationLongitude = useCustomerStore(
+    (state) => state.locationLongitude,
+  );
+  const locationServiceAreaId = useCustomerStore(
+    (state) => state.locationServiceAreaId,
   );
 
   const increaseStoreItem = useCartStore(
@@ -495,8 +534,15 @@ function StoreCartScreen() {
   const storeIcon =
     currentCart?.storeIcon ?? null;
 
-  const minimumOrder =
-    currentCart?.minimumOrder ?? 0;
+  const quoteKey = [
+    storeId ?? '',
+    locationLatitude ?? 'no-pin',
+    locationLongitude ?? 'no-pin',
+    locationServiceAreaId ?? 'default-area',
+  ].join(':');
+  const currentQuote =
+    deliveryQuote?.key === quoteKey ? deliveryQuote : null;
+  const minimumOrder = currentQuote?.minimumOrder ?? 0;
 
   const subtotal = useMemo(
     () => getCartSubtotal(items),
@@ -506,13 +552,17 @@ function StoreCartScreen() {
   const paymentProcessingFee =
     FIXED_PAYMENT_PROCESSING_FEE;
 
-  const deliveryFee =
-    Number(currentCart?.deliveryFee ?? 0);
+  const deliveryFee = currentQuote?.fee ?? null;
 
+  // Do not display a made-up total while the current quote is loading.
   const grandTotal =
-    Number(subtotal ?? 0) +
-    deliveryFee +
-    paymentProcessingFee;
+    deliveryFee === null
+      ? null
+      : Number(subtotal ?? 0) + deliveryFee + paymentProcessingFee;
+  const checkoutEnabled =
+    minimumReachedForQuote(items, subtotal, minimumOrder) &&
+    deliveryFee !== null &&
+    deliveryQuoteError === null;
 
   /* ============================================================
    * LOAD STORE LOGOS FOR MULTI-CART CHOOSER
@@ -600,34 +650,98 @@ function StoreCartScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    setDeliveryQuote(null);
+    setDeliveryQuoteError(null);
 
-    async function loadCatalog() {
+    async function loadCatalogAndDeliveryQuote() {
       if (!storeId) {
         setCatalog(null);
-
         return;
       }
 
       try {
-        const loadedCatalog =
-          await getStoreCatalog(storeId);
+        const hasSavedPin =
+          typeof locationLatitude === 'number' &&
+          Number.isFinite(locationLatitude) &&
+          typeof locationLongitude === 'number' &&
+          Number.isFinite(locationLongitude);
 
-        if (!cancelled) {
-          setCatalog(loadedCatalog);
+        // Reuse the existing catalog fetch instead of making two
+        // expensive catalog requests when the cart opens.
+        const [loadedCatalog, pinQuote] = await Promise.all([
+          getStoreCatalog(
+            storeId,
+            locationServiceAreaId ?? undefined,
+          ),
+          hasSavedPin
+            ? resolveDeliveryLocation({
+                latitude: locationLatitude,
+                longitude: locationLongitude,
+                storeId,
+              })
+            : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+        setCatalog(loadedCatalog);
+
+        if (
+          pinQuote &&
+          (!pinQuote.serviceable ||
+            pinQuote.storeAvailable !== true ||
+            pinQuote.deliveryFee === null)
+        ) {
+          throw new Error(
+            getDeliveryLocationErrorMessage(pinQuote.reason),
+          );
         }
-      } catch {
+
+        const fee = pinQuote
+          ? pinQuote.deliveryFee
+          : loadedCatalog.delivery.deliveryFee;
+        const nextMinimumOrder = pinQuote
+          ? (pinQuote.minimumOrder ?? 0)
+          : loadedCatalog.delivery.minimumOrder;
+
+        if (
+          fee === null ||
+          !Number.isFinite(fee) ||
+          fee < 0 ||
+          !Number.isFinite(nextMinimumOrder)
+        ) {
+          throw new Error('تعذر تحديد رسوم التوصيل لهذا المطعم.');
+        }
+
+        setDeliveryQuote({
+          key: quoteKey,
+          fee,
+          minimumOrder: nextMinimumOrder,
+        });
+        // Replace an old AsyncStorage cart snapshot with the server quote.
+        updateStoreDeliveryTerms(storeId, fee, nextMinimumOrder);
+      } catch (error) {
         if (!cancelled) {
-          setCatalog(null);
+          setDeliveryQuote(null);
+          setDeliveryQuoteError(
+            error instanceof Error
+              ? error.message
+              : 'تعذر تحديث رسوم التوصيل. حاول مرة أخرى.',
+          );
         }
       }
     }
 
-    void loadCatalog();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [storeId]);
+    void loadCatalogAndDeliveryQuote();
+    return () => { cancelled = true; };
+  }, [
+    storeId,
+    quoteKey,
+    locationLatitude,
+    locationLongitude,
+    locationServiceAreaId,
+    quoteRetry,
+    updateStoreDeliveryTerms,
+  ]);
 
   const catalogProducts = useMemo(() => {
     if (!catalog) {
@@ -802,8 +916,10 @@ function StoreCartScreen() {
 
   function handleCheckout() {
     if (
-      !minimumReached ||
-      !storeId
+      !checkoutEnabled ||
+      !storeId ||
+      deliveryFee === null ||
+      grandTotal === null
     ) {
       return;
     }
@@ -872,7 +988,7 @@ function StoreCartScreen() {
         categorySlug:
           currentCart.categorySlug,
         deliveryFee:
-          Number(currentCart.deliveryFee ?? 0),
+          deliveryFee ?? 0,
         minimumOrder:
           Number(minimumOrder ?? 0),
       },
@@ -1724,9 +1840,19 @@ function StoreCartScreen() {
             <Text
               style={styles.summaryValue}
             >
-              {formatPrice(deliveryFee)}
+              {deliveryFee === null
+                ? deliveryQuoteError ? 'غير متاح' : 'جارٍ حساب التوصيل...'
+                : deliveryFee === 0 ? 'مجاني' : formatPrice(deliveryFee)}
             </Text>
           </View>
+
+          {deliveryQuoteError ? (
+            <Pressable onPress={() => setQuoteRetry((count) => count + 1)}>
+              <Text style={styles.paymentFeeDescription}>
+                {deliveryQuoteError} — اضغط لإعادة المحاولة
+              </Text>
+            </Pressable>
+          ) : null}
 
           <View
             style={styles.summaryRow}
@@ -1784,7 +1910,7 @@ function StoreCartScreen() {
             <Text
               style={styles.totalValue}
             >
-              {formatPrice(grandTotal)}
+              {grandTotal === null ? 'جارٍ الحساب...' : formatPrice(grandTotal)}
             </Text>
           </View>
         </View>
@@ -1841,15 +1967,15 @@ function StoreCartScreen() {
           </Pressable>
 
           <Pressable
-            disabled={!minimumReached}
+            disabled={!checkoutEnabled}
             style={({ pressed }) => [
               styles.checkoutButton,
 
-              !minimumReached &&
+              !checkoutEnabled &&
                 styles.checkoutButtonDisabled,
 
               pressed &&
-                minimumReached &&
+                checkoutEnabled &&
                 styles.bottomButtonPressed,
             ]}
             onPress={handleCheckout}
