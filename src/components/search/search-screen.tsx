@@ -51,6 +51,7 @@ import {
   type GlobalSearchServiceKey,
   prepareGlobalSearchIndex,
   searchGlobalCatalog,
+  searchSupermarketProducts,
 } from '../../services/global-search-service';
 import {
   recordRecentlyViewed,
@@ -483,6 +484,53 @@ async function loadActiveCatalogCategoryIds(
   }
 
   return activeCategoryIdsByStore;
+}
+
+/**
+ * Discovery categories for supermarket search are fetched as lightweight
+ * metadata; opening search must not download 4 complete supermarket catalogs.
+ */
+async function loadSupermarketSearchSuggestions(
+  stores: readonly StoreSummary[],
+  preferredStoreId?: string | null,
+): Promise<SearchCatalogSuggestion[]> {
+  const store = stores.find((item) => item.id === preferredStoreId) ??
+    stores.find((item) => item.isFeatured && !item.isManuallyClosed) ??
+    stores.find((item) => !item.isManuallyClosed) ??
+    stores[0];
+
+  if (!store) return [];
+
+  const nowClient = (publicSupabase as any).schema('now');
+  const { data, error } = await nowClient
+    .from('catalog_categories')
+    .select('id,slug,name_ar,image_url,parent_id,store_id')
+    .eq('store_id', store.id)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+
+  if (error) {
+    throw new Error(`Loading supermarket search categories failed: ${error.message}`);
+  }
+
+  if (!Array.isArray(data)) return [];
+
+  return (data as Array<{
+    id: string;
+    slug: string;
+    name_ar: string;
+    image_url: string | null;
+    parent_id: string | null;
+  }>).filter((item) => item.id && item.name_ar).map((item) => ({
+    id: `${store.id}:${item.id}`,
+    name: item.name_ar,
+    imageUrl: item.image_url,
+    storeId: store.id,
+    storeCategorySlug: 'supermarket',
+    sectionId: item.id,
+    sectionSlug: item.slug,
+    depth: item.parent_id ? 1 : 0,
+  }));
 }
 
 async function loadSearchCatalogSuggestions(
@@ -1516,8 +1564,10 @@ function SupermarketSearchProductCard({
 
 export default function SearchScreen({
   scope = null,
+  storeId = null,
 }: {
   scope?: SearchScopeKey | null;
+  storeId?: string | null;
 }) {
   const router = useRouter();
 
@@ -1609,6 +1659,8 @@ export default function SearchScreen({
     setActiveSuggestionIndex,
   ] = useState(0);
 
+  const [searchRetryKey, setSearchRetryKey] = useState(0);
+
   const [
     selectedTab,
     setSelectedTab,
@@ -1632,13 +1684,14 @@ export default function SearchScreen({
   const visibleResults =
     useMemo(
       () =>
-        results.filter(
-          (result) =>
-            doesResultMatchSearchTab(
-              result,
-              activeSearchScope,
-              activeCategoryIdsByStore,
-            ),
+        results.filter((result) =>
+          activeSearchScope === 'supermarket' && result.kind === 'product'
+            ? result.storeCategorySlug === 'supermarket'
+            : doesResultMatchSearchTab(
+                result,
+                activeSearchScope,
+                activeCategoryIdsByStore,
+              ),
         ),
       [
         results,
@@ -1833,35 +1886,37 @@ export default function SearchScreen({
           loadedStores,
         );
 
-        const activeCategoryIds =
-          await loadActiveCatalogCategoryIds(
-            loadedStores,
-          );
+        if (scope === 'supermarket') {
+          // Search products directly via RPC; do not block the screen on
+          // downloading full catalogs / building the global index.
+          let suggestions: SearchCatalogSuggestion[] = [];
+          try {
+            suggestions = await loadSupermarketSearchSuggestions(
+              loadedStores,
+              storeId,
+            );
+          } catch (suggestionError) {
+            console.warn('Supermarket search discovery unavailable:', suggestionError);
+          }
+          if (!active) return;
+          setCatalogSuggestions(suggestions);
+          setActiveCategoryIdsByStore(new Map());
+        } else {
+          const activeCategoryIds =
+            await loadActiveCatalogCategoryIds(loadedStores);
 
-        const [
-          suggestions,
-        ] = await Promise.all([
-          loadSearchCatalogSuggestions(
+          const suggestions = await loadSearchCatalogSuggestions(
             loadedStores,
             resolvedServiceAreaId,
             activeCategoryIds,
-          ),
-          prepareGlobalSearchIndex(
-            resolvedServiceAreaId,
-          ),
-        ]);
+          );
 
-        if (!active) {
-          return;
+          await prepareGlobalSearchIndex(resolvedServiceAreaId);
+
+          if (!active) return;
+          setActiveCategoryIdsByStore(activeCategoryIds);
+          setCatalogSuggestions(suggestions);
         }
-
-        setActiveCategoryIdsByStore(
-          activeCategoryIds,
-        );
-
-        setCatalogSuggestions(
-          suggestions,
-        );
       } catch (error) {
         if (!active) {
           return;
@@ -1892,6 +1947,7 @@ export default function SearchScreen({
     };
   }, [
     scope,
+    storeId,
     savedServiceAreaId,
   ]);
 
@@ -1953,10 +2009,16 @@ export default function SearchScreen({
               );
 
             const response =
-              await searchGlobalCatalog(
-                normalizedQuery,
-                serviceAreaId,
-              );
+              activeSearchScope === 'supermarket'
+                ? await searchSupermarketProducts(
+                    normalizedQuery,
+                    serviceAreaId,
+                    storeId,
+                  )
+                : await searchGlobalCatalog(
+                    normalizedQuery,
+                    serviceAreaId,
+                  );
 
             if (
               searchRequestIdRef.current !==
@@ -2039,10 +2101,13 @@ export default function SearchScreen({
 
             setResults([]);
             setFailedStoreCount(0);
+            console.warn('Search query failed:', error);
             setErrorMessage(
-              error instanceof Error
-                ? error.message
-                : 'تعذر البحث حاليًا.',
+              activeSearchScope === 'supermarket'
+                ? 'تعذر تحميل نتائج البحث مؤقتًا. جرّب مرة تانية.'
+                : error instanceof Error
+                  ? error.message
+                  : 'تعذر البحث حاليًا.',
             );
           } finally {
             if (
@@ -2055,7 +2120,7 @@ export default function SearchScreen({
         }
 
         void executeSearch();
-      }, SEARCH_DEBOUNCE_MS);
+      }, activeSearchScope === 'supermarket' ? 280 : SEARCH_DEBOUNCE_MS);
 
     return () => {
       clearTimeout(timer);
@@ -2063,8 +2128,11 @@ export default function SearchScreen({
   }, [
     hasSearchQuery,
     scope,
+    activeSearchScope,
+    storeId,
     normalizedQuery,
     serviceAreaId,
+    searchRetryKey,
   ]);
 
   const saveRecentSearch =
@@ -2479,22 +2547,22 @@ export default function SearchScreen({
 
   function isSearchProductDisabled(product: SupermarketSearchProduct) {
     const store = storesById.get(product.storeId);
-    return !store || store.isManuallyClosed || product.productType === 'service';
+    return (store?.isManuallyClosed ?? product.storeClosed ?? true) ||
+      product.productType === 'service';
   }
 
   function addSearchProduct(product: SupermarketSearchProduct) {
     const store = storesById.get(product.storeId);
-    if (!store || isSearchProductDisabled(product)) return;
+    if (isSearchProductDisabled(product)) return;
 
-    Keyboard.dismiss();
     addItem(
       {
-        id: store.id,
-        name: store.name,
-        icon: store.icon,
-        categorySlug: store.categorySlug,
-        deliveryFee: store.deliveryFee,
-        minimumOrder: store.minimumOrder,
+        id: product.storeId,
+        name: store?.name ?? product.storeName,
+        icon: store?.icon ?? product.storeIcon ?? '🏪',
+        categorySlug: 'supermarket',
+        deliveryFee: store?.deliveryFee ?? product.deliveryFee ?? 0,
+        minimumOrder: store?.minimumOrder ?? product.minimumOrder ?? 0,
       },
       {
         id: product.productId,
@@ -2916,6 +2984,15 @@ export default function SearchScreen({
               >
                 {errorMessage}
               </Text>
+              {activeSearchScope === 'supermarket' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setSearchRetryKey((value) => value + 1)}
+                  style={styles.searchRetryButton}
+                >
+                  <Text style={styles.searchRetryText}>إعادة المحاولة</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -3834,6 +3911,22 @@ const styles = StyleSheet.create({
   marketCartButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: '700',
+  },
+
+  searchRetryButton: {
+    alignSelf: 'flex-end',
+    marginTop: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E9CBCB',
+    borderWidth: 1,
+  },
+  searchRetryText: {
+    color: '#8B3333',
+    fontSize: 12,
     fontWeight: '700',
   },
 
