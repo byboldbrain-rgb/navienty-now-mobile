@@ -67,17 +67,22 @@ export function ShoppingBannerProductRail({
       windowSize={5}
       onEndReachedThreshold={0.65}
       onEndReached={() => {
-        if (query.hasNextPage && !query.isFetchingNextPage) {
+        if (query.hasNextPage && !query.isFetching && !query.isFetchNextPageError) {
           void query.fetchNextPage();
         }
       }}
       ListFooterComponent={query.isFetchingNextPage
         ? <ActivityIndicator size="small" color="#00B956" style={{ marginHorizontal: 15 }} />
         : query.isFetchNextPageError
-          ? <Pressable onPress={() => void query.fetchNextPage()} style={styles.footer}>
-              <Text style={styles.retryText}>عرض المزيد</Text>
+          ? <Pressable accessibilityRole="button" onPress={() => void query.fetchNextPage()} style={styles.footer}>
+              <Text style={styles.retryText}>إعادة التحميل</Text>
             </Pressable>
-          : null}
+          : query.hasNextPage
+            ? <Pressable accessibilityRole="button" accessibilityLabel="عرض المزيد من منتجات العرض"
+                onPress={() => { if (!query.isFetching) void query.fetchNextPage(); }} style={styles.footer}>
+                <Text style={styles.retryText}>عرض المزيد</Text>
+              </Pressable>
+            : null}
       contentContainerStyle={styles.rail}
       style={[styles.railScroll, { marginTop: -overlap }]}
       getItemLayout={(_data, index) => ({
