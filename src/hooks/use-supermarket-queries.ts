@@ -17,16 +17,9 @@ import {
   type StorefrontCategoryTile,
 } from '../services/storefront-category-service';
 import {
-  listSupermarketPromotionBanners,
-  type SupermarketPromotionBanner,
-} from '../services/supermarket-banner-service';
-
-type SupermarketHomeData = {
-  catalog: StoreCatalog;
-  promotionBanners: SupermarketPromotionBanner[];
-  storefrontCategoryTiles: StorefrontCategoryTile[] | null;
-  currencyCode: string;
-};
+  getSupermarketHomeSnapshot,
+  getSupermarketHomePreviewProducts,
+} from '../services/supermarket-home-service';
 
 type SupermarketCategoryContext = {
   catalog: StoreCatalog;
@@ -71,27 +64,6 @@ async function getDefaultStoreContext(serviceAreaId: string | null) {
   };
 }
 
-async function fetchSupermarketHome(
-  serviceAreaId: string | null,
-): Promise<SupermarketHomeData> {
-  const { effectiveServiceAreaId, currencyCode } =
-    await getDefaultStoreContext(serviceAreaId);
-
-  const stores = await listStores({
-    categorySlug: 'supermarket',
-    serviceAreaId: effectiveServiceAreaId,
-  });
-  const store = chooseSupermarket(stores);
-
-  const [catalog, promotionBanners, storefrontCategoryTiles] = await Promise.all([
-    getStoreCatalog(store.id, effectiveServiceAreaId),
-    listSupermarketPromotionBanners({ storeId: store.id }).catch(() => []),
-    listStorefrontCategoryTiles('supermarket').catch(() => null),
-  ]);
-
-  return { catalog, promotionBanners, storefrontCategoryTiles, currencyCode };
-}
-
 async function fetchSupermarketCategoryContext({
   serviceAreaId,
   requestedStoreId,
@@ -126,9 +98,31 @@ async function fetchSupermarketCategoryContext({
  */
 export function useSupermarketHomeQuery(serviceAreaId: string | null) {
   return useQuery({
-    queryKey: ['public', 'supermarket', 'home', serviceAreaId ?? '*'],
-    queryFn: () => fetchSupermarketHome(serviceAreaId),
+    // Versioned key prevents old persisted 4.5 MB catalog home data from
+    // hydrating a lightweight home shell with a different response shape.
+    queryKey: ['public', 'supermarket', 'home-shell-v2', serviceAreaId ?? '*'],
+    queryFn: () => getSupermarketHomeSnapshot(serviceAreaId),
+    staleTime: 90_000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
     meta: { persist: true },
+  });
+}
+
+/** Independent query for the small number of promo and reorder card items. */
+export function useSupermarketHomePreviewProductsQuery(
+  storeId: string | null,
+  productIds: readonly string[],
+) {
+  return useQuery({
+    queryKey: ['public', 'supermarket', 'home-previews', storeId ?? '*', productIds],
+    queryFn: () => getSupermarketHomePreviewProducts(storeId!, productIds),
+    enabled: Boolean(storeId) && productIds.length > 0,
+    staleTime: 60_000,
+    gcTime: 30 * 60 * 1000,
+    retry: 1,
+    // Product prices and availability should not be persisted indefinitely.
+    meta: { persist: false },
   });
 }
 
