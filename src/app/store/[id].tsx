@@ -1353,6 +1353,14 @@ export default function StoreScreen({
     }
   }
 
+  // Keep both overlay controls on exactly the same screen coordinate
+  // and switch them to the sticky header in the same render.
+  const heroActionTop =
+    Math.max(
+      insets.top,
+      Platform.OS === 'android' ? 24 : 12,
+    ) + 10;
+
   return (
     <View style={styles.screen}>
       {searchOnly && (
@@ -1524,29 +1532,6 @@ export default function StoreScreen({
               </Text>
             </View>
           )}
-
-          <Pressable
-            accessibilityLabel="العودة"
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.backButton,
-              styles.heroBackButton,
-              {
-                top:
-                  Math.max(
-                    insets.top,
-                    Platform.OS === 'android'
-                      ? 24
-                      : 12,
-                  ) + 10,
-              },
-              pressed &&
-                styles.headerButtonPressed,
-            ]}
-            onPress={() => router.back()}
-          >
-            <BackArrowIcon />
-          </Pressable>
 
           {storeRating !== null && (
             <View style={styles.ratingBadge}>
@@ -1760,33 +1745,43 @@ export default function StoreScreen({
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Overlay is a sibling of SectionList: it is visible immediately
-          even before a scroll event or a sticky header is mounted. */}
+      {/* Both hero controls use the same fixed overlay and switch
+          together to the sticky header once scrolling passes 170 px. */}
       {!isSearchVisible && !isScrollHeaderVisible && (
-        <Pressable
-          accessibilityLabel="البحث في منتجات المطعم"
-          accessibilityRole="button"
-          hitSlop={8}
-          style={({ pressed }) => [
-            styles.backButton,
-            styles.heroSearchButton,
-            {
-              top:
-                Math.max(
-                  insets.top,
-                  Platform.OS === 'android' ? 24 : 12,
-                ) + 10,
-            },
-            pressed && styles.headerButtonPressed,
-          ]}
-          onPress={openRestaurantSearch}
-        >
-          <Ionicons
-            name="search-outline"
-            size={21}
-            color="#242424"
-          />
-        </Pressable>
+        <>
+          <Pressable
+            accessibilityLabel="العودة"
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.backButton,
+              styles.heroBackButton,
+              { top: heroActionTop },
+              pressed && styles.headerButtonPressed,
+            ]}
+            onPress={() => router.back()}
+          >
+            <BackArrowIcon />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="البحث في منتجات المطعم"
+            accessibilityRole="button"
+            hitSlop={8}
+            style={({ pressed }) => [
+              styles.backButton,
+              styles.heroSearchButton,
+              { top: heroActionTop },
+              pressed && styles.headerButtonPressed,
+            ]}
+            onPress={openRestaurantSearch}
+          >
+            <Ionicons
+              name="search-outline"
+              size={21}
+              color="#242424"
+            />
+          </Pressable>
+        </>
       )}
 
       {!isSearchVisible && isScrollHeaderVisible && (
@@ -2348,7 +2343,7 @@ const styles = StyleSheet.create({
     left:
       NAVIENTY_NOW_LAYOUT.pageGutter,
     position: 'absolute',
-    zIndex: 20,
+    zIndex: 90,
 
     shadowColor: '#000000',
     shadowOffset: {
