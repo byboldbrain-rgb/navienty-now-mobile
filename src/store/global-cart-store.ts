@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
 import { isV1PublicCategorySlug } from '../config/v1-release-scope';
 import { resilientAsyncStorage } from '../lib/resilient-storage';
 import type { PrintJobSnapshot } from '../types/printing';
@@ -246,7 +245,7 @@ function compatibilitySnapshot(
     storeId: id,
     storeName: group.storeName,
     storeIcon: group.storeIcon,
-    deliveryFee: GLOBAL_CART_DELIVERY_FEE,
+    deliveryFee: group.deliveryFee,
     minimumOrder: 0,
     items: group.items,
   };
@@ -453,7 +452,12 @@ export const selectCartItemCount = selectAllCartItemCount;
 export const selectCartSubtotal = selectAllCartSubtotal;
 export const selectCartTotal = (state: CartState) => {
   const count = selectAllCartItemCount(state);
-  return count > 0 ? selectAllCartSubtotal(state) + GLOBAL_CART_DELIVERY_FEE : 0;
+  // Cart snapshots are provisional; the checkout obtains a live store-area quote.
+  const groupFees = Object.values(state.carts)
+    .filter((group) => group.items.length > 0)
+    .map((group) => group.deliveryFee);
+  const previewFee = groupFees.length ? Math.max(0, ...groupFees) : 0;
+  return count > 0 ? selectAllCartSubtotal(state) + previewFee : 0;
 };
 export const selectGlobalCartStoreCount = (state: CartState) =>
   Object.values(state.carts).filter((group) => group.items.length > 0).length;
