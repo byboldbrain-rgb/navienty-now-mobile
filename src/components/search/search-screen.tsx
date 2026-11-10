@@ -1660,6 +1660,10 @@ export default function SearchScreen({
   ] = useState(0);
 
   const [searchRetryKey, setSearchRetryKey] = useState(0);
+  const [hasMoreProducts, setHasMoreProducts] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [paginationError, setPaginationError] = useState(false);
+  const loadMoreInProgressRef = useRef(false);
 
   const [
     selectedTab,
@@ -1993,8 +1997,20 @@ export default function SearchScreen({
       setIsSearching(false);
       setFailedStoreCount(0);
       setErrorMessage(null);
+      setHasMoreProducts(false);
+      setPaginationError(false);
+      setIsLoadingMore(false);
+      loadMoreInProgressRef.current = false;
       return;
     }
+
+    // Clear stale products immediately while a new search is debouncing.
+    setResults([]);
+    setIsSearching(true);
+    setHasMoreProducts(false);
+    setPaginationError(false);
+    setIsLoadingMore(false);
+    loadMoreInProgressRef.current = false;
 
     const timer =
       setTimeout(() => {
@@ -2044,6 +2060,9 @@ export default function SearchScreen({
 
             setResults(
               scopedResults,
+            );
+            setHasMoreProducts(
+              activeSearchScope === 'supermarket' && response.hasMore === true,
             );
 
             setFailedStoreCount(
@@ -2100,6 +2119,7 @@ export default function SearchScreen({
             }
 
             setResults([]);
+            setHasMoreProducts(false);
             setFailedStoreCount(0);
             console.warn('Search query failed:', error);
             setErrorMessage(
@@ -2588,6 +2608,47 @@ export default function SearchScreen({
 
   function decreaseSearchProduct(product: SupermarketSearchProduct) {
     decreaseStoreItem(product.storeId, product.productId, null);
+  }
+
+
+  async function loadMoreSupermarketProducts() {
+    if (
+      activeSearchScope !== 'supermarket' ||
+      !hasMoreProducts ||
+      loadMoreInProgressRef.current
+    ) return;
+
+    const activeRequestId = searchRequestIdRef.current;
+    loadMoreInProgressRef.current = true;
+    setIsLoadingMore(true);
+    setPaginationError(false);
+
+    try {
+      const nextPage = await searchSupermarketProducts(
+        normalizedQuery,
+        serviceAreaId,
+        storeId,
+        groupedResults.products.length,
+      );
+      if (searchRequestIdRef.current !== activeRequestId) return;
+
+      setResults((currentResults) => {
+        const seen = new Set(currentResults.map((result) => result.id));
+        const added = nextPage.results.filter((result) => !seen.has(result.id));
+        return [...currentResults, ...added];
+      });
+      setHasMoreProducts(nextPage.hasMore === true);
+    } catch (error) {
+      if (searchRequestIdRef.current === activeRequestId) {
+        console.warn('Unable to load more supermarket products:', error);
+        setPaginationError(true);
+      }
+    } finally {
+      if (searchRequestIdRef.current === activeRequestId) {
+        setIsLoadingMore(false);
+        loadMoreInProgressRef.current = false;
+      }
+    }
   }
 
   async function clearRecentSearches() {
@@ -3123,6 +3184,26 @@ export default function SearchScreen({
                       />
                     ))}
                   </View>
+                  {hasMoreProducts ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="عرض المزيد من المنتجات"
+                      disabled={isLoadingMore}
+                      onPress={() => { void loadMoreSupermarketProducts(); }}
+                      style={({ pressed }) => [
+                        styles.marketLoadMoreButton,
+                        pressed && styles.marketLoadMorePressed,
+                      ]}
+                    >
+                      {isLoadingMore ? (
+                        <ActivityIndicator color="#00B14F" size="small" />
+                      ) : (
+                        <Text style={styles.marketLoadMoreText}>
+                          {paginationError ? 'تعذر التحميل — حاول مرة أخرى' : 'عرض المزيد من المنتجات'}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : (
                 <ResultSection title="المنتجات">
@@ -3927,6 +4008,29 @@ const styles = StyleSheet.create({
   searchRetryText: {
     color: '#8B3333',
     fontSize: 12,
+    fontWeight: '700',
+  },
+
+
+  marketLoadMoreButton: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    minHeight: 44,
+    paddingHorizontal: 20,
+    backgroundColor: '#F2FAF5',
+    borderRadius: 13,
+    borderColor: '#D6EDDF',
+    borderWidth: 1,
+  },
+  marketLoadMorePressed: {
+    opacity: 0.78,
+  },
+  marketLoadMoreText: {
+    color: '#007C3A',
+    fontSize: 13,
     fontWeight: '700',
   },
 
