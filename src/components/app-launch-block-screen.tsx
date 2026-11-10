@@ -14,7 +14,6 @@ import type {
 } from '../services/app-launch-gate-service';
 import {
   NAVIENTY_NOW_COLORS,
-  NAVIENTY_NOW_LAYOUT,
 } from '../theme/navienty-now-theme';
 
 type AppLaunchBlockScreenProps = {
