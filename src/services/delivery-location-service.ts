@@ -1,4 +1,3 @@
-import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
 import {
   getGlobalCartStoreGroups,
 } from '../store/cart-store';
@@ -6,6 +5,13 @@ import * as legacy from './delivery-location-service-legacy';
 
 export * from './delivery-location-service-legacy';
 
+/**
+ * The RPC is authoritative for a particular store and destination. Never
+ * replace a valid 0 delivery fee with a general cart or service-area fee.
+ *
+ * In a multi-store cart we charge one shared delivery fee: the highest of
+ * the participating stores' individual fees, rather than a hard-coded fee.
+ */
 export async function resolveDeliveryLocation(
   input: {
     latitude: number;
@@ -13,85 +19,54 @@ export async function resolveDeliveryLocation(
     storeId?: string | null;
   },
 ): Promise<legacy.DeliveryLocationResolution> {
-  const groups =
-    getGlobalCartStoreGroups();
-
-  if (groups.length <= 1) {
-    const resolution =
-      await legacy.resolveDeliveryLocation(
-        input,
-      );
-
-    return {
-      ...resolution,
-      minimumOrder: 0,
-      deliveryFee:
-        groups.length === 1
-          ? GLOBAL_CART_DELIVERY_FEE
-          : resolution.deliveryFee,
-    };
+  if (input.storeId) {
+    return legacy.resolveDeliveryLocation(input);
   }
 
-  const resolutions =
-    await Promise.all(
-      groups.map(
-        (group) =>
-          legacy.resolveDeliveryLocation({
-            latitude:
-              input.latitude,
-            longitude:
-              input.longitude,
-            storeId:
-              group.storeId,
-          }),
-      ),
-    );
+  const groups = getGlobalCartStoreGroups();
+  if (groups.length === 0) {
+    return legacy.resolveDeliveryLocation(input);
+  }
 
-  const unavailable =
-    resolutions.find(
-      (resolution) =>
-        !resolution.serviceable ||
-        resolution.storeAvailable !==
-          true,
-    );
+  const resolutions = await Promise.all(
+    groups.map((group) =>
+      legacy.resolveDeliveryLocation({
+        latitude: input.latitude,
+        longitude: input.longitude,
+        storeId: group.storeId,
+      }),
+    ),
+  );
+
+  const unavailable = resolutions.find(
+    (resolution) =>
+      !resolution.serviceable || resolution.storeAvailable !== true,
+  );
 
   if (unavailable) {
     return {
       ...unavailable,
-      storeId:
-        input.storeId ??
-        unavailable.storeId,
+      storeId: null,
       storeAvailable: false,
-      deliveryFee:
-        GLOBAL_CART_DELIVERY_FEE,
-      minimumOrder: 0,
+      deliveryFee: null,
     };
   }
 
-  const base = resolutions[0];
+  const fees = resolutions.map((resolution) => resolution.deliveryFee);
+  const deliveryFee = fees.every(
+    (fee): fee is number => fee !== null && Number.isFinite(fee) && fee >= 0,
+  )
+    ? Math.max(...(fees as number[]))
+    : null;
 
   return {
-    ...base,
-    serviceable: true,
-    reason: null,
-    storeId:
-      input.storeId ??
-      base.storeId,
+    ...resolutions[0],
+    storeId: null,
     storeAvailable: true,
-    deliveryFee:
-      GLOBAL_CART_DELIVERY_FEE,
-    minimumOrder: 0,
+    deliveryFee,
     estimatedDeliveryMinutes:
-      Math.max(
-        ...resolutions.map(
-          (resolution) =>
-            Number(
-              resolution
-                .estimatedDeliveryMinutes ??
-                0,
-            ),
-        ),
-      ) ||
-      base.estimatedDeliveryMinutes,
+      Math.max(...resolutions.map(
+        (resolution) => resolution.estimatedDeliveryMinutes ?? 0,
+      )) || resolutions[0].estimatedDeliveryMinutes,
   };
 }
