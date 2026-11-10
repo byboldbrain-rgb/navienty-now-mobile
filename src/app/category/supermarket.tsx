@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -42,6 +42,9 @@ import {
   useSupermarketHomePreviewProductsQuery,
   useSupermarketHomeQuery,
 } from '../../hooks/use-supermarket-queries';
+import {
+  getSupermarketBannerProductPage,
+} from '../../services/supermarket-home-service';
 import { getMyOrders } from '../../services/order-service';
 import {
   listStorefrontCategoryTiles,
@@ -150,11 +153,6 @@ type CategoryDisplayItem = {
   section: CatalogSection | null;
   isOffers: boolean;
 };
-
-type ResolvedPromotionBanner =
-  SupermarketPromotionBanner & {
-    products: CatalogProduct[];
-  };
 
 type FeaturedProductCardProps = {
   product: CatalogProduct;
@@ -2154,6 +2152,155 @@ function FeaturedProductCard({
   );
 }
 
+
+/**
+ * Each banner owns its own product pagination. The home page never truncates
+ * the union of all promo products to a global limit. FlatList virtualizes
+ * rendered cards and loads subsequent pages only when the customer swipes.
+ */
+function PromotionBannerProductRail({
+  banner,
+  storeId,
+  serviceAreaId,
+  currencyCode,
+  cardWidth,
+  overlap,
+  isStoreClosed,
+  cartItems,
+  onOpen,
+  onAdd,
+  onIncrease,
+  onDecrease,
+}: {
+  banner: SupermarketPromotionBanner;
+  storeId: string;
+  serviceAreaId: string | null;
+  currencyCode: string;
+  cardWidth: number;
+  overlap: number;
+  isStoreClosed: boolean;
+  cartItems: ReadonlyArray<{ id: string; quantity: number }>;
+  onOpen: (product: CatalogProduct) => void;
+  onAdd: (product: CatalogProduct) => void;
+  onIncrease: (product: CatalogProduct) => void;
+  onDecrease: (productId: string) => void;
+}) {
+  const query = useInfiniteQuery({
+    queryKey: [
+      'public', 'supermarket', 'banner-products-v3',
+      storeId, serviceAreaId ?? '*', banner.id, banner.productIds.length,
+    ],
+    enabled: banner.productIds.length > 0 && Boolean(storeId),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      getSupermarketBannerProductPage(
+        storeId, banner.id, serviceAreaId, pageParam,
+      ),
+    getNextPageParam: (lastPage, pages) =>
+      lastPage.hasMore
+        ? pages.reduce((total, page) => total + page.items.length, 0)
+        : undefined,
+    staleTime: 60_000,
+    gcTime: 15 * 60_000,
+    retry: 1,
+    meta: { persist: false },
+  });
+
+  const products = useMemo(
+    () => query.data?.pages.flatMap((page) => page.items) ?? [],
+    [query.data],
+  );
+
+  // A banner may have no linked products (branding only), or every linked
+  // product may have since become inactive. Neither case is a network error.
+  if (banner.productIds.length === 0) return null;
+
+  if (query.isPending) {
+    return (
+      <View style={[styles.promotionRailStatus, { marginTop: -overlap }]}>
+        <ActivityIndicator color="#00B956" size="small" />
+      </View>
+    );
+  }
+
+  if (query.isError && products.length === 0) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        style={[styles.promotionRailStatus, { marginTop: -overlap }]}
+        onPress={() => { void query.refetch(); }}
+      >
+        <Text style={styles.promotionRailStatusText}>
+          تعذر تحميل المنتجات — اضغط لإعادة المحاولة
+        </Text>
+      </Pressable>
+    );
+  }
+
+  if (products.length === 0) return null;
+
+  return (
+    <FlatList
+      horizontal
+      nestedScrollEnabled
+      data={products}
+      extraData={cartItems}
+      keyExtractor={(product) => `${banner.id}-${product.id}`}
+      renderItem={({ item: product }) => (
+        <FeaturedProductCard
+          product={product}
+          currencyCode={currencyCode}
+          cardWidth={cardWidth}
+          quantity={cartItems.find((item) => item.id === product.id)?.quantity ?? 0}
+          isStoreClosed={isStoreClosed}
+          onOpen={() => onOpen(product)}
+          onAdd={() => onAdd(product)}
+          onIncrease={() => onIncrease(product)}
+          onDecrease={() => onDecrease(product.id)}
+        />
+      )}
+      onEndReached={() => {
+        if (query.hasNextPage && !query.isFetching && !query.isFetchNextPageError) {
+          void query.fetchNextPage();
+        }
+      }}
+      onEndReachedThreshold={0.9}
+      ListFooterComponent={
+        query.isFetchingNextPage ? (
+          <View style={styles.promotionRailPageStatus}>
+            <ActivityIndicator color="#00B956" size="small" />
+          </View>
+        ) : query.isFetchNextPageError ? (
+          <Pressable
+            accessibilityRole="button"
+            style={styles.promotionRailPageStatus}
+            onPress={() => { void query.fetchNextPage(); }}
+          >
+            <Text style={styles.promotionRailStatusText}>إعادة التحميل</Text>
+          </Pressable>
+        ) : null
+      }
+      initialNumToRender={4}
+      maxToRenderPerBatch={6}
+      updateCellsBatchingPeriod={50}
+      windowSize={5}
+      getItemLayout={(_data, index) => ({
+        length: cardWidth + PROMOTION_PRODUCT_GAP,
+        offset: PROMOTION_PRODUCT_HORIZONTAL_PADDING +
+          (cardWidth + PROMOTION_PRODUCT_GAP) * index,
+        index,
+      })}
+      showsHorizontalScrollIndicator={false}
+      directionalLockEnabled
+      contentContainerStyle={styles.promotionProductsRail}
+      style={[
+        styles.promotionProductsScroll,
+        { marginTop: -overlap },
+      ]}
+    />
+  );
+}
+
 export default function SupermarketScreen() {
   const router = useRouter();
 
@@ -2465,16 +2612,13 @@ export default function SupermarketScreen() {
     extrapolate: 'clamp',
   });
 
-  // Preview product cards load only active IDs referenced by promotions
-  // and the customer's accepted orders; category product lists stay lazy.
+  // Reorder preview is independent: promo banner products have their
+  // own per-banner infinite queries, with no global product cap.
   const previewIds = useMemo(
-    () => Array.from(new Set([
-      // Prioritize real previously ordered products if promo campaigns have
-      // many linked IDs; the bounded preview endpoint must not starve reorder.
-      ...reorderedProductIds.slice(0, 40),
-      ...promotionBanners.flatMap((banner) => banner.productIds),
-    ])).slice(0, 120),
-    [promotionBanners, reorderedProductIds],
+    () => Array.from(
+      new Set(reorderedProductIds.slice(0, REORDER_PREVIEW_COUNT)),
+    ),
+    [reorderedProductIds],
   );
   const previewQuery = useSupermarketHomePreviewProductsQuery(
     homeStoreId,
@@ -2494,45 +2638,10 @@ export default function SupermarketScreen() {
     [reorderedProductIds, catalogProductsById],
   );
 
-  const resolvedPromotionBanners =
-    useMemo<
-      ResolvedPromotionBanner[]
-    >(() => {
-      return promotionBanners
-        .map(
-          (banner) => ({
-            ...banner,
-
-            products:
-              banner.productIds
-                .map(
-                  (
-                    productId,
-                  ) =>
-                    catalogProductsById.get(
-                      productId,
-                    ),
-                )
-                .filter(
-                  (
-                    product,
-                  ): product is CatalogProduct =>
-                    Boolean(
-                      product,
-                    ),
-                ),
-          }),
-        )
-        .filter(
-          (banner) =>
-            Boolean(
-              banner.imageUrl.trim(),
-            ),
-        );
-    }, [
-      catalogProductsById,
-      promotionBanners,
-    ]);
+  const visiblePromotionBanners = useMemo(
+    () => promotionBanners.filter((banner) => Boolean(banner.imageUrl.trim())),
+    [promotionBanners],
+  );
 
   const pageWidth =
     Math.min(
@@ -3261,7 +3370,7 @@ export default function SupermarketScreen() {
             </View>
           ) : null}
 
-          {resolvedPromotionBanners.map(
+          {visiblePromotionBanners.map(
             (
               banner,
               bannerIndex,
@@ -3274,7 +3383,7 @@ export default function SupermarketScreen() {
                   styles.promotionSection,
 
                   bannerIndex ===
-                    resolvedPromotionBanners.length -
+                    visiblePromotionBanners.length -
                       1 &&
                     styles.promotionSectionLast,
                 ]}
@@ -3306,92 +3415,20 @@ export default function SupermarketScreen() {
                   />
                 </View>
 
-                {banner.products
-                  .length >
-                  0 && (
-                  <FlatList
-                    horizontal
-                    nestedScrollEnabled
-                    data={
-                      banner.products
-                    }
-                    keyExtractor={(product) =>
-                      `${banner.id}-${product.id}`
-                    }
-                    renderItem={({
-                      item: product,
-                    }) => (
-                      <FeaturedProductCard
-                        product={
-                          product
-                        }
-                        currencyCode={
-                          currencyCode
-                        }
-                        cardWidth={
-                          featuredCardWidth
-                        }
-                        quantity={getProductQuantity(
-                          product.id,
-                        )}
-                        isStoreClosed={
-                          isStoreClosed
-                        }
-                        onOpen={() => openProductDetails(product)}
-                        onAdd={() =>
-                          addFeaturedProduct(
-                            product,
-                          )
-                        }
-                        onIncrease={() =>
-                          increaseFeaturedProduct(
-                            product,
-                          )
-                        }
-                        onDecrease={() =>
-                          decreaseFeaturedProduct(
-                            product.id,
-                          )
-                        }
-                      />
-                    )}
-                    initialNumToRender={4}
-                    maxToRenderPerBatch={4}
-                    updateCellsBatchingPeriod={50}
-                    windowSize={3}
-                    getItemLayout={(
-                      _data,
-                      index,
-                    ) => ({
-                      length:
-                        featuredCardWidth +
-                        PROMOTION_PRODUCT_GAP,
-
-                      offset:
-                        PROMOTION_PRODUCT_HORIZONTAL_PADDING +
-                        (featuredCardWidth +
-                          PROMOTION_PRODUCT_GAP) *
-                          index,
-
-                      index,
-                    })}
-                    showsHorizontalScrollIndicator={
-                      false
-                    }
-                    directionalLockEnabled
-                    contentContainerStyle={
-                      styles.promotionProductsRail
-                    }
-                    style={[
-                      styles.promotionProductsScroll,
-
-                      {
-                        marginTop:
-                          -promotionProductsOverlap,
-                      },
-                    ]}
-                  />
-                )}
+                <PromotionBannerProductRail
+                  banner={banner}
+                  storeId={currentStore.id}
+                  serviceAreaId={delivery.serviceAreaId}
+                  currencyCode={currencyCode}
+                  cardWidth={featuredCardWidth}
+                  overlap={promotionProductsOverlap}
+                  isStoreClosed={isStoreClosed}
+                  cartItems={cartItems}
+                  onOpen={openProductDetails}
+                  onAdd={addFeaturedProduct}
+                  onIncrease={increaseFeaturedProduct}
+                  onDecrease={decreaseFeaturedProduct}
+                />
               </View>
             ),
           )}
@@ -4025,6 +4062,35 @@ const styles =
 
       zIndex:
         10,
+    },
+
+    promotionRailStatus: {
+      alignItems: 'center',
+      alignSelf: 'center',
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      minHeight: 74,
+      justifyContent: 'center',
+      marginHorizontal: 12,
+      paddingHorizontal: 18,
+      position: 'relative',
+      width: '85%',
+      zIndex: 10,
+    },
+
+    promotionRailPageStatus: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 86,
+      paddingHorizontal: 12,
+    },
+
+    promotionRailStatusText: {
+      color: '#606060',
+      fontSize: 12,
+      fontWeight: '600',
+      textAlign: 'center',
+      writingDirection: 'rtl',
     },
 
     promotionProductsRail: {
