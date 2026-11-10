@@ -4,7 +4,6 @@ import type { ShoppingHomeSnapshot } from '../../services/shopping-home-service'
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import {
-  ActivityIndicator,
   useLocalSearchParams,
   useRouter,
 } from 'expo-router';
@@ -16,6 +15,7 @@ import {
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   type ImageSourcePropType,
   Pressable,
