@@ -4633,9 +4633,9 @@ const styles =
      * the same white product shell used across the catalog.
      */
     productImage: {
-      height: '88%',
+      height: '100%',
 
-      width: '88%',
+      width: '100%',
     },
 
     productFallback: {

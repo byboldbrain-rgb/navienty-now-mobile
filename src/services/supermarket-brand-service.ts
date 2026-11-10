@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase } from '../lib/supabase';
 
 /**
  * The public RPC only exposes active, available product IDs and their
@@ -25,7 +25,7 @@ async function loadBrandRows(
   storeId: string,
   filter: { productId: string } | { brandId: string },
 ): Promise<BrandProductRow[]> {
-  const { data, error } = await supabase.rpc('get_supermarket_brand_products', {
+  const { data, error } = await publicSupabase.rpc('get_supermarket_brand_products', {
     p_store_id: storeId,
     p_brand_id: 'brandId' in filter ? filter.brandId : null,
     p_product_id: 'productId' in filter ? filter.productId : null,
