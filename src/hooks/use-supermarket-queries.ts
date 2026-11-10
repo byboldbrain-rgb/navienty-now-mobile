@@ -1,30 +1,30 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import getAppBootstrap from '../services/bootstrap-service';
 import {
   findCatalogSectionBySlug,
-  getStoreCatalog,
-  listStores,
   type CatalogSection,
   type StoreCatalog,
-  type StoreSummary,
 } from '../services/catalog-service';
 import {
   findStorefrontCategoryTile,
   getStorefrontTileCategoryImages,
   listStorefrontCategoryTiles,
-  type StorefrontCategoryTile,
 } from '../services/storefront-category-service';
 import {
   getSupermarketHomeSnapshot,
   getSupermarketHomePreviewProducts,
 } from '../services/supermarket-home-service';
+import {
+  getFastSupermarketCategoryContext,
+  getFastSupermarketCategoryPage,
+  SUPERMARKET_CATEGORY_PAGE_SIZE,
+} from '../services/supermarket-category-fast-service';
 
 type SupermarketCategoryContext = {
   catalog: StoreCatalog;
   currencyCode: string;
-  tiles: StorefrontCategoryTile[] | null;
+  offerRootCategoryIds: string[];
 };
 
 type SupermarketCategoryData = {
@@ -33,6 +33,7 @@ type SupermarketCategoryData = {
   currencyCode: string;
   rootCategoryImageUrl: string | null;
   categoryImageOverrides: Record<string, string>;
+  offerRootCategoryIds: string[];
 };
 
 type CategoryQueryOptions = {
@@ -41,55 +42,6 @@ type CategoryQueryOptions = {
   sectionSlug: string;
   categoryKey: string | null;
 };
-
-function chooseSupermarket(stores: StoreSummary[]): StoreSummary {
-  if (stores.length === 0) {
-    throw new Error('لا يوجد سوبر ماركت متاح حاليًا.');
-  }
-  return (
-    stores.find((store) => store.isFeatured && !store.isManuallyClosed) ??
-    stores.find((store) => !store.isManuallyClosed) ??
-    stores[0]
-  );
-}
-
-async function getDefaultStoreContext(serviceAreaId: string | null) {
-  // Bootstrap is useful for defaults, but a failed settings read must not
-  // suppress an otherwise accessible public storefront.
-  const bootstrap = await getAppBootstrap().catch(() => null);
-  return {
-    effectiveServiceAreaId:
-      serviceAreaId ?? bootstrap?.settings.default_service_area_id ?? undefined,
-    currencyCode: bootstrap?.settings.currency_code || 'EGP',
-  };
-}
-
-async function fetchSupermarketCategoryContext({
-  serviceAreaId,
-  requestedStoreId,
-}: Pick<CategoryQueryOptions, 'serviceAreaId' | 'requestedStoreId'>):
-  Promise<SupermarketCategoryContext> {
-  const { effectiveServiceAreaId, currencyCode } =
-    await getDefaultStoreContext(serviceAreaId);
-
-  const tilesPromise = listStorefrontCategoryTiles('supermarket').catch(() => null);
-
-  let storeId = requestedStoreId;
-  if (!storeId) {
-    const stores = await listStores({
-      categorySlug: 'supermarket',
-      serviceAreaId: effectiveServiceAreaId,
-    });
-    storeId = chooseSupermarket(stores).id;
-  }
-
-  const [catalog, tiles] = await Promise.all([
-    getStoreCatalog(storeId, effectiveServiceAreaId),
-    tilesPromise,
-  ]);
-
-  return { catalog, currencyCode, tiles };
-}
 
 /**
  * Both hooks cache public data by service area (and store/category when
@@ -126,42 +78,93 @@ export function useSupermarketHomePreviewProductsQuery(
   });
 }
 
+/**
+ * Public category metadata and optional artwork are independent queries.
+ * The product list has a separate paginated feed, so the header never waits
+ * for thousands of products before opening.
+ */
 export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
-  // All category screens for the same store/area share one cached catalog
-  // rather than persisting duplicate product lists for every subcategory.
   const query = useQuery({
     queryKey: [
-      'public', 'supermarket', 'category-catalog',
-      options.serviceAreaId ?? '*',
-      options.requestedStoreId ?? '*',
+      'public', 'supermarket', 'category-context-v2',
+      options.serviceAreaId ?? '*', options.requestedStoreId ?? '*',
     ],
-    queryFn: () => fetchSupermarketCategoryContext(options),
+    queryFn: () => getFastSupermarketCategoryContext(
+      options.serviceAreaId, options.requestedStoreId,
+    ),
+    staleTime: 90_000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+    meta: { persist: true },
+  });
+
+  const tilesQuery = useQuery({
+    queryKey: ['public', 'supermarket', 'category-tiles-v2'],
+    queryFn: () => listStorefrontCategoryTiles('supermarket'),
     staleTime: 120_000,
-    gcTime: 30 * 60 * 1000,
-    // Full 4+ MB catalog remains memory-cached but must not slow down
-    // future app startup by being hydrated from persistent disk storage.
-    meta: { persist: false },
+    retry: 1,
+    meta: { persist: true },
   });
 
   const data = useMemo<SupermarketCategoryData | undefined>(() => {
     if (!query.data) return undefined;
-
-    const { catalog, currencyCode, tiles } = query.data;
+    const { catalog, currencyCode, offerRootCategoryIds } =
+      query.data as SupermarketCategoryContext;
     const tile = findStorefrontCategoryTile(
-      tiles ?? [],
+      tilesQuery.data ?? [],
       [options.categoryKey, options.sectionSlug],
     );
     const isOffersPage = options.sectionSlug.trim().toLowerCase() === 'offers';
+
     return {
       catalog,
       currencyCode,
+      offerRootCategoryIds,
       selectedSection: isOffersPage
         ? null
         : findCatalogSectionBySlug(catalog, options.sectionSlug),
       rootCategoryImageUrl: tile?.imageUrl ?? null,
       categoryImageOverrides: getStorefrontTileCategoryImages(tile),
     };
-  }, [query.data, options.sectionSlug, options.categoryKey]);
+  }, [query.data, tilesQuery.data, options.sectionSlug, options.categoryKey]);
 
-  return { ...query, data };
+  return { ...query, data, tiles: tilesQuery.data ?? [] };
+}
+
+export type SupermarketCategoryProductsOptions = {
+  storeId: string | null;
+  serviceAreaId: string | null;
+  categoryId: string | null;
+  offersOnly: boolean;
+  search: string;
+  enabled: boolean;
+};
+
+/** Per-selected-category infinite list with DB-side filters and search. */
+export function useSupermarketCategoryProductsQuery(
+  options: SupermarketCategoryProductsOptions,
+) {
+  return useInfiniteQuery({
+    queryKey: [
+      'public', 'supermarket', 'category-products-v2',
+      options.storeId ?? '*', options.serviceAreaId ?? '*',
+      options.categoryId ?? '*', options.offersOnly, options.search.trim(),
+    ],
+    enabled: options.enabled && Boolean(options.storeId),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => getFastSupermarketCategoryPage({
+      storeId: options.storeId!,
+      serviceAreaId: options.serviceAreaId,
+      categoryId: options.categoryId,
+      offersOnly: options.offersOnly,
+      search: options.search,
+      offset: pageParam,
+    }),
+    getNextPageParam: (lastPage, _pages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + SUPERMARKET_CATEGORY_PAGE_SIZE : undefined,
+    staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+    meta: { persist: false },
+  });
 }
