@@ -86,6 +86,11 @@ export type CartState = {
   removeStoreLine: (storeId: string, lineId: string) => void;
   clearStoreCart: (storeId: string) => void;
   clearAllCarts: () => void;
+  applyCheckoutCartCorrections: (corrections: Array<{
+    storeId: string;
+    expectedItems: CartItem[];
+    nextItems: CartItem[];
+  }>) => boolean;
   setHasHydrated: (hasHydrated: boolean) => void;
 };
 
@@ -404,6 +409,46 @@ export const useCartStore = create<CartState>()(
       clearStoreCart: (storeId) => set((state) =>
         updateGroup(state, storeId, () => [])),
       clearAllCarts: () => set((state) => ({ ...state, carts: {}, activeStoreId: null, ...emptyLegacy })),
+      // Commit all store corrections atomically; don't overwrite a basket that
+      // changed while the live catalog was being fetched.
+      applyCheckoutCartCorrections: (corrections) => {
+        let applied = false;
+        set((state) => {
+          const nonEmptyCount = Object.values(state.carts).filter(
+            (cart) => cart.items.length > 0,
+          ).length;
+          if (nonEmptyCount !== corrections.length ||
+              corrections.some((correction) =>
+                state.carts[correction.storeId]?.items !== correction.expectedItems
+              )) {
+            return state;
+          }
+
+          applied = true;
+          if (corrections.every((correction) =>
+            correction.nextItems === correction.expectedItems
+          )) {
+            return state;
+          }
+
+          const carts = { ...state.carts };
+          for (const correction of corrections) {
+            if (correction.nextItems.length) {
+              carts[correction.storeId] = {
+                ...carts[correction.storeId],
+                items: correction.nextItems,
+              };
+            } else {
+              delete carts[correction.storeId];
+            }
+          }
+          const activeId = state.activeStoreId && carts[state.activeStoreId]
+            ? state.activeStoreId
+            : firstStore(carts);
+          return { ...state, carts, ...compatibilitySnapshot(carts, activeId) };
+        });
+        return applied;
+      },
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),
     {
