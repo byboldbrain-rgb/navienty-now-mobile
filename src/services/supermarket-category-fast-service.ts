@@ -45,6 +45,17 @@ export async function getFastSupermarketCategoryContext(
 
   // Restore the expected CategorySection tree without downloading products.
   // The API sends every active category with its canonical DB name and ID.
+  return normalizeSupermarketCategoryContext(raw);
+}
+
+/**
+ * Convert compact DB metadata into the same category hierarchy the existing
+ * screen expects. Also used to instantly show DB names from the cached home
+ * snapshot before the category-specific request completes.
+ */
+export function normalizeSupermarketCategoryContext(
+  raw: RawCategoryContext,
+): FastSupermarketCategoryContext {
   const sections: CatalogSection[] = raw.catalog.sections.map((section) => ({
     ...section,
     products: [],
