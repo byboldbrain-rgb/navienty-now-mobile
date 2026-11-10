@@ -1,3 +1,5 @@
+import { publicSupabase } from '../lib/supabase';
+
 import {
     type CatalogProduct,
     type CatalogSection,
@@ -67,6 +69,11 @@ export type GlobalSearchResult =
       unitLabelAr: string | null;
       isAgeRestricted: boolean;
       productType: string;
+      /** Optional store metadata supplied by the lightweight search RPC. */
+      storeIcon?: string;
+      storeClosed?: boolean;
+      deliveryFee?: number;
+      minimumOrder?: number;
       storeName: string;
       categoryName: string;
     };
@@ -869,6 +876,106 @@ export async function prepareGlobalSearchIndex(
       indexRequests.delete(key);
     }
   }
+}
+
+/**
+ * Fast path for supermarket search. It asks the database for a limited,
+ * ranked set of ACTIVE and AVAILABLE products in a permitted service area.
+ * This avoids downloading thousands of products from every store just to
+ * match one text query.
+ */
+type SupermarketSearchRow = {
+  product_id: string;
+  store_id: string;
+  store_name: string;
+  store_icon: string | null;
+  store_manually_closed: boolean;
+  delivery_fee: number | string | null;
+  minimum_order: number | string | null;
+  section_id: string;
+  section_slug: string;
+  category_name: string;
+  name_ar: string;
+  description_ar: string | null;
+  image_url: string | null;
+  icon: string | null;
+  price: number | string;
+  compare_at_price: number | string | null;
+  unit_label_ar: string | null;
+  is_age_restricted: boolean;
+  product_type: string;
+};
+
+export async function searchSupermarketProducts(
+  query: string,
+  serviceAreaId?: string | null,
+  storeId?: string | null,
+): Promise<GlobalSearchResponse> {
+  const normalizedQuery = normalizeSearchText(query);
+  if (normalizedQuery.length < 2) {
+    return {
+      query,
+      results: [],
+      failedStoreCount: 0,
+      indexedStoreCount: 0,
+    };
+  }
+
+  const { data, error } = await publicSupabase.rpc(
+    'search_supermarket_products',
+    {
+      p_query: query,
+      p_service_area_id: serviceAreaId?.trim() || null,
+      p_store_id: storeId?.trim() || null,
+      p_limit: 48,
+    },
+  );
+
+  if (error) {
+    throw new Error(`Supermarket search failed: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data)
+    ? (data as SupermarketSearchRow[])
+    : [];
+
+  return {
+    query,
+    failedStoreCount: 0,
+    indexedStoreCount: rows.length > 0 ? 1 : 0,
+    results: rows
+      .filter((row) =>
+        Boolean(row.product_id && row.store_id && row.section_id),
+      )
+      .map((row): Extract<GlobalSearchResult, { kind: 'product' }> => ({
+        id: `product:${row.store_id}:${row.product_id}`,
+        kind: 'product',
+        productId: row.product_id,
+        storeId: row.store_id,
+        storeCategorySlug: 'supermarket',
+        sectionId: row.section_id,
+        sectionSlug: row.section_slug,
+        title: row.name_ar,
+        subtitle: row.store_name,
+        description: row.description_ar ?? '',
+        icon: row.icon || '📦',
+        imageUrl: row.image_url,
+        price: Number(row.price) || 0,
+        compareAtPrice:
+          row.compare_at_price === null
+            ? null
+            : Number(row.compare_at_price),
+        unitLabelAr: row.unit_label_ar,
+        isAgeRestricted: row.is_age_restricted === true,
+        productType: row.product_type || 'physical',
+        storeIcon: row.store_icon || '🏪',
+        storeClosed: row.store_manually_closed === true,
+        deliveryFee: Number(row.delivery_fee) || 0,
+        minimumOrder: Number(row.minimum_order) || 0,
+        storeName: row.store_name,
+        categoryName: row.category_name,
+      })),
+  };
 }
 
 export async function searchGlobalCatalog(
