@@ -12,13 +12,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GLOBAL_CART_DELIVERY_FEE } from '../../config/global-cart';
+import { useGlobalDeliveryFee } from '../../hooks/use-global-delivery-fee';
+import { useCustomerStore } from '../../store/customer-store';
 import {
   isPrintJobCartItem,
   selectAllCartItemCount,
   selectAllCartSubtotal,
   useCartStore,
-} from '../../store/cart-store';
+} from '../../store/global-cart-store';
 import {
   NAVIENTY_NOW_COLORS,
   NAVIENTY_NOW_LAYOUT,
@@ -37,12 +38,21 @@ export default function GlobalCartScreen() {
   const removeLine = useCartStore((state) => state.removeStoreLine);
   const clearStore = useCartStore((state) => state.clearStoreCart);
   const clearAll = useCartStore((state) => state.clearAllCarts);
+  const latitude = useCustomerStore((state) => state.locationLatitude);
+  const longitude = useCustomerStore((state) => state.locationLongitude);
 
   const groups = useMemo(
     () => Object.values(carts).filter((group) => group.items.length > 0),
     [carts],
   );
-  const total = itemCount > 0 ? subtotal + GLOBAL_CART_DELIVERY_FEE : 0;
+  const { deliveryFee } = useGlobalDeliveryFee(
+    groups.map((group) => group.storeId),
+    latitude,
+    longitude,
+  );
+  const total = itemCount > 0 && deliveryFee !== null
+    ? subtotal + deliveryFee
+    : null;
 
   const confirmClearAll = () => Alert.alert(
     'إفراغ السلة؟',
@@ -194,16 +204,16 @@ export default function GlobalCartScreen() {
               <View style={styles.onceBadge}><Text style={styles.onceText}>مرة واحدة</Text></View>
               <Text style={styles.summaryLabel}>التوصيل</Text>
             </View>
-            <Text style={styles.summaryValue}>{money(GLOBAL_CART_DELIVERY_FEE)}</Text>
+            <Text style={styles.summaryValue}>{deliveryFee === null ? 'تُحدد حسب الموقع' : deliveryFee === 0 ? 'مجاني' : money(deliveryFee)}</Text>
           </View>
           <View style={styles.summaryDivider} />
-          <SummaryRow label="الإجمالي قبل رسوم الدفع" value={money(total)} total />
+          <SummaryRow label="الإجمالي قبل رسوم الدفع" value={total === null ? 'يُحدد بعد اختيار الموقع' : money(total)} total />
         </View>
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Pressable style={styles.checkoutButton} onPress={() => router.push('/global-location-picker')}>
-          <Text style={styles.checkoutTotal}>{money(total)}</Text>
+          <Text style={styles.checkoutTotal}>{total === null ? money(subtotal) : money(total)}</Text>
           <Text style={styles.checkoutText}>تابع للدفع</Text>
           <View style={styles.checkoutIcon}>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
