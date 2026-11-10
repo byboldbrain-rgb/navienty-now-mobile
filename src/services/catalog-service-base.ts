@@ -2185,6 +2185,48 @@ async function loadCatalogCategoryMeta(
  * ============================================================
  */
 
+/**
+ * The public catalog RPC can exceed anon's statement timeout while the
+ * supermarket catalog is large. Only retry transient infrastructure failures;
+ * permanent errors (invalid store/service area, permissions) must surface.
+ */
+function isTransientCatalogRpcError(
+  error: { code?: string; message?: string },
+): boolean {
+  return (
+    error.code === '57014' ||
+    /statement timeout|timed out|network request failed|fetch failed|gateway timeout|service unavailable|connection reset/i.test(
+      error.message ?? '',
+    )
+  );
+}
+
+async function loadStoreCatalogRpc(
+  args: {
+    p_store_id: string;
+    p_service_area_id?: string;
+  },
+) {
+  let result = await publicSupabase.rpc(
+    'get_store_catalog',
+    args,
+  );
+
+  if (!result.error || !isTransientCatalogRpcError(result.error)) {
+    return result;
+  }
+
+  // One bounded retry after a transient timeout, never an unbounded loop.
+  console.warn(
+    'Transient catalog request failed; retrying once:',
+    result.error.code,
+  );
+  await new Promise<void>((resolve) => setTimeout(resolve, 700));
+
+  result = await publicSupabase.rpc('get_store_catalog', args);
+  return result;
+}
+
 async function loadStoreCatalogFromSupabase(
   storeId: string,
   serviceAreaId?: string,
@@ -2226,10 +2268,7 @@ async function loadStoreCatalogFromSupabase(
     catalogResult,
     categoryMeta,
   ] = await Promise.all([
-    publicSupabase.rpc(
-      'get_store_catalog',
-      rpcArguments,
-    ),
+    loadStoreCatalogRpc(rpcArguments),
 
     loadCatalogCategoryMeta(
       storeId,
