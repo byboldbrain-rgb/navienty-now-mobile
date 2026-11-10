@@ -2162,6 +2162,7 @@ function PromotionBannerProductRail({
   banner,
   storeId,
   serviceAreaId,
+  shouldLoad,
   currencyCode,
   cardWidth,
   overlap,
@@ -2175,6 +2176,7 @@ function PromotionBannerProductRail({
   banner: SupermarketPromotionBanner;
   storeId: string;
   serviceAreaId: string | null;
+  shouldLoad: boolean;
   currencyCode: string;
   cardWidth: number;
   overlap: number;
@@ -2190,7 +2192,7 @@ function PromotionBannerProductRail({
       'public', 'supermarket', 'banner-products-v3',
       storeId, serviceAreaId ?? '*', banner.id, banner.productIds.length,
     ],
-    enabled: banner.productIds.length > 0 && Boolean(storeId),
+    enabled: shouldLoad && banner.productIds.length > 0 && Boolean(storeId),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       getSupermarketBannerProductPage(
@@ -2213,7 +2215,7 @@ function PromotionBannerProductRail({
 
   // A banner may have no linked products (branding only), or every linked
   // product may have since become inactive. Neither case is a network error.
-  if (banner.productIds.length === 0) return null;
+  if (!shouldLoad || banner.productIds.length === 0) return null;
 
   if (query.isPending) {
     return (
@@ -2315,6 +2317,13 @@ export default function SupermarketScreen() {
   const categoryScrollX = useRef(new Animated.Value(0)).current;
   const categoryScrollRef = useRef<ScrollView | null>(null);
   const reorderScrollRef = useRef<ScrollView | null>(null);
+  const promoScrollY = useRef(0);
+  const promoViewportHeight = useRef(800);
+  const promoBannerRects = useRef(new Map<string, { top: number; bottom: number }>());
+  const prefetchedBannerIdsRef = useRef(new Set<string>());
+  const [prefetchedBannerIds, setPrefetchedBannerIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   // Spotlight and media are independent, cached queries (not part of the loading gate).
   const [categoryViewportWidth, setCategoryViewportWidth] = useState(0);
   const [categoryContentWidth, setCategoryContentWidth] = useState(0);
@@ -2706,6 +2715,31 @@ export default function SupermarketScreen() {
       promotionBannerHeight *
         0.55,
     );
+
+
+  // Only start each banner's query when it approaches the visible scroll
+  // region. The Set grows as a customer browses; scroll position stays in
+  // refs to avoid expensive state updates on every scroll frame.
+  function prefetchNearbyBannerRails() {
+    const top = Math.max(0, promoScrollY.current - 400);
+    const bottom = promoScrollY.current + promoViewportHeight.current + 650;
+    let changed = false;
+
+    for (const [id, rect] of promoBannerRects.current.entries()) {
+      if (
+        rect.top <= bottom &&
+        rect.bottom >= top &&
+        !prefetchedBannerIdsRef.current.has(id)
+      ) {
+        prefetchedBannerIdsRef.current.add(id);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      setPrefetchedBannerIds(new Set(prefetchedBannerIdsRef.current));
+    }
+  }
 
   if (isLoading) {
     return (
@@ -3187,7 +3221,15 @@ export default function SupermarketScreen() {
             shouldShowCartBar &&
               styles.mainContentWithCart,
           ]}
-          onScroll={handleCartDockScroll}
+          onScroll={(event) => {
+            handleCartDockScroll(event);
+            promoScrollY.current = event.nativeEvent.contentOffset.y;
+            prefetchNearbyBannerRails();
+          }}
+          onLayout={(event) => {
+            promoViewportHeight.current = event.nativeEvent.layout.height;
+            prefetchNearbyBannerRails();
+          }}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={
             false
@@ -3387,6 +3429,11 @@ export default function SupermarketScreen() {
                       1 &&
                     styles.promotionSectionLast,
                 ]}
+                onLayout={(event) => {
+                  const { y, height } = event.nativeEvent.layout;
+                  promoBannerRects.current.set(banner.id, { top: y, bottom: y + height });
+                  prefetchNearbyBannerRails();
+                }}
               >
                 <View
                   pointerEvents="none"
@@ -3419,6 +3466,7 @@ export default function SupermarketScreen() {
                   banner={banner}
                   storeId={currentStore.id}
                   serviceAreaId={delivery.serviceAreaId}
+                  shouldLoad={prefetchedBannerIds.has(banner.id)}
                   currencyCode={currencyCode}
                   cardWidth={featuredCardWidth}
                   overlap={promotionProductsOverlap}
