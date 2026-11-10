@@ -117,7 +117,6 @@ type StoreVisualFields = {
 type StoreRatingInfo = {
   hasRatings: boolean;
   rating: number | null;
-  ratingCount: number | null;
 };
 
 const RESTAURANTS_SLUG = 'restaurants';
@@ -304,19 +303,12 @@ function getStoreRatingInfo(
     return {
       hasRatings: false,
       rating: null,
-      ratingCount: null,
     };
   }
 
   return {
     hasRatings: true,
     rating,
-    ratingCount:
-      ratingCount !== null &&
-      Number.isFinite(ratingCount) &&
-      ratingCount > 0
-        ? Math.floor(ratingCount)
-        : null,
   };
 }
 
@@ -1275,12 +1267,6 @@ export default function RestaurantsScreen() {
                                 1,
                               )}
                             </Text>
-
-                            {ratingInfo.ratingCount !== null && (
-                              <Text style={styles.ratingCountText}>
-                                ({ratingInfo.ratingCount})
-                              </Text>
-                            )}
                           </View>
                         ) : (
                           <Text
@@ -1319,12 +1305,6 @@ export default function RestaurantsScreen() {
                                 1,
                               )}
                             </Text>
-
-                            {ratingInfo.ratingCount !== null && (
-                              <Text style={styles.ratingCountText}>
-                                ({ratingInfo.ratingCount})
-                              </Text>
-                            )}
                           </>
                         ) : (
                           <Text
@@ -2708,14 +2688,6 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     lineHeight: 20,
     textAlign: 'right',
-    writingDirection: 'ltr',
-  },
-
-  ratingCountText: {
-    color: '#8B8B92',
-    fontSize: 12,
-    fontWeight: '400',
-    lineHeight: 20,
     writingDirection: 'ltr',
   },
 
