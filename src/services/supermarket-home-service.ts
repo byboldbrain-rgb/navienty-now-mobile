@@ -85,3 +85,62 @@ export async function getSupermarketHomePreviewProducts(
       images: product.images ?? [],
     }));
 }
+
+
+/** Each banner has its own paginated product feed (no global 120-item cap). */
+export const SUPERMARKET_BANNER_PAGE_SIZE = 16;
+
+export type SupermarketBannerProductPage = {
+  items: CatalogProduct[];
+  hasMore: boolean;
+};
+
+type BannerProductPageRow = {
+  items: PreviewRow[] | null;
+  hasMore: boolean;
+};
+
+/**
+ * This endpoint takes the banner ID, not an arbitrary subset of IDs from
+ * other banners. It returns active products in the admin's banner sort order.
+ * Fetch additional pages only as the customer swipes the rail.
+ */
+export async function getSupermarketBannerProductPage(
+  storeId: string,
+  bannerId: string,
+  serviceAreaId: string | null,
+  offset: number,
+): Promise<SupermarketBannerProductPage> {
+  if (!storeId || !bannerId) return { items: [], hasMore: false };
+
+  const { data, error } = await publicSupabase.rpc(
+    'get_supermarket_banner_products',
+    {
+      p_store_id: storeId,
+      p_banner_id: bannerId,
+      p_service_area_id: serviceAreaId || null,
+      p_limit: SUPERMARKET_BANNER_PAGE_SIZE,
+      p_offset: Math.max(0, Math.floor(offset)),
+    },
+  );
+  if (error) {
+    throw new Error(`Loading supermarket banner products failed: ${error.message}`);
+  }
+
+  const page = data as BannerProductPageRow | null;
+  const rows = Array.isArray(page?.items) ? page.items : [];
+
+  return {
+    items: rows
+      .filter((item) => Boolean(item.id && item.name))
+      .map((item): CatalogProduct => ({
+        ...item,
+        price: Number(item.price) || 0,
+        compareAtPrice:
+          item.compareAtPrice === null ? null : Number(item.compareAtPrice),
+        variants: item.variants ?? [],
+        images: item.images ?? [],
+      })),
+    hasMore: page?.hasMore === true,
+  };
+}
