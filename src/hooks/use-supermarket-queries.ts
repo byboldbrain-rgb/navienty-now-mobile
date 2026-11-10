@@ -136,7 +136,11 @@ export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
       options.requestedStoreId ?? '*',
     ],
     queryFn: () => fetchSupermarketCategoryContext(options),
-    meta: { persist: true },
+    staleTime: 120_000,
+    gcTime: 30 * 60 * 1000,
+    // Full 4+ MB catalog remains memory-cached but must not slow down
+    // future app startup by being hydrated from persistent disk storage.
+    meta: { persist: false },
   });
 
   const data = useMemo<SupermarketCategoryData | undefined>(() => {
