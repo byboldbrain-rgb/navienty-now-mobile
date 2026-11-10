@@ -741,6 +741,17 @@ export async function createWhatsAppOrder(
           (group) => ({
             storeId:
               group.storeId,
+            // Preserve the chosen checkout's voucher/Spin when the
+            // single-store flow is upgraded to a global order group.
+            // Backend eligibility is revalidated per child store.
+            voucherCode:
+              group.storeId === input.storeId
+                ? input.voucherCode ?? null
+                : null,
+            spinEventId:
+              group.storeId === input.storeId
+                ? input.spinEventId ?? null
+                : null,
             items:
               group.items.map(
                 (item) => ({
