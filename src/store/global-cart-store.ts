@@ -1,3 +1,4 @@
+import { sumStoreDeliveryFees } from '../domain/store-delivery-pricing';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -456,7 +457,9 @@ export const selectCartTotal = (state: CartState) => {
   const groupFees = Object.values(state.carts)
     .filter((group) => group.items.length > 0)
     .map((group) => group.deliveryFee);
-  const previewFee = groupFees.length ? Math.max(0, ...groupFees) : 0;
+  const previewFee = groupFees.length
+    ? sumStoreDeliveryFees(groupFees.map((fee) => Math.max(0, Number.isFinite(fee) ? fee : 0)))
+    : 0;
   return count > 0 ? selectAllCartSubtotal(state) + previewFee : 0;
 };
 export const selectGlobalCartStoreCount = (state: CartState) =>
