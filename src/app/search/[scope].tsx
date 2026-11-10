@@ -12,6 +12,7 @@ export default function ScopedSearchRoute() {
   const params =
     useLocalSearchParams<{
       scope?: string | string[];
+      storeId?: string | string[];
     }>();
 
   const rawScope = Array.isArray(
@@ -48,6 +49,7 @@ export default function ScopedSearchRoute() {
   return (
     <SearchScreen
       scope={scope}
+      storeId={Array.isArray(params.storeId) ? params.storeId[0] : params.storeId}
     />
   );
 }
