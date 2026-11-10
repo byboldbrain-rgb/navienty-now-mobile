@@ -24,6 +24,7 @@ import {
   Text,
   TextInput,
   View,
+  type ViewToken,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -256,6 +257,91 @@ function matchesRestaurantSearch(
 
   return terms.every((term) => searchText.includes(term));
 }
+
+type RestaurantCategoryTab = {
+  id: string;
+  name: string;
+  sectionIndex: number;
+};
+
+/** A data-driven, horizontally scrolling menu, styled as premium pill tabs. */
+const RestaurantCategoryPills = memo(function RestaurantCategoryPills({
+  categories,
+  activeCategoryId,
+  onSelect,
+}: {
+  categories: readonly RestaurantCategoryTab[];
+  activeCategoryId: string | null;
+  onSelect: (category: RestaurantCategoryTab) => void;
+}) {
+  const railRef = useRef<ScrollView>(null);
+  const positions = useRef<Record<string, { x: number; width: number }>>({});
+
+  useEffect(() => {
+    const position = activeCategoryId
+      ? positions.current[activeCategoryId]
+      : null;
+    if (position) {
+      railRef.current?.scrollTo({
+        x: Math.max(0, position.x - 24),
+        animated: true,
+      });
+    }
+  }, [activeCategoryId]);
+
+  if (categories.length === 0) return null;
+
+  return (
+    <ScrollView
+      ref={railRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="always"
+      style={styles.restaurantCategoriesScroll}
+      contentContainerStyle={styles.restaurantCategoriesContent}
+    >
+      {categories.map((category) => {
+        const selected = activeCategoryId === category.id;
+        const isHotCategory =
+          /عروض|الاكثر مبيع|الأكثر مبيع|bestseller|offers|exclusive/i.test(
+            category.name,
+          );
+
+        return (
+          <Pressable
+            key={category.id}
+            accessibilityRole="tab"
+            accessibilityLabel={category.name}
+            accessibilityState={{ selected }}
+            onLayout={(event) => {
+              const { x, width } = event.nativeEvent.layout;
+              positions.current[category.id] = { x, width };
+            }}
+            onPress={() => onSelect(category)}
+            style={({ pressed }) => [
+              styles.restaurantCategoryPill,
+              selected && styles.restaurantCategoryPillSelected,
+              pressed && styles.restaurantCategoryPillPressed,
+            ]}
+          >
+            {isHotCategory && (
+              <Text style={styles.restaurantCategoryFlame}>🔥</Text>
+            )}
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.restaurantCategoryPillText,
+                selected && styles.restaurantCategoryPillTextSelected,
+              ]}
+            >
+              {category.name}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+});
 
 type ProductRowProps = {
   product: CatalogProduct;
@@ -685,11 +771,39 @@ export default function StoreScreen({
   const scrollHeaderVisibleRef =
     useRef(false);
 
+  const [activeCategoryId, setActiveCategoryId] =
+    useState<string | null>(null);
+  const [areCategoryTabsSticky, setAreCategoryTabsSticky] =
+    useState(false);
+  const categoryTabsTopRef = useRef<number | null>(null);
+  const pendingCategoryJumpRef = useRef<{
+    sectionIndex: number;
+    attempts: number;
+  } | null>(null);
+  const categoryJumpTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (categoryJumpTimerRef.current) {
+        clearTimeout(categoryJumpTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     setSearchQuery('');
     setDebouncedSearch('');
     setIsScrollHeaderVisible(false);
     scrollHeaderVisibleRef.current = false;
+    setActiveCategoryId(null);
+    setAreCategoryTabsSticky(false);
+    categoryTabsTopRef.current = null;
+    pendingCategoryJumpRef.current = null;
+    if (categoryJumpTimerRef.current) {
+      clearTimeout(categoryJumpTimerRef.current);
+      categoryJumpTimerRef.current = null;
+    }
   }, [rawId, searchOnly]);
 
   const [
@@ -774,6 +888,61 @@ export default function StoreScreen({
       data: section.products,
     }));
   }, [catalogSections, normalizedSearch, searchOnly]);
+
+  // Show only real menu categories with products; keep original section
+  // indices so tapping a pill navigates to the correct SectionList group.
+  const restaurantCategoryTabs = useMemo<RestaurantCategoryTab[]>(
+    () =>
+      searchOnly
+        ? []
+        : sectionListData.flatMap((section, sectionIndex) =>
+            section.data.length > 0
+              ? [{
+                  id: section.id,
+                  name: section.name,
+                  sectionIndex,
+                }]
+              : [],
+          ),
+    [sectionListData, searchOnly],
+  );
+
+  const selectedCategoryId =
+    activeCategoryId ?? restaurantCategoryTabs[0]?.id ?? null;
+
+  // SectionList supplies a section on viewability tokens; use it to
+  // highlight the active pill when customers scroll through the menu.
+  const onCategoryItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const firstSection = viewableItems
+        .map(
+          (token) =>
+            (token as ViewToken & {
+              section?: { id?: string };
+            }).section,
+        )
+        .find((section) => typeof section?.id === 'string');
+
+      if (firstSection?.id) {
+        setActiveCategoryId(firstSection.id);
+        if (
+          pendingCategoryJumpRef.current &&
+          restaurantCategoryTabs.length > 0
+        ) {
+          // The viewability callback also runs during programmatic jumps.
+          // Clearing a finished jump is safe; the ref stores the target index.
+          const target = pendingCategoryJumpRef.current.sectionIndex;
+          if (sectionListData[target]?.id === firstSection.id) {
+            pendingCategoryJumpRef.current = null;
+          }
+        }
+      }
+    },
+  ).current;
+
+  const categoryViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 35,
+  }).current;
 
   const cartQuantityByProductId =
     useMemo(() => {
@@ -1334,6 +1503,53 @@ export default function StoreScreen({
     });
   }
 
+  const categoryNavigationTop =
+    Math.max(insets.top, Platform.OS === 'android' ? 24 : 0) + 56;
+  const categoryNavigationOffset = categoryNavigationTop + 64 + 50;
+
+  function selectRestaurantCategory(category: RestaurantCategoryTab) {
+    setActiveCategoryId(category.id);
+    pendingCategoryJumpRef.current = {
+      sectionIndex: category.sectionIndex,
+      attempts: 0,
+    };
+    scrollRef.current?.scrollToLocation({
+      animated: true,
+      sectionIndex: category.sectionIndex,
+      itemIndex: 0,
+      viewOffset: categoryNavigationOffset,
+    });
+  }
+
+  function handleCategoryJumpFailed(info: {
+    index: number;
+    highestMeasuredFrameIndex: number;
+    averageItemLength: number;
+  }) {
+    const pending = pendingCategoryJumpRef.current;
+    if (!pending || pending.attempts >= 2) return;
+    pending.attempts += 1;
+
+    // SectionList virtualizes distant sections. First jump near the
+    // unmeasured cell, let it render, then retry the exact section index.
+    scrollRef.current?.getScrollResponder()?.scrollTo({
+      y: Math.max(0, info.averageItemLength * info.index),
+      animated: false,
+    });
+    if (categoryJumpTimerRef.current) {
+      clearTimeout(categoryJumpTimerRef.current);
+    }
+    categoryJumpTimerRef.current = setTimeout(() => {
+      if (pendingCategoryJumpRef.current !== pending) return;
+      scrollRef.current?.scrollToLocation({
+        animated: true,
+        sectionIndex: pending.sectionIndex,
+        itemIndex: 0,
+        viewOffset: categoryNavigationOffset,
+      });
+    }, 160);
+  }
+
   function handleStoreScroll(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
@@ -1342,6 +1558,16 @@ export default function StoreScreen({
       event.nativeEvent.contentOffset.y;
 
     const nextVisible = scrollY >= 170;
+
+    const tabsTop = categoryTabsTopRef.current;
+    const nextTabsSticky =
+      restaurantCategoryTabs.length > 0 &&
+      tabsTop !== null &&
+      scrollY >= tabsTop - categoryNavigationTop;
+
+    setAreCategoryTabsSticky((current) =>
+      current === nextTabsSticky ? current : nextTabsSticky,
+    );
 
     if (
       scrollHeaderVisibleRef.current !==
@@ -1474,6 +1700,9 @@ export default function StoreScreen({
           Platform.OS === 'android'
         }
         stickySectionHeadersEnabled={false}
+        onViewableItemsChanged={onCategoryItemsChanged}
+        viewabilityConfig={categoryViewabilityConfig}
+        onScrollToIndexFailed={handleCategoryJumpFailed}
         keyExtractor={(product) =>
           product.id
         }
@@ -1632,6 +1861,21 @@ export default function StoreScreen({
               {currentStore.manualClosedNote ??
                 'المطعم مغلق مؤقتًا ولا يستقبل طلبات الآن.'}
             </Text>
+          </View>
+        )}
+
+        {restaurantCategoryTabs.length > 0 && (
+          <View
+            style={styles.restaurantCategoryRailShell}
+            onLayout={(event) => {
+              categoryTabsTopRef.current = event.nativeEvent.layout.y;
+            }}
+          >
+            <RestaurantCategoryPills
+              categories={restaurantCategoryTabs}
+              activeCategoryId={selectedCategoryId}
+              onSelect={selectRestaurantCategory}
+            />
           </View>
         )}
 
@@ -1835,6 +2079,23 @@ export default function StoreScreen({
           </View>
         </View>
       )}
+
+      {!isSearchVisible &&
+        areCategoryTabsSticky &&
+        restaurantCategoryTabs.length > 0 && (
+          <View
+            style={[
+              styles.restaurantStickyCategoryRail,
+              { top: categoryNavigationTop },
+            ]}
+          >
+            <RestaurantCategoryPills
+              categories={restaurantCategoryTabs}
+              activeCategoryId={selectedCategoryId}
+              onSelect={selectRestaurantCategory}
+            />
+          </View>
+        )}
 
       {/* PRODUCT OPTIONS MODAL */}
 
@@ -2764,6 +3025,82 @@ const styles = StyleSheet.create({
   /* ---------------------------------- */
   /* PRODUCT SECTIONS                   */
   /* ---------------------------------- */
+
+  restaurantCategoryRailShell: {
+    backgroundColor: NAVIENTY_NOW_COLORS.white,
+    paddingBottom: 8,
+    paddingTop: 12,
+  },
+
+  restaurantStickyCategoryRail: {
+    backgroundColor: NAVIENTY_NOW_COLORS.white,
+    borderBottomColor: NAVIENTY_NOW_COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    elevation: 5,
+    left: 0,
+    paddingBottom: 4,
+    position: 'absolute',
+    right: 0,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    zIndex: 99,
+  },
+
+  restaurantCategoriesScroll: {
+    flexGrow: 0,
+  },
+
+  restaurantCategoriesContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingVertical: 8,
+  },
+
+  restaurantCategoryPill: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.white,
+    borderColor: NAVIENTY_NOW_COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+
+  restaurantCategoryPillSelected: {
+    backgroundColor: NAVIENTY_NOW_COLORS.primaryPale,
+    borderColor: NAVIENTY_NOW_COLORS.primaryPale,
+  },
+
+  restaurantCategoryPillPressed: {
+    opacity: 0.75,
+  },
+
+  restaurantCategoryPillText: {
+    color: NAVIENTY_NOW_COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+    maxWidth: 210,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  restaurantCategoryPillTextSelected: {
+    color: NAVIENTY_NOW_COLORS.primaryDark,
+    fontWeight: '800',
+  },
+
+  restaurantCategoryFlame: {
+    fontSize: 16,
+    lineHeight: 21,
+  },
 
   productsSection: {
     backgroundColor: '#ffffff',
