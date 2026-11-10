@@ -1277,14 +1277,6 @@ export default function RestaurantsScreen() {
                             New
                           </Text>
                         )}
-
-                        {hasFreeDelivery && (
-                          <View style={styles.freeDeliveryBadge}>
-                            <Text style={styles.freeDeliveryBadgeText}>
-                              توصيل مجاني
-                            </Text>
-                          </View>
-                        )}
                       </View>
                     ) : (
                       <View
@@ -1323,14 +1315,14 @@ export default function RestaurantsScreen() {
                             New
                           </Text>
                         )}
+                      </View>
+                    )}
 
-                        {hasFreeDelivery && (
-                          <View style={styles.freeDeliveryBadge}>
-                            <Text style={styles.freeDeliveryBadgeText}>
-                              توصيل مجاني
-                            </Text>
-                          </View>
-                        )}
+                    {hasFreeDelivery && (
+                      <View style={styles.freeDeliveryBadge}>
+                        <Text style={styles.freeDeliveryBadgeText}>
+                          توصيل مجاني
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -2665,9 +2657,11 @@ const styles = StyleSheet.create({
 
   freeDeliveryBadge: {
     alignItems: 'center',
+    alignSelf: 'flex-end',
     backgroundColor: '#E6F8E9',
     borderRadius: 9,
     justifyContent: 'center',
+    marginTop: 6,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
