@@ -308,9 +308,26 @@ export async function createGlobalOrderGroup(
     );
   }
 
-  const group = mapGroup(
+  let group = mapGroup(
     (data ?? {}) as RawGlobalOrderGroup,
   );
+
+  // The tip is applied to the FIRST child order only and persisted on the
+  // global parent; the amount returned here is the server-calculated total.
+  // Keep the pending group idempotency key until submission for safe retries.
+  if ((input.driverTipAmount ?? 0) > 0) {
+    const { data: tippedGroup, error: tipError } = await supabase.rpc(
+      'set_driver_tip_v1',
+      {
+        p_access_token: group.accessToken,
+        p_tip_amount: input.driverTipAmount,
+      },
+    );
+    if (tipError) {
+      throw new Error('تعذر حفظ إكرامية السائق. لم نرسل الطلب، حاول مرة أخرى.');
+    }
+    group = mapGroup((tippedGroup ?? {}) as RawGlobalOrderGroup);
+  }
 
   return group;
 }
