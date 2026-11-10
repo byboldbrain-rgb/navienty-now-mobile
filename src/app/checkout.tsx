@@ -2110,6 +2110,62 @@ function StoreCheckoutScreen() {
           false
         }
       >
+        {/* Show each merchant's own delivery fee before personal details. */}
+        {isMultiStoreCheckout && (
+          <View style={styles.multiOrderSection}>
+            <Text style={styles.orderSummaryTitle}>
+              تفاصيل {storeOrders.length} أوردرات
+            </Text>
+            <Text style={styles.multiOrderDescription}>
+              كل مطعم أو متجر ليه أوردر مستقل، ورسوم التوصيل بتتحسب
+              لكل مكان لوحده حسب عنوانك.
+            </Text>
+            {storeOrders.map((group, index) => {
+              const storeSubtotal = group.items.reduce(
+                (sum, item) => sum + item.price * item.quantity, 0,
+              );
+              const storeFee = individualStoreDeliveryFees?.[group.storeId] ?? null;
+              return (
+                <View key={group.storeId} style={styles.multiOrderCard}>
+                  <View style={styles.multiOrderTitleRow}>
+                    <Text style={styles.multiOrderStoreName}>{group.storeName}</Text>
+                    <Text style={styles.multiOrderNumber}>الأوردر #{index + 1}</Text>
+                  </View>
+                  {group.items.map((item) => (
+                    <View key={item.lineId} style={styles.summaryRow}>
+                      <Text style={styles.multiOrderItemName}>
+                        {item.name} × {item.quantity}
+                        {item.variantName ? ' — ' + item.variantName : ''}
+                      </Text>
+                      <Text style={styles.summaryValue}>
+                        {formatPrice(item.price * item.quantity)}
+                      </Text>
+                    </View>
+                  ))}
+                  <View style={styles.multiOrderDivider} />
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>المنتجات</Text>
+                    <Text style={styles.summaryValue}>{formatPrice(storeSubtotal)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>توصيل {group.storeName}</Text>
+                    <Text style={styles.summaryValue}>
+                      {storeFee === null ? 'جارٍ الحساب' : storeFee === 0 ? 'مجاني' : formatPrice(storeFee)}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.multiOrderTotalLabel}>إجمالي الأوردر #{index + 1} قبل رسوم الدفع</Text>
+                    <Text style={styles.multiOrderTotalValue}>
+                      {storeFee === null ? '—' : formatPrice(storeSubtotal + storeFee)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+
         <View
           style={styles.section}
         >
@@ -2396,60 +2452,6 @@ function StoreCheckoutScreen() {
             )}
         </View>
 
-        {isMultiStoreCheckout && (
-          <View style={styles.multiOrderSection}>
-            <Text style={styles.orderSummaryTitle}>
-              تفاصيل {storeOrders.length} أوردرات
-            </Text>
-            <Text style={styles.multiOrderDescription}>
-              كل مطعم أو متجر ليه أوردر مستقل، ورسوم التوصيل بتتحسب
-              لكل مكان لوحده حسب عنوانك.
-            </Text>
-            {storeOrders.map((group, index) => {
-              const storeSubtotal = group.items.reduce(
-                (sum, item) => sum + item.price * item.quantity, 0,
-              );
-              const storeFee = individualStoreDeliveryFees?.[group.storeId] ?? null;
-              return (
-                <View key={group.storeId} style={styles.multiOrderCard}>
-                  <View style={styles.multiOrderTitleRow}>
-                    <Text style={styles.multiOrderStoreName}>{group.storeName}</Text>
-                    <Text style={styles.multiOrderNumber}>الأوردر #{index + 1}</Text>
-                  </View>
-                  {group.items.map((item) => (
-                    <View key={item.lineId} style={styles.summaryRow}>
-                      <Text style={styles.multiOrderItemName}>
-                        {item.name} × {item.quantity}
-                        {item.variantName ? ' — ' + item.variantName : ''}
-                      </Text>
-                      <Text style={styles.summaryValue}>
-                        {formatPrice(item.price * item.quantity)}
-                      </Text>
-                    </View>
-                  ))}
-                  <View style={styles.multiOrderDivider} />
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>المنتجات</Text>
-                    <Text style={styles.summaryValue}>{formatPrice(storeSubtotal)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>توصيل {group.storeName}</Text>
-                    <Text style={styles.summaryValue}>
-                      {storeFee === null ? 'جارٍ الحساب' : storeFee === 0 ? 'مجاني' : formatPrice(storeFee)}
-                    </Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.multiOrderTotalLabel}>إجمالي الأوردر #{index + 1} قبل رسوم الدفع</Text>
-                    <Text style={styles.multiOrderTotalValue}>
-                      {storeFee === null ? '—' : formatPrice(storeSubtotal + storeFee)}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
         <View
           style={
             styles.orderSummarySection
@@ -2542,6 +2544,34 @@ function StoreCheckoutScreen() {
                   : deliveryFee === 0 ? 'مجاني' : formatPrice(deliveryFee)}
             </Text>
           </View>
+
+          {isMultiStoreCheckout && storeOrders.map((group, index) => {
+            const storeDeliveryFee =
+              individualStoreDeliveryFees?.[group.storeId] ?? null;
+
+            return (
+              <View
+                key={group.storeId}
+                style={styles.multiDeliverySummaryRow}
+              >
+                <Text style={styles.multiDeliverySummaryPrice}>
+                  {storeDeliveryFee === null
+                    ? 'جارٍ الحساب'
+                    : storeDeliveryFee === 0
+                      ? 'مجاني'
+                      : formatPrice(storeDeliveryFee)}
+                </Text>
+                <Text style={styles.multiDeliverySummaryLabel}>
+                  ↳ الأوردر #{index + 1} – {group.storeName}
+                </Text>
+              </View>
+            );
+          })}
+          {isMultiStoreCheckout ? (
+            <Text style={styles.multiDeliveryHint}>
+              قيمة التوصيل إجمالي توصيل كل مكان لوحده، مش زيادة على توصيل أوردر واحد.
+            </Text>
+          ) : null}
 
           {voucherDiscount > 0 &&
             voucherDiscountTarget ===
@@ -3289,10 +3319,46 @@ const styles =
       writingDirection: 'rtl',
     },
 
+    multiDeliverySummaryRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+
+    multiDeliverySummaryLabel: {
+      color: '#66736C',
+      flex: 1,
+      fontSize: 12,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
+    multiDeliverySummaryPrice: {
+      color: '#2A6F45',
+      fontSize: 12,
+      fontWeight: '800',
+      marginRight: 8,
+    },
+
+    multiDeliveryHint: {
+      color: '#68756D',
+      fontSize: 12,
+      lineHeight: 20,
+      marginBottom: 12,
+      marginTop: 5,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+
     multiOrderSection: {
       backgroundColor: '#ffffff',
-      paddingHorizontal: 24,
+      paddingBottom: 15,
+      paddingHorizontal: 20,
       paddingTop: 22,
+      borderBottomColor: '#EDF1EE',
+      borderBottomWidth: 1,
     },
     multiOrderCard: {
       backgroundColor: '#F8FBF9',
