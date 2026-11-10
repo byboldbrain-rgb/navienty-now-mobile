@@ -101,6 +101,8 @@ export type Order = {
   voucherTitle?: string | null;
   voucherDiscountAmount?: number;
   deliveryFee: number;
+  /** Optional gratuity, paid to the assigned courier. */
+  driverTipAmount?: number;
   paymentProcessingFee?: number;
   total: number;
 
@@ -141,6 +143,8 @@ export type CreateWhatsAppOrderInput = {
   deliveryLongitude: number;
 
   paymentMethodId: string;
+  /** One optional gratuity for the complete checkout, not per store. */
+  driverTipAmount?: number;
 
   customerName: string;
   customerPhone: string;
