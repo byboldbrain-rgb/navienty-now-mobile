@@ -1135,10 +1135,22 @@ export async function createWhatsAppOrder(
     );
   }
 
-  const order =
-    await getOrderByToken(
-      createdOrder.access_token,
-    );
+  // The gratuity is charged and persisted by the server before submission.
+  // Failed writes keep the idempotent pending order for a safe retry.
+  if ((input.driverTipAmount ?? 0) > 0) {
+    const { error: tipError } = await supabase.rpc('set_driver_tip_v1', {
+      p_access_token: createdOrder.access_token,
+      p_tip_amount: input.driverTipAmount,
+    });
+    if (tipError) {
+      throw new Error('تعذر حفظ إكرامية السائق. لم نرسل الطلب، حاول مرة أخرى.');
+    }
+  }
+
+  const order = {
+    ...await getOrderByToken(createdOrder.access_token),
+    driverTipAmount: input.driverTipAmount ?? 0,
+  };
 
   await clearPendingOrderAttempt(
     pendingAttempt,
