@@ -36,7 +36,7 @@ function parseTipInput(input: string): number | null {
     .replace(/,/g, '.')
     .trim();
 
-  if (!/^\\d+(?:\\.\\d{1,2})?$/.test(normalized)) return null;
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
   const value = Number(normalized);
   if (!Number.isFinite(value) || value <= 0 || value > MAX_TIP_EGP) return null;
   return Math.round(value * 100) / 100;
