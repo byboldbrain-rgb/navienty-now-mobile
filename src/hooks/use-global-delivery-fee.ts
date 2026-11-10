@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { sumStoreDeliveryFees } from '../domain/store-delivery-pricing';
+import { getSingleCheckoutDeliveryFee } from '../domain/store-delivery-pricing';
 
 import {
   getDeliveryLocationErrorMessage,
@@ -16,7 +16,7 @@ type FeeQuote = {
 /**
  * Location-aware checkout quote. Resolves each store against the authoritative
  * DB fee matrix, retaining explicit zeroes. Each participating store is a
- * distinct delivery, so the checkout charge is the SUM of the store fees.
+ * separate fulfillment, but the customer pays delivery only once (highest quote).
  *
  * A quote belongs to a specific (stores, latitude, longitude) key, so an old
  * location's fee is never displayed while the new request is in flight.
@@ -71,7 +71,7 @@ export function useGlobalDeliveryFee(
       }
       setQuote({
         key,
-        deliveryFee: sumStoreDeliveryFees(fees as number[]),
+        deliveryFee: getSingleCheckoutDeliveryFee(fees as number[]),
         storeFees: Object.fromEntries(ids.map((id, index) => [id, fees[index] as number])),
         error: null,
       });
