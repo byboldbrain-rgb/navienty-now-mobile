@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useExpirationStatus,
 } from '../hooks/use-expiration-status';
+import { useGlobalDeliveryFee } from '../hooks/use-global-delivery-fee';
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
@@ -70,6 +71,7 @@ import {
   isPrintJobCartItem,
   useCartStore,
 } from '../store/cart-store';
+import { useCartStore as useBaseCartStore } from '../store/global-cart-store';
 import {
   useCustomerStore,
 } from '../store/customer-store';
@@ -565,6 +567,27 @@ function StoreCheckoutScreen() {
     checkoutCart?.storeId ??
     null;
 
+  // Read the REAL cart groups, not the legacy facade that merges items into
+  // the active store. Each physical store has its own delivery charge.
+  const physicalCarts = useBaseCartStore((state) => state.carts);
+  const storeOrders = Object.values(physicalCarts).filter(
+    (group) => group.items.length > 0,
+  );
+  const isMultiStoreCheckout = storeOrders.length > 1;
+  const locationLatitude = useCustomerStore((state) => state.locationLatitude);
+  const locationLongitude = useCustomerStore((state) => state.locationLongitude);
+  const {
+    deliveryFee: groupDeliveryFee,
+    storeFees: individualStoreDeliveryFees,
+    error: groupDeliveryError,
+    isLoading: isResolvingGroupDelivery,
+  } = useGlobalDeliveryFee(
+    storeOrders.map((group) => group.storeId),
+    locationLatitude,
+    locationLongitude,
+  );
+  const clearAllStoreCarts = useBaseCartStore((state) => state.clearAllCarts);
+
   const appliedVoucher =
     useVoucherStore(
       (state) =>
@@ -696,9 +719,18 @@ function StoreCheckoutScreen() {
       0,
     );
 
-  // Never display the Cart snapshot (often the area default) while the
-  // store-specific database quote is loading. A real zero remains zero.
-  const deliveryFee = deliveryResolution?.deliveryFee ?? 0;
+  // A multi-store checkout charges each store's own delivery exactly once.
+  // Until all RPCs have resolved we keep the price pending and disable submit.
+  const deliveryFee = isMultiStoreCheckout
+    ? groupDeliveryFee ?? 0
+    : deliveryResolution?.deliveryFee ?? 0;
+  const anchorStoreSubtotal = isMultiStoreCheckout
+    ? (storeOrders.find((group) => group.storeId === storeId)?.items ?? [])
+        .reduce((sum, item) => sum + item.price * item.quantity, 0)
+    : subtotal;
+  const anchorStoreDeliveryFee = isMultiStoreCheckout
+    ? individualStoreDeliveryFees?.[storeId ?? ''] ?? 0
+    : deliveryFee;
 
   const paymentFeeMethod =
     bootstrap?.payment_methods.find(
@@ -747,7 +779,7 @@ function StoreCheckoutScreen() {
 
   const spinThresholdReached =
     checkoutSpin?.mode === 'welcome' ||
-    Number(subtotal ?? 0) >=
+    Number(anchorStoreSubtotal ?? 0) >=
       (
         checkoutSpin?.unlockSubtotal ??
         SPIN_UNLOCK_SUBTOTAL_FALLBACK
@@ -768,7 +800,7 @@ function StoreCheckoutScreen() {
     );
 
   const nextOrderMinimumReached =
-    Number(subtotal ?? 0) >=
+    Number(anchorStoreSubtotal ?? 0) >=
     nextOrderMinimum;
 
   /**
@@ -817,8 +849,8 @@ function StoreCheckoutScreen() {
   const voucherDiscountBase =
     voucherDiscountTarget ===
       'delivery_fee'
-      ? deliveryFee
-      : Number(subtotal ?? 0);
+      ? anchorStoreDeliveryFee
+      : Number(anchorStoreSubtotal ?? 0);
 
   const voucherDiscount =
     Math.min(
@@ -869,7 +901,7 @@ function StoreCheckoutScreen() {
     )
       ? Math.min(
           checkoutSpin.rewardValue,
-          discountedSubtotal,
+          anchorStoreSubtotal,
         )
       : 0;
 
@@ -973,17 +1005,6 @@ function StoreCheckoutScreen() {
         state.address,
     );
 
-  const locationLatitude =
-    useCustomerStore(
-      (state) =>
-        state.locationLatitude,
-    );
-
-  const locationLongitude =
-    useCustomerStore(
-      (state) =>
-        state.locationLongitude,
-    );
 
   const landmark =
     useCustomerStore(
@@ -1254,7 +1275,7 @@ function StoreCheckoutScreen() {
       Math.abs(
         appliedVoucher
           .deliveryFeeBeforeDiscount -
-          deliveryFee,
+          anchorStoreDeliveryFee,
       ) > 0.009;
 
     if (
@@ -1284,8 +1305,8 @@ function StoreCheckoutScreen() {
             storeId:
               storeIdForRefresh,
 
-            subtotal,
-            deliveryFee,
+            subtotal: anchorStoreSubtotal,
+            deliveryFee: anchorStoreDeliveryFee,
 
             customerPhone:
               voucherPhone ||
@@ -1315,7 +1336,8 @@ function StoreCheckoutScreen() {
     };
   }, [
     appliedVoucher,
-    deliveryFee,
+    anchorStoreDeliveryFee,
+    anchorStoreSubtotal,
     phoneNumber,
     setStoreVoucher,
     spinCanApplyToCurrentOrder,
@@ -1500,7 +1522,12 @@ function StoreCheckoutScreen() {
 
   const deliveryIsAvailable =
     deliveryResolution?.serviceable === true &&
-    deliveryResolution.storeAvailable === true;
+    deliveryResolution.storeAvailable === true &&
+    (!isMultiStoreCheckout || (
+      groupDeliveryFee !== null &&
+      !isResolvingGroupDelivery &&
+      groupDeliveryError === null
+    ));
 
   const formIsValid =
     Object.values(
@@ -1955,9 +1982,11 @@ function StoreCheckoutScreen() {
           whatsappConfirmationMessage,
       });
 
-      clearStoreCart(
-        activeStoreId,
-      );
+      if (isMultiStoreCheckout) {
+        clearAllStoreCarts();
+      } else {
+        clearStoreCart(activeStoreId);
+      }
 
       setStoreVoucher(
         activeStoreId,
@@ -2364,6 +2393,56 @@ function StoreCheckoutScreen() {
             )}
         </View>
 
+        {isMultiStoreCheckout && (
+          <View style={styles.multiOrderSection}>
+            <Text style={styles.orderSummaryTitle}>
+              تفاصيل الطلبات ({storeOrders.length})
+            </Text>
+            {storeOrders.map((group, index) => {
+              const storeSubtotal = group.items.reduce(
+                (sum, item) => sum + item.price * item.quantity, 0,
+              );
+              const storeFee = individualStoreDeliveryFees?.[group.storeId] ?? null;
+              return (
+                <View key={group.storeId} style={styles.multiOrderCard}>
+                  <View style={styles.multiOrderTitleRow}>
+                    <Text style={styles.multiOrderStoreName}>{group.storeName}</Text>
+                    <Text style={styles.multiOrderNumber}>الطلب {index + 1}</Text>
+                  </View>
+                  {group.items.map((item) => (
+                    <View key={item.lineId} style={styles.summaryRow}>
+                      <Text style={styles.multiOrderItemName}>
+                        {item.name} × {item.quantity}
+                        {item.variantName ? ' — ' + item.variantName : ''}
+                      </Text>
+                      <Text style={styles.summaryValue}>
+                        {formatPrice(item.price * item.quantity)}
+                      </Text>
+                    </View>
+                  ))}
+                  <View style={styles.multiOrderDivider} />
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>المنتجات</Text>
+                    <Text style={styles.summaryValue}>{formatPrice(storeSubtotal)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>توصيل المطعم / المتجر</Text>
+                    <Text style={styles.summaryValue}>
+                      {storeFee === null ? 'جارٍ الحساب' : storeFee === 0 ? 'مجاني' : formatPrice(storeFee)}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.multiOrderTotalLabel}>إجمالي الطلب قبل رسوم الدفع</Text>
+                    <Text style={styles.multiOrderTotalValue}>
+                      {storeFee === null ? '—' : formatPrice(storeSubtotal + storeFee)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         <View
           style={
             styles.orderSummarySection
@@ -2439,7 +2518,7 @@ function StoreCheckoutScreen() {
                 styles.summaryLabel
               }
             >
-              التوصيل
+              {isMultiStoreCheckout ? 'إجمالي توصيل المتاجر' : 'التوصيل'}
             </Text>
 
             <Text
@@ -2447,11 +2526,13 @@ function StoreCheckoutScreen() {
                 styles.summaryValue
               }
             >
-              {deliveryResolution?.deliveryFee === null || !deliveryResolution
-                ? 'جارٍ حساب التوصيل'
-                : deliveryFee === 0
-                  ? 'مجاني'
-                  : formatPrice(deliveryFee)}
+              {isMultiStoreCheckout
+                ? groupDeliveryFee === null
+                  ? (groupDeliveryError ?? 'جارٍ حساب التوصيل')
+                  : groupDeliveryFee === 0 ? 'مجاني' : formatPrice(groupDeliveryFee)
+                : !deliveryResolution || deliveryResolution.deliveryFee === null
+                  ? 'جارٍ حساب التوصيل'
+                  : deliveryFee === 0 ? 'مجاني' : formatPrice(deliveryFee)}
             </Text>
           </View>
 
@@ -2625,7 +2706,9 @@ function StoreCheckoutScreen() {
                 styles.totalValue
               }
             >
-              {formatPrice(total)}
+              {isMultiStoreCheckout && groupDeliveryFee === null
+                ? 'جارٍ حساب التوصيل'
+                : formatPrice(total)}
             </Text>
           </View>
         </View>
@@ -3189,6 +3272,63 @@ const styles =
       writingDirection: 'rtl',
     },
 
+    multiOrderSection: {
+      backgroundColor: '#ffffff',
+      paddingHorizontal: 24,
+      paddingTop: 22,
+    },
+    multiOrderCard: {
+      backgroundColor: '#F8FBF9',
+      borderColor: '#E5EDE8',
+      borderRadius: 17,
+      borderWidth: 1,
+      marginBottom: 14,
+      padding: 15,
+    },
+    multiOrderTitleRow: {
+      alignItems: 'center',
+      flexDirection: 'row-reverse',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    multiOrderStoreName: {
+      color: '#242424',
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '900',
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    multiOrderNumber: {
+      color: '#008B43',
+      fontSize: 12,
+      fontWeight: '700',
+      marginLeft: 12,
+    },
+    multiOrderItemName: {
+      color: '#343434',
+      flex: 1,
+      fontSize: 12,
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    multiOrderDivider: {
+      backgroundColor: '#DFE8E2',
+      height: StyleSheet.hairlineWidth,
+      marginVertical: 10,
+    },
+    multiOrderTotalLabel: {
+      color: '#242424',
+      fontSize: 12,
+      fontWeight: '800',
+      textAlign: 'right',
+      writingDirection: 'rtl',
+    },
+    multiOrderTotalValue: {
+      color: '#008B43',
+      fontSize: 13,
+      fontWeight: '900',
+    },
     orderSummarySection: {
       backgroundColor: '#ffffff',
       paddingBottom: 24,
