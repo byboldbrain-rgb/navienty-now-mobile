@@ -37,7 +37,6 @@ import {
 } from '../config/v1-release-scope';
 import {
   calculatePaymentProcessingFee,
-  getPaymentProcessingFeeLabelAr,
 } from '../domain/payment-method';
 import {
   canApplyCheckoutSpin,
@@ -759,10 +758,7 @@ function StoreCheckoutScreen() {
         )
       : LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK;
 
-  const paymentProcessingFeeLabel =
-    getPaymentProcessingFeeLabelAr(
-      paymentFeeMethod,
-    );
+  const paymentProcessingFeeLabel = 'رسوم السحب';
 
   const spinBelongsToCurrentStore =
     !!checkoutSpin &&
