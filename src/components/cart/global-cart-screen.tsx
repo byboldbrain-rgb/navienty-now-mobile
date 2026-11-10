@@ -121,6 +121,7 @@ export default function GlobalCartScreen() {
             (sum, item) => sum + item.price * item.quantity,
             0,
           );
+          const storeDeliveryFee = storeFees?.[group.storeId] ?? null;
 
           return (
             <View key={group.storeId} style={styles.storeCard}>
@@ -143,9 +144,11 @@ export default function GlobalCartScreen() {
                   <View style={styles.storeCopy}>
                     <Text style={styles.storeName} numberOfLines={1}>{group.storeName}</Text>
                     <Text style={styles.storeSubtotal}>{money(groupSubtotal)}</Text>
-                    <Text style={styles.storeSubtotal}>التوصيل: {storeFees?.[group.storeId] === undefined
-                      ? 'يُحدد حسب الموقع'
-                      : storeFees[group.storeId] === 0 ? 'مجاني' : money(storeFees[group.storeId])}</Text>
+                    <Text style={styles.storeSubtotal}>
+                      التوصيل: {storeDeliveryFee === null
+                        ? 'يُحدد حسب الموقع'
+                        : storeDeliveryFee === 0 ? 'مجاني' : money(storeDeliveryFee)}
+                    </Text>
                   </View>
                   <View style={styles.storeIcon}><Text style={styles.emoji}>{group.storeIcon || '🏪'}</Text></View>
                 </View>
