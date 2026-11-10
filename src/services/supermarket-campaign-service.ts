@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase } from '../lib/supabase';
 
 /** Brand promotion slides in the supermarket carousel; all content comes from Supabase. */
 export type SupermarketMediaCard = {
@@ -68,7 +68,7 @@ function parseCard(row: MediaCardRow, hasCampaignProducts = false): SupermarketM
 
 /** RLS exposes only active, in-schedule slides. The store check prevents cross-store content. */
 export async function listSupermarketMediaCards(storeId: string): Promise<SupermarketMediaCard[]> {
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .schema('now')
     .from('supermarket_media_cards')
     .select(CARD_SELECT)
@@ -81,7 +81,7 @@ export async function listSupermarketMediaCards(storeId: string): Promise<Superm
   const rows = (data ?? []) as MediaCardRow[];
   if (rows.length === 0) return [];
 
-  const { data: associated, error: linksError } = await supabase
+  const { data: associated, error: linksError } = await publicSupabase
     .schema('now')
     .from('supermarket_media_card_products')
     .select('media_card_id')
@@ -103,7 +103,7 @@ export type SupermarketBrandCampaign = {
 
 /** Fetch the selected brand campaign and its ordered, database-linked product IDs. */
 export async function getSupermarketBrandCampaign(cardId: string, storeId: string): Promise<SupermarketBrandCampaign> {
-  const { data, error } = await supabase
+  const { data, error } = await publicSupabase
     .schema('now')
     .from('supermarket_media_cards')
     .select(CARD_SELECT)
@@ -116,7 +116,7 @@ export async function getSupermarketBrandCampaign(cardId: string, storeId: strin
   const card = parseCard(data as MediaCardRow, true);
   if (!card) throw new Error('محتوى العرض غير صالح.');
 
-  const { data: productLinks, error: productsError } = await supabase
+  const { data: productLinks, error: productsError } = await publicSupabase
     .schema('now')
     .from('supermarket_media_card_products')
     .select('media_card_id,product_id,sort_order')
