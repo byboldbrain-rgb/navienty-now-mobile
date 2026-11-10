@@ -114,6 +114,9 @@ export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
       });
     },
     staleTime: 90_000,
+    // Keep cached metadata for instant paint, but refresh canonical DB names
+    // whenever this category screen mounts (including after a DB rename).
+    refetchOnMount: 'always',
     gcTime: 24 * 60 * 60 * 1000,
     retry: 1,
     meta: { persist: true },
