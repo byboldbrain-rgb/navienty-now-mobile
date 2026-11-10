@@ -83,6 +83,8 @@ export type GlobalSearchResponse = {
   results: GlobalSearchResult[];
   failedStoreCount: number;
   indexedStoreCount: number;
+  /** When true, there are more results after the current supermarket page. */
+  hasMore?: boolean;
 };
 
 type SearchIndexEntry = {
@@ -910,6 +912,7 @@ export async function searchSupermarketProducts(
   query: string,
   serviceAreaId?: string | null,
   storeId?: string | null,
+  offset = 0,
 ): Promise<GlobalSearchResponse> {
   const normalizedQuery = normalizeSearchText(query);
   if (normalizedQuery.length < 2) {
@@ -922,12 +925,13 @@ export async function searchSupermarketProducts(
   }
 
   const { data, error } = await publicSupabase.rpc(
-    'search_supermarket_products',
+    'search_supermarket_products_paged',
     {
       p_query: query,
       p_service_area_id: serviceAreaId?.trim() || null,
       p_store_id: storeId?.trim() || null,
-      p_limit: 48,
+      p_limit: 24,
+      p_offset: Math.max(0, Math.floor(offset)),
     },
   );
 
@@ -943,6 +947,7 @@ export async function searchSupermarketProducts(
     query,
     failedStoreCount: 0,
     indexedStoreCount: rows.length > 0 ? 1 : 0,
+    hasMore: rows.length === 24,
     results: rows
       .filter((row) =>
         Boolean(row.product_id && row.store_id && row.section_id),
