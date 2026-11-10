@@ -576,7 +576,11 @@ const ProductRow = memo(
   },
 );
 
-export default function StoreScreen() {
+export default function StoreScreen({
+  searchOnly = false,
+}: {
+  searchOnly?: boolean;
+}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -616,8 +620,8 @@ export default function StoreScreen() {
   const [isLoading, setIsLoading] =
     useState(true);
 
-  const [isSearchVisible, setIsSearchVisible] =
-    useState(false);
+  // This screen is reused by /restaurant-search/[id] in search-only mode.
+  const isSearchVisible = searchOnly;
   const [searchQuery, setSearchQuery] =
     useState('');
   const [debouncedSearch, setDebouncedSearch] =
@@ -682,12 +686,11 @@ export default function StoreScreen() {
     useRef(false);
 
   useEffect(() => {
-    setIsSearchVisible(false);
     setSearchQuery('');
     setDebouncedSearch('');
     setIsScrollHeaderVisible(false);
     scrollHeaderVisibleRef.current = false;
-  }, [rawId]);
+  }, [rawId, searchOnly]);
 
   const [
     failedProductImages,
@@ -738,25 +741,36 @@ export default function StoreScreen() {
   );
 
   const sectionListData = useMemo(() => {
-    const searchTerms =
-      isSearchVisible && normalizedSearch
-        ? normalizedSearch.split(' ').filter(Boolean)
-        : [];
+    if (searchOnly) {
+      // Search the full, current restaurant menu (not a global or paged
+      // sample). Deduplicate products that belong to multiple sections.
+      const uniqueProducts = new Map<string, CatalogProduct>();
+      for (const section of catalogSections ?? []) {
+        for (const product of section.products) {
+          if (!uniqueProducts.has(product.id)) {
+            uniqueProducts.set(product.id, product);
+          }
+        }
+      }
 
-    return (catalogSections ?? [])
-      .map((section) => ({
-        ...section,
-        data:
-          searchTerms.length > 0
-            ? section.products.filter((product) =>
-                matchesRestaurantSearch(product, searchTerms),
-              )
-            : section.products,
-      }))
-      .filter((section) =>
-        searchTerms.length === 0 || section.data.length > 0,
-      );
-  }, [catalogSections, isSearchVisible, normalizedSearch]);
+      const terms = normalizedSearch.split(' ').filter(Boolean);
+      const products = Array.from(uniqueProducts.values());
+      const matchedProducts =
+        terms.length === 0
+          ? products
+          : products.filter((product) =>
+              matchesRestaurantSearch(product, terms),
+            );
+
+      // One virtual section keeps search results flat (no menu headings).
+      return [{ name: '', data: matchedProducts }];
+    }
+
+    return (catalogSections ?? []).map((section) => ({
+      ...section,
+      data: section.products,
+    }));
+  }, [catalogSections, normalizedSearch, searchOnly]);
 
   const cartQuantityByProductId =
     useMemo(() => {
@@ -1311,24 +1325,16 @@ export default function StoreScreen() {
   }
 
   function openRestaurantSearch() {
-    setSearchQuery('');
-    setDebouncedSearch('');
-    setIsSearchVisible(true);
-    scrollHeaderVisibleRef.current = false;
-    setIsScrollHeaderVisible(false);
-  }
-
-  function closeRestaurantSearch() {
-    setSearchQuery('');
-    setDebouncedSearch('');
-    setIsSearchVisible(false);
-    scrollHeaderVisibleRef.current = false;
-    setIsScrollHeaderVisible(false);
+    router.push({
+      pathname: '/restaurant-search/[id]',
+      params: { id: currentStore.id },
+    });
   }
 
   function handleStoreScroll(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
+    if (searchOnly) return;
     const scrollY =
       event.nativeEvent.contentOffset.y;
 
@@ -1346,18 +1352,119 @@ export default function StoreScreen() {
 
   return (
     <View style={styles.screen}>
+      {searchOnly && (
+        <View
+          style={[
+            styles.restaurantSearchPageHeader,
+            {
+              paddingTop: Math.max(
+                insets.top,
+                Platform.OS === 'android' ? 24 : 0,
+              ),
+            },
+          ]}
+        >
+          <View style={styles.restaurantSearchTopRow}>
+            <Pressable
+              accessibilityLabel="رجوع للمطعم"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.headerButtonPressed,
+              ]}
+              onPress={() => router.back()}
+            >
+              <BackArrowIcon />
+            </Pressable>
+            <Text
+              numberOfLines={1}
+              style={styles.restaurantSearchPageTitle}
+            >
+              البحث في {currentStore.name}
+            </Text>
+            <Pressable
+              accessibilityLabel="فتح السلة"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.restaurantSearchCartButton,
+                pressed && styles.headerButtonPressed,
+              ]}
+              onPress={openCart}
+            >
+              <Ionicons
+                name="cart-outline"
+                size={24}
+                color="#9F0A85"
+              />
+              {cartItemCount > 0 && (
+                <View style={styles.restaurantSearchCartCount}>
+                  <Text style={styles.restaurantSearchCartCountText}>
+                    {cartItemCount > 99 ? '99+' : cartItemCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
+
+          <View style={styles.restaurantSearchFieldRow}>
+            <View style={styles.searchInputContainer}>
+              <Ionicons
+                name="search-outline"
+                size={20}
+                color="#999999"
+              />
+              <TextInput
+                autoFocus
+                accessibilityLabel={`ابحث في منتجات ${currentStore.name}`}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="بتدور على إيه؟"
+                placeholderTextColor="#999999"
+                returnKeyType="search"
+                selectionColor="#9F0A85"
+                style={styles.searchInput}
+                textAlign="right"
+              />
+              {searchQuery.length > 0 && (
+                <Pressable
+                  accessibilityLabel="مسح كلمة البحث"
+                  accessibilityRole="button"
+                  hitSlop={10}
+                  onPress={() => setSearchQuery('')}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    color="#888888"
+                    size={20}
+                  />
+                </Pressable>
+              )}
+            </View>
+            <Pressable
+              accessibilityLabel="إلغاء البحث"
+              accessibilityRole="button"
+              hitSlop={8}
+              style={styles.restaurantSearchCancel}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.restaurantSearchCancelText}>
+                إلغاء
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
       <SectionList
         key={isSearchVisible ? 'restaurant-search' : 'restaurant-catalog'}
         ref={scrollRef}
         sections={sectionListData}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
-          isSearchVisible && {
-            paddingTop:
-              Math.max(
-                insets.top,
-                Platform.OS === 'android' ? 24 : 0,
-              ) + 56,
-          },
           styles.pageContent,
 
           cartItemCount > 0 &&
@@ -1478,8 +1585,8 @@ export default function StoreScreen() {
           >
             <Ionicons
               name="search-outline"
-              size={19}
-              color="#202020"
+              size={26}
+              color="#A00084"
             />
           </Pressable>
 
@@ -1553,29 +1660,6 @@ export default function StoreScreen() {
             </View>
           </View>
         </View>
-
-        {/* Accessible search bar on every restaurant menu. */}
-        <Pressable
-          accessibilityLabel={`ابحث في منتجات ${currentStore.name}`}
-          accessibilityRole="button"
-          style={({ pressed }) => [
-            styles.restaurantSearchEntry,
-            pressed && styles.headerButtonPressed,
-          ]}
-          onPress={openRestaurantSearch}
-        >
-          <Ionicons
-            name="search-outline"
-            size={18}
-            color="#777777"
-          />
-          <Text
-            numberOfLines={1}
-            style={styles.restaurantSearchEntryPlaceholder}
-          >
-            ابحث في منيو {currentStore.name}
-          </Text>
-        </Pressable>
 
         {/* CLOSED NOTICE */}
 
@@ -1663,7 +1747,7 @@ export default function StoreScreen() {
         }
         renderSectionHeader={({
           section,
-        }) => (
+        }) => isSearchVisible ? null : (
           <View
             style={[
               styles.container,
@@ -1718,7 +1802,7 @@ export default function StoreScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {(isScrollHeaderVisible || isSearchVisible) && (
+      {!isSearchVisible && isScrollHeaderVisible && (
         <View
           style={[
             styles.scrollHeader,
@@ -1731,75 +1815,40 @@ export default function StoreScreen() {
           ]}
         >
           <View style={styles.scrollHeaderRow}>
-            {isSearchVisible ? (
-              <View style={styles.searchInputContainer}>
-                <Ionicons
-                  name="search-outline"
-                  size={17}
-                  color="#222222"
-                />
-                <TextInput
-                  autoFocus
-                  accessibilityLabel="ابحث في منتجات المطعم"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="ابحث في منتجات المطعم"
-                  placeholderTextColor="#999999"
-                  returnKeyType="search"
-                  style={styles.searchInput}
-                  textAlign="right"
-                />
-                <Pressable
-                  accessibilityLabel="إغلاق البحث"
-                  accessibilityRole="button"
-                  hitSlop={12}
-                  onPress={closeRestaurantSearch}
-                >
-                  <Ionicons
-                    name="close"
-                    size={18}
-                    color="#222222"
-                  />
-                </Pressable>
-              </View>
-            ) : (
-              <>
-                <Pressable
-                  accessibilityLabel="العودة"
-                  accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.backButton,
-                    pressed && styles.headerButtonPressed,
-                  ]}
-                  onPress={() => router.back()}
-                >
-                  <BackArrowIcon />
-                </Pressable>
-                <View style={styles.scrollHeaderTitleGroup}>
-                  <Text
-                    numberOfLines={1}
-                    style={styles.scrollHeaderTitle}
-                  >
-                    {currentStore.name}
-                  </Text>
-                </View>
-                <Pressable
-                  accessibilityLabel="البحث في منتجات المطعم"
-                  accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.backButton,
-                    pressed && styles.headerButtonPressed,
-                  ]}
-                  onPress={openRestaurantSearch}
-                >
-                  <Ionicons
-                    name="search-outline"
-                    size={19}
-                    color="#202020"
-                  />
-                </Pressable>
-              </>
-            )}
+            <Pressable
+              accessibilityLabel="العودة"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.headerButtonPressed,
+              ]}
+              onPress={() => router.back()}
+            >
+              <BackArrowIcon />
+            </Pressable>
+            <View style={styles.scrollHeaderTitleGroup}>
+              <Text
+                numberOfLines={1}
+                style={styles.scrollHeaderTitle}
+              >
+                {currentStore.name}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityLabel="البحث في منتجات المطعم"
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.headerButtonPressed,
+              ]}
+              onPress={openRestaurantSearch}
+            >
+              <Ionicons
+                name="search-outline"
+                size={21}
+                color="#A00084"
+              />
+            </Pressable>
           </View>
         </View>
       )}
@@ -2311,6 +2360,9 @@ const styles = StyleSheet.create({
     left:
       NAVIENTY_NOW_LAYOUT.pageGutter,
     position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     zIndex: 20,
 
     shadowColor: '#000000',
@@ -2327,6 +2379,9 @@ const styles = StyleSheet.create({
   heroSearchButton: {
     right: NAVIENTY_NOW_LAYOUT.pageGutter,
     position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     zIndex: 20,
     shadowColor: '#000000',
     shadowOffset: { height: 2, width: 0 },
@@ -2430,16 +2485,87 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
 
+  restaurantSearchPageHeader: {
+    backgroundColor: '#FFFFFF',
+    borderBottomColor: '#F0F0F0',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 14,
+  },
+
+  restaurantSearchTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    height: 58,
+    paddingHorizontal: NAVIENTY_NOW_LAYOUT.pageGutter,
+  },
+
+  restaurantSearchPageTitle: {
+    color: '#161616',
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    paddingHorizontal: 12,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  restaurantSearchCartButton: {
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 40,
+  },
+
+  restaurantSearchCartCount: {
+    alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.primary,
+    borderRadius: 10,
+    height: 19,
+    justifyContent: 'center',
+    minWidth: 19,
+    paddingHorizontal: 3,
+    position: 'absolute',
+    right: -4,
+    top: -3,
+  },
+
+  restaurantSearchCartCountText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+
+  restaurantSearchFieldRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingTop: 8,
+  },
+
+  restaurantSearchCancel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+  },
+
+  restaurantSearchCancelText: {
+    color: '#9F0A85',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
   searchInputContainer: {
     alignItems: 'center',
     backgroundColor: '#F6F6F6',
     borderColor: '#EAEAEA',
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
     flex: 1,
     flexDirection: 'row',
-    gap: 7,
-    minHeight: 40,
+    gap: 9,
+    minHeight: 48,
     paddingHorizontal: 13,
   },
 
@@ -2448,30 +2574,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     minHeight: 38,
-    writingDirection: 'rtl',
-  },
-
-  restaurantSearchEntry: {
-    alignItems: 'center',
-    backgroundColor: '#F6F6F6',
-    borderColor: '#EAEAEA',
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    marginHorizontal: NAVIENTY_NOW_LAYOUT.pageGutter,
-    marginTop: 14,
-    marginBottom: 8,
-    minHeight: 44,
-    paddingHorizontal: 14,
-  },
-
-  restaurantSearchEntryPlaceholder: {
-    color: '#888888',
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'right',
     writingDirection: 'rtl',
   },
 
