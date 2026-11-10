@@ -493,10 +493,7 @@ export default function AddressDetailsScreen() {
         deliveryInstructions.trim(),
     });
 
-    if (
-      source ===
-      'checkout'
-    ) {
+    if (source === 'checkout' || source === 'global-checkout') {
       router.back();
 
       return;
@@ -508,6 +505,7 @@ export default function AddressDetailsScreen() {
 
       params: {
         storeId,
+        ...(source === 'global-cart' ? { allStores: '1' } : {}),
       },
     });
   }
