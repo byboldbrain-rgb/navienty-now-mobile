@@ -303,6 +303,10 @@ export default function GlobalStoreCheckout() {
   const renderedDelivery = approvedGroup?.deliveryFee ?? quotedDeliveryTotal;
   const renderedFee = approvedGroup?.paymentProcessingFee ?? PREVIEW_PAYMENT_FEE;
   const renderedTotal = approvedGroup?.totalAmount ?? previewTotal;
+  const renderedDiscount = approvedGroup
+    ? Math.max(0, approvedGroup.subtotal + approvedGroup.deliveryFee +
+        approvedGroup.paymentProcessingFee - approvedGroup.totalAmount)
+    : 0;
   const normalizedPhone = phoneNumber.replace(/\D/g, '');
   const selectedMethod = bootstrap?.payment_methods.find(
     (method) => method.id === paymentMethod,
@@ -552,8 +556,9 @@ export default function GlobalStoreCheckout() {
                     strong
                     label={`إجمالي الأوردر #${index + 1}`}
                     value={money(
-                      child?.totalAmount ??
-                      (storeDelivery === null ? null : storeSubtotal + storeDelivery),
+                      child
+                        ? child.totalAmount - child.paymentProcessingFee
+                        : (storeDelivery === null ? null : storeSubtotal + storeDelivery),
                     )}
                   />
                 </View>
@@ -675,6 +680,9 @@ export default function GlobalStoreCheckout() {
               label="رسوم الدفع الإلكتروني (مرة واحدة)"
               value={money(renderedFee)}
             />
+            {renderedDiscount > 0 ? (
+              <PriceRow label="خصومات الطلبات" value={`- ${money(renderedDiscount)}`} />
+            ) : null}
             <View style={styles.line} />
             <PriceRow label="الإجمالي النهائي" value={money(renderedTotal)} strong />
             {approvedGroup ? (
