@@ -29,6 +29,10 @@ import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
 import CategorySearchEntry from '../../components/search/category-search-entry';
+import { useQuery } from '@tanstack/react-query';
+import { CatalogMediaCarousel, CatalogBrandBanners } from '../../components/category/catalog-promotional-rails';
+import { listSupermarketMediaCards, type SupermarketMediaCard } from '../../services/supermarket-campaign-service';
+import { listSupermarketBrandBanners, type SupermarketBrandBanner } from '../../services/supermarket-brand-banner-service';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
@@ -53,9 +57,10 @@ import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
-const CATEGORY_COLUMNS_PER_ROW = 4;
+const CATEGORY_COLUMNS_PER_ROW = 3;
+const CATEGORY_ROWS_PER_COLUMN = 3;
 const CATEGORY_HORIZONTAL_PADDING = 16;
-const CATEGORY_COLUMN_GAP = 7;
+const CATEGORY_COLUMN_GAP = 9;
 
 const PROMOTION_PRODUCT_GAP = 7;
 const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
@@ -370,44 +375,11 @@ function formatCartMoney(
   )} ${amount.toFixed(2)}`;
 }
 
-function makeCategoryColumns(
-  categories: CategoryDisplayItem[],
-) {
-  const rowCount = Math.ceil(
-    categories.length /
-      CATEGORY_COLUMNS_PER_ROW,
-  );
+function makeCategoryColumns(categories: CategoryDisplayItem[]) {
   const columns: CategoryDisplayItem[][] = [];
-
-  for (
-    let columnIndex = 0;
-    columnIndex < CATEGORY_COLUMNS_PER_ROW;
-    columnIndex += 1
-  ) {
-    const column: CategoryDisplayItem[] = [];
-
-    for (
-      let rowIndex = 0;
-      rowIndex < rowCount;
-      rowIndex += 1
-    ) {
-      const item =
-        categories[
-          rowIndex *
-            CATEGORY_COLUMNS_PER_ROW +
-            columnIndex
-        ];
-
-      if (item) {
-        column.push(item);
-      }
-    }
-
-    if (column.length > 0) {
-      columns.push(column);
-    }
+  for (let index = 0; index < categories.length; index += CATEGORY_ROWS_PER_COLUMN) {
+    columns.push(categories.slice(index, index + CATEGORY_ROWS_PER_COLUMN));
   }
-
   return columns;
 }
 
@@ -1553,16 +1525,7 @@ function CategoryVisual({
 }) {
   return (
     <View
-      style={[
-        styles.categoryImageBox,
-        {
-          borderRadius: Math.round(
-            size * 0.16,
-          ),
-          height: size,
-          width: size,
-        },
-      ]}
+      style={styles.categoryImageBox}
     >
       {item.imageUrl ? (
         <ExpoImage
@@ -2157,6 +2120,26 @@ export default function BookstoreScreen() {
     storefrontCategoryTiles,
   ]);
 
+  const storefrontStoreId = catalog?.store.id ?? null;
+  const mediaQuery = useQuery({
+    queryKey: ['public', 'bookstore', 'top-media-v1', storefrontStoreId],
+    queryFn: () => listSupermarketMediaCards(storefrontStoreId!),
+    enabled: Boolean(storefrontStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const brandQuery = useQuery({
+    queryKey: ['public', 'bookstore', 'brand-banners-v1', storefrontStoreId],
+    queryFn: () => listSupermarketBrandBanners(storefrontStoreId!),
+    enabled: Boolean(storefrontStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const mediaCards: SupermarketMediaCard[] = mediaQuery.data ?? [];
+  const brandBanners: SupermarketBrandBanner[] = brandQuery.data ?? [];
+
   const categoryColumns = useMemo(
     () =>
       makeCategoryColumns(
@@ -2287,19 +2270,12 @@ export default function BookstoreScreen() {
     560,
   );
 
-  const categoryColumnWidth = Math.max(
-    1,
-    (pageWidth -
-      CATEGORY_HORIZONTAL_PADDING * 2 -
-      CATEGORY_COLUMN_GAP *
-        (CATEGORY_COLUMNS_PER_ROW - 1)) /
+  const categoryColumnWidth = Math.max(1,
+    (pageWidth - CATEGORY_HORIZONTAL_PADDING * 2 - CATEGORY_COLUMN_GAP * (CATEGORY_COLUMNS_PER_ROW - 1)) /
       CATEGORY_COLUMNS_PER_ROW,
   );
-
-  const categoryImageSize = Math.max(
-    54,
-    Math.min(80, categoryColumnWidth - 5),
-  );
+  const categoryCardHeight = categoryColumnWidth * 4 / 3;
+  const categoryImageSize = categoryColumnWidth;
 
   const featuredCardWidth = Math.min(
     136,
@@ -2455,6 +2431,29 @@ export default function BookstoreScreen() {
         categoryKey: item.key,
         label: item.label,
       },
+    });
+  }
+
+  function openMediaCard(card: SupermarketMediaCard) {
+    if (!catalog) return;
+    if (card.hasCampaignProducts) {
+      router.push({
+        pathname: '/supermarket-campaign/[id]',
+        params: { id: card.id, storeId: catalog.store.id },
+      });
+      return;
+    }
+    const matching = categories.find(item =>
+      item.key === card.categoryKey || item.section?.slug === card.categoryKey,
+    );
+    if (matching) openCategory(matching);
+  }
+
+  function openBrandBanner(banner: SupermarketBrandBanner) {
+    if (!catalog) return;
+    router.push({
+      pathname: '/supermarket-campaign/[id]',
+      params: { id: banner.brandId, storeId: catalog.store.id, view: 'catalog-brand' },
     });
   }
 
@@ -2636,6 +2635,7 @@ export default function BookstoreScreen() {
 
           <CategorySearchEntry
             scope="bookstore"
+            storeId={currentStore.id}
             suggestions={searchSuggestions}
             style={styles.headerSearchEntry}
           />
@@ -2652,6 +2652,10 @@ export default function BookstoreScreen() {
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
         >
+          {mediaCards.length > 0 ? (
+            <CatalogMediaCarousel cards={mediaCards} viewportWidth={pageWidth} onPress={openMediaCard} />
+          ) : null}
+
           <View style={styles.categoriesSection}>
             <Text style={styles.categoriesTitle}>
               تسوق حسب الفئة
@@ -2697,6 +2701,7 @@ export default function BookstoreScreen() {
                             {
                               width:
                                 categoryColumnWidth,
+                              height: categoryCardHeight,
                             },
                             pressed &&
                               styles.categoryItemPressed,
@@ -2744,6 +2749,10 @@ export default function BookstoreScreen() {
               </View>
             )}
           </View>
+
+          {brandBanners.length > 0 ? (
+            <CatalogBrandBanners banners={brandBanners} pageWidth={pageWidth} onPress={openBrandBanner} />
+          ) : null}
 
           {resolvedPromotionBanners.map(
             (banner, bannerIndex) => (
@@ -2951,46 +2960,38 @@ const styles = StyleSheet.create({
   categoriesRail: {
     direction: 'ltr',
     flexDirection: 'row',
-    flexGrow: 1,
     gap: CATEGORY_COLUMN_GAP,
-    justifyContent: 'flex-end',
-    paddingHorizontal:
-      CATEGORY_HORIZONTAL_PADDING,
+    paddingHorizontal: CATEGORY_HORIZONTAL_PADDING,
   },
-  categoryColumn: {
-    alignItems: 'center',
-    gap: 15,
-  },
+  categoryColumn: { gap: CATEGORY_COLUMN_GAP },
   categoryItem: {
-    alignItems: 'center',
+    backgroundColor: '#F5F0E9',
+    borderColor: '#ECE9E5',
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  categoryItemPressed: {
-    opacity: 0.68,
-    transform: [{ scale: 0.97 }],
-  },
+  categoryItemPressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
   categoryImageBox: {
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    height: '100%', width: '100%',
+    alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
-  categoryImage: {
-    height: '100%',
-    width: '100%',
-  },
-  categoryFallbackIcon: {
-    fontSize: 39,
-  },
+  categoryImage: { height: '100%', width: '100%' },
+  categoryFallbackIcon: { fontSize: 32 },
   categoryLabel: {
-    color: '#202020',
-    fontSize: 13.5,
-    fontWeight: '400',
-    letterSpacing: -0.2,
-    lineHeight: 18,
-    marginTop: 8,
-    minHeight: 36,
+    color: '#171717',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 15,
     textAlign: 'center',
     writingDirection: 'rtl',
+    position: 'absolute',
+    top: 8, left: 5, right: 5, zIndex: 2,
   },
   emptyCategories: {
     alignItems: 'center',

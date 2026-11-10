@@ -26,6 +26,10 @@ import CategoryCartDock, {
   useCartDockScrollBehavior,
 } from '../../components/cart/category-cart-dock';
 import CategorySearchEntry from '../../components/search/category-search-entry';
+import { useQuery } from '@tanstack/react-query';
+import { CatalogMediaCarousel, CatalogBrandBanners } from '../../components/category/catalog-promotional-rails';
+import { listSupermarketMediaCards, type SupermarketMediaCard } from '../../services/supermarket-campaign-service';
+import { listSupermarketBrandBanners, type SupermarketBrandBanner } from '../../services/supermarket-brand-banner-service';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import { supabase } from '../../lib/supabase';
@@ -47,9 +51,10 @@ import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
-const CATEGORY_COLUMNS_PER_ROW = 4;
+const CATEGORY_COLUMNS_PER_ROW = 3;
+const CATEGORY_ROWS_PER_COLUMN = 3;
 const CATEGORY_HORIZONTAL_PADDING = 16;
-const CATEGORY_COLUMN_GAP = 7;
+const CATEGORY_COLUMN_GAP = 9;
 const PAGE_MAX_WIDTH = 560;
 
 const PROMOTION_PRODUCT_GAP = 7;
@@ -524,45 +529,11 @@ function findPersonalCareStorefrontSections(
   );
 }
 
-function makeCategoryColumns(
-  categories: CategoryDisplayItem[],
-) {
-  const rowCount = Math.ceil(
-    categories.length /
-      CATEGORY_COLUMNS_PER_ROW,
-  );
-
+function makeCategoryColumns(categories: CategoryDisplayItem[]) {
   const columns: CategoryDisplayItem[][] = [];
-
-  for (
-    let columnIndex = 0;
-    columnIndex < CATEGORY_COLUMNS_PER_ROW;
-    columnIndex += 1
-  ) {
-    const column: CategoryDisplayItem[] = [];
-
-    for (
-      let rowIndex = 0;
-      rowIndex < rowCount;
-      rowIndex += 1
-    ) {
-      const item =
-        categories[
-          rowIndex *
-            CATEGORY_COLUMNS_PER_ROW +
-            columnIndex
-        ];
-
-      if (item) {
-        column.push(item);
-      }
-    }
-
-    if (column.length > 0) {
-      columns.push(column);
-    }
+  for (let index = 0; index < categories.length; index += CATEGORY_ROWS_PER_COLUMN) {
+    columns.push(categories.slice(index, index + CATEGORY_ROWS_PER_COLUMN));
   }
-
   return columns;
 }
 
@@ -1269,16 +1240,7 @@ function CategoryVisual({
 }) {
   return (
     <View
-      style={[
-        styles.categoryImageBox,
-        {
-          borderRadius: Math.round(
-            size * 0.16,
-          ),
-          height: size,
-          width: size,
-        },
-      ]}
+      style={styles.categoryImageBox}
     >
       {item.imageUrl ? (
         <ExpoImage
@@ -2636,6 +2598,26 @@ export default function PersonalCareScreen() {
     storefrontCategoryTiles,
   ]);
 
+  const storefrontStoreId = catalog?.store.id ?? null;
+  const mediaQuery = useQuery({
+    queryKey: ['public', 'personal-care', 'top-media-v1', storefrontStoreId],
+    queryFn: () => listSupermarketMediaCards(storefrontStoreId!),
+    enabled: Boolean(storefrontStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const brandQuery = useQuery({
+    queryKey: ['public', 'personal-care', 'brand-banners-v1', storefrontStoreId],
+    queryFn: () => listSupermarketBrandBanners(storefrontStoreId!),
+    enabled: Boolean(storefrontStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const mediaCards: SupermarketMediaCard[] = mediaQuery.data ?? [];
+  const brandBanners: SupermarketBrandBanner[] = brandQuery.data ?? [];
+
   const categoryColumns = useMemo(
     () =>
       makeCategoryColumns(
@@ -2729,26 +2711,12 @@ export default function PersonalCareScreen() {
     PAGE_MAX_WIDTH,
   );
 
-  const categoryColumnWidth =
-    Math.max(
-      1,
-      (pageWidth -
-        CATEGORY_HORIZONTAL_PADDING *
-          2 -
-        CATEGORY_COLUMN_GAP *
-          (CATEGORY_COLUMNS_PER_ROW -
-            1)) /
-        CATEGORY_COLUMNS_PER_ROW,
-    );
-
-  const categoryImageSize =
-    Math.max(
-      54,
-      Math.min(
-        80,
-        categoryColumnWidth - 5,
-      ),
-    );
+  const categoryColumnWidth = Math.max(1,
+    (pageWidth - CATEGORY_HORIZONTAL_PADDING * 2 - CATEGORY_COLUMN_GAP * (CATEGORY_COLUMNS_PER_ROW - 1)) /
+      CATEGORY_COLUMNS_PER_ROW,
+  );
+  const categoryCardHeight = categoryColumnWidth * 4 / 3;
+  const categoryImageSize = categoryColumnWidth;
 
   const featuredCardWidth = Math.min(
     136,
@@ -2926,6 +2894,29 @@ export default function PersonalCareScreen() {
     });
   }
 
+  function openMediaCard(card: SupermarketMediaCard) {
+    if (!catalog) return;
+    if (card.hasCampaignProducts) {
+      router.push({
+        pathname: '/supermarket-campaign/[id]',
+        params: { id: card.id, storeId: catalog.store.id },
+      });
+      return;
+    }
+    const matching = categories.find(item =>
+      item.key === card.categoryKey || item.section?.slug === card.categoryKey,
+    );
+    if (matching) openCategory(matching);
+  }
+
+  function openBrandBanner(banner: SupermarketBrandBanner) {
+    if (!catalog) return;
+    router.push({
+      pathname: '/supermarket-campaign/[id]',
+      params: { id: banner.brandId, storeId: catalog.store.id, view: 'catalog-brand' },
+    });
+  }
+
   function addFeaturedProduct(
     product: CatalogProduct,
   ) {
@@ -3060,6 +3051,7 @@ export default function PersonalCareScreen() {
 
           <CategorySearchEntry
             scope="personal-care"
+            storeId={currentStore.id}
             suggestions={searchSuggestions}
             style={styles.headerSearchEntry}
           />
@@ -3078,6 +3070,10 @@ export default function PersonalCareScreen() {
             false
           }
         >
+          {mediaCards.length > 0 ? (
+            <CatalogMediaCarousel cards={mediaCards} viewportWidth={pageWidth} onPress={openMediaCard} />
+          ) : null}
+
           <View
             style={
               styles.categoriesSection
@@ -3148,6 +3144,7 @@ export default function PersonalCareScreen() {
                               {
                                 width:
                                   categoryColumnWidth,
+                              height: categoryCardHeight,
                               },
                               pressed &&
                                 styles.categoryItemPressed,
@@ -3210,6 +3207,10 @@ export default function PersonalCareScreen() {
               </View>
             )}
           </View>
+
+          {brandBanners.length > 0 ? (
+            <CatalogBrandBanners banners={brandBanners} pageWidth={pageWidth} onPress={openBrandBanner} />
+          ) : null}
 
           {resolvedPromotionBanners.map(
             (banner, bannerIndex) => (
@@ -3504,251 +3505,38 @@ const styles = StyleSheet.create({
   categoriesRail: {
     direction: 'ltr',
     flexDirection: 'row',
-    flexGrow: 1,
     gap: CATEGORY_COLUMN_GAP,
-    justifyContent: 'flex-end',
-    paddingHorizontal:
-      CATEGORY_HORIZONTAL_PADDING,
+    paddingHorizontal: CATEGORY_HORIZONTAL_PADDING,
   },
-
-  categoryColumn: {
-    alignItems: 'center',
-    gap: 15,
-  },
-
+  categoryColumn: { gap: CATEGORY_COLUMN_GAP },
   categoryItem: {
-    alignItems: 'center',
+    backgroundColor: '#F5F0E9',
+    borderColor: '#ECE9E5',
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
+    overflow: 'hidden',
+    position: 'relative',
   },
-
-  categoryItemPressed: {
-    opacity: 0.68,
-    transform: [
-      {
-        scale: 0.97,
-      },
-    ],
-  },
-
+  categoryItemPressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
   categoryImageBox: {
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    height: '100%', width: '100%',
+    alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
-
-  categoryImage: {
-    height: '100%',
-    width: '100%',
-  },
-
-  categoryFallbackIcon: {
-    fontSize: 39,
-  },
-
+  categoryImage: { height: '100%', width: '100%' },
+  categoryFallbackIcon: { fontSize: 32 },
   categoryLabel: {
-    color: '#202020',
-    fontSize: 13.5,
-    fontWeight: '400',
-    letterSpacing: -0.2,
-    lineHeight: 18,
-    marginTop: 8,
-    minHeight: 36,
+    color: '#171717',
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 15,
     textAlign: 'center',
     writingDirection: 'rtl',
-  },
-
-  promotionSection: {
-    backgroundColor: '#FFFFFF',
-    marginBottom: 22,
-    overflow: 'visible',
-    width: '100%',
-  },
-
-  promotionSectionLast: {
-    marginBottom: 0,
-  },
-
-  promotionBannerFrame: {
-    marginHorizontal: 0,
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
-    zIndex: 1,
-  },
-
-  promotionBanner: {
-    backgroundColor: '#F4F4F4',
-    width: '100%',
-  },
-
-  promotionProductsScroll: {
-    elevation: 10,
-    overflow: 'visible',
-    position: 'relative',
-    zIndex: 10,
-  },
-
-  promotionProductsRail: {
-    alignItems: 'flex-start',
-    gap: PROMOTION_PRODUCT_GAP,
-    paddingBottom: 7,
-    paddingHorizontal:
-      PROMOTION_PRODUCT_HORIZONTAL_PADDING,
-    paddingTop: 0,
-  },
-  featuredProductCard: {
-    backgroundColor: 'transparent',
-    overflow: 'visible',
-  },
-  featuredProductImageBox: {
-    alignItems: 'center',
-    backgroundColor: '#F7F7F7',
-    borderColor: '#E8E8E8',
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  featuredProductImage: {
-    height: '100%',
-    width: '100%',
-  },
-  featuredProductFallback: {
-    fontSize: 34,
-  },
-  featuredDiscountBadge: {
-    alignItems: 'center',
-    backgroundColor: '#BFFF00',
-    borderRadius: 3,
-    justifyContent: 'center',
-    left: 6,
-    minHeight: 17,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
     position: 'absolute',
-    top: 6,
-    zIndex: 5,
-  },
-  featuredDiscountText: {
-    color: '#111111',
-    fontSize: 8.5,
-    fontWeight: '500',
-    lineHeight: 11,
-  },
-  featuredAddButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E7E7E7',
-    borderRadius: 20,
-    borderWidth: 1,
-    bottom: 8,
-    elevation: 2,
-    height: 38,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    width: 38,
-    zIndex: 8,
-  },
-  featuredAddButtonPressed: {
-    backgroundColor: '#F8F8F8',
-    transform: [{ scale: 0.94 }],
-  },
-  featuredAddButtonDisabled: {
-    opacity: 0.45,
-  },
-  featuredAddButtonText: {
-    color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 27,
-    fontWeight: '300',
-    lineHeight: 29,
-    marginTop: -2,
-  },
-  featuredQuantityPill: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E7E7E7',
-    borderRadius: 20,
-    borderWidth: 1,
-    bottom: 8,
-    elevation: 2,
-    flexDirection: 'row',
-    height: 38,
-    position: 'absolute',
-    right: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    zIndex: 8,
-  },
-  featuredQuantityButton: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 28,
-  },
-  featuredQuantityButtonText: {
-    color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 20,
-    fontWeight: '500',
-    lineHeight: 22,
-  },
-  featuredQuantityValue: {
-    color: '#202020',
-    fontSize: 11,
-    fontWeight: '700',
-    minWidth: 16,
-    textAlign: 'center',
-  },
-  featuredProductName: {
-    color: '#202020',
-    fontSize: 13.5,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-    lineHeight: 17,
-    marginTop: 8,
-    minHeight: 34,
-    paddingHorizontal: 2,
-    textAlign: 'center',
-    width: '100%',
-    writingDirection: 'rtl',
-  },
-  featuredPriceRow: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    justifyContent: 'center',
-    marginTop: 4,
-    width: '100%',
-  },
-  featuredCurrentPriceWrap: {
-    alignSelf: 'center',
-    borderBottomColor: '#BFFF00',
-    borderBottomWidth: 2,
-  },
-  featuredCurrentPrice: {
-    color: '#202020',
-    fontSize: 11.5,
-    fontWeight: '500',
-    lineHeight: 14,
-    textAlign: 'center',
-    writingDirection: 'ltr',
-  },
-  featuredOldPrice: {
-    color: '#858585',
-    fontSize: 9.5,
-    lineHeight: 12,
-    textAlign: 'center',
-    textDecorationLine: 'line-through',
-    writingDirection: 'ltr',
+    top: 8, left: 5, right: 5, zIndex: 2,
   },
   emptyCategories: {
     alignItems: 'center',
