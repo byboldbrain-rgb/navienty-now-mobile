@@ -1,4 +1,3 @@
-import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
 import {
   useCartStore as useBaseCartStore,
   type CartState,
@@ -33,6 +32,15 @@ function anchorGroup(
   );
 }
 
+/** Provisional-only fee for legacy Cart views. The checkout uses the live RPC quote. */
+function provisionalSharedDeliveryFee(groups: StoreCart[]): number {
+  return groups.length > 0
+    ? Math.max(0, ...groups.map((group) =>
+        Number.isFinite(group.deliveryFee) ? Math.max(0, group.deliveryFee) : 0,
+      ))
+    : 0;
+}
+
 function aggregateCart(
   state: CartState,
 ): StoreCart | null {
@@ -45,7 +53,7 @@ function aggregateCart(
 
   return {
     ...anchor,
-    deliveryFee: GLOBAL_CART_DELIVERY_FEE,
+    deliveryFee: provisionalSharedDeliveryFee(groups),
     minimumOrder: 0,
     items: groups.flatMap(
       (group) => group.items,
@@ -259,7 +267,7 @@ function facadeState(
     ...state,
     carts: cartFacade(state),
     deliveryFee: aggregate
-      ? GLOBAL_CART_DELIVERY_FEE
+      ? aggregate.deliveryFee
       : 0,
     minimumOrder: 0,
     increaseStoreItem,
