@@ -24,6 +24,10 @@ export type AppLaunchSettings = {
 
 type LegacyBootstrapSettings =
   AppSettings & {
+    minimum_supported_ios_version?: string | null;
+    minimum_supported_android_version?: string | null;
+    minimum_supported_ios_build?: number | null;
+    minimum_supported_android_build?: number | null;
     ios_store_url?: string | null;
     app_store_url?: string | null;
     android_store_url?: string | null;
