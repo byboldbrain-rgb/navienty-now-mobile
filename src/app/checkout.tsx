@@ -549,9 +549,12 @@ function StoreCheckoutScreen() {
         state.clearStoreCart,
     );
 
+  // If a legacy/removed anchor store disappeared during cart repair, keep
+  // showing the remaining real carts instead of treating checkout as empty.
   const checkoutStoreId =
-    requestedStoreId ??
-    activeStoreId;
+    requestedStoreId && carts[requestedStoreId]
+      ? requestedStoreId
+      : activeStoreId;
 
   const checkoutCart =
     checkoutStoreId
