@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import {
   compareVersions,
   isVersionBelowMinimum,
+  isBuildBelowMinimum,
 } from '../domain/app-version';
 import getAppLaunchSettings, {
   type AppLaunchSettings,
@@ -12,6 +13,7 @@ import getAppLaunchSettings, {
 export {
   compareVersions,
   isVersionBelowMinimum,
+  isBuildBelowMinimum,
 } from '../domain/app-version';
 
 export type AppLaunchGateStatus =
@@ -26,6 +28,8 @@ export type AppLaunchGateResult = {
   minimumVersion: string | null;
   messageAr: string | null;
   updateUrl: string | null;
+  currentBuild?: string | null;
+  minimumBuild?: number | null;
   supportWhatsapp: string | null;
 };
 
@@ -56,14 +60,16 @@ function getUpdateUrl(
   if (Platform.OS === 'ios') {
     return normalizeNullableUrl(
       settings.ios_store_url ??
-        settings.app_store_url,
+        settings.app_store_url ??
+        'https://apps.apple.com/app/id6804870140',
     );
   }
 
   if (Platform.OS === 'android') {
     return normalizeNullableUrl(
       settings.android_store_url ??
-        settings.play_store_url,
+        settings.play_store_url ??
+        'https://play.google.com/store/apps/details?id=com.navienty.now',
     );
   }
 
@@ -86,6 +92,20 @@ export function getCurrentAppVersion(): string | null {
   return version.trim();
 }
 
+/**
+ * The bundled build code does not change when OTA JavaScript updates.
+ * This also distinguishes store builds with identical marketing versions.
+ */
+export function getCurrentAppBuild(): string | null {
+  const build = Platform.OS === 'ios'
+    ? Constants.platform?.ios?.buildNumber
+    : Platform.OS === 'android'
+      ? Constants.platform?.android?.versionCode
+      : null;
+
+  return build === null || build === undefined ? null : String(build);
+}
+
 export async function getAppLaunchGate():
   Promise<AppLaunchGateResult> {
   try {
@@ -95,9 +115,26 @@ export async function getAppLaunchGate():
     const currentVersion =
       getCurrentAppVersion();
 
+    const platformMinimumVersion =
+      Platform.OS === 'ios'
+        ? settings.minimum_supported_ios_version
+        : Platform.OS === 'android'
+          ? settings.minimum_supported_android_version
+          : null;
+
     const minimumVersion =
-      settings.minimum_supported_app_version
-        ?.trim() || null;
+      platformMinimumVersion?.trim() ||
+      settings.minimum_supported_app_version?.trim() ||
+      null;
+
+    const minimumBuild =
+      Platform.OS === 'ios'
+        ? settings.minimum_supported_ios_build
+        : Platform.OS === 'android'
+          ? settings.minimum_supported_android_build
+          : null;
+
+    const currentBuild = getCurrentAppBuild();
 
     if (settings.maintenance_mode) {
       return {
@@ -115,17 +152,17 @@ export async function getAppLaunchGate():
     }
 
     if (
-      isVersionBelowMinimum(
-        currentVersion,
-        minimumVersion,
-      )
+      isVersionBelowMinimum(currentVersion, minimumVersion) ||
+      isBuildBelowMinimum(currentBuild, minimumBuild)
     ) {
       return {
         status: 'force-update',
         currentVersion,
         minimumVersion,
+        currentBuild,
+        minimumBuild,
         messageAr:
-          'يوجد إصدار أحدث مطلوب لمواصلة استخدام Navienty Now.',
+          'نزلنا تحديث جديد لـ Navienty Now. لازم تحدّث التطبيق عشان تقدر تكمل استخدامه.',
         updateUrl:
           getUpdateUrl(settings),
         supportWhatsapp:
