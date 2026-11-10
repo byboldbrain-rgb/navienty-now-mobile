@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AnimatedDeliveryRider from './animated-delivery-rider';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -53,6 +53,24 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
   const [customVisible, setCustomVisible] = useState(false);
   const [customText, setCustomText] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
+  const optionsScrollRef = useRef<ScrollView>(null);
+  const initialScrollPositionedRef = useRef(false);
+  const optionsViewportWidthRef = useRef(0);
+  const optionsContentWidthRef = useRef(0);
+
+  // Explicit LTR physical layout: custom, 20, 15, 10 from left to right.
+  // Start at the right edge (10 EGP), then swipe left for more options.
+  function positionAtFirstTip() {
+    if (initialScrollPositionedRef.current ||
+        optionsViewportWidthRef.current <= 0 ||
+        optionsContentWidthRef.current <= 0) return;
+
+    initialScrollPositionedRef.current = true;
+    optionsScrollRef.current?.scrollTo({
+      x: Math.max(0, optionsContentWidthRef.current - optionsViewportWidthRef.current),
+      animated: false,
+    });
+  }
 
   const isCustom = amount > 0 &&
     !SUGGESTED_TIPS.some((item) => item.amount === amount);
@@ -89,12 +107,32 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
         </View>
 
         <ScrollView
+          ref={optionsScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.optionsScroll}
           contentContainerStyle={styles.options}
+          onLayout={(event) => {
+            optionsViewportWidthRef.current = event.nativeEvent.layout.width;
+            positionAtFirstTip();
+          }}
+          onContentSizeChange={(width) => {
+            optionsContentWidthRef.current = width;
+            positionAtFirstTip();
+          }}
         >
-          {SUGGESTED_TIPS.map((item) => {
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="اختيار مبلغ إكرامية آخر"
+            onPress={() => setCustomVisible(true)}
+            style={[styles.chip, isCustom && styles.chipSelected]}
+          >
+            <Ionicons name="pencil-outline" size={17} color={isCustom ? ACCENT_DARK : '#292929'} />
+            <Text style={[styles.chipText, isCustom && styles.chipTextSelected]}>
+              {isCustom ? `${formatTip(amount)} ج.م` : 'مبلغ آخر'}
+            </Text>
+          </Pressable>
+          {[...SUGGESTED_TIPS].reverse().map((item) => {
             const selected = amount === item.amount;
             return (
               <Pressable
@@ -112,17 +150,6 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
               </Pressable>
             );
           })}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="اختيار مبلغ إكرامية آخر"
-            onPress={() => setCustomVisible(true)}
-            style={[styles.chip, isCustom && styles.chipSelected]}
-          >
-            <Ionicons name="pencil-outline" size={17} color={isCustom ? ACCENT_DARK : '#292929'} />
-            <Text style={[styles.chipText, isCustom && styles.chipTextSelected]}>
-              {isCustom ? `${formatTip(amount)} ج.م` : 'مبلغ آخر'}
-            </Text>
-          </Pressable>
         </ScrollView>
 
         {amount > 0 ? (
@@ -189,8 +216,9 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
 const styles = StyleSheet.create({
   card: {
     marginTop: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 13,
+    marginHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderColor: '#E4E4E4',
     borderRadius: 16,
@@ -201,14 +229,15 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
   title: { color: '#202020', fontSize: 16, fontWeight: '800', textAlign: 'right' },
   subtitle: { marginTop: 3, fontSize: 11, color: '#858585', textAlign: 'right' },
-  optionsScroll: { marginTop: 12, flexGrow: 0 },
-  options: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, paddingVertical: 1 }, 
+  optionsScroll: { marginTop: 9, flexGrow: 0, alignSelf: 'stretch', direction: 'ltr' },
+  options: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 1, direction: 'ltr' }, 
   chip: {
     borderWidth: 1,
     borderColor: '#E1E1E1',
-    paddingHorizontal: 12,
-    minHeight: 38,
-    borderRadius: 20,
+    paddingHorizontal: 11,
+    minWidth: 104,
+    minHeight: 36,
+    borderRadius: 18,
     flexDirection: 'row-reverse',
     gap: 6,
     alignItems: 'center',
