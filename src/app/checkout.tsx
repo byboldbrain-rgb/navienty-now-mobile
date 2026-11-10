@@ -590,6 +590,7 @@ function StoreCheckoutScreen() {
     locationLongitude,
   );
   const clearAllStoreCarts = useBaseCartStore((state) => state.clearAllCarts);
+  const driverTipAmount = useBaseCartStore((state) => state.driverTipAmount);
 
   const appliedVoucher =
     useVoucherStore(
@@ -924,7 +925,8 @@ function StoreCheckoutScreen() {
   const totalBeforeSpin =
     discountedSubtotal +
     discountedDeliveryFee +
-    paymentProcessingFee;
+    paymentProcessingFee +
+    driverTipAmount;
 
   const total =
     Math.max(
@@ -1923,6 +1925,8 @@ function StoreCheckoutScreen() {
           paymentMethodId:
             selectedPaymentMethod.id,
 
+          driverTipAmount,
+
           customerName,
 
           customerPhone:
@@ -2692,6 +2696,13 @@ function StoreCheckoutScreen() {
               >
                 {spinStatusError}
               </Text>
+            </View>
+          ) : null}
+
+          {driverTipAmount > 0 ? (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>إكرامية السائق</Text>
+              <Text style={styles.summaryValue}>{formatPrice(driverTipAmount)}</Text>
             </View>
           ) : null}
 
