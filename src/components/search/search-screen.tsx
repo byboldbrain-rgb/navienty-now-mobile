@@ -1688,6 +1688,12 @@ export default function SearchScreen({
   const activeSearchScope =
     scope ?? selectedTab;
 
+  // The same square-image product cards are shared by all shopping categories.
+  const isProductCardScope =
+    activeSearchScope === 'supermarket' ||
+    activeSearchScope === 'bookstore' ||
+    activeSearchScope === 'personal-care';
+
   const activeScopeConfig =
     SEARCH_SCOPES[activeSearchScope];
 
@@ -2554,8 +2560,9 @@ export default function SearchScreen({
 
       case 'product':
         if (
-          getSearchScopeForCategorySlug(result.storeCategorySlug) ===
-          'supermarket'
+          ['supermarket', 'bookstore', 'personal-care'].includes(
+            getSearchScopeForCategorySlug(result.storeCategorySlug),
+          )
         ) {
           router.push({
             pathname: '/supermarket-product/[id]',
@@ -2589,7 +2596,7 @@ export default function SearchScreen({
         id: product.storeId,
         name: store?.name ?? product.storeName,
         icon: store?.icon ?? product.storeIcon ?? '🏪',
-        categorySlug: 'supermarket',
+        categorySlug: store?.categorySlug ?? product.storeCategorySlug,
         deliveryFee: store?.deliveryFee ?? product.deliveryFee ?? 0,
         minimumOrder: store?.minimumOrder ?? product.minimumOrder ?? 0,
       },
@@ -3054,7 +3061,7 @@ export default function SearchScreen({
               >
                 {errorMessage}
               </Text>
-              {activeSearchScope === 'supermarket' ? (
+              {isProductCardScope ? (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setSearchRetryKey((value) => value + 1)}
@@ -3112,7 +3119,7 @@ export default function SearchScreen({
           <View
             style={[
               styles.resultsContainer,
-              activeSearchScope === 'supermarket' && styles.marketResultsContainer,
+              isProductCardScope && styles.marketResultsContainer,
             ]}
           >
             {failedStoreCount >
@@ -3177,7 +3184,7 @@ export default function SearchScreen({
             ) : null}
 
             {groupedResults.products.length > 0 ? (
-              activeSearchScope === 'supermarket' ? (
+              isProductCardScope ? (
                 <View style={styles.marketProductsSection}>
                   <Text style={styles.resultSectionTitle}>المنتجات</Text>
                   <View style={styles.marketProductsGrid}>
@@ -3232,7 +3239,7 @@ export default function SearchScreen({
         ) : null}
       </ScrollView>
 
-      {activeSearchScope === 'supermarket' && cartItemCount > 0 ? (
+      {isProductCardScope && cartItemCount > 0 ? (
         <SafeAreaView edges={['bottom']} style={styles.marketCartFooter}>
           <Pressable
             accessibilityRole="button"

@@ -1566,6 +1566,8 @@ type ProductCardProps = {
 
   priority?: 'high' | 'normal' | 'low';
 
+  onOpen: () => void;
+
   onAdd: () => void;
 
   onIncrease: () => void;
@@ -1581,6 +1583,7 @@ function ProductCard({
   isStoreClosed,
   mode,
   priority = 'normal',
+  onOpen,
   onAdd,
   onIncrease,
   onDecrease,
@@ -1600,7 +1603,10 @@ function ProductCard({
       product.price;
 
   return (
-    <View
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`عرض تفاصيل ${product.name}`}
+      onPress={onOpen}
       style={[
         styles.productCard,
         isOffersMode &&
@@ -1674,7 +1680,7 @@ function ProductCard({
           <Pressable
             disabled={isStoreClosed}
             hitSlop={4}
-            onPress={onAdd}
+            onPress={(event) => { event.stopPropagation(); onAdd(); }}
             style={({ pressed }) => [
               styles.addButton,
 
@@ -1714,7 +1720,7 @@ function ProductCard({
               style={
                 styles.quantityAction
               }
-              onPress={onDecrease}
+              onPress={(event) => { event.stopPropagation(); onDecrease(); }}
             >
               <Text
                 style={
@@ -1739,7 +1745,7 @@ function ProductCard({
               style={
                 styles.quantityAction
               }
-              onPress={onIncrease}
+              onPress={(event) => { event.stopPropagation(); onIncrease(); }}
             >
               <Text
                 style={
@@ -1850,7 +1856,7 @@ function ProductCard({
           )}
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -2025,6 +2031,8 @@ export default function PersonalCareCategoryScreen() {
       null,
     );
 
+  const [dbCategoryLabel, setDbCategoryLabel] = useState<string | null>(null);
+
   const [
     rootCategoryImageUrl,
     setRootCategoryImageUrl,
@@ -2116,6 +2124,8 @@ export default function PersonalCareCategoryScreen() {
         remoteRootImageUrl =
           remoteTile?.imageUrl ??
           null;
+
+        setDbCategoryLabel(remoteTile?.labelAr?.trim() || null);
 
         remoteCategoryImages =
           getStorefrontTileCategoryImages(
@@ -2306,6 +2316,7 @@ export default function PersonalCareCategoryScreen() {
       setRootCategoryImageUrl(
         null,
       );
+      setDbCategoryLabel(null);
 
       setCategoryImageOverrides(
         {},
@@ -2963,7 +2974,8 @@ export default function PersonalCareCategoryScreen() {
   const pageTitle =
     isOffersPage
       ? 'العروض'
-      : selectedSection?.name ||
+      : dbCategoryLabel ||
+        selectedSection?.name ||
         fallbackCategory?.label ||
         passedLabel ||
         '';
@@ -3672,6 +3684,10 @@ export default function PersonalCareCategoryScreen() {
                   ? 'high'
                   : 'normal'
               }
+              onOpen={() => router.push({
+                pathname: '/supermarket-product/[id]',
+                params: { id: product.id, storeId: currentStore.id },
+              })}
               onAdd={() =>
                 addProduct(
                   product,
