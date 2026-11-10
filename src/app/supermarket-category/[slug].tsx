@@ -886,6 +886,8 @@ export default function SupermarketCategoryScreen() {
       params.categoryKey,
     );
 
+  const passedLabel = getSingleParam(params.label);
+
   const isOffersPage =
     normalizeSlug(sectionSlug) ===
     'offers';
@@ -1416,15 +1418,15 @@ export default function SupermarketCategoryScreen() {
     selectedSection?.slug ??
     '';
 
-  // The Header identifies the opened category, not the selected product filter.
-  // selectedSection.name comes from the canonical catalog_categories.name_ar
-  // returned by the category metadata RPC; no hardcoded category titles.
-  const offersTile = categoryQuery.tiles.find(
-    (item) => item.kind === 'offers' || item.key === 'offers',
-  );
-  const pageTitle = isOffersPage
-    ? (offersTile?.labelAr?.trim() || 'العروض')
-    : (selectedSection?.name?.trim() || '');
+  // Match the Header to the category tile opened on the supermarket home.
+  // Top-level customer-facing labels are managed in now.storefront_category_tiles;
+  // catalog_categories supplies the per-store category ID and products.
+  // If tiles are loading, the DB-derived route label avoids showing an old
+  // per-store name (e.g. "دواجن ولحوم ومأكولات بحرية") first.
+  const pageTitle =
+    categoryQuery.data?.categoryLabelAr?.trim() ||
+    passedLabel?.trim() ||
+    (isOffersPage ? 'العروض' : (selectedSection?.name?.trim() || ''));
 
   const shouldShowNormalCartDock =
     currentStoreItemCount > 0;
