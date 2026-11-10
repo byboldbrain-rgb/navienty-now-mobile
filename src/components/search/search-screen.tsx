@@ -22,6 +22,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -1419,6 +1420,11 @@ function SearchResultRow({
 type SupermarketSearchProduct =
   Extract<GlobalSearchResult, { kind: 'product' }>;
 
+// Match formatMoney(value, 'EGP') in supermarket-category/[slug].tsx.
+function formatSupermarketCardMoney(value: number) {
+  return `${value.toFixed(2)} ج.م`;
+}
+
 /**
  * Search uses the same two-column product-card language as
  * supermarket-category/[slug].tsx, including the large square image,
@@ -1426,6 +1432,7 @@ type SupermarketSearchProduct =
  */
 function SupermarketSearchProductCard({
   product,
+  cardWidth,
   quantity,
   disabled,
   onOpen,
@@ -1434,6 +1441,7 @@ function SupermarketSearchProductCard({
   onDecrease,
 }: {
   product: SupermarketSearchProduct;
+  cardWidth: number;
   quantity: number;
   disabled: boolean;
   onOpen: () => void;
@@ -1460,10 +1468,11 @@ function SupermarketSearchProductCard({
       onPress={onOpen}
       style={({ pressed }) => [
         styles.marketProductCard,
+        { width: cardWidth },
         pressed && styles.marketProductCardPressed,
       ]}
     >
-      <View style={styles.marketProductImageBox}>
+      <View style={[styles.marketProductImageBox, { height: cardWidth }]}>
         {product.imageUrl && !imageFailed ? (
           <ExpoImage
             source={{ uri: product.imageUrl }}
@@ -1482,7 +1491,7 @@ function SupermarketSearchProductCard({
         {discount !== null ? (
           <View style={styles.marketDiscountBadge}>
             <Text style={styles.marketDiscountText}>
-              وفر {discount}%
+              خصم {discount}%
             </Text>
           </View>
         ) : null}
@@ -1536,28 +1545,26 @@ function SupermarketSearchProductCard({
       </View>
 
       <Text
-        numberOfLines={2}
+        numberOfLines={3}
         style={styles.marketProductName}
       >
         {product.title}
       </Text>
-      <Text
-        numberOfLines={1}
-        style={styles.marketProductUnit}
-      >
-        {product.unitLabelAr ?? ''}
-      </Text>
-      <Text numberOfLines={1} style={styles.marketProductPrice}>
-        {formatMoney(product.price)}
-      </Text>
-      {discount !== null ? (
-        <Text
-          numberOfLines={1}
-          style={styles.marketProductOldPrice}
-        >
-          {formatMoney(product.compareAtPrice!)}
+      {product.unitLabelAr ? (
+        <Text numberOfLines={1} style={styles.marketProductUnit}>
+          {product.unitLabelAr}
         </Text>
       ) : null}
+      <View style={styles.marketPriceColumn}>
+        <Text numberOfLines={1} style={styles.marketProductPrice}>
+          {formatSupermarketCardMoney(product.price)}
+        </Text>
+        {discount !== null ? (
+          <Text numberOfLines={1} style={styles.marketProductOldPrice}>
+            {formatSupermarketCardMoney(product.compareAtPrice!)}
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -1570,6 +1577,8 @@ export default function SearchScreen({
   storeId?: string | null;
 }) {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const marketCardWidth = (Math.min(windowWidth, 560) - 16 * 2 - 10) / 2;
 
   const savedServiceAreaId =
     useCustomerStore(
@@ -3101,9 +3110,10 @@ export default function SearchScreen({
         {hasSearchQuery &&
         hasResults ? (
           <View
-            style={
-              styles.resultsContainer
-            }
+            style={[
+              styles.resultsContainer,
+              activeSearchScope === 'supermarket' && styles.marketResultsContainer,
+            ]}
           >
             {failedStoreCount >
             0 ? (
@@ -3175,6 +3185,7 @@ export default function SearchScreen({
                       <SupermarketSearchProductCard
                         key={result.id}
                         product={result}
+                        cardWidth={marketCardWidth}
                         quantity={getSearchProductQuantity(result)}
                         disabled={isSearchProductDisabled(result)}
                         onOpen={() => { void openResult(result); }}
@@ -3815,161 +3826,315 @@ const styles = StyleSheet.create({
       'line-through',
   },
 
+  marketResultsContainer: {
+    alignSelf: 'center',
+    maxWidth: 560,
+    width: '100%',
+    paddingHorizontal: 16,
+  },
   marketProductsSection: {
     marginTop: 14,
   },
   marketProductsGrid: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 18,
-    paddingTop: 6,
+    gap: 10,
+    paddingTop: 11,
+    width: '100%',
   },
   marketProductCard: {
-    width: '48%',
-    minWidth: 0,
-    backgroundColor: '#FFFFFF',
-  },
+      backgroundColor:
+        '#FFFFFF',
+
+      marginBottom: 16,
+    },
   marketProductCardPressed: {
     opacity: 0.87,
   },
   marketProductImageBox: {
-    width: '100%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderWidth: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-    position: 'relative',
-  },
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E1E1E1',
+
+      borderRadius: 20,
+
+      borderWidth: 1,
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+
+      position:
+        'relative',
+
+      width: '100%',
+    },
   marketProductImage: {
-    width: '100%',
-    height: '100%',
-  },
+      height: '100%',
+
+      width: '100%',
+    },
   marketProductFallback: {
-    fontSize: 44,
-  },
+      fontSize: 44,
+    },
   marketDiscountBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    borderRadius: 5,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    backgroundColor: '#FFF1B7',
-    zIndex: 2,
+    alignItems:
+        'center',
+
+      borderRadius: 4,
+
+      justifyContent:
+        'center',
+
+      minHeight: 22,
+
+      paddingHorizontal:
+        7,
+
+      paddingVertical:
+        3,
+
+      position:
+        'absolute',
+
+      top: 7,
+
+      zIndex: 5,
+    backgroundColor:
+        '#FFF1B7',
+
+      left: 8,
   },
   marketDiscountText: {
-    color: '#202020',
-    fontSize: 10,
-    fontWeight: '700',
-  },
+      color:
+        '#8B6813',
+
+      fontSize: 10,
+
+      fontWeight:
+        '700',
+
+      lineHeight: 13,
+    },
   marketAddButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-    bottom: 7,
-    right: 7,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E1E1E1',
-    borderRadius: 22,
-    width: 44,
-    height: 44,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    zIndex: 3,
-  },
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E1E1E1',
+
+      borderRadius: 21,
+
+      borderWidth: 1,
+
+      bottom: 8,
+
+      elevation: 3,
+
+      height: 42,
+
+      justifyContent:
+        'center',
+
+      position:
+        'absolute',
+
+      right: 8,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width: 44,
+        height: 2,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius: 5,
+
+      width: 50,
+
+      zIndex: 7,
+    },
   marketDisabledButton: {
-    opacity: 0.45,
-  },
+      opacity: 0.45,
+    },
   marketAddButtonPressed: {
-    backgroundColor: '#F8F8F8',
-    transform: [{ scale: 0.96 }],
-  },
+      backgroundColor:
+        '#F7F7F7',
+
+      transform: [
+        {
+          scale: 0.95,
+        },
+      ],
+    },
   marketAddButtonText: {
-    color: '#F04A00',
-    fontSize: 31,
-    fontWeight: '300',
-    lineHeight: 34,
-    marginTop: -3,
-  },
+      color:
+        '#00B14F',
+
+      fontSize: 31,
+
+      fontWeight:
+        '300',
+
+      lineHeight: 33,
+
+      marginTop: -3,
+    },
   marketQuantityPill: {
-    position: 'absolute',
-    bottom: 7,
-    right: 7,
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 40,
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E1E1E1',
-    borderWidth: 1,
-    borderRadius: 22,
-    elevation: 2,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    zIndex: 3,
-  },
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E1E1E1',
+
+      borderRadius: 21,
+
+      borderWidth: 1,
+
+      bottom: 8,
+
+      elevation: 3,
+
+      flexDirection:
+        'row',
+
+      height: 42,
+
+      position:
+        'absolute',
+
+      right: 8,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius: 5,
+
+      zIndex: 7,
+    },
   marketQuantityAction: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 38,
-    width: 27,
-  },
+      alignItems:
+        'center',
+
+      height: 40,
+
+      justifyContent:
+        'center',
+
+      width: 28,
+    },
   marketQuantityActionText: {
-    color: '#F04A00',
-    fontSize: 19,
-    fontWeight: '500',
-  },
+      color:
+        '#00B14F',
+
+      fontSize: 19,
+
+      fontWeight:
+        '500',
+    },
   marketQuantityValue: {
-    minWidth: 15,
-    textAlign: 'center',
-    color: '#202020',
-    fontSize: 12,
-    fontWeight: '700',
-  },
+      color:
+        '#202020',
+
+      fontSize: 12,
+
+      fontWeight:
+        '700',
+
+      minWidth: 16,
+
+      textAlign:
+        'center',
+    },
   marketProductName: {
-    color: '#202020',
-    fontSize: 14,
-    lineHeight: 19,
-    minHeight: 38,
-    fontWeight: '500',
-    marginTop: 9,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+      color:
+        '#202020',
+
+      fontSize: 14,
+
+      fontWeight:
+        '500',
+
+      lineHeight: 19,
+
+      marginTop: 8,
+
+      minHeight: 38,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
   marketProductUnit: {
-    color: '#999999',
-    fontSize: 11.5,
-    lineHeight: 16,
-    minHeight: 16,
-    marginTop: 3,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+      color:
+        '#999999',
+
+      fontSize: 11.5,
+
+      marginTop: 2,
+
+      textAlign:
+        'right',
+
+      writingDirection:
+        'rtl',
+    },
+  marketPriceColumn: {
+      alignItems:
+        'flex-end',
+
+      marginTop: 7,
+    },
   marketProductPrice: {
-    color: '#202020',
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: 5,
-    textAlign: 'right',
-    writingDirection: 'rtl',
-  },
+      color:
+        '#202020',
+
+      fontSize: 14,
+
+      fontWeight:
+        '600',
+
+      textAlign:
+        'right',
+    },
   marketProductOldPrice: {
-    color: '#969696',
-    fontSize: 11.5,
-    marginTop: 3,
-    textAlign: 'right',
-    textDecorationLine: 'line-through',
-  },
+      color:
+        '#969696',
+
+      fontSize: 11.5,
+
+      marginTop: 3,
+
+      textDecorationLine:
+        'line-through',
+    },
   marketCartFooter: {
     paddingHorizontal: 16,
     paddingTop: 8,
