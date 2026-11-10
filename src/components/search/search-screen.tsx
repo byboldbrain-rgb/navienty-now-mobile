@@ -53,6 +53,7 @@ import {
   prepareGlobalSearchIndex,
   searchGlobalCatalog,
   searchSupermarketProducts,
+  searchStorefrontProducts,
 } from '../../services/global-search-service';
 import {
   recordRecentlyViewed,
@@ -491,7 +492,7 @@ async function loadActiveCatalogCategoryIds(
  * Discovery categories for supermarket search are fetched as lightweight
  * metadata; opening search must not download 4 complete supermarket catalogs.
  */
-async function loadSupermarketSearchSuggestions(
+async function loadShoppingSearchSuggestions(
   stores: readonly StoreSummary[],
   preferredStoreId?: string | null,
 ): Promise<SearchCatalogSuggestion[]> {
@@ -527,7 +528,7 @@ async function loadSupermarketSearchSuggestions(
     name: item.name_ar,
     imageUrl: item.image_url,
     storeId: store.id,
-    storeCategorySlug: 'supermarket',
+    storeCategorySlug: store.categorySlug,
     sectionId: item.id,
     sectionSlug: item.slug,
     depth: item.parent_id ? 1 : 0,
@@ -1905,12 +1906,12 @@ export default function SearchScreen({
           loadedStores,
         );
 
-        if (scope === 'supermarket') {
+        if (scope === 'supermarket' || scope === 'bookstore' || scope === 'personal-care') {
           // Search products directly via RPC; do not block the screen on
           // downloading full catalogs / building the global index.
           let suggestions: SearchCatalogSuggestion[] = [];
           try {
-            suggestions = await loadSupermarketSearchSuggestions(
+            suggestions = await loadShoppingSearchSuggestions(
               loadedStores,
               storeId,
             );
@@ -2046,7 +2047,14 @@ export default function SearchScreen({
                     serviceAreaId,
                     storeId,
                   )
-                : await searchGlobalCatalog(
+                : activeSearchScope === 'bookstore' || activeSearchScope === 'personal-care'
+                  ? await searchStorefrontProducts(
+                      normalizedQuery,
+                      activeSearchScope === 'bookstore' ? 'bookstores' : 'personal-care',
+                      serviceAreaId,
+                      storeId,
+                    )
+                  : await searchGlobalCatalog(
                     normalizedQuery,
                     serviceAreaId,
                   );
@@ -2077,7 +2085,7 @@ export default function SearchScreen({
               scopedResults,
             );
             setHasMoreProducts(
-              activeSearchScope === 'supermarket' && response.hasMore === true,
+              isProductCardScope && response.hasMore === true,
             );
 
             setFailedStoreCount(
@@ -2138,7 +2146,7 @@ export default function SearchScreen({
             setFailedStoreCount(0);
             console.warn('Search query failed:', error);
             setErrorMessage(
-              activeSearchScope === 'supermarket'
+              isProductCardScope
                 ? 'تعذر تحميل نتائج البحث مؤقتًا. جرّب مرة تانية.'
                 : error instanceof Error
                   ? error.message
@@ -2155,7 +2163,7 @@ export default function SearchScreen({
         }
 
         void executeSearch();
-      }, activeSearchScope === 'supermarket' ? 280 : SEARCH_DEBOUNCE_MS);
+      }, isProductCardScope ? 280 : SEARCH_DEBOUNCE_MS);
 
     return () => {
       clearTimeout(timer);
@@ -2560,9 +2568,9 @@ export default function SearchScreen({
 
       case 'product':
         if (
-          ['supermarket', 'bookstore', 'personal-care'].includes(
-            getSearchScopeForCategorySlug(result.storeCategorySlug),
-          )
+          getSearchScopeForCategorySlug(result.storeCategorySlug) === 'supermarket' ||
+          getSearchScopeForCategorySlug(result.storeCategorySlug) === 'bookstore' ||
+          getSearchScopeForCategorySlug(result.storeCategorySlug) === 'personal-care'
         ) {
           router.push({
             pathname: '/supermarket-product/[id]',
@@ -2629,7 +2637,7 @@ export default function SearchScreen({
 
   async function loadMoreSupermarketProducts() {
     if (
-      activeSearchScope !== 'supermarket' ||
+      !isProductCardScope ||
       !hasMoreProducts ||
       loadMoreInProgressRef.current
     ) return;
@@ -2640,12 +2648,15 @@ export default function SearchScreen({
     setPaginationError(false);
 
     try {
-      const nextPage = await searchSupermarketProducts(
-        normalizedQuery,
-        serviceAreaId,
-        storeId,
-        groupedResults.products.length,
-      );
+      const nextPage = activeSearchScope === 'supermarket'
+        ? await searchSupermarketProducts(normalizedQuery, serviceAreaId, storeId, groupedResults.products.length)
+        : await searchStorefrontProducts(
+            normalizedQuery,
+            activeSearchScope === 'bookstore' ? 'bookstores' : 'personal-care',
+            serviceAreaId,
+            storeId,
+            groupedResults.products.length,
+          );
       if (searchRequestIdRef.current !== activeRequestId) return;
 
       setResults((currentResults) => {

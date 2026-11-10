@@ -983,6 +983,84 @@ export async function searchSupermarketProducts(
   };
 }
 
+/** Lightweight, store-scoped search for the bookstore and personal-care catalogs. */
+export async function searchStorefrontProducts(
+  query: string,
+  storeCategorySlug: 'bookstores' | 'personal-care',
+  serviceAreaId?: string | null,
+  storeId?: string | null,
+  offset = 0,
+): Promise<GlobalSearchResponse> {
+  const normalizedQuery = normalizeSearchText(query);
+  if (normalizedQuery.length < 2) {
+    return {
+      query,
+      results: [],
+      failedStoreCount: 0,
+      indexedStoreCount: 0,
+    };
+  }
+
+  const { data, error } = await publicSupabase.rpc(
+    'search_catalog_products_paged__v1',
+    {
+      p_query: query,
+      p_category_slug: storeCategorySlug,
+      p_service_area_id: serviceAreaId?.trim() || null,
+      p_store_id: storeId?.trim() || null,
+      p_limit: 24,
+      p_offset: Math.max(0, Math.floor(offset)),
+    },
+  );
+
+  if (error) {
+    throw new Error(`Storefront search failed: ${error.message}`);
+  }
+
+  const rows = Array.isArray(data)
+    ? (data as SupermarketSearchRow[])
+    : [];
+
+  return {
+    query,
+    failedStoreCount: 0,
+    indexedStoreCount: rows.length > 0 ? 1 : 0,
+    hasMore: rows.length === 24,
+    results: rows
+      .filter((row) =>
+        Boolean(row.product_id && row.store_id && row.section_id),
+      )
+      .map((row): Extract<GlobalSearchResult, { kind: 'product' }> => ({
+        id: `product:${row.store_id}:${row.product_id}`,
+        kind: 'product',
+        productId: row.product_id,
+        storeId: row.store_id,
+        storeCategorySlug,
+        sectionId: row.section_id,
+        sectionSlug: row.section_slug,
+        title: row.name_ar,
+        subtitle: row.store_name,
+        description: row.description_ar ?? '',
+        icon: row.icon || '📦',
+        imageUrl: row.image_url,
+        price: Number(row.price) || 0,
+        compareAtPrice:
+          row.compare_at_price === null
+            ? null
+            : Number(row.compare_at_price),
+        unitLabelAr: row.unit_label_ar,
+        isAgeRestricted: row.is_age_restricted === true,
+        productType: row.product_type || 'physical',
+        storeIcon: row.store_icon || '🏪',
+        storeClosed: row.store_manually_closed === true,
+        deliveryFee: Number(row.delivery_fee) || 0,
+        minimumOrder: Number(row.minimum_order) || 0,
+        storeName: row.store_name,
+        categoryName: row.category_name,
+      })),
+  };
+}
+
 export async function searchGlobalCatalog(
   query: string,
   serviceAreaId?: string | null,
