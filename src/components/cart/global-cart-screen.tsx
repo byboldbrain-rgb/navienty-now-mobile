@@ -45,7 +45,7 @@ export default function GlobalCartScreen() {
     () => Object.values(carts).filter((group) => group.items.length > 0),
     [carts],
   );
-  const { deliveryFee } = useGlobalDeliveryFee(
+  const { deliveryFee, storeFees } = useGlobalDeliveryFee(
     groups.map((group) => group.storeId),
     latitude,
     longitude,
@@ -112,7 +112,7 @@ export default function GlobalCartScreen() {
         <View style={styles.notice}>
           <Ionicons name="layers-outline" size={20} color={NAVIENTY_NOW_COLORS.primary} />
           <Text style={styles.noticeText}>
-            اطلب من أكتر من متجر في نفس السلة وادفع رسوم توصيل 25 جنيه مرة واحدة بس.
+            اطلب من أكتر من متجر في نفس السلة. التوصيل بيتحسب لكل متجر حسب مكانك، والمجاني بيفضل مجاني.
           </Text>
         </View>
 
@@ -143,6 +143,9 @@ export default function GlobalCartScreen() {
                   <View style={styles.storeCopy}>
                     <Text style={styles.storeName} numberOfLines={1}>{group.storeName}</Text>
                     <Text style={styles.storeSubtotal}>{money(groupSubtotal)}</Text>
+                    <Text style={styles.storeSubtotal}>التوصيل: {storeFees?.[group.storeId] === undefined
+                      ? 'يُحدد حسب الموقع'
+                      : storeFees[group.storeId] === 0 ? 'مجاني' : money(storeFees[group.storeId])}</Text>
                   </View>
                   <View style={styles.storeIcon}><Text style={styles.emoji}>{group.storeIcon || '🏪'}</Text></View>
                 </View>
@@ -201,8 +204,7 @@ export default function GlobalCartScreen() {
           <SummaryRow label="إجمالي المنتجات" value={money(subtotal)} />
           <View style={styles.summaryRow}>
             <View style={styles.deliveryLabel}>
-              <View style={styles.onceBadge}><Text style={styles.onceText}>مرة واحدة</Text></View>
-              <Text style={styles.summaryLabel}>التوصيل</Text>
+              <Text style={styles.summaryLabel}>إجمالي توصيل المتاجر</Text>
             </View>
             <Text style={styles.summaryValue}>{deliveryFee === null ? 'تُحدد حسب الموقع' : deliveryFee === 0 ? 'مجاني' : money(deliveryFee)}</Text>
           </View>
