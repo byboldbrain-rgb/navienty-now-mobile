@@ -59,6 +59,7 @@ import {
 } from '../store/orders-store';
 
 import ServicePackageCheckout from '../components/service/service-package-checkout';
+import GlobalStoreCheckout from '../components/checkout/global-store-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 
 import {
@@ -211,6 +212,7 @@ export default function CheckoutScreen() {
       servicePackageId?:
         | string
         | string[];
+      allStores?: string | string[];
     }>();
 
   const servicePackageId =
@@ -226,6 +228,10 @@ export default function CheckoutScreen() {
         }
       />
     );
+  }
+
+  if (getSingleParam(params.allStores) === '1') {
+    return <GlobalStoreCheckout />;
   }
 
   return <StoreCheckoutScreen />;
