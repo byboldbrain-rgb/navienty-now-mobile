@@ -4,6 +4,9 @@ import type {
 
 export type GlobalOrderGroupStoreInput = {
   storeId: string;
+  /** Store-scoped promotions; Supabase validates both against the order. */
+  voucherCode?: string | null;
+  spinEventId?: string | null;
   items: Array<{
     productId: string;
     variantId?: string | null;
