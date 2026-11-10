@@ -281,6 +281,7 @@ type FeaturedProductCardProps = {
   cardWidth: number;
   quantity: number;
   isStoreClosed: boolean;
+  onOpen: () => void;
   onAdd: () => void;
   onIncrease: () => void;
   onDecrease: () => void;
@@ -1567,6 +1568,7 @@ function FeaturedProductCard({
   cardWidth,
   quantity,
   isStoreClosed,
+  onOpen,
   onAdd,
   onIncrease,
   onDecrease,
@@ -1578,9 +1580,13 @@ function FeaturedProductCard({
     getDiscountPercent(product);
 
   return (
-    <View
-      style={[
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`عرض تفاصيل ${product.name}`}
+      onPress={onOpen}
+      style={({ pressed }) => [
         styles.featuredProductCard,
+        pressed && styles.featuredProductCardPressed,
         {
           width: cardWidth,
         },
@@ -1651,7 +1657,7 @@ function FeaturedProductCard({
                 !isStoreClosed &&
                 styles.featuredAddButtonPressed,
             ]}
-            onPress={onAdd}
+            onPress={event => { event.stopPropagation(); onAdd(); }}
           >
             <Text
               style={
@@ -1672,9 +1678,7 @@ function FeaturedProductCard({
               style={
                 styles.featuredQuantityButton
               }
-              onPress={
-                onDecrease
-              }
+              onPress={event => { event.stopPropagation(); onDecrease(); }}
             >
               <Text
                 style={
@@ -1701,9 +1705,7 @@ function FeaturedProductCard({
               style={
                 styles.featuredQuantityButton
               }
-              onPress={
-                onIncrease
-              }
+              onPress={event => { event.stopPropagation(); onIncrease(); }}
             >
               <Text
                 style={
@@ -1766,7 +1768,7 @@ function FeaturedProductCard({
             </Text>
           )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -2778,6 +2780,10 @@ export default function BookstoreScreen() {
                       cardWidth={featuredCardWidth}
                       quantity={getProductQuantity(product.id)}
                       isStoreClosed={isStoreClosed}
+                      onOpen={() => router.push({
+                        pathname: '/supermarket-product/[id]',
+                        params: { id: product.id, storeId: currentStore.id },
+                      })}
                       onAdd={() => addFeaturedProduct(product)}
                       onIncrease={() => increaseFeaturedProduct(product)}
                       onDecrease={() => decreaseFeaturedProduct(product.id)}
@@ -2965,160 +2971,379 @@ const styles = StyleSheet.create({
       PROMOTION_PRODUCT_HORIZONTAL_PADDING,
     paddingTop: 0,
   },
-  featuredProductCard: {
-    backgroundColor: 'transparent',
-    overflow: 'visible',
-  },
-  featuredProductImageBox: {
-    alignItems: 'center',
-    backgroundColor: '#F7F7F7',
-    borderColor: '#E8E8E8',
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  featuredProductImage: {
-    height: '100%',
-    width: '100%',
-  },
-  featuredProductFallback: {
-    fontSize: 34,
-  },
-  featuredDiscountBadge: {
-    alignItems: 'center',
-    backgroundColor: '#BFFF00',
-    borderRadius: 3,
-    justifyContent: 'center',
-    left: 6,
-    minHeight: 17,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    position: 'absolute',
-    top: 6,
-    zIndex: 5,
-  },
-  featuredDiscountText: {
-    color: '#111111',
-    fontSize: 8.5,
-    fontWeight: '500',
-    lineHeight: 11,
-  },
-  featuredAddButton: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E7E7E7',
-    borderRadius: 20,
-    borderWidth: 1,
-    bottom: 8,
-    elevation: 2,
-    height: 38,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    width: 38,
-    zIndex: 8,
-  },
-  featuredAddButtonPressed: {
-    backgroundColor: '#F8F8F8',
-    transform: [{ scale: 0.94 }],
-  },
-  featuredAddButtonDisabled: {
-    opacity: 0.45,
-  },
-  featuredAddButtonText: {
-    color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 27,
-    fontWeight: '300',
-    lineHeight: 29,
-    marginTop: -2,
-  },
-  featuredQuantityPill: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E7E7E7',
-    borderRadius: 20,
-    borderWidth: 1,
-    bottom: 8,
-    elevation: 2,
-    flexDirection: 'row',
-    height: 38,
-    position: 'absolute',
-    right: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    zIndex: 8,
-  },
-  featuredQuantityButton: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 28,
-  },
-  featuredQuantityButtonText: {
-    color: NAVIENTY_NOW_COLORS.primary,
-    fontSize: 20,
-    fontWeight: '500',
-    lineHeight: 22,
-  },
-  featuredQuantityValue: {
-    color: '#202020',
-    fontSize: 11,
-    fontWeight: '700',
-    minWidth: 16,
-    textAlign: 'center',
-  },
-  featuredProductName: {
-    color: '#202020',
-    fontSize: 13.5,
-    fontWeight: '500',
-    letterSpacing: -0.1,
-    lineHeight: 17,
-    marginTop: 8,
-    minHeight: 34,
-    paddingHorizontal: 2,
-    textAlign: 'center',
-    width: '100%',
-    writingDirection: 'rtl',
-  },
-  featuredPriceRow: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    justifyContent: 'center',
-    marginTop: 4,
-    width: '100%',
-  },
-  featuredCurrentPriceWrap: {
-    alignSelf: 'center',
-    borderBottomColor: '#BFFF00',
-    borderBottomWidth: 2,
-  },
-  featuredCurrentPrice: {
-    color: '#202020',
-    fontSize: 11.5,
-    fontWeight: '500',
-    lineHeight: 14,
-    textAlign: 'center',
-    writingDirection: 'ltr',
-  },
-  featuredOldPrice: {
-    color: '#858585',
-    fontSize: 9.5,
-    lineHeight: 12,
-    textAlign: 'center',
-    textDecorationLine: 'line-through',
-    writingDirection: 'ltr',
-  },
+    featuredProductCard: {
+      backgroundColor:
+        'transparent',
+
+      overflow:
+        'visible',
+    },
+    featuredProductCardPressed: {
+      opacity: 0.92,
+    },
+    featuredProductImageBox: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#F7F7F7',
+
+      borderColor:
+        '#E8E8E8',
+
+      borderRadius:
+        14,
+
+      borderWidth:
+        1,
+
+      justifyContent:
+        'center',
+
+      overflow:
+        'hidden',
+
+      position:
+        'relative',
+    },
+    featuredProductImage: {
+      height:
+        '100%',
+
+      width:
+        '100%',
+    },
+    featuredProductFallback: {
+      fontSize: 34,
+    },
+    featuredDiscountBadge: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#BFFF00',
+
+      borderRadius: 3,
+
+      justifyContent:
+        'center',
+
+      left: 6,
+
+      minHeight: 17,
+
+      paddingHorizontal:
+        4,
+
+      paddingVertical:
+        2,
+
+      position:
+        'absolute',
+
+      top: 6,
+
+      zIndex: 5,
+    },
+    featuredDiscountText: {
+      color:
+        '#111111',
+
+      fontSize: 8.5,
+
+      fontWeight:
+        '500',
+
+      lineHeight: 11,
+    },
+    featuredAddButton: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E7E7E7',
+
+      borderRadius:
+        20,
+
+      borderWidth:
+        1,
+
+      bottom:
+        8,
+
+      elevation:
+        2,
+
+      height:
+        38,
+
+      justifyContent:
+        'center',
+
+      position:
+        'absolute',
+
+      right:
+        8,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width:
+          0,
+
+        height:
+          1,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius:
+        2,
+
+      width:
+        38,
+
+      zIndex:
+        8,
+    },
+    featuredAddButtonPressed: {
+      backgroundColor:
+        '#F8F8F8',
+
+      transform: [
+        {
+          scale:
+            0.94,
+        },
+      ],
+    },
+    featuredAddButtonDisabled: {
+      opacity: 0.45,
+    },
+    featuredAddButtonText: {
+      color:
+        '#00B956',
+
+      fontSize:
+        27,
+
+      fontWeight:
+        '300',
+
+      lineHeight:
+        29,
+
+      marginTop:
+        -2,
+    },
+    featuredQuantityPill: {
+      alignItems:
+        'center',
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderColor:
+        '#E7E7E7',
+
+      borderRadius:
+        20,
+
+      borderWidth:
+        1,
+
+      bottom:
+        8,
+
+      elevation:
+        2,
+
+      flexDirection:
+        'row',
+
+      height:
+        38,
+
+      position:
+        'absolute',
+
+      right:
+        8,
+
+      shadowColor:
+        '#000000',
+
+      shadowOffset: {
+        width:
+          0,
+
+        height:
+          1,
+      },
+
+      shadowOpacity:
+        0.08,
+
+      shadowRadius:
+        2,
+
+      zIndex:
+        8,
+    },
+    featuredQuantityButton: {
+      alignItems:
+        'center',
+
+      height:
+        36,
+
+      justifyContent:
+        'center',
+
+      width:
+        28,
+    },
+    featuredQuantityButtonText: {
+      color:
+        '#00B956',
+
+      fontSize:
+        20,
+
+      fontWeight:
+        '500',
+
+      lineHeight:
+        22,
+    },
+    featuredQuantityValue: {
+      color:
+        '#202020',
+
+      fontSize:
+        11,
+
+      fontWeight:
+        '700',
+
+      minWidth:
+        16,
+
+      textAlign:
+        'center',
+    },
+    featuredProductName: {
+      color:
+        '#202020',
+
+      fontSize:
+        13.5,
+
+      fontWeight:
+        '500',
+
+      letterSpacing:
+        -0.1,
+
+      lineHeight:
+        17,
+
+      marginTop:
+        8,
+
+      minHeight:
+        34,
+
+      paddingHorizontal:
+        2,
+
+      textAlign:
+        'center',
+
+      width: '100%',
+
+      writingDirection:
+        'rtl',
+    },
+    featuredPriceRow: {
+      alignItems:
+        'center',
+
+      alignSelf:
+        'center',
+
+      flexDirection:
+        'row',
+
+      flexWrap:
+        'wrap',
+
+      gap:
+        4,
+
+      justifyContent:
+        'center',
+
+      marginTop:
+        4,
+
+      width: '100%',
+    },
+    featuredCurrentPriceWrap: {
+      alignSelf:
+        'center',
+
+      borderBottomColor:
+        '#BFFF00',
+
+      borderBottomWidth:
+        2,
+    },
+    featuredCurrentPrice: {
+      color:
+        '#202020',
+
+      fontSize:
+        11.5,
+
+      fontWeight:
+        '500',
+
+      lineHeight:
+        14,
+
+      textAlign:
+        'center',
+
+      writingDirection:
+        'ltr',
+    },
+    featuredOldPrice: {
+      color:
+        '#858585',
+
+      fontSize:
+        9.5,
+
+      lineHeight:
+        12,
+
+      textAlign:
+        'center',
+
+      textDecorationLine:
+        'line-through',
+
+      writingDirection:
+        'ltr',
+    },
   cartBarFloatingWrapper: {
     bottom: 12,
     left: 18,
