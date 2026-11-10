@@ -87,6 +87,77 @@ export async function getSupermarketHomePreviewProducts(
 }
 
 
+
+/** Banner artwork metadata only; product rows are fetched by banner ID. */
+export type SupermarketHomeBanner = {
+  id: string;
+  adminLabel: string;
+  imageUrl: string;
+  storagePath: string | null;
+  altTextAr: string | null;
+  altTextEn: string | null;
+  linkUrl: string | null;
+  sortOrder: number;
+};
+
+type SupermarketHomeBannerRow = {
+  id: string;
+  admin_label: string;
+  image_url: string;
+  storage_path: string | null;
+  alt_text_ar: string | null;
+  alt_text_en: string | null;
+  link_url: string | null;
+  sort_order: number;
+  starts_at: string | null;
+  ends_at: string | null;
+};
+
+/**
+ * Do not embed home_banner_products here: a single banner can contain
+ * hundreds of linked products. Fetching those IDs merely to paint its
+ * artwork wastes bandwidth and creates accidental result caps.
+ */
+export async function listSupermarketHomeBanners(
+  storeId: string,
+): Promise<SupermarketHomeBanner[]> {
+  if (!storeId.trim()) return [];
+
+  const { data, error } = await publicSupabase
+    .from('home_banners')
+    .select(
+      'id,admin_label,image_url,storage_path,alt_text_ar,alt_text_en,link_url,sort_order,starts_at,ends_at',
+    )
+    .eq('placement', 'supermarket')
+    .eq('store_id', storeId)
+    .eq('is_active', true)
+    .eq('audience', 'all')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Loading supermarket banners failed: ${error.message}`);
+  }
+
+  const now = Date.now();
+  return ((data ?? []) as SupermarketHomeBannerRow[])
+    .filter((banner) => {
+      if (banner.starts_at && Date.parse(banner.starts_at) > now) return false;
+      if (banner.ends_at && Date.parse(banner.ends_at) <= now) return false;
+      return Boolean(banner.image_url?.trim());
+    })
+    .map((banner) => ({
+      id: banner.id,
+      adminLabel: banner.admin_label,
+      imageUrl: banner.image_url,
+      storagePath: banner.storage_path,
+      altTextAr: banner.alt_text_ar,
+      altTextEn: banner.alt_text_en,
+      linkUrl: banner.link_url,
+      sortOrder: banner.sort_order,
+    }));
+}
+
 /** Each banner has its own paginated product feed (no global 120-item cap). */
 export const SUPERMARKET_BANNER_PAGE_SIZE = 16;
 
