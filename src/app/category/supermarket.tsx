@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
@@ -32,15 +33,15 @@ import CategorySearchEntry from '../../components/search/category-search-entry';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import { supabase } from '../../lib/supabase';
-import getAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
   type CatalogSection,
-  getStoreCatalog,
-  listStores,
   type StoreBusinessHour,
-  type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+  useSupermarketHomePreviewProductsQuery,
+  useSupermarketHomeQuery,
+} from '../../hooks/use-supermarket-queries';
 import { getMyOrders } from '../../services/order-service';
 import {
   listStorefrontCategoryTiles,
@@ -88,6 +89,9 @@ const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
 
 // Horizontal preview. "عرض الكل" opens a dedicated full-screen product grid.
 const REORDER_PREVIEW_COUNT = 8;
+const EMPTY_PROMOTIONS: SupermarketPromotionBanner[] = [];
+const EMPTY_MEDIA_CARDS: SupermarketMediaCard[] = [];
+const EMPTY_BRAND_BANNERS: SupermarketBrandBanner[] = [];
 
 /**
  * Independent promotional spotlight BELOW the personal reorder row.
@@ -2164,65 +2168,79 @@ export default function SupermarketScreen() {
   const categoryScrollX = useRef(new Animated.Value(0)).current;
   const categoryScrollRef = useRef<ScrollView | null>(null);
   const reorderScrollRef = useRef<ScrollView | null>(null);
-  const [spotlightCard, setSpotlightCard] = useState<SupermarketSpotlight | null>(null);
+  // Spotlight and media are independent, cached queries (not part of the loading gate).
   const [categoryViewportWidth, setCategoryViewportWidth] = useState(0);
   const [categoryContentWidth, setCategoryContentWidth] = useState(0);
-
-  const [
-    catalog,
-    setCatalog,
-  ] =
-    useState<StoreCatalog | null>(
-      null,
-    );
-
-  const [
-    promotionBanners,
-    setPromotionBanners,
-  ] = useState<
-    SupermarketPromotionBanner[]
-  >([]);
-
-  const [mediaCards, setMediaCards] = useState<SupermarketMediaCard[]>([]);
-  const [brandBanners, setBrandBanners] = useState<SupermarketBrandBanner[]>([]);
 
   const [reorderedProductIds, setReorderedProductIds] = useState<string[]>([]);
   const [isReorderLoading, setIsReorderLoading] = useState(false);
   const [reorderError, setReorderError] = useState(false);
   const [reorderRetryKey, setReorderRetryKey] = useState(0);
 
-  const [
-    storefrontCategoryTiles,
-    setStorefrontCategoryTiles,
-  ] = useState<
-    StorefrontCategoryTile[] | null
-  >(null);
+  const savedServiceAreaId = useCustomerStore(
+    (state) => state.locationServiceAreaId,
+  );
 
-  const [
-    currencyCode,
-    setCurrencyCode,
-  ] =
-    useState('EGP');
+  /**
+   * Critical path: ~45 KB cached metadata (not a 4.5 MB product catalog).
+   * Optional widgets render independently and never gate the whole screen.
+   */
+  const homeQuery = useSupermarketHomeQuery(savedServiceAreaId);
+  const catalog = homeQuery.data?.catalog ?? null;
+  const currencyCode = homeQuery.data?.currencyCode ?? 'EGP';
+  const hasOffers = homeQuery.data?.hasOffers === true;
+  const homeStoreId = catalog?.store.id ?? null;
+  const isLoading = homeQuery.isPending && !catalog;
+  const errorMessage = homeQuery.isError && !catalog
+    ? 'حصلت مشكلة مؤقتة في تحميل بيانات الماركت. اتأكد من الإنترنت واضغط إعادة المحاولة.'
+    : null;
 
-  const [
-    isLoading,
-    setIsLoading,
-  ] =
-    useState(true);
+  const promotionQuery = useQuery({
+    queryKey: ['public', 'supermarket', 'home-promotions-v2', homeStoreId],
+    queryFn: () => listSupermarketPromotionBanners({ storeId: homeStoreId! }),
+    enabled: Boolean(homeStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const tilesQuery = useQuery({
+    queryKey: ['public', 'supermarket', 'home-tiles-v2', homeStoreId],
+    queryFn: () => listStorefrontCategoryTiles('supermarket'),
+    enabled: Boolean(homeStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const mediaQuery = useQuery({
+    queryKey: ['public', 'supermarket', 'home-media-v2', homeStoreId],
+    queryFn: () => listSupermarketMediaCards(homeStoreId!),
+    enabled: Boolean(homeStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const spotlightQuery = useQuery({
+    queryKey: ['public', 'supermarket', 'home-spotlight-v2', homeStoreId],
+    queryFn: () => getSupermarketSpotlight(homeStoreId!),
+    enabled: Boolean(homeStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+  const brandQuery = useQuery({
+    queryKey: ['public', 'supermarket', 'home-brands-v2', homeStoreId],
+    queryFn: () => listSupermarketBrandBanners(homeStoreId!),
+    enabled: Boolean(homeStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
 
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] =
-    useState<string | null>(
-      null,
-    );
-
-  const savedServiceAreaId =
-    useCustomerStore(
-      (state) =>
-        state.locationServiceAreaId,
-    );
+  const promotionBanners = promotionQuery.data ?? EMPTY_PROMOTIONS;
+  const storefrontCategoryTiles = tilesQuery.data ?? null;
+  const mediaCards = mediaQuery.data ?? EMPTY_MEDIA_CARDS;
+  const spotlightCard = spotlightQuery.data ?? null;
+  const brandBanners = brandQuery.data ?? EMPTY_BRAND_BANNERS;
 
   const carts =
     useCartStore(
@@ -2252,154 +2270,7 @@ export default function SupermarketScreen() {
         state.setActiveCart,
     );
 
-  async function loadSupermarket() {
-    try {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      const bootstrap =
-        await getAppBootstrap();
-
-      const defaultServiceAreaId =
-        savedServiceAreaId ??
-        bootstrap.settings
-          .default_service_area_id ??
-        undefined;
-
-      const supermarketStores =
-        await listStores({
-          categorySlug:
-            'supermarket',
-
-          serviceAreaId:
-            defaultServiceAreaId,
-        });
-
-      if (
-        supermarketStores.length ===
-        0
-      ) {
-        throw new Error(
-          'لا يوجد سوبر ماركت متاح حاليًا.',
-        );
-      }
-
-      const supermarket =
-        supermarketStores.find(
-          (store) =>
-            store.isFeatured &&
-            !store.isManuallyClosed,
-        ) ??
-        supermarketStores.find(
-          (store) =>
-            !store.isManuallyClosed,
-        ) ??
-        supermarketStores[0];
-
-      const [
-        loadedCatalog,
-        loadedPromotionBanners,
-        loadedStorefrontCategoryTiles,
-        loadedMediaCards,
-        loadedSpotlightCard,
-        loadedBrandBanners,
-      ] = await Promise.all([
-        getStoreCatalog(
-          supermarket.id,
-          defaultServiceAreaId,
-        ),
-
-        listSupermarketPromotionBanners({
-          storeId:
-            supermarket.id,
-        }).catch(
-          (bannerError) => {
-            console.warn(
-              'Unable to load supermarket banners:',
-              bannerError,
-            );
-
-            return [];
-          },
-        ),
-
-        listStorefrontCategoryTiles(
-          'supermarket',
-        ).catch((categoryError) => {
-          console.warn(
-            'Unable to load supermarket category configuration:',
-            categoryError,
-          );
-
-          return null;
-        }),
-
-        listSupermarketMediaCards(supermarket.id).catch((mediaError) => {
-          console.warn('Unable to load now.supermarket_media_cards:', mediaError);
-          return [] as SupermarketMediaCard[];
-        }),
-
-        getSupermarketSpotlight(supermarket.id).catch((spotlightError) => {
-          console.warn('Unable to load supermarket spotlight:', spotlightError);
-          return null;
-        }),
-
-        listSupermarketBrandBanners(supermarket.id).catch((brandBannerError) => {
-          console.warn('Unable to load supermarket brand banners:', brandBannerError);
-          return [] as SupermarketBrandBanner[];
-        }),
-      ]);
-
-      setSpotlightCard(loadedSpotlightCard);
-
-      setMediaCards(loadedMediaCards);
-      setBrandBanners(loadedBrandBanners);
-
-      setCatalog(
-        loadedCatalog,
-      );
-
-      setPromotionBanners(
-        loadedPromotionBanners,
-      );
-
-      setStorefrontCategoryTiles(
-        loadedStorefrontCategoryTiles,
-      );
-
-      setCurrencyCode(
-        bootstrap.settings
-          .currency_code ||
-          'EGP',
-      );
-    } catch (error) {
-      setCatalog(null);
-
-      setPromotionBanners([]);
-      setMediaCards([]);
-      setBrandBanners([]);
-      setSpotlightCard(null);
-
-      setStorefrontCategoryTiles(
-        null,
-      );
-
-      const technicalMessage =
-        error instanceof Error ? error.message : String(error);
-      console.warn('Supermarket load failed:', technicalMessage);
-      setErrorMessage(
-        /store_not_available_in_service_area|لا يوجد سوبر ماركت متاح/i.test(technicalMessage)
-          ? 'خدمة الماركت غير متاحة حاليًا للمنطقة المختارة.'
-          : 'حصلت مشكلة مؤقتة في تحميل بيانات الماركت. تأكد من اتصال الإنترنت واضغط إعادة المحاولة.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadSupermarket();
-  }, [savedServiceAreaId]);
+  // Home data is managed by TanStack Query and background refresh.
 
   // Reorder is personalized: read the customer's real accepted past orders,
   // then resolve product IDs against this store's CURRENT active catalog.
@@ -2452,16 +2323,6 @@ export default function SupermarketScreen() {
         catalog?.sections ??
         [];
 
-      const hasOffers =
-        sections.some(
-          (section) =>
-            section.products.some(
-              (product) =>
-                getDiscountPercent(
-                  product,
-                ) !== null,
-            ),
-        );
 
       if (
         storefrontCategoryTiles !==
@@ -2571,6 +2432,7 @@ export default function SupermarketScreen() {
         );
     }, [
       catalog,
+      hasOffers,
       storefrontCategoryTiles,
     ]);
 
@@ -2603,31 +2465,25 @@ export default function SupermarketScreen() {
     extrapolate: 'clamp',
   });
 
-  const catalogProductsById =
-    useMemo(() => {
-      const productsById =
-        new Map<
-          string,
-          CatalogProduct
-        >();
-
-      for (
-        const section of
-        catalog?.sections ?? []
-      ) {
-        for (
-          const product of
-          section.products
-        ) {
-          productsById.set(
-            product.id,
-            product,
-          );
-        }
-      }
-
-      return productsById;
-    }, [catalog]);
+  // Preview product cards load only active IDs referenced by promotions
+  // and the customer's accepted orders; category product lists stay lazy.
+  const previewIds = useMemo(
+    () => Array.from(new Set([
+      ...promotionBanners.flatMap((banner) => banner.productIds),
+      ...reorderedProductIds.slice(0, 60),
+    ])).slice(0, 120),
+    [promotionBanners, reorderedProductIds],
+  );
+  const previewQuery = useSupermarketHomePreviewProductsQuery(
+    homeStoreId,
+    previewIds,
+  );
+  const catalogProductsById = useMemo(
+    () => new Map<string, CatalogProduct>(
+      (previewQuery.data ?? []).map((product) => [product.id, product]),
+    ),
+    [previewQuery.data],
+  );
 
   const reorderProducts = useMemo(
     () => reorderedProductIds
@@ -2795,7 +2651,7 @@ export default function SupermarketScreen() {
               styles.generalPressed,
           ]}
           onPress={() => {
-            void loadSupermarket();
+            void homeQuery.refetch();
           }}
         >
           <Text
@@ -3354,7 +3210,7 @@ export default function SupermarketScreen() {
               <Text style={styles.reorderTitle}>اطلب من جديد</Text>
             </View>
 
-            {isReorderLoading ? (
+            {isReorderLoading || (reorderedProductIds.length > 0 && previewQuery.isPending) ? (
               <ActivityIndicator style={styles.reorderLoading} size="small" color="#00B14F" />
             ) : reorderError ? (
               <Pressable
