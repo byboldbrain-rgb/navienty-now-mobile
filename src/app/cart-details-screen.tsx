@@ -44,6 +44,7 @@ import Svg, {
 import {
   calculatePaymentProcessingFee,
 } from '../domain/payment-method';
+import { isAvailableCrossStoreSpin } from '../domain/spin-checkout-policy';
 import {
   supabase
 } from '../lib/supabase';
@@ -1758,10 +1759,16 @@ function StoreCartScreen() {
           spinUnlockSubtotal
     );
 
+  // An activated future Spin reward is valid for the customer's next
+  // eligible order at ANY store; only immediate/pending rewards are scoped.
   const spinRewardDifferentStore =
     !!spinSession &&
     !!storeId &&
-    spinSession.storeId !== storeId;
+    spinSession.storeId !== storeId &&
+    !isAvailableCrossStoreSpin(
+      spinReward?.type,
+      spinSession.rewardStatus,
+    );
 
   const spinRewardExpired =
     useExpirationStatus(
