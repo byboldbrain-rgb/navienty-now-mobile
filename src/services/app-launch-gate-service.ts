@@ -122,10 +122,15 @@ export async function getAppLaunchGate():
           ? settings.minimum_supported_android_version
           : null;
 
-    const minimumVersion =
-      platformMinimumVersion?.trim() ||
-      settings.minimum_supported_app_version?.trim() ||
-      null;
+    // Never let a platform override relax the shared minimum version.
+    const globalMinimum = settings.minimum_supported_app_version?.trim() || null;
+    const platformMinimum = platformMinimumVersion?.trim() || null;
+    const comparison = globalMinimum && platformMinimum
+      ? compareVersions(platformMinimum, globalMinimum)
+      : null;
+    const minimumVersion = globalMinimum && platformMinimum
+      ? comparison === 1 ? platformMinimum : globalMinimum
+      : platformMinimum || globalMinimum;
 
     const minimumBuild =
       Platform.OS === 'ios'
