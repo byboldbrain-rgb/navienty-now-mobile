@@ -32,7 +32,6 @@ import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton'
 import {
   type CatalogProduct,
   type CatalogSection,
-  type StoreCatalog,
 } from '../../services/catalog-service';
 import {
   useSupermarketCategoryQuery,
@@ -42,6 +41,7 @@ import { getUserFacingCatalogError } from '../../lib/user-facing-error';
 import { useCartStore } from '../../store/cart-store';
 
 const EMPTY_CATEGORY_IMAGE_OVERRIDES: Record<string, string> = {};
+const EMPTY_OFFER_ROOT_IDS: string[] = [];
 import { useCustomerStore } from '../../store/customer-store';
 
 /* ============================================================
@@ -308,14 +308,6 @@ function getSingleParam(
   return value;
 }
 
-function normalizeSearchText(
-  value: string | null | undefined,
-) {
-  return (value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
 function normalizeSlug(
   value: string | null | undefined,
 ) {
@@ -366,17 +358,6 @@ function getDiscountPercent(
       product.price) /
       product.compareAtPrice) *
       100,
-  );
-}
-
-function isOfferProduct(
-  product: CatalogProduct,
-) {
-  return (
-    product.compareAtPrice !== null &&
-    product.compareAtPrice >
-      product.price &&
-    product.compareAtPrice > 0
   );
 }
 
@@ -936,7 +917,7 @@ export default function SupermarketCategoryScreen() {
   const currencyCode = categoryQuery.data?.currencyCode ?? 'EGP';
   const rootCategoryImageUrl = categoryQuery.data?.rootCategoryImageUrl ?? null;
   const categoryImageOverrides = categoryQuery.data?.categoryImageOverrides ?? EMPTY_CATEGORY_IMAGE_OVERRIDES;
-  const offerRootCategoryIds = categoryQuery.data?.offerRootCategoryIds ?? [];
+  const offerRootCategoryIds = categoryQuery.data?.offerRootCategoryIds ?? EMPTY_OFFER_ROOT_IDS;
   const isLoading = categoryQuery.isPending;
   const errorMessage = categoryQuery.error
     ? getUserFacingCatalogError(categoryQuery.error)
