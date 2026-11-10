@@ -16,10 +16,10 @@ const persister = createAsyncStoragePersister({
 const persistOptions = {
   persister,
   maxAge: 2 * 60 * 60_000,
-  buster: 'public-catalog-v1',
+  buster: 'public-catalog-v2-light-home',
   dehydrateOptions: {
     // Never persist authentication, orders, addresses, or customer-specific data.
-    // Public supermarket queries opt in explicitly via query.meta.persist.
+    // Persist small public home/widget payloads only. Full product catalogs are memory-only.
     shouldDehydrateQuery: (query: { state: { status: string }; meta?: Record<string, unknown> }) =>
       query.state.status === 'success' && query.meta?.persist === true,
   },
