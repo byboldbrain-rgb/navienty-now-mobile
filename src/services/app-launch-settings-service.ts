@@ -10,6 +10,10 @@ export type AppLaunchSettings = {
   minimum_supported_app_version:
     | string
     | null;
+  minimum_supported_ios_version: string | null;
+  minimum_supported_android_version: string | null;
+  minimum_supported_ios_build: number | null;
+  minimum_supported_android_build: number | null;
   support_whatsapp: string | null;
   ios_store_url?: string | null;
   app_store_url?: string | null;
@@ -39,6 +43,18 @@ function isRecord(
     value !== null &&
     !Array.isArray(value)
   );
+}
+
+function readNullableBuild(value: unknown, fieldName: string): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Invalid ${fieldName} in app launch gate settings.`);
+  }
+
+  return value;
 }
 
 function readNullableString(
@@ -88,6 +104,14 @@ function parseLaunchSettings(
         value.minimum_supported_app_version,
         'minimum_supported_app_version',
       ),
+    minimum_supported_ios_version:
+      readNullableString(value.minimum_supported_ios_version, 'minimum_supported_ios_version'),
+    minimum_supported_android_version:
+      readNullableString(value.minimum_supported_android_version, 'minimum_supported_android_version'),
+    minimum_supported_ios_build:
+      readNullableBuild(value.minimum_supported_ios_build, 'minimum_supported_ios_build'),
+    minimum_supported_android_build:
+      readNullableBuild(value.minimum_supported_android_build, 'minimum_supported_android_build'),
     support_whatsapp:
       readNullableString(
         value.support_whatsapp,
@@ -174,6 +198,14 @@ function mapLegacyBootstrapSettings(
       settings.maintenance_message_ar,
     minimum_supported_app_version:
       settings.minimum_supported_app_version,
+    minimum_supported_ios_version:
+      settings.minimum_supported_ios_version ?? null,
+    minimum_supported_android_version:
+      settings.minimum_supported_android_version ?? null,
+    minimum_supported_ios_build:
+      settings.minimum_supported_ios_build ?? null,
+    minimum_supported_android_build:
+      settings.minimum_supported_android_build ?? null,
     support_whatsapp:
       settings.support_whatsapp,
     ios_store_url:
