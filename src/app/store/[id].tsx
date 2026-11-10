@@ -762,8 +762,11 @@ export default function StoreScreen({
               matchesRestaurantSearch(product, terms),
             );
 
-      // One virtual section keeps search results flat (no menu headings).
-      return [{ name: '', data: matchedProducts }];
+      // No matching items: leave sections empty so ListEmptyComponent
+      // shows a helpful message rather than an empty virtual header.
+      return matchedProducts.length > 0
+        ? [{ name: '', data: matchedProducts }]
+        : [];
     }
 
     return (catalogSections ?? []).map((section) => ({
