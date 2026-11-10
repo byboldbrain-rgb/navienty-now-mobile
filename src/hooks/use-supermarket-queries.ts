@@ -34,6 +34,7 @@ type SupermarketCategoryData = {
   selectedSection: CatalogSection | null;
   currencyCode: string;
   rootCategoryImageUrl: string | null;
+  categoryLabelAr: string | null;
   categoryImageOverrides: Record<string, string>;
   offerRootCategoryIds: string[];
 };
@@ -126,6 +127,8 @@ export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
     queryKey: ['public', 'supermarket', 'category-tiles-v2'],
     queryFn: () => listStorefrontCategoryTiles('supermarket'),
     staleTime: 120_000,
+    // Refresh tile labels after DB edits, without blocking cached category data.
+    refetchOnMount: 'always',
     retry: 1,
     meta: { persist: true },
   });
@@ -148,6 +151,7 @@ export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
         ? null
         : findCatalogSectionBySlug(catalog, options.sectionSlug),
       rootCategoryImageUrl: tile?.imageUrl ?? null,
+      categoryLabelAr: tile?.labelAr ?? null,
       categoryImageOverrides: getStorefrontTileCategoryImages(tile),
     };
   }, [query.data, tilesQuery.data, options.sectionSlug, options.categoryKey]);
