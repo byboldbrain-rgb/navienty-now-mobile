@@ -26,12 +26,14 @@ const PLACEHOLDER_ROTATION_MS = 1800;
 
 type CategorySearchEntryProps = {
   scope: SearchScopeKey;
+  storeId?: string | null;
   suggestions?: readonly string[];
   style?: StyleProp<ViewStyle>;
 };
 
 export default function CategorySearchEntry({
   scope,
+  storeId = null,
   suggestions = [],
   style,
 }: CategorySearchEntryProps) {
@@ -107,6 +109,7 @@ export default function CategorySearchEntry({
           pathname: '/search/[scope]',
           params: {
             scope,
+            ...(storeId ? { storeId } : {}),
           },
         });
       }}
