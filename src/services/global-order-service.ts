@@ -60,9 +60,9 @@ function fingerprintInput(
   input: CreateGlobalOrderGroupInput,
 ) {
   return JSON.stringify({
-    // Invalidate idempotency attempts created under the old shared-fee model.
-    // A new attempt must receive the per-store fee policy on the server.
-    deliveryPolicyVersion: 'per_store_delivery_v2',
+    // Prevent an earlier cached group with multiple delivery charges from
+    // being reused after moving to a single checkout-level delivery fee.
+    deliveryPolicyVersion: 'single_global_delivery_v3',
     latitude: input.deliveryLatitude,
     longitude: input.deliveryLongitude,
     paymentMethodId: input.paymentMethodId,
