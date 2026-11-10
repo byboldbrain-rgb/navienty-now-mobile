@@ -3204,6 +3204,7 @@ export default function SupermarketScreen() {
 
           <CategorySearchEntry
             scope="supermarket"
+            storeId={currentStore.id}
             suggestions={searchSuggestions}
             style={styles.headerSearchEntry}
           />
