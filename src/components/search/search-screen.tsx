@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 // SEARCH_CATEGORY_DIRECT_NAVIGATION_V6_NO_UI_CHANGE_2026_08_29
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -62,6 +63,7 @@ import {
   getRecentSearches,
   saveRecentSearch as persistRecentSearch,
 } from '../../services/search-history-service';
+import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -1365,6 +1367,153 @@ function SearchResultRow({
   );
 }
 
+
+type SupermarketSearchProduct =
+  Extract<GlobalSearchResult, { kind: 'product' }>;
+
+/**
+ * Search uses the same two-column product-card language as
+ * supermarket-category/[slug].tsx, including the large square image,
+ * discount marker, quantity controls, and Arabic product metadata.
+ */
+function SupermarketSearchProductCard({
+  product,
+  quantity,
+  disabled,
+  onOpen,
+  onAdd,
+  onIncrease,
+  onDecrease,
+}: {
+  product: SupermarketSearchProduct;
+  quantity: number;
+  disabled: boolean;
+  onOpen: () => void;
+  onAdd: () => void;
+  onIncrease: () => void;
+  onDecrease: () => void;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [product.imageUrl]);
+
+  const discount =
+    product.compareAtPrice !== null &&
+    product.compareAtPrice > product.price &&
+    product.compareAtPrice > 0
+      ? Math.round(
+          (1 - product.price / product.compareAtPrice) * 100,
+        )
+      : null;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`عرض تفاصيل ${product.title}`}
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.marketProductCard,
+        pressed && styles.marketProductCardPressed,
+      ]}
+    >
+      <View style={styles.marketProductImageBox}>
+        {product.imageUrl && !imageFailed ? (
+          <ExpoImage
+            source={{ uri: product.imageUrl }}
+            style={styles.marketProductImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={120}
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <Text style={styles.marketProductFallback}>
+            {product.icon || '🛒'}
+          </Text>
+        )}
+
+        {discount !== null ? (
+          <View style={styles.marketDiscountBadge}>
+            <Text style={styles.marketDiscountText}>
+              وفر {discount}%
+            </Text>
+          </View>
+        ) : null}
+
+        {quantity === 0 ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`إضافة ${product.title} للسلة`}
+            disabled={disabled}
+            hitSlop={4}
+            style={({ pressed }) => [
+              styles.marketAddButton,
+              disabled && styles.marketDisabledButton,
+              pressed && !disabled && styles.marketAddButtonPressed,
+            ]}
+            onPress={(event) => {
+              event.stopPropagation();
+              onAdd();
+            }}
+          >
+            <Text style={styles.marketAddButtonText}>+</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.marketQuantityPill}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`تقليل كمية ${product.title}`}
+              style={styles.marketQuantityAction}
+              onPress={(event) => {
+                event.stopPropagation();
+                onDecrease();
+              }}
+            >
+              <Text style={styles.marketQuantityActionText}>−</Text>
+            </Pressable>
+            <Text style={styles.marketQuantityValue}>{quantity}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`زيادة كمية ${product.title}`}
+              disabled={disabled}
+              style={styles.marketQuantityAction}
+              onPress={(event) => {
+                event.stopPropagation();
+                onIncrease();
+              }}
+            >
+              <Text style={styles.marketQuantityActionText}>+</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <Text
+        numberOfLines={2}
+        style={styles.marketProductName}
+      >
+        {product.title}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={styles.marketProductUnit}
+      >
+        {product.unitLabelAr ?? ''}
+      </Text>
+      <Text numberOfLines={1} style={styles.marketProductPrice}>
+        {formatMoney(product.price)}
+      </Text>
+      {discount !== null ? (
+        <Text
+          numberOfLines={1}
+          style={styles.marketProductOldPrice}
+        >
+          {formatMoney(product.compareAtPrice!)}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
 export default function SearchScreen({
   scope = null,
 }: {
@@ -1377,6 +1526,15 @@ export default function SearchScreen({
       (state) =>
         state.locationServiceAreaId,
     );
+
+  const carts = useCartStore((state) => state.carts);
+  const addItem = useCartStore((state) => state.addItem);
+  const increaseStoreItem = useCartStore(
+    (state) => state.increaseStoreItem,
+  );
+  const decreaseStoreItem = useCartStore(
+    (state) => state.decreaseStoreItem,
+  );
 
   const inputRef =
     useRef<TextInput>(null);
@@ -1497,6 +1655,22 @@ export default function SearchScreen({
         ),
       [visibleResults],
     );
+
+  const storesById = useMemo(
+    () => new Map(availableStores.map((store) => [store.id, store])),
+    [availableStores],
+  );
+
+  const cartItemCount = useMemo(
+    () => Object.values(carts).reduce(
+      (total, cart) => total + cart.items.reduce(
+        (count, item) => count + item.quantity,
+        0,
+      ),
+      0,
+    ),
+    [carts],
+  );
 
   const suggestionsForSelectedTab =
     useMemo(
@@ -2278,12 +2452,74 @@ export default function SearchScreen({
         return;
 
       case 'category':
+        openCatalogSection(result);
+        return;
+
       case 'product':
-        openCatalogSection(
-          result,
-        );
+        if (
+          getSearchScopeForCategorySlug(result.storeCategorySlug) ===
+          'supermarket'
+        ) {
+          router.push({
+            pathname: '/supermarket-product/[id]',
+            params: { id: result.productId, storeId: result.storeId },
+          });
+          return;
+        }
+        openCatalogSection(result);
         return;
     }
+  }
+
+  function getSearchProductQuantity(product: SupermarketSearchProduct) {
+    return carts[product.storeId]?.items.find(
+      (item) => item.id === product.productId && item.variantId === null,
+    )?.quantity ?? 0;
+  }
+
+  function isSearchProductDisabled(product: SupermarketSearchProduct) {
+    const store = storesById.get(product.storeId);
+    return !store || store.isManuallyClosed || product.productType === 'service';
+  }
+
+  function addSearchProduct(product: SupermarketSearchProduct) {
+    const store = storesById.get(product.storeId);
+    if (!store || isSearchProductDisabled(product)) return;
+
+    Keyboard.dismiss();
+    addItem(
+      {
+        id: store.id,
+        name: store.name,
+        icon: store.icon,
+        categorySlug: store.categorySlug,
+        deliveryFee: store.deliveryFee,
+        minimumOrder: store.minimumOrder,
+      },
+      {
+        id: product.productId,
+        name: product.title,
+        description: product.description,
+        price: product.price,
+        icon: product.icon,
+        variantId: null,
+        variantName: null,
+        isAgeRestricted: product.isAgeRestricted,
+      },
+    );
+  }
+
+  function increaseSearchProduct(product: SupermarketSearchProduct) {
+    if (isSearchProductDisabled(product)) return;
+    if (getSearchProductQuantity(product) > 0) {
+      increaseStoreItem(product.storeId, product.productId, null);
+    } else {
+      addSearchProduct(product);
+    }
+  }
+
+  function decreaseSearchProduct(product: SupermarketSearchProduct) {
+    decreaseStoreItem(product.storeId, product.productId, null);
   }
 
   async function clearRecentSearches() {
@@ -2792,27 +3028,62 @@ export default function SearchScreen({
               </ResultSection>
             ) : null}
 
-            {groupedResults.products
-              .length > 0 ? (
-              <ResultSection title="المنتجات">
-                {groupedResults.products.map(
-                  (result) => (
+            {groupedResults.products.length > 0 ? (
+              activeSearchScope === 'supermarket' ? (
+                <View style={styles.marketProductsSection}>
+                  <Text style={styles.resultSectionTitle}>المنتجات</Text>
+                  <View style={styles.marketProductsGrid}>
+                    {groupedResults.products.map((result) => (
+                      <SupermarketSearchProductCard
+                        key={result.id}
+                        product={result}
+                        quantity={getSearchProductQuantity(result)}
+                        disabled={isSearchProductDisabled(result)}
+                        onOpen={() => { void openResult(result); }}
+                        onAdd={() => addSearchProduct(result)}
+                        onIncrease={() => increaseSearchProduct(result)}
+                        onDecrease={() => decreaseSearchProduct(result)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : (
+                <ResultSection title="المنتجات">
+                  {groupedResults.products.map((result) => (
                     <SearchResultRow
                       key={result.id}
                       result={result}
-                      onPress={() => {
-                        void openResult(
-                          result,
-                        );
-                      }}
+                      onPress={() => { void openResult(result); }}
                     />
-                  ),
-                )}
-              </ResultSection>
+                  ))}
+                </ResultSection>
+              )
             ) : null}
           </View>
         ) : null}
       </ScrollView>
+
+      {activeSearchScope === 'supermarket' && cartItemCount > 0 ? (
+        <SafeAreaView edges={['bottom']} style={styles.marketCartFooter}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`عرض السلة، ${cartItemCount} منتجات`}
+            style={({ pressed }) => [
+              styles.marketCartButton,
+              pressed && styles.marketCartButtonPressed,
+            ]}
+            onPress={() => {
+              Keyboard.dismiss();
+              router.push('/cart');
+            }}
+          >
+            <Ionicons name="bag-handle-outline" size={21} color="#FFFFFF" />
+            <Text style={styles.marketCartButtonText}>
+              عرض السلة ({cartItemCount})
+            </Text>
+          </Pressable>
+        </SafeAreaView>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -3385,4 +3656,185 @@ const styles = StyleSheet.create({
     textDecorationLine:
       'line-through',
   },
+
+  marketProductsSection: {
+    marginTop: 14,
+  },
+  marketProductsGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 18,
+    paddingTop: 6,
+  },
+  marketProductCard: {
+    width: '48%',
+    minWidth: 0,
+    backgroundColor: '#FFFFFF',
+  },
+  marketProductCardPressed: {
+    opacity: 0.87,
+  },
+  marketProductImageBox: {
+    width: '100%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
+    borderWidth: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  marketProductImage: {
+    width: '100%',
+    height: '100%',
+  },
+  marketProductFallback: {
+    fontSize: 44,
+  },
+  marketDiscountBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    backgroundColor: '#FFF1B7',
+    zIndex: 2,
+  },
+  marketDiscountText: {
+    color: '#202020',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  marketAddButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'absolute',
+    bottom: 7,
+    right: 7,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E1E1E1',
+    borderRadius: 22,
+    width: 44,
+    height: 44,
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    zIndex: 3,
+  },
+  marketDisabledButton: {
+    opacity: 0.45,
+  },
+  marketAddButtonPressed: {
+    backgroundColor: '#F8F8F8',
+    transform: [{ scale: 0.96 }],
+  },
+  marketAddButtonText: {
+    color: '#F04A00',
+    fontSize: 31,
+    fontWeight: '300',
+    lineHeight: 34,
+    marginTop: -3,
+  },
+  marketQuantityPill: {
+    position: 'absolute',
+    bottom: 7,
+    right: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 40,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
+    borderWidth: 1,
+    borderRadius: 22,
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    zIndex: 3,
+  },
+  marketQuantityAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 38,
+    width: 27,
+  },
+  marketQuantityActionText: {
+    color: '#F04A00',
+    fontSize: 19,
+    fontWeight: '500',
+  },
+  marketQuantityValue: {
+    minWidth: 15,
+    textAlign: 'center',
+    color: '#202020',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  marketProductName: {
+    color: '#202020',
+    fontSize: 14,
+    lineHeight: 19,
+    minHeight: 38,
+    fontWeight: '500',
+    marginTop: 9,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  marketProductUnit: {
+    color: '#999999',
+    fontSize: 11.5,
+    lineHeight: 16,
+    minHeight: 16,
+    marginTop: 3,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  marketProductPrice: {
+    color: '#202020',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 5,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  marketProductOldPrice: {
+    color: '#969696',
+    fontSize: 11.5,
+    marginTop: 3,
+    textAlign: 'right',
+    textDecorationLine: 'line-through',
+  },
+  marketCartFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    backgroundColor: '#FFFFFF',
+    borderTopColor: '#ECECEC',
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  marketCartButton: {
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: '#00B14F',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  marketCartButtonPressed: {
+    opacity: 0.85,
+  },
+  marketCartButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
 });
