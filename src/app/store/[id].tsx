@@ -1554,6 +1554,29 @@ export default function StoreScreen() {
           </View>
         </View>
 
+        {/* Accessible search bar on every restaurant menu. */}
+        <Pressable
+          accessibilityLabel={`ابحث في منتجات ${currentStore.name}`}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.restaurantSearchEntry,
+            pressed && styles.headerButtonPressed,
+          ]}
+          onPress={openRestaurantSearch}
+        >
+          <Ionicons
+            name="search-outline"
+            size={18}
+            color="#777777"
+          />
+          <Text
+            numberOfLines={1}
+            style={styles.restaurantSearchEntryPlaceholder}
+          >
+            ابحث في منيو {currentStore.name}
+          </Text>
+        </Pressable>
+
         {/* CLOSED NOTICE */}
 
         {storeIsClosed && (
@@ -2425,6 +2448,30 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     minHeight: 38,
+    writingDirection: 'rtl',
+  },
+
+  restaurantSearchEntry: {
+    alignItems: 'center',
+    backgroundColor: '#F6F6F6',
+    borderColor: '#EAEAEA',
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginHorizontal: NAVIENTY_NOW_LAYOUT.pageGutter,
+    marginTop: 14,
+    marginBottom: 8,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+
+  restaurantSearchEntryPlaceholder: {
+    color: '#888888',
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'right',
     writingDirection: 'rtl',
   },
 
