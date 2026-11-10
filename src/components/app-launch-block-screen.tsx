@@ -188,6 +188,7 @@ export default function AppLaunchBlockScreen({
 
   return (
     <View style={styles.screen}>
+      <StatusBar style="light" />
       <View style={styles.content}>
         <View style={styles.brandRow}>
           <View style={styles.brandDot} />
@@ -225,6 +226,11 @@ export default function AppLaunchBlockScreen({
               </Text>
               <Text style={styles.versionValue}>
                 {gate.currentVersion ?? '—'}
+                {gate.minimumBuild !== null &&
+                 gate.minimumBuild !== undefined &&
+                 gate.currentBuild
+                  ? ` · Build ${gate.currentBuild}`
+                  : ''}
               </Text>
             </View>
 
@@ -232,10 +238,14 @@ export default function AppLaunchBlockScreen({
 
             <View style={styles.versionItem}>
               <Text style={styles.versionLabel}>
-                الحد الأدنى
+                الإصدار المطلوب
               </Text>
               <Text style={styles.versionValue}>
-                {gate.minimumVersion ?? '—'}
+                {gate.minimumVersion ?? gate.currentVersion ?? '—'}
+                {gate.minimumBuild !== null &&
+                 gate.minimumBuild !== undefined
+                  ? ` · Build ${gate.minimumBuild}`
+                  : ''}
               </Text>
             </View>
           </View>
@@ -466,17 +476,25 @@ const styles = StyleSheet.create({
 
   screen: {
     alignItems: 'center',
-    backgroundColor:
-      NAVIENTY_NOW_COLORS.page,
+    backgroundColor: '#14251D',
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal:
-      NAVIENTY_NOW_LAYOUT.pageGutter,
+    paddingHorizontal: 20,
   },
 
+  // Modal-like, non-dismissible update card. The app navigator is not mounted.
   content: {
     alignItems: 'center',
+    backgroundColor: NAVIENTY_NOW_COLORS.white,
+    borderRadius: 28,
+    elevation: 12,
     maxWidth: 440,
+    paddingHorizontal: 24,
+    paddingVertical: 30,
+    shadowColor: NAVIENTY_NOW_COLORS.black,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
     width: '100%',
   },
 
@@ -484,7 +502,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 42,
+    marginBottom: 28,
   },
 
   brandDot: {
