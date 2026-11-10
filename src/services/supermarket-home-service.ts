@@ -55,7 +55,12 @@ export async function getSupermarketHomePreviewProducts(
   storeId: string,
   productIds: readonly string[],
 ): Promise<CatalogProduct[]> {
-  const uniqueIds = Array.from(new Set(productIds.filter(Boolean))).slice(0, 120);
+  // Order history may include legacy/non-UUID identifiers. The RPC expects
+  // UUIDs, so ignore malformed values instead of failing every promo card.
+  const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uniqueIds = Array.from(
+    new Set(productIds.filter((id) => validUuid.test(id))),
+  ).slice(0, 120);
   if (!storeId.trim() || uniqueIds.length === 0) return [];
 
   const { data, error } = await publicSupabase.rpc(
