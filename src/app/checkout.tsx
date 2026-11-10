@@ -692,9 +692,9 @@ function StoreCheckoutScreen() {
       0,
     );
 
-  const deliveryFee =
-    deliveryResolution?.deliveryFee ??
-    Number(checkoutCart?.deliveryFee ?? 0);
+  // Never display the Cart snapshot (often the area default) while the
+  // store-specific database quote is loading. A real zero remains zero.
+  const deliveryFee = deliveryResolution?.deliveryFee ?? 0;
 
   const paymentFeeMethod =
     bootstrap?.payment_methods.find(
@@ -2441,9 +2441,11 @@ function StoreCheckoutScreen() {
                 styles.summaryValue
               }
             >
-              {formatPrice(
-                deliveryFee,
-              )}
+              {deliveryResolution?.deliveryFee === null || !deliveryResolution
+                ? 'جارٍ حساب التوصيل'
+                : deliveryFee === 0
+                  ? 'مجاني'
+                  : formatPrice(deliveryFee)}
             </Text>
           </View>
 
