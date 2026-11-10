@@ -2,6 +2,12 @@ import {
   isV1PublicCategorySlug,
 } from '../config/v1-release-scope';
 import { publicSupabase } from '../lib/supabase';
+import { isRetryablePublicQueryError } from '../lib/user-facing-error';
+import {
+  isUsableAppBootstrap,
+  readCachedAppBootstrap,
+  writeCachedAppBootstrap,
+} from './bootstrap-cache-service';
 import {
   recordStartupTimingOnce,
 } from './startup-performance-service';
@@ -113,6 +119,10 @@ type ServiceCategoryRow = {
 
 const APP_BOOTSTRAP_CACHE_TTL_MS =
   5 * 60 * 1000;
+// Keep cached fallback briefly in memory so a restored connection can refresh.
+const APP_BOOTSTRAP_FALLBACK_MEMORY_TTL_MS = 30 * 1000;
+// The initial request plus two bounded retries for transient transport errors.
+const APP_BOOTSTRAP_RETRY_DELAYS_MS = [300, 900] as const;
 
 let cachedAppBootstrap:
   | {
@@ -232,7 +242,11 @@ async function loadAppBootstrap():
       );
     }
 
-    const bootstrap = data as AppBootstrap;
+    if (!isUsableAppBootstrap(data)) {
+      throw new Error('Supabase bootstrap returned invalid data.');
+    }
+
+    const bootstrap = data;
 
     const currentCategories =
       Array.isArray(
@@ -300,6 +314,70 @@ async function loadAppBootstrap():
   }
 }
 
+type ResolvedBootstrap = {
+  bootstrap: AppBootstrap;
+  fromPersistentCache: boolean;
+};
+
+/**
+ * A canceled native fetch, timeout, or 5xx is recoverable; permissions and
+ * malformed payloads aren't. Avoid infinite loops and duplicate RPC bursts.
+ * The persistent fallback is only for valid public data and is read after
+ * transient transport failures. Maintenance/force-update checks remain in
+ * the independent, network-backed app-launch gate.
+ */
+async function loadBootstrapWithRecovery(): Promise<ResolvedBootstrap> {
+  let lastTransientError: unknown = null;
+
+  for (
+    let attempt = 0;
+    attempt <= APP_BOOTSTRAP_RETRY_DELAYS_MS.length;
+    attempt += 1
+  ) {
+    try {
+      const bootstrap = await loadAppBootstrap();
+      // Don't slow the first usable render down with disk writes.
+      void writeCachedAppBootstrap(bootstrap);
+      return { bootstrap, fromPersistentCache: false };
+    } catch (error) {
+      // Never mask authorization, schema, or configuration errors with a
+      // stale snapshot; only known transient transport failures qualify.
+      if (!isRetryablePublicQueryError(error)) {
+        throw error;
+      }
+
+      lastTransientError = error;
+
+      if (attempt < APP_BOOTSTRAP_RETRY_DELAYS_MS.length) {
+        if (__DEV__) {
+          console.warn(
+            '[bootstrap] Temporary network error, retrying.',
+            { attempt: attempt + 1, error },
+          );
+        }
+
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, APP_BOOTSTRAP_RETRY_DELAYS_MS[attempt]);
+        });
+      }
+    }
+  }
+
+  const persisted = await readCachedAppBootstrap();
+  if (persisted) {
+    if (__DEV__) {
+      console.warn(
+        '[bootstrap] Using a recent cached snapshot after network failure.',
+      );
+    }
+
+    return { bootstrap: persisted, fromPersistentCache: true };
+  }
+
+  throw lastTransientError ??
+    new Error('Bootstrap network unavailable and no valid cache exists.');
+}
+
 export function getCachedAppBootstrap(): AppBootstrap | null {
   const currentTime = Date.now();
 
@@ -347,13 +425,15 @@ async function getAppBootstrap():
     }
 
     appBootstrapRequest =
-      loadAppBootstrap().then(
-        (bootstrap) => {
+      loadBootstrapWithRecovery().then(
+        ({ bootstrap, fromPersistentCache }) => {
           cachedAppBootstrap = {
             value: bootstrap,
             expiresAt:
               Date.now() +
-              APP_BOOTSTRAP_CACHE_TTL_MS,
+              (fromPersistentCache
+                ? APP_BOOTSTRAP_FALLBACK_MEMORY_TTL_MS
+                : APP_BOOTSTRAP_CACHE_TTL_MS),
           };
 
           return bootstrap;
