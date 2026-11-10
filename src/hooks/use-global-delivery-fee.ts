@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { sumStoreDeliveryFees } from '../domain/store-delivery-pricing';
 
 import {
   getDeliveryLocationErrorMessage,
@@ -8,13 +9,14 @@ import {
 type FeeQuote = {
   key: string;
   deliveryFee: number | null;
+  storeFees: Record<string, number> | null;
   error: string | null;
 };
 
 /**
  * Location-aware checkout quote. Resolves each store against the authoritative
- * DB fee matrix, retaining explicit zeroes. One shared fee is the maximum
- * store fee (not the sum or an area-wide fixed amount).
+ * DB fee matrix, retaining explicit zeroes. Each participating store is a
+ * distinct delivery, so the checkout charge is the SUM of the store fees.
  *
  * A quote belongs to a specific (stores, latitude, longitude) key, so an old
  * location's fee is never displayed while the new request is in flight.
@@ -24,7 +26,7 @@ export function useGlobalDeliveryFee(
   latitude: number | null | undefined,
   longitude: number | null | undefined,
 ) {
-  const idsKey = storeIds.filter(Boolean).join('|');
+  const idsKey = Array.from(new Set(storeIds.filter(Boolean))).join('|');
   const hasLocation =
     typeof latitude === 'number' &&
     Number.isFinite(latitude) &&
@@ -57,18 +59,20 @@ export function useGlobalDeliveryFee(
         setQuote({
           key,
           deliveryFee: null,
+          storeFees: null,
           error: getDeliveryLocationErrorMessage(unavailable.reason),
         });
         return;
       }
       const fees = results.map((result) => result.deliveryFee);
       if (fees.some((fee) => fee === null || !Number.isFinite(fee) || fee < 0)) {
-        setQuote({ key, deliveryFee: null, error: 'تعذر حساب رسوم التوصيل.' });
+        setQuote({ key, deliveryFee: null, storeFees: null, error: 'تعذر حساب رسوم التوصيل.' });
         return;
       }
       setQuote({
         key,
-        deliveryFee: Math.max(...(fees as number[])),
+        deliveryFee: sumStoreDeliveryFees(fees as number[]),
+        storeFees: Object.fromEntries(ids.map((id, index) => [id, fees[index] as number])),
         error: null,
       });
     }).catch(() => {
@@ -76,6 +80,7 @@ export function useGlobalDeliveryFee(
         setQuote({
           key,
           deliveryFee: null,
+          storeFees: null,
           error: 'تعذر حساب رسوم التوصيل. حاول مرة أخرى.',
         });
       }
@@ -87,6 +92,7 @@ export function useGlobalDeliveryFee(
   const current = quote?.key === key ? quote : null;
   return {
     deliveryFee: hasLocation && idsKey ? current?.deliveryFee ?? null : null,
+    storeFees: hasLocation && idsKey ? current?.storeFees ?? null : null,
     error: current?.error ?? null,
     isLoading: Boolean(idsKey && hasLocation && !current),
   };
