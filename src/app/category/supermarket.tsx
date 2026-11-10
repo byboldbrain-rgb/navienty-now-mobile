@@ -3973,7 +3973,8 @@ const styles =
     },
     spotlightCard: {
       width: '100%',
-      aspectRatio: 1,
+      // Slightly taller than a square while keeping the same card width.
+      aspectRatio: 0.92,
       borderRadius: 23,
       overflow: 'hidden',
       position: 'relative',
