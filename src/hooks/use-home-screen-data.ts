@@ -11,6 +11,7 @@ import getAppBootstrap, {
   type City,
   type ServiceArea,
 } from '../services/bootstrap-service';
+import { isRetryablePublicQueryError } from '../lib/user-facing-error';
 import {
   listStores,
   type StoreSummary,
@@ -320,10 +321,15 @@ export function useHomeScreenData(
           return;
         }
 
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'تعذر تحميل بيانات التطبيق.';
+        // Supabase / native fetch diagnostics belong in developer logs,
+        // never in customer-facing Home error screens.
+        if (__DEV__) {
+          console.warn('[home] Unable to load bootstrap:', error);
+        }
+
+        const message = isRetryablePublicQueryError(error)
+          ? 'تعذر الاتصال حاليًا. تأكد من الإنترنت واضغط إعادة المحاولة.'
+          : 'تعذر تحميل بيانات التطبيق حاليًا. حاول مرة أخرى بعد قليل.';
 
         setBootstrap(null);
         setSelectedLocation(null);
