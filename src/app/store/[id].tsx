@@ -1386,29 +1386,8 @@ export default function StoreScreen({
             >
               البحث في {currentStore.name}
             </Text>
-            <Pressable
-              accessibilityLabel="فتح السلة"
-              accessibilityRole="button"
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.restaurantSearchCartButton,
-                pressed && styles.headerButtonPressed,
-              ]}
-              onPress={openCart}
-            >
-              <Ionicons
-                name="cart-outline"
-                size={24}
-                color="#9F0A85"
-              />
-              {cartItemCount > 0 && (
-                <View style={styles.restaurantSearchCartCount}>
-                  <Text style={styles.restaurantSearchCartCountText}>
-                    {cartItemCount > 99 ? '99+' : cartItemCount}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
+            {/* Balance the back button so the title stays centered. */}
+            <View style={styles.restaurantSearchHeaderSpacer} />
           </View>
 
           <View style={styles.restaurantSearchFieldRow}>
@@ -1416,7 +1395,7 @@ export default function StoreScreen({
               <Ionicons
                 name="search-outline"
                 size={20}
-                color="#999999"
+                color="#18994D"
               />
               <TextInput
                 autoFocus
@@ -1428,7 +1407,7 @@ export default function StoreScreen({
                 placeholder="بتدور على إيه؟"
                 placeholderTextColor="#999999"
                 returnKeyType="search"
-                selectionColor="#9F0A85"
+                selectionColor="#18994D"
                 style={styles.searchInput}
                 textAlign="right"
               />
@@ -1567,30 +1546,6 @@ export default function StoreScreen({
             onPress={() => router.back()}
           >
             <BackArrowIcon />
-          </Pressable>
-
-          <Pressable
-            accessibilityLabel="البحث في منتجات المطعم"
-            accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.backButton,
-              styles.heroSearchButton,
-              {
-                top:
-                  Math.max(
-                    insets.top,
-                    Platform.OS === 'android' ? 24 : 12,
-                  ) + 10,
-              },
-              pressed && styles.headerButtonPressed,
-            ]}
-            onPress={openRestaurantSearch}
-          >
-            <Ionicons
-              name="search-outline"
-              size={26}
-              color="#A00084"
-            />
           </Pressable>
 
           {storeRating !== null && (
@@ -1805,6 +1760,35 @@ export default function StoreScreen({
         showsVerticalScrollIndicator={false}
       />
 
+      {/* Overlay is a sibling of SectionList: it is visible immediately
+          even before a scroll event or a sticky header is mounted. */}
+      {!isSearchVisible && !isScrollHeaderVisible && (
+        <Pressable
+          accessibilityLabel="البحث في منتجات المطعم"
+          accessibilityRole="button"
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.backButton,
+            styles.heroSearchButton,
+            {
+              top:
+                Math.max(
+                  insets.top,
+                  Platform.OS === 'android' ? 24 : 12,
+                ) + 10,
+            },
+            pressed && styles.headerButtonPressed,
+          ]}
+          onPress={openRestaurantSearch}
+        >
+          <Ionicons
+            name="search-outline"
+            size={21}
+            color="#17974A"
+          />
+        </Pressable>
+      )}
+
       {!isSearchVisible && isScrollHeaderVisible && (
         <View
           style={[
@@ -1849,7 +1833,7 @@ export default function StoreScreen({
               <Ionicons
                 name="search-outline"
                 size={21}
-                color="#A00084"
+                color="#17974A"
               />
             </Pressable>
           </View>
@@ -2363,9 +2347,6 @@ const styles = StyleSheet.create({
     left:
       NAVIENTY_NOW_LAYOUT.pageGutter,
     position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
     zIndex: 20,
 
     shadowColor: '#000000',
@@ -2382,10 +2363,9 @@ const styles = StyleSheet.create({
   heroSearchButton: {
     right: NAVIENTY_NOW_LAYOUT.pageGutter,
     position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    zIndex: 20,
+    backgroundColor: '#E9F9EE',
+    borderColor: '#CBEED5',
+    zIndex: 90,
     shadowColor: '#000000',
     shadowOffset: { height: 2, width: 0 },
     shadowOpacity: 0.14,
@@ -2512,31 +2492,9 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
 
-  restaurantSearchCartButton: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    position: 'relative',
+  restaurantSearchHeaderSpacer: {
     width: 40,
-  },
-
-  restaurantSearchCartCount: {
-    alignItems: 'center',
-    backgroundColor: NAVIENTY_NOW_COLORS.primary,
-    borderRadius: 10,
-    height: 19,
-    justifyContent: 'center',
-    minWidth: 19,
-    paddingHorizontal: 3,
-    position: 'absolute',
-    right: -4,
-    top: -3,
-  },
-
-  restaurantSearchCartCountText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
+    height: 40,
   },
 
   restaurantSearchFieldRow: {
@@ -2554,15 +2512,15 @@ const styles = StyleSheet.create({
   },
 
   restaurantSearchCancelText: {
-    color: '#9F0A85',
+    color: '#18994D',
     fontSize: 14,
     fontWeight: '600',
   },
 
   searchInputContainer: {
     alignItems: 'center',
-    backgroundColor: '#F6F6F6',
-    borderColor: '#EAEAEA',
+    backgroundColor: '#F0FBF3',
+    borderColor: '#D0EED9',
     borderRadius: 14,
     borderWidth: 1,
     flex: 1,
