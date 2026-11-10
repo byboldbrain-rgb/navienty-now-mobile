@@ -12,6 +12,7 @@ import {
 } from 'react';
 import {
   Animated,
+  AppState,
   Easing,
   Image,
   Platform,
@@ -978,6 +979,37 @@ export default function RootLayout() {
         isRefreshingLaunchGate,
       ],
     );
+
+  /*
+   * Verify again when returning from the App Store / Google Play
+   * or whenever an existing app session returns to foreground.
+   * The root-level gate can block the entire navigator immediately.
+   */
+  const lastAppStateRef = useRef(AppState.currentState);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      return;
+    }
+
+    const subscription = AppState.addEventListener(
+      'change',
+      (nextState) => {
+        const previousState = lastAppStateRef.current;
+        lastAppStateRef.current = nextState;
+
+        if (
+          nextState === 'active' &&
+          (previousState === 'background' ||
+            previousState === 'inactive')
+        ) {
+          void refreshLaunchGate();
+        }
+      },
+    );
+
+    return () => subscription.remove();
+  }, [refreshLaunchGate]);
 
   const appHasHydrated =
     cartHasHydrated &&
