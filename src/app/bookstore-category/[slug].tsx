@@ -4,6 +4,7 @@ import type { ShoppingHomeSnapshot } from '../../services/shopping-home-service'
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import {
+  ActivityIndicator,
   useLocalSearchParams,
   useRouter,
 } from 'expo-router';
@@ -1988,7 +1989,7 @@ export default function BookstoreCategoryScreen() {
   const queryClient = useQueryClient();
   const contextQuery = useQuery({
     queryKey: ['public', 'bookstore', 'category-context-v1', savedServiceAreaId ?? '*', requestedStoreId ?? '*'],
-    queryFn: () => getShoppingCategoryContext('bookstores', savedServiceAreaId, requestedStoreId),
+    queryFn: () => getShoppingCategoryContext('bookstores', savedServiceAreaId, requestedStoreId ?? null),
     staleTime: 90_000,
     refetchOnMount: 'always',
     gcTime: 24 * 60 * 60 * 1000,
