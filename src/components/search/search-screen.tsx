@@ -33,6 +33,8 @@ import {
   type SearchScopeKey,
 } from '../../config/search-scopes';
 
+import { isSearchResultVisible } from './search-result-visibility';
+
 import { publicSupabase } from '../../lib/supabase';
 
 import {
@@ -342,56 +344,6 @@ function normalizeCategorySlug(
     .replace(/_/g, '-');
 }
 
-
-function isSearchResultInActiveCategory(
-  result: GlobalSearchResult,
-  activeCategoryIdsByStore:
-    ActiveCategoryIdsByStore,
-) {
-  if (
-    result.kind !== 'category' &&
-    result.kind !== 'product'
-  ) {
-    return true;
-  }
-
-  const activeCategoryIds =
-    activeCategoryIdsByStore.get(
-      result.storeId,
-    );
-
-  return Boolean(
-    activeCategoryIds?.has(
-      result.sectionId,
-    ),
-  );
-}
-
-function doesResultMatchSearchTab(
-  result: GlobalSearchResult,
-  tab: SearchScopeKey,
-  activeCategoryIdsByStore:
-    ActiveCategoryIdsByStore,
-) {
-  if (result.kind === 'service') {
-    return false;
-  }
-
-  if (
-    !isSearchResultInActiveCategory(
-      result,
-      activeCategoryIdsByStore,
-    )
-  ) {
-    return false;
-  }
-
-  return (
-    getSearchScopeForCategorySlug(
-      result.storeCategorySlug,
-    ) === tab
-  );
-}
 
 function doesSuggestionMatchSearchTab(
   suggestion: SearchCatalogSuggestion,
@@ -1705,13 +1657,12 @@ export default function SearchScreen({
     useMemo(
       () =>
         results.filter((result) =>
-          activeSearchScope === 'supermarket' && result.kind === 'product'
-            ? result.storeCategorySlug === 'supermarket'
-            : doesResultMatchSearchTab(
-                result,
-                activeSearchScope,
-                activeCategoryIdsByStore,
-              ),
+          isSearchResultVisible(
+            result,
+            activeSearchScope,
+            activeCategoryIdsByStore,
+            getSearchScopeForCategorySlug,
+          ),
         ),
       [
         results,
