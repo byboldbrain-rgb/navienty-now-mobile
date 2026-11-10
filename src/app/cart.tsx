@@ -675,8 +675,8 @@ function StoreCartScreen() {
           ),
           hasSavedPin
             ? resolveDeliveryLocation({
-                latitude: locationLatitude,
-                longitude: locationLongitude,
+                latitude: locationLatitude as number,
+                longitude: locationLongitude as number,
                 storeId,
               })
             : Promise.resolve(null),
