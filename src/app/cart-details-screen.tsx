@@ -30,6 +30,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   useExpirationStatus,
 } from '../hooks/use-expiration-status';
+import { useGlobalDeliveryFee } from '../hooks/use-global-delivery-fee';
 
 import Svg, {
   Circle,
@@ -71,6 +72,7 @@ import {
 import {
   useCustomerStore,
 } from '../store/customer-store';
+import { useCartStore as usePhysicalCartStore } from '../store/global-cart-store';
 import {
   useOrderNotesStore,
 } from '../store/order-notes-store';
@@ -1342,6 +1344,17 @@ function StoreCartScreen() {
   const storeId =
     currentCart?.storeId ?? null;
 
+  const physicalCarts = usePhysicalCartStore((state) => state.carts);
+  const deliveryLatitude = useCustomerStore((state) => state.locationLatitude);
+  const deliveryLongitude = useCustomerStore((state) => state.locationLongitude);
+  const { deliveryFee: quotedDeliveryFee } = useGlobalDeliveryFee(
+    Object.values(physicalCarts)
+      .filter((group) => group.items.length > 0)
+      .map((group) => group.storeId),
+    deliveryLatitude,
+    deliveryLongitude,
+  );
+
   const phoneNumber =
     useCustomerStore(
       (state) => state.phoneNumber,
@@ -1659,8 +1672,8 @@ function StoreCartScreen() {
         )
       : LEGACY_PAYMENT_PROCESSING_FEE_FALLBACK;
 
-  const deliveryFee =
-    Number(currentCart?.deliveryFee ?? 0);
+  // The stored Cart fee is a snapshot, not an authoritative live quote.
+  const deliveryFee = quotedDeliveryFee ?? 0;
 
   const voucherDiscountTarget =
     appliedVoucher?.discountTarget ??
@@ -4234,9 +4247,11 @@ function StoreCartScreen() {
                 styles.referenceSummaryValue
               }
             >
-              {formatSummaryAmount(
-                deliveryFee,
-              )}
+              {quotedDeliveryFee === null
+                ? 'تُحدد حسب الموقع'
+                : quotedDeliveryFee === 0
+                  ? 'مجاني'
+                  : formatSummaryAmount(deliveryFee)}
             </Text>
           </View>
 
