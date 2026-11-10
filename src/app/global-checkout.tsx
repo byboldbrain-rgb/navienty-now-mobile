@@ -113,7 +113,7 @@ export default function GlobalCheckoutScreen() {
   const processingFee = selectedPaymentMethod
     ? calculatePaymentProcessingFee(selectedPaymentMethod, subtotal)
     : 0;
-  const { deliveryFee, error: deliveryFeeError, isLoading: isResolvingFee } = useGlobalDeliveryFee(
+  const { deliveryFee, storeFees, error: deliveryFeeError, isLoading: isResolvingFee } = useGlobalDeliveryFee(
     groups.map((group) => group.storeId),
     latitude,
     longitude,
@@ -331,9 +331,51 @@ export default function GlobalCheckoutScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>تفاصيل الطلبات ({groups.length})</Text>
+          {groups.map((group, index) => {
+            const storeSubtotal = group.items.reduce(
+              (sum, item) => sum + item.price * item.quantity, 0,
+            );
+            const fee = storeFees?.[group.storeId] ?? null;
+            return (
+              <View key={group.storeId} style={styles.storeBreakdown}>
+                <View style={styles.storeBreakdownHeader}>
+                  <Text style={styles.storeBreakdownName}>{group.storeName}</Text>
+                  <Text style={styles.storeBreakdownNumber}>الطلب {index + 1}</Text>
+                </View>
+                {group.items.map((item) => (
+                  <View key={item.lineId} style={styles.orderItemRow}>
+                    <View style={styles.orderItemCopy}>
+                      <Text style={styles.orderItemName}>
+                        {item.name} × {item.quantity}
+                      </Text>
+                      {item.variantName ? (
+                        <Text style={styles.orderItemVariant}>{item.variantName}</Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.orderItemPrice}>{money(item.price * item.quantity)}</Text>
+                  </View>
+                ))}
+                <Summary label="المنتجات" value={money(storeSubtotal)} />
+                <Summary
+                  label="توصيل المتجر"
+                  value={fee === null ? 'جارٍ حساب التوصيل' : fee === 0 ? 'مجاني' : money(fee)}
+                />
+                <View style={styles.divider} />
+                <Summary
+                  label="إجمالي الطلب قبل رسوم الدفع"
+                  value={fee === null ? '—' : money(storeSubtotal + fee)}
+                  total
+                />
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>ملخص الدفع</Text>
           <Summary label={`المنتجات من ${groups.length} ${groups.length === 1 ? 'متجر' : 'متاجر'}`} value={money(subtotal)} />
-          <Summary label="التوصيل — مرة واحدة" value={deliveryFee === null ? (deliveryFeeError ?? 'جارٍ الحساب') : deliveryFee === 0 ? 'مجاني' : money(deliveryFee)} />
+          <Summary label="إجمالي توصيل المتاجر" value={deliveryFee === null ? (deliveryFeeError ?? 'جارٍ الحساب') : deliveryFee === 0 ? 'مجاني' : money(deliveryFee)} />
           {processingFee > 0 ? <Summary label="رسوم الدفع" value={money(processingFee)} /> : null}
           <View style={styles.divider} />
           <Summary label="الإجمالي" value={total === null ? '—' : money(total)} total />
@@ -410,6 +452,15 @@ const styles = StyleSheet.create({
   content: { alignSelf: 'center', maxWidth: NAVIENTY_NOW_LAYOUT.contentMaxWidth, padding: 16, paddingBottom: 28, width: '100%' },
   card: { backgroundColor: '#FFFFFF', borderColor: NAVIENTY_NOW_COLORS.border, borderRadius: NAVIENTY_NOW_LAYOUT.cardRadius, borderWidth: 1, marginBottom: 14, padding: 15 },
   sectionTitle: { color: NAVIENTY_NOW_COLORS.text, fontSize: 15, fontWeight: '900', marginBottom: 11, textAlign: 'right', writingDirection: 'rtl' },
+  storeBreakdown: { backgroundColor: NAVIENTY_NOW_COLORS.surface, borderColor: NAVIENTY_NOW_COLORS.border, borderRadius: 15, borderWidth: 1, marginTop: 10, padding: 12 },
+  storeBreakdownHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 9 },
+  storeBreakdownName: { color: NAVIENTY_NOW_COLORS.text, fontSize: 14, fontWeight: '900', flexShrink: 1, textAlign: 'right' },
+  storeBreakdownNumber: { color: NAVIENTY_NOW_COLORS.primaryDark, fontSize: 11, fontWeight: '800' },
+  orderItemRow: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between', minHeight: 32, paddingVertical: 4 },
+  orderItemCopy: { flex: 1, marginLeft: 12 },
+  orderItemName: { color: NAVIENTY_NOW_COLORS.text, fontSize: 11.5, textAlign: 'right', writingDirection: 'rtl' },
+  orderItemVariant: { color: NAVIENTY_NOW_COLORS.textMuted, fontSize: 10, marginTop: 2, textAlign: 'right' },
+  orderItemPrice: { color: NAVIENTY_NOW_COLORS.text, fontSize: 11, fontWeight: '800' },
   input: { backgroundColor: NAVIENTY_NOW_COLORS.surface, borderColor: NAVIENTY_NOW_COLORS.border, borderRadius: 15, borderWidth: 1, color: NAVIENTY_NOW_COLORS.text, fontSize: 13, minHeight: 50, marginTop: 9, paddingHorizontal: 13, writingDirection: 'rtl' },
   multiline: { minHeight: 80, paddingTop: 13 },
   locationRow: { alignItems: 'center', flexDirection: 'row-reverse', marginTop: 10 },
