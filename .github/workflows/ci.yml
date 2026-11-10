@@ -8,6 +8,7 @@ on:
       - agent/p0-launch-hardening
       - cto/launch-readiness-hardening
       - codex/android-production-hardening
+      - android-production-hardening
 
 permissions:
   contents: read
