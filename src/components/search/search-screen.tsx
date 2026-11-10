@@ -77,10 +77,10 @@ const SEARCH_SUGGESTION_CATALOG_CONCURRENCY = 4;
 const SEARCH_DISCOVERY_LIMIT = 12;
 
 type SearchGroups = {
-  services: GlobalSearchResult[];
-  stores: GlobalSearchResult[];
-  categories: GlobalSearchResult[];
-  products: GlobalSearchResult[];
+  services: Extract<GlobalSearchResult, { kind: 'service' }>[];
+  stores: Extract<GlobalSearchResult, { kind: 'store' }>[];
+  categories: Extract<GlobalSearchResult, { kind: 'category' }>[];
+  products: Extract<GlobalSearchResult, { kind: 'product' }>[];
 };
 
 
