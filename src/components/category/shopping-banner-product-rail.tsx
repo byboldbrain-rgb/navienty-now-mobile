@@ -40,14 +40,14 @@ export function ShoppingBannerProductRail({
   // when the banner has no linked products.
   if (query.isPending) {
     return (
-      <View style={styles.loading}>
+      <View style={[styles.loading, { marginTop: -overlap }]} >
         <ActivityIndicator size="small" color="#00B956" />
       </View>
     );
   }
   if (query.isError && items.length === 0) {
     return (
-      <Pressable style={styles.retry} onPress={() => void query.refetch()}>
+      <Pressable style={[styles.retry, { marginTop: -overlap }]} onPress={() => void query.refetch()}>
         <Text style={styles.retryText}>تعذر تحميل المنتجات. اضغط لإعادة المحاولة</Text>
       </Pressable>
     );
@@ -79,7 +79,7 @@ export function ShoppingBannerProductRail({
             </Pressable>
           : null}
       contentContainerStyle={styles.rail}
-      style={{ marginTop: -overlap, overflow: 'visible' }}
+      style={[styles.railScroll, { marginTop: -overlap }]}
       getItemLayout={(_data, index) => ({
         index, length: cardWidth + 7, offset: 8 + index * (cardWidth + 7),
       })}
@@ -87,9 +87,15 @@ export function ShoppingBannerProductRail({
   );
 }
 const styles = StyleSheet.create({
+  railScroll: {
+    elevation: 10,
+    overflow: 'visible',
+    position: 'relative',
+    zIndex: 10,
+  },
   rail: { alignItems: 'flex-start', gap: 7, paddingHorizontal: 8, paddingBottom: 7, paddingTop: 0 },
-  loading: { minHeight: 65, justifyContent: 'center', alignItems: 'center' },
-  retry: { paddingVertical: 16, paddingHorizontal: 20, alignItems: 'center' },
+  loading: { backgroundColor: '#FFFFFF', borderRadius: 12, minHeight: 74, justifyContent: 'center', alignItems: 'center', position: 'relative', zIndex: 10, elevation: 10, alignSelf: 'center', width: '85%' },
+  retry: { backgroundColor: '#FFFFFF', borderRadius: 12, minHeight: 74, justifyContent: 'center', paddingVertical: 16, paddingHorizontal: 20, alignItems: 'center', position: 'relative', zIndex: 10, elevation: 10, alignSelf: 'center', width: '85%' },
   footer: { justifyContent: 'center', padding: 14 },
   retryText: { color: '#606060', fontSize: 12, textAlign: 'center', writingDirection: 'rtl' },
 });

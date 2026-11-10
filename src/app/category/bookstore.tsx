@@ -31,7 +31,8 @@ import CategoryCartDock, {
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import { useQuery } from '@tanstack/react-query';
 import { getShoppingHomeSnapshot } from '../../services/shopping-home-service';
-import { CatalogMediaCarousel, CatalogBrandBanners } from '../../components/category/catalog-promotional-rails';
+import { CatalogMediaCarousel } from '../../components/category/catalog-promotional-rails';
+import { CatalogBrandBanners } from '../../components/category/catalog-brand-banners';
 import { CatalogSpotlightCard } from '../../components/category/catalog-spotlight-card';
 import { ShoppingBannerProductRail } from '../../components/category/shopping-banner-product-rail';
 import { getShoppingSpotlight, type ShoppingSpotlight } from '../../services/shopping-spotlight-service';
