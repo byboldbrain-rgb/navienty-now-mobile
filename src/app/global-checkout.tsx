@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GLOBAL_CART_DELIVERY_FEE } from '../config/global-cart';
+import { useGlobalDeliveryFee } from '../hooks/use-global-delivery-fee';
 import { calculatePaymentProcessingFee } from '../domain/payment-method';
 import getAppBootstrap, {
   type AppBootstrap,
@@ -39,7 +39,7 @@ import {
   selectAllCartItemCount,
   selectAllCartSubtotal,
   useCartStore,
-} from '../store/cart-store';
+} from '../store/global-cart-store';
 import { useCustomerStore } from '../store/customer-store';
 import {
   NAVIENTY_NOW_COLORS,
@@ -113,7 +113,12 @@ export default function GlobalCheckoutScreen() {
   const processingFee = selectedPaymentMethod
     ? calculatePaymentProcessingFee(selectedPaymentMethod, subtotal)
     : 0;
-  const total = subtotal + GLOBAL_CART_DELIVERY_FEE + processingFee;
+  const { deliveryFee, error: deliveryFeeError, isLoading: isResolvingFee } = useGlobalDeliveryFee(
+    groups.map((group) => group.storeId),
+    latitude,
+    longitude,
+  );
+  const total = deliveryFee === null ? null : subtotal + deliveryFee + processingFee;
 
   async function openWhatsApp(number: string, message: string) {
     const phone = number.replace(/\D/g, '');
@@ -149,6 +154,11 @@ export default function GlobalCheckoutScreen() {
     }
     if (!selectedPaymentMethod) {
       Alert.alert('اختر طريقة الدفع', 'حدد طريقة الدفع لإكمال الطلب.');
+      return;
+    }
+
+    if (deliveryFee === null || isResolvingFee) {
+      Alert.alert('رسوم التوصيل', deliveryFeeError ?? 'جارٍ حساب رسوم التوصيل حسب موقعك.');
       return;
     }
 
@@ -323,24 +333,24 @@ export default function GlobalCheckoutScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>ملخص الدفع</Text>
           <Summary label={`المنتجات من ${groups.length} ${groups.length === 1 ? 'متجر' : 'متاجر'}`} value={money(subtotal)} />
-          <Summary label="التوصيل — مرة واحدة" value={money(GLOBAL_CART_DELIVERY_FEE)} />
+          <Summary label="التوصيل — مرة واحدة" value={deliveryFee === null ? (deliveryFeeError ?? 'جارٍ الحساب') : deliveryFee === 0 ? 'مجاني' : money(deliveryFee)} />
           {processingFee > 0 ? <Summary label="رسوم الدفع" value={money(processingFee)} /> : null}
           <View style={styles.divider} />
-          <Summary label="الإجمالي" value={money(total)} total />
+          <Summary label="الإجمالي" value={total === null ? '—' : money(total)} total />
         </View>
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <Pressable
-          disabled={isSubmitting}
-          style={[styles.submitButton, isSubmitting && styles.disabled]}
+          disabled={isSubmitting || total === null}
+          style={[styles.submitButton, (isSubmitting || total === null) && styles.disabled]}
           onPress={() => void submit()}
         >
           {isSubmitting ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <>
-              <Text style={styles.submitTotal}>{money(total)}</Text>
+              <Text style={styles.submitTotal}>{total === null ? '—' : money(total)}</Text>
               <Text style={styles.submitTitle}>تأكيد الطلب</Text>
               <View style={styles.submitIcon}><Ionicons name="checkmark" size={21} color="#FFFFFF" /></View>
             </>
