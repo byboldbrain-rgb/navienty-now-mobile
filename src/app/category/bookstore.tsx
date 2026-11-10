@@ -32,6 +32,9 @@ import CategorySearchEntry from '../../components/search/category-search-entry';
 import { useQuery } from '@tanstack/react-query';
 import { getShoppingHomeSnapshot } from '../../services/shopping-home-service';
 import { CatalogMediaCarousel, CatalogBrandBanners } from '../../components/category/catalog-promotional-rails';
+import { CatalogSpotlightCard } from '../../components/category/catalog-spotlight-card';
+import { ShoppingBannerProductRail } from '../../components/category/shopping-banner-product-rail';
+import { getShoppingSpotlight, type ShoppingSpotlight } from '../../services/shopping-spotlight-service';
 import { listSupermarketMediaCards, type SupermarketMediaCard } from '../../services/supermarket-campaign-service';
 import { listSupermarketBrandBanners, type SupermarketBrandBanner } from '../../services/supermarket-brand-banner-service';
 import Image from '../../components/ui/app-image';
@@ -2066,6 +2069,15 @@ export default function BookstoreScreen() {
     retry: 1,
     meta: { persist: true },
   });
+  const spotlightQuery = useQuery({
+    queryKey: ['public', 'bookstores', 'home-spotlight-v1', storefrontStoreId],
+    queryFn: () => getShoppingSpotlight(storefrontStoreId!),
+    enabled: Boolean(storefrontStoreId),
+    staleTime: 120_000,
+    retry: 1,
+    meta: { persist: true },
+  });
+
   const brandQuery = useQuery({
     queryKey: ['public', 'bookstore', 'brand-banners-v1', storefrontStoreId],
     queryFn: () => listSupermarketBrandBanners(storefrontStoreId!),
@@ -2076,6 +2088,7 @@ export default function BookstoreScreen() {
   });
   const mediaCards: SupermarketMediaCard[] = mediaQuery.data ?? [];
   const brandBanners: SupermarketBrandBanner[] = brandQuery.data ?? [];
+  const spotlightCard: ShoppingSpotlight | null = spotlightQuery.data ?? null;
 
   const categoryColumns = useMemo(
     () =>
@@ -2384,6 +2397,22 @@ export default function BookstoreScreen() {
       item.key === card.categoryKey || item.section?.slug === card.categoryKey,
     );
     if (matching) openCategory(matching);
+  }
+
+  function openSpotlight() {
+    if (!catalog || !spotlightCard) return;
+    const match = categories.find(item =>
+      item.key === spotlightCard.categoryKey || item.section?.slug === spotlightCard.categoryKey,
+    );
+    if (match) { openCategory(match); return; }
+    router.push({
+      pathname: '/bookstore-category/[slug]',
+      params: {
+        slug: spotlightCard.categoryKey,
+        storeId: catalog.store.id,
+        categoryKey: spotlightCard.categoryKey,
+      },
+    });
   }
 
   function openBrandBanner(banner: SupermarketBrandBanner) {
@@ -2695,6 +2724,10 @@ export default function BookstoreScreen() {
             <CatalogBrandBanners banners={brandBanners} pageWidth={pageWidth} onPress={openBrandBanner} />
           ) : null}
 
+          {spotlightCard ? (
+            <CatalogSpotlightCard key={spotlightCard.id} card={spotlightCard} onPress={openSpotlight} />
+          ) : null}
+
           {resolvedPromotionBanners.map(
             (banner, bannerIndex) => (
               <View
@@ -2730,78 +2763,26 @@ export default function BookstoreScreen() {
                   />
                 </View>
 
-                {banner.products.length > 0 && (
-                  <FlatList
-                    horizontal
-                    nestedScrollEnabled
-                    data={banner.products}
-                    keyExtractor={(product) =>
-                      `${banner.id}-${product.id}`
-                    }
-                    renderItem={({
-                      item: product,
-                    }) => (
-                      <FeaturedProductCard
-                        product={product}
-                        currencyCode={currencyCode}
-                        cardWidth={featuredCardWidth}
-                        quantity={getProductQuantity(
-                          product.id,
-                        )}
-                        isStoreClosed={
-                          isStoreClosed
-                        }
-                        onAdd={() =>
-                          addFeaturedProduct(
-                            product,
-                          )
-                        }
-                        onIncrease={() =>
-                          increaseFeaturedProduct(
-                            product,
-                          )
-                        }
-                        onDecrease={() =>
-                          decreaseFeaturedProduct(
-                            product.id,
-                          )
-                        }
-                      />
-                    )}
-                    showsHorizontalScrollIndicator={
-                      false
-                    }
-                    directionalLockEnabled
-                    initialNumToRender={4}
-                    maxToRenderPerBatch={4}
-                    updateCellsBatchingPeriod={50}
-                    windowSize={3}
-                    getItemLayout={(
-                      _data,
-                      index,
-                    ) => ({
-                      length:
-                        featuredCardWidth +
-                        PROMOTION_PRODUCT_GAP,
-                      offset:
-                        PROMOTION_PRODUCT_HORIZONTAL_PADDING +
-                        (featuredCardWidth +
-                          PROMOTION_PRODUCT_GAP) *
-                          index,
-                      index,
-                    })}
-                    contentContainerStyle={
-                      styles.promotionProductsRail
-                    }
-                    style={[
-                      styles.promotionProductsScroll,
-                      {
-                        marginTop:
-                          -promotionProductsOverlap,
-                      },
-                    ]}
-                  />
-                )}
+                <ShoppingBannerProductRail
+                  bannerId={banner.id}
+                  storeId={currentStore.id}
+                  categorySlug="bookstores"
+                  serviceAreaId={delivery.serviceAreaId ?? null}
+                  cardWidth={featuredCardWidth}
+                  overlap={promotionProductsOverlap}
+                  renderProduct={(product) => (
+                    <FeaturedProductCard
+                      product={product}
+                      currencyCode={currencyCode}
+                      cardWidth={featuredCardWidth}
+                      quantity={getProductQuantity(product.id)}
+                      isStoreClosed={isStoreClosed}
+                      onAdd={() => addFeaturedProduct(product)}
+                      onIncrease={() => increaseFeaturedProduct(product)}
+                      onDecrease={() => decreaseFeaturedProduct(product.id)}
+                    />
+                  )}
+                />
               </View>
             ),
           )}
