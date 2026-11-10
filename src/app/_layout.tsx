@@ -106,6 +106,30 @@ const PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED =
     .EXPO_PUBLIC_STARTUP_DIAGNOSTICS ===
   '1';
 
+/**
+ * Visual-only QA mode, restricted to development builds. Never modify
+ * the shared app_settings just to preview the mandatory update screen.
+ */
+const DEVELOPMENT_FORCE_UPDATE_PREVIEW_ENABLED =
+  __DEV__ &&
+  process.env.EXPO_PUBLIC_FORCE_UPDATE_PREVIEW === '1';
+
+const DEVELOPMENT_FORCE_UPDATE_PREVIEW_GATE:
+  AppLaunchGateResult = {
+    status: 'force-update',
+    currentVersion: '1.0.1',
+    minimumVersion: '1.0.2',
+    messageAr:
+      'نزلنا تحديث جديد لـ Navienty Now. لازم تحدّث التطبيق عشان تقدر تكمل استخدامه.',
+    updateUrl:
+      Platform.OS === 'ios'
+        ? 'https://apps.apple.com/app/id6804870140'
+        : Platform.OS === 'android'
+          ? 'https://play.google.com/store/apps/details?id=com.navienty.now'
+          : null,
+    supportWhatsapp: null,
+  };
+
 const DEVELOPMENT_ALLOWED_LAUNCH_GATE:
   AppLaunchGateResult = {
     status: 'allowed',
@@ -805,10 +829,12 @@ export default function RootLayout() {
     setLaunchGate,
   ] =
     useState<AppLaunchGateResult | null>(
-      __DEV__ &&
-      !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
-        ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
-        : null,
+      DEVELOPMENT_FORCE_UPDATE_PREVIEW_ENABLED
+        ? DEVELOPMENT_FORCE_UPDATE_PREVIEW_GATE
+        : __DEV__ &&
+            !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
+          ? DEVELOPMENT_ALLOWED_LAUNCH_GATE
+          : null,
     );
 
   const [
@@ -865,6 +891,13 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (DEVELOPMENT_FORCE_UPDATE_PREVIEW_ENABLED) {
+      console.log(
+        '[Navienty] Development-only force-update preview enabled.',
+      );
+      return;
+    }
+
     if (
       __DEV__ &&
       !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
@@ -932,6 +965,11 @@ export default function RootLayout() {
         );
 
         try {
+          if (DEVELOPMENT_FORCE_UPDATE_PREVIEW_ENABLED) {
+            setLaunchGate(DEVELOPMENT_FORCE_UPDATE_PREVIEW_GATE);
+            return;
+          }
+
           if (
             __DEV__ &&
             !PRODUCTION_LIKE_STARTUP_DIAGNOSTICS_ENABLED
