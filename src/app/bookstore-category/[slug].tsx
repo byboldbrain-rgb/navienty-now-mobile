@@ -1,3 +1,6 @@
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getShoppingCategoryContext, getShoppingCategoryPage, SHOPPING_CATEGORY_PAGE_SIZE } from '../../services/shopping-category-fast-service';
+import type { ShoppingHomeSnapshot } from '../../services/shopping-home-service';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import {
@@ -1980,6 +1983,26 @@ export default function BookstoreCategoryScreen() {
       null,
     );
 
+  const [isFullCatalogLoaded, setIsFullCatalogLoaded] = useState(false);
+  const fastContextRef = useRef<Awaited<ReturnType<typeof getShoppingCategoryContext>> | null>(null);
+  const queryClient = useQueryClient();
+  const contextQuery = useQuery({
+    queryKey: ['public', 'bookstore', 'category-context-v1', savedServiceAreaId ?? '*', requestedStoreId ?? '*'],
+    queryFn: () => getShoppingCategoryContext('bookstores', savedServiceAreaId, requestedStoreId),
+    staleTime: 90_000,
+    refetchOnMount: 'always',
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+    placeholderData: () => {
+      const cached = queryClient.getQueryData<ShoppingHomeSnapshot>([
+        'public', 'bookstore', 'home-shell-v1', savedServiceAreaId ?? '*', requestedStoreId ?? '*',
+      ]);
+      if (!cached || (requestedStoreId && cached.catalog.store.id !== requestedStoreId)) return undefined;
+      return { catalog: cached.catalog, currencyCode: cached.currencyCode, offerRootCategoryIds: [] };
+    },
+    meta: { persist: true },
+  });
+
   const [
     selectedSection,
     setSelectedSection,
@@ -2085,9 +2108,28 @@ export default function BookstoreCategoryScreen() {
    * ==========================================================
    */
 
+  // Fast category metadata uses the same persisted lightweight data as home.
+  // Full category data still enriches legacy/virtual filters without blocking the first paint.
+  useEffect(() => {
+    const context = contextQuery.data;
+    if (!context || isFullCatalogLoaded) return;
+    fastContextRef.current = context;
+    const section = isOffersPage
+      ? null
+      : findCatalogSectionByRouteParams(
+          context.catalog, sectionSlug, passedCategoryKey, passedLabel,
+        );
+    setCatalog(context.catalog);
+    setSelectedSection(section);
+    setCurrencyCode(context.currencyCode);
+    setErrorMessage(null);
+    setIsLoading(false);
+  }, [contextQuery.data, sectionSlug, passedCategoryKey, passedLabel, isOffersPage, isFullCatalogLoaded]);
+
   async function loadCategory() {
     try {
-      setIsLoading(true);
+      setIsFullCatalogLoaded(false);
+      setIsLoading(!fastContextRef.current);
 
       setErrorMessage(null);
 
@@ -2249,7 +2291,8 @@ export default function BookstoreCategoryScreen() {
        * من كل أقسام المكتبة.
        */
       if (isOffersPage) {
-        setCatalog(
+        setIsFullCatalogLoaded(true);
+      setCatalog(
           loadedCatalog,
         );
 
@@ -2289,6 +2332,7 @@ export default function BookstoreCategoryScreen() {
         );
       }
 
+      setIsFullCatalogLoaded(true);
       setCatalog(
         loadedCatalog,
       );
@@ -2309,26 +2353,19 @@ export default function BookstoreCategoryScreen() {
 
       setSearchQuery('');
     } catch (error) {
-      setCatalog(null);
-
-      setRootCategoryImageUrl(
-        null,
-      );
-      setDbCategoryLabel(null);
-
-      setCategoryImageOverrides(
-        {},
-      );
-
-      setSelectedSection(
-        null,
-      );
-
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل هذه الفئة.',
-      );
+      if (fastContextRef.current) {
+        const context = fastContextRef.current;
+        setCatalog(context.catalog);
+        setSelectedSection(isOffersPage ? null : findCatalogSectionByRouteParams(
+          context.catalog, sectionSlug, passedCategoryKey, passedLabel,
+        ));
+        setCurrencyCode(context.currencyCode);
+        setErrorMessage(null);
+      } else {
+        setCatalog(null);
+        setSelectedSection(null);
+        setErrorMessage('تعذر تحميل هذا القسم مؤقتًا. حاول مرة أخرى.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -2524,13 +2561,9 @@ export default function BookstoreCategoryScreen() {
        * أي Category لا يوجد بداخلها منتج
        * compareAtPrice > price لن تظهر في شريط الفلاتر.
        */
-      return getOfferPageRootCategories(
-        catalog,
-      ).filter(
-        (category) =>
-          getCatalogSectionOffers(
-            category,
-          ).length > 0,
+      return getOfferPageRootCategories(catalog).filter(category =>
+        contextQuery.data?.offerRootCategoryIds.includes(category.id) ||
+        getCatalogSectionOffers(category).length > 0,
       );
     }, [catalog]);
 
@@ -2572,10 +2605,51 @@ export default function BookstoreCategoryScreen() {
    * ==========================================================
    */
 
+  // Products are paginated in SQL; a slow full-catalog refresh cannot keep
+  // the category page blank. Product prices/stock are never persisted to disk.
+  const selectedChildCategory = childCategories.find(item => item.id === selectedFilterKey);
+  const activeCategoryId = isOffersPage
+    ? (selectedFilterKey === 'all' ? null : offerCategoryTabs.find(item => item.id === selectedFilterKey)?.id ?? null)
+    : (selectedFilterKey === 'all' ? selectedSection?.id ?? null : selectedChildCategory?.id ?? selectedSection?.id ?? null);
+  const pagedStoreId = contextQuery.data?.catalog.store.id ?? null;
+  const pagedAreaId = contextQuery.data?.catalog.delivery.serviceAreaId ?? savedServiceAreaId;
+  const productPageQuery = useInfiniteQuery({
+    queryKey: [
+      'public', 'bookstore', 'category-products-v1',
+      pagedStoreId ?? '*', pagedAreaId ?? '*',
+      activeCategoryId ?? '*', isOffersPage, searchQuery.trim(),
+    ],
+    queryFn: ({ pageParam }) => getShoppingCategoryPage({
+      slug: 'bookstores',
+      storeId: pagedStoreId!,
+      serviceAreaId: pagedAreaId,
+      categoryId: activeCategoryId,
+      offersOnly: isOffersPage,
+      search: searchQuery,
+      offset: pageParam,
+    }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.length * SHOPPING_CATEGORY_PAGE_SIZE : undefined,
+    enabled: Boolean(pagedStoreId) && Boolean(isOffersPage || selectedSection),
+    staleTime: 60_000,
+    retry: 1,
+    meta: { persist: false },
+  });
+  const pagedProducts = useMemo(
+    () => productPageQuery.data?.pages.flatMap(page => page.items) ?? [],
+    [productPageQuery.data],
+  );
+
   const filteredProducts =
     useMemo(() => {
       if (!catalog) {
         return [];
+      }
+      if (!isFullCatalogLoaded && (isOffersPage || selectedSection)) {
+        return deduplicateProducts(
+          pagedProducts.filter(product => product.productType !== 'service'),
+        );
       }
 
       let products:
@@ -2769,6 +2843,8 @@ export default function BookstoreCategoryScreen() {
       );
     }, [
       catalog,
+      isFullCatalogLoaded,
+      pagedProducts,
       isOffersPage,
       selectedFilterKey,
       searchQuery,
@@ -3887,6 +3963,18 @@ export default function BookstoreCategoryScreen() {
                   : 30,
             },
           ]}
+          onEndReached={() => {
+            if (!isFullCatalogLoaded && productPageQuery.hasNextPage &&
+                !productPageQuery.isFetchingNextPage) {
+              void productPageQuery.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.45}
+          ListFooterComponent={
+            !isFullCatalogLoaded && productPageQuery.isFetchingNextPage
+              ? <ActivityIndicator size="small" color="#00B14F" style={{ marginVertical: 16 }} />
+              : null
+          }
           initialNumToRender={8}
           maxToRenderPerBatch={6}
           windowSize={5}
