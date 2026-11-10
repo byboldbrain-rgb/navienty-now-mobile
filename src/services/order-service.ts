@@ -729,6 +729,7 @@ export async function createWhatsAppOrder(
         input.deliveryLongitude,
       paymentMethodId:
         input.paymentMethodId,
+      driverTipAmount: input.driverTipAmount ?? 0,
       customerName:
         input.customerName,
       customerPhone:
