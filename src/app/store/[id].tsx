@@ -778,6 +778,7 @@ export default function StoreScreen({
   const categoryTabsTopRef = useRef<number | null>(null);
   const pendingCategoryJumpRef = useRef<{
     sectionIndex: number;
+    id: string;
     attempts: number;
   } | null>(null);
   const categoryJumpTimerRef =
@@ -895,8 +896,8 @@ export default function StoreScreen({
     () =>
       searchOnly
         ? []
-        : sectionListData.flatMap((section, sectionIndex) =>
-            section.data.length > 0
+        : (catalogSections ?? []).flatMap((section, sectionIndex) =>
+            section.products.length > 0
               ? [{
                   id: section.id,
                   name: section.name,
@@ -904,7 +905,7 @@ export default function StoreScreen({
                 }]
               : [],
           ),
-    [sectionListData, searchOnly],
+    [catalogSections, searchOnly],
   );
 
   const selectedCategoryId =
@@ -925,16 +926,8 @@ export default function StoreScreen({
 
       if (firstSection?.id) {
         setActiveCategoryId(firstSection.id);
-        if (
-          pendingCategoryJumpRef.current &&
-          restaurantCategoryTabs.length > 0
-        ) {
-          // The viewability callback also runs during programmatic jumps.
-          // Clearing a finished jump is safe; the ref stores the target index.
-          const target = pendingCategoryJumpRef.current.sectionIndex;
-          if (sectionListData[target]?.id === firstSection.id) {
-            pendingCategoryJumpRef.current = null;
-          }
+        if (pendingCategoryJumpRef.current?.id === firstSection.id) {
+          pendingCategoryJumpRef.current = null;
         }
       }
     },
@@ -1511,6 +1504,7 @@ export default function StoreScreen({
     setActiveCategoryId(category.id);
     pendingCategoryJumpRef.current = {
       sectionIndex: category.sectionIndex,
+      id: category.id,
       attempts: 0,
     };
     scrollRef.current?.scrollToLocation({
