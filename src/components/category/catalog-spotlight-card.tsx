@@ -73,7 +73,7 @@ export function CatalogSpotlightCard({
 const styles = StyleSheet.create({
   section: { marginHorizontal: 16, marginBottom: 26 },
   card: { width: '100%', aspectRatio: 0.92, borderRadius: 23, overflow: 'hidden', backgroundColor: '#1F2421', position: 'relative' },
-  background: { ...StyleSheet.absoluteFillObject },
+  background: { ...StyleSheet.absoluteFill },
   loader: { position: 'absolute', top: '50%', left: '50%' },
   copy: { position: 'absolute', top: 28, right: 23, left: 23, alignItems: 'flex-end' },
   eyebrow: { color: 'white', fontSize: 19, fontWeight: '600', lineHeight: 26, textAlign: 'right', writingDirection: 'rtl' },
