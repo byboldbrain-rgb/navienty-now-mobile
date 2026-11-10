@@ -122,7 +122,6 @@ export default function AnimatedDeliveryRider() {
       accessibilityLabel="سائق توصيل نافينتي على الموتوسيكل"
       accessible
     >
-      <View style={styles.shadow} />
       <Animated.View
         renderToHardwareTextureAndroid
         style={{
@@ -146,25 +145,17 @@ export default function AnimatedDeliveryRider() {
 
 const styles = StyleSheet.create({
   stage: {
-    width: 60,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#EAF8F0',
+    // Give the real Home courier enough space to be recognizable.
+    width: 84,
+    height: 70,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
     flexShrink: 0,
   },
-  shadow: {
-    position: 'absolute',
-    bottom: 9,
-    width: 38,
-    height: 3,
-    backgroundColor: 'rgba(0, 67, 34, 0.12)',
-    borderRadius: 999,
-  },
   artwork: {
-    width: 70,
-    height: 56,
+    width: 94,
+    height: 72,
   },
 });
