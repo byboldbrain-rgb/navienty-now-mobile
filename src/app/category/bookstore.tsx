@@ -30,6 +30,7 @@ import CategoryCartDock, {
 } from '../../components/cart/category-cart-dock';
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import { useQuery } from '@tanstack/react-query';
+import { getShoppingHomeSnapshot } from '../../services/shopping-home-service';
 import { CatalogMediaCarousel, CatalogBrandBanners } from '../../components/category/catalog-promotional-rails';
 import { listSupermarketMediaCards, type SupermarketMediaCard } from '../../services/supermarket-campaign-service';
 import { listSupermarketBrandBanners, type SupermarketBrandBanner } from '../../services/supermarket-brand-banner-service';
@@ -39,13 +40,11 @@ import {
   type BookstorePromotionBanner,
   listBookstorePromotionBanners,
 } from '../../services/bookstore-banner-service';
-import getAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
   type CatalogSection,
   getCatalogSectionProducts,
   getStoreCatalog,
-  listStores,
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
@@ -1818,6 +1817,8 @@ export default function BookstoreScreen() {
   const [currencyCode, setCurrencyCode] =
     useState('EGP');
 
+  const [isFullCatalogLoaded, setIsFullCatalogLoaded] = useState(false);
+
   const [isLoading, setIsLoading] =
     useState(true);
 
@@ -1850,140 +1851,75 @@ export default function BookstoreScreen() {
     (state) => state.setActiveCart,
   );
 
-  async function loadBookstore() {
-    try {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      const bootstrap = await getAppBootstrap();
-
-      const defaultServiceAreaId =
-        savedServiceAreaId ??
-        bootstrap.settings.default_service_area_id ??
-        undefined;
-
-      const bookstoreStores = await listStores({
-        categorySlug: 'bookstores',
-        serviceAreaId: defaultServiceAreaId,
-      });
-
-      if (bookstoreStores.length === 0) {
-        throw new Error(
-          'No bookstore is currently available.',
-        );
-      }
-
-      const requestedBookstore =
-        requestedStoreId
-          ? bookstoreStores.find(
-              (store) =>
-                store.id ===
-                requestedStoreId,
-            ) ?? null
-          : null;
-
-      const bookstore =
-        requestedBookstore ??
-        bookstoreStores.find(
-          (store) =>
-            store.isFeatured &&
-            !store.isManuallyClosed,
-        ) ??
-        bookstoreStores.find(
-          (store) =>
-            !store.isManuallyClosed,
-        ) ??
-        bookstoreStores[0];
-
-      const [
-        loadedCatalog,
-        loadedPromotionBanners,
-        loadedStorefrontCategoryTiles,
-      ] = await Promise.all([
-        getStoreCatalog(
-          bookstore.id,
-          defaultServiceAreaId,
-        ),
-        listBookstorePromotionBanners({
-          storeId: bookstore.id,
-        }).catch((bannerError) => {
-          console.warn(
-            'Unable to load bookstore banners:',
-            bannerError,
-          );
-          return [];
-        }),
-
-        listStorefrontCategoryTiles(
-          'bookstore',
-        ).catch((categoryError) => {
-          console.warn(
-            'Unable to load bookstore category configuration:',
-            categoryError,
-          );
-          return null;
-        }),
-      ]);
-
-      /*
-       * Start warming the image cache BEFORE the screen renders.
-       * Local category artwork is bundled, so only remote URLs
-       * need prefetching here.
-       */
-      const initialProductImageUrls =
-        loadedCatalog.sections
-          .flatMap((section) =>
-            getCatalogSectionProducts(
-              section,
-              true,
-            ),
-          )
-          .slice(0, 12)
-          .map(getProductImage);
-
-      prefetchBookstoreImageUrls([
-        ...loadedPromotionBanners.map(
-          (banner) => banner.imageUrl,
-        ),
-        ...(loadedStorefrontCategoryTiles ??
-          []).map(
-          (tile) => tile.imageUrl,
-        ),
-        ...initialProductImageUrls,
-      ]);
-
-      setCatalog(loadedCatalog);
-      setPromotionBanners(
-        loadedPromotionBanners,
-      );
-      setStorefrontCategoryTiles(
-        loadedStorefrontCategoryTiles,
-      );
-      setCurrencyCode(
-        bootstrap.settings.currency_code || 'EGP',
-      );
-    } catch (error) {
-      setCatalog(null);
-      setPromotionBanners([]);
-      setStorefrontCategoryTiles(
-        null,
-      );
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to load the bookstore.',
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  // Persist the small home shell, never a multi-megabyte catalog of live prices.
+  const homeQuery = useQuery({
+    queryKey: ['public', 'bookstore', 'home-shell-v1', savedServiceAreaId ?? '*', requestedStoreId ?? '*'],
+    queryFn: () => getShoppingHomeSnapshot('bookstores', savedServiceAreaId, requestedStoreId),
+    staleTime: 90_000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+    meta: { persist: true },
+  });
 
   useEffect(() => {
-    void loadBookstore();
-  }, [
-    savedServiceAreaId,
-    requestedStoreId,
-  ]);
+    if (homeQuery.data) {
+      setCatalog(homeQuery.data.catalog);
+      setCurrencyCode(homeQuery.data.currencyCode);
+      setErrorMessage(null);
+      setIsLoading(false);
+    } else if (homeQuery.isError) {
+      setCatalog(null);
+      setErrorMessage('تعذر تحميل بيانات المتجر مؤقتًا. حاول مرة أخرى.');
+      setIsLoading(false);
+    }
+  }, [homeQuery.data, homeQuery.isError]);
+
+  // Optional promotions and the full product catalog are independent from the
+  // small home shell. Printing and promo product rails use the complete catalog.
+  useEffect(() => {
+    const snapshot = homeQuery.data;
+    if (!snapshot) return;
+    const storeId = snapshot.catalog.store.id;
+    const areaId = snapshot.catalog.delivery.serviceAreaId ?? savedServiceAreaId ?? undefined;
+    let alive = true;
+    setIsFullCatalogLoaded(false);
+
+    void listBookstorePromotionBanners({ storeId: storeId })
+      .then(banners => {
+        if (alive) {
+          setPromotionBanners(banners);
+          prefetchBookstoreImageUrls(banners.map(banner => banner.imageUrl));
+        }
+      })
+      .catch(error => console.warn('Optional promotion data unavailable:', error));
+
+    void listStorefrontCategoryTiles('bookstore')
+      .then(tiles => {
+        if (alive) {
+          setStorefrontCategoryTiles(tiles);
+          prefetchBookstoreImageUrls(tiles.map(tile => tile.imageUrl));
+        }
+      })
+      .catch(error => console.warn('Optional category images unavailable:', error));
+
+    void getStoreCatalog(storeId, areaId)
+      .then(full => {
+        if (!alive) return;
+        setCatalog(full);
+        setIsFullCatalogLoaded(true);
+
+        prefetchBookstoreImageUrls(full.sections
+          .flatMap(section => getCatalogSectionProducts(section, true))
+          .slice(0, 12)
+          .map(getProductImage));
+      })
+      .catch(error => {
+        // Preserve the usable home with database category names. Missing lower
+        // promo product data must never turn a successful home into an error.
+        console.warn('Product catalog enrichment unavailable:', error);
+      });
+    return () => { alive = false; };
+  }, [homeQuery.data, savedServiceAreaId]);
 
   const categories = useMemo<
     CategoryDisplayItem[]
@@ -2001,6 +1937,7 @@ export default function BookstoreScreen() {
           );
 
     const hasOffers =
+      homeQuery.data?.hasOffers === true ||
       catalog.sections.some(
         (section) =>
           section.products.some(
@@ -2324,7 +2261,7 @@ export default function BookstoreScreen() {
             pressed && styles.generalPressed,
           ]}
           onPress={() => {
-            void loadBookstore();
+            void homeQuery.refetch();
           }}
         >
           <Text style={styles.retryButtonText}>
@@ -2594,6 +2531,10 @@ export default function BookstoreScreen() {
         />
       </SafeAreaView>
     );
+  }
+
+  if (requestedPrintingSectionId && !isFullCatalogLoaded) {
+    return <CatalogHomeScreenSkeleton />;
   }
 
   if (

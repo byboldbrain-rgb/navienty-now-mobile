@@ -27,19 +27,18 @@ import CategoryCartDock, {
 } from '../../components/cart/category-cart-dock';
 import CategorySearchEntry from '../../components/search/category-search-entry';
 import { useQuery } from '@tanstack/react-query';
+import { getShoppingHomeSnapshot } from '../../services/shopping-home-service';
 import { CatalogMediaCarousel, CatalogBrandBanners } from '../../components/category/catalog-promotional-rails';
 import { listSupermarketMediaCards, type SupermarketMediaCard } from '../../services/supermarket-campaign-service';
 import { listSupermarketBrandBanners, type SupermarketBrandBanner } from '../../services/supermarket-brand-banner-service';
 import Image from '../../components/ui/app-image';
 import { CatalogHomeScreenSkeleton } from '../../components/ui/loading-skeleton';
 import { supabase } from '../../lib/supabase';
-import loadAppBootstrap from '../../services/bootstrap-service';
 import {
   type CatalogProduct,
   type CatalogSection,
   getCatalogSectionProducts,
   getStoreCatalog,
-  listStores,
   type StoreBusinessHour,
   type StoreCatalog,
 } from '../../services/catalog-service';
@@ -2211,172 +2210,73 @@ export default function PersonalCareScreen() {
     (state) => state.setActiveCart,
   );
 
-  const loadPersonalCare =
-    useCallback(async () => {
-      const requestId =
-        loadRequestIdRef.current + 1;
-
-      loadRequestIdRef.current =
-        requestId;
-
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-
-        const bootstrap =
-          await loadAppBootstrap();
-
-        const serviceAreaId =
-          savedServiceAreaId ??
-          bootstrap.settings
-            .default_service_area_id ??
-          undefined;
-
-        const personalCareStores =
-          await listStores({
-            categorySlug:
-              'personal-care',
-            serviceAreaId,
-          });
-
-        if (
-          personalCareStores.length ===
-          0
-        ) {
-          throw new Error(
-            'لا يوجد متجر عناية متاح في منطقتك حاليًا.',
-          );
-        }
-
-        const selectedStore =
-          personalCareStores.find(
-            (store) =>
-              store.isFeatured &&
-              !store.isManuallyClosed,
-          ) ??
-          personalCareStores.find(
-            (store) =>
-              !store.isManuallyClosed,
-          ) ??
-          personalCareStores[0];
-
-        const [
-          loadedCatalog,
-          loadedPromotionBanners,
-          loadedStorefrontCategoryTiles,
-        ] = await Promise.all([
-          getStoreCatalog(
-            selectedStore.id,
-            serviceAreaId,
-          ),
-
-          listPersonalCarePromotionBanners({
-            storeId: selectedStore.id,
-          }).catch((bannerError) => {
-            console.warn(
-              'Unable to load personal-care banners:',
-              bannerError,
-            );
-            return [];
-          }),
-
-          listStorefrontCategoryTiles(
-            'personal-care',
-          ).catch((categoryError) => {
-            console.warn(
-              'Unable to load personal-care category configuration:',
-              categoryError,
-            );
-            return null;
-          }),
-        ]);
-
-        /*
-         * Warm remote artwork before React commits the loaded screen.
-         * This runs while the skeleton is still visible.
-         */
-        const initialProductImageUrls =
-          loadedCatalog.sections
-            .flatMap((section) =>
-              getCatalogSectionProducts(
-                section,
-                true,
-              ),
-            )
-            .slice(0, 12)
-            .map(getProductImage);
-
-        prefetchPersonalCareImages([
-          ...loadedPromotionBanners.map(
-            (banner) => banner.imageUrl,
-          ),
-          ...(loadedStorefrontCategoryTiles ??
-            []).map(
-            (tile) => tile.imageUrl,
-          ),
-          ...initialProductImageUrls,
-        ]);
-
-        if (
-          loadRequestIdRef.current !==
-          requestId
-        ) {
-          return;
-        }
-
-        setCatalog(loadedCatalog);
-
-        setPromotionBanners(
-          loadedPromotionBanners,
-        );
-
-        setStorefrontCategoryTiles(
-          loadedStorefrontCategoryTiles,
-        );
-
-        setCurrencyCode(
-          bootstrap.settings
-            .currency_code ||
-            'EGP',
-        );
-      } catch (error) {
-        if (
-          loadRequestIdRef.current !==
-          requestId
-        ) {
-          return;
-        }
-
-        setCatalog(null);
-
-        setPromotionBanners([]);
-
-        setStorefrontCategoryTiles(
-          null,
-        );
-
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : 'تعذر تحميل قسم العناية.',
-        );
-      } finally {
-        if (
-          loadRequestIdRef.current ===
-          requestId
-        ) {
-          setIsLoading(false);
-        }
-      }
-    }, [savedServiceAreaId]);
+  // Persist the small home shell, never a multi-megabyte catalog of live prices.
+  const homeQuery = useQuery({
+    queryKey: ['public', 'personal-care', 'home-shell-v1', savedServiceAreaId ?? '*'],
+    queryFn: () => getShoppingHomeSnapshot('personal-care', savedServiceAreaId),
+    staleTime: 90_000,
+    gcTime: 24 * 60 * 60 * 1000,
+    retry: 1,
+    meta: { persist: true },
+  });
 
   useEffect(() => {
-    void loadPersonalCare();
+    if (homeQuery.data) {
+      setCatalog(homeQuery.data.catalog);
+      setCurrencyCode(homeQuery.data.currencyCode);
+      setErrorMessage(null);
+      setIsLoading(false);
+    } else if (homeQuery.isError) {
+      setCatalog(null);
+      setErrorMessage('تعذر تحميل بيانات المتجر مؤقتًا. حاول مرة أخرى.');
+      setIsLoading(false);
+    }
+  }, [homeQuery.data, homeQuery.isError]);
 
-    return () => {
-      loadRequestIdRef.current += 1;
-    };
-  }, [loadPersonalCare]);
+  // Optional promotions and the full product catalog are independent from the
+  // small home shell. Printing and promo product rails use the complete catalog.
+  useEffect(() => {
+    const snapshot = homeQuery.data;
+    if (!snapshot) return;
+    const storeId = snapshot.catalog.store.id;
+    const areaId = snapshot.catalog.delivery.serviceAreaId ?? savedServiceAreaId ?? undefined;
+    let alive = true;
+
+    void listPersonalCarePromotionBanners({ storeId: storeId })
+      .then(banners => {
+        if (alive) {
+          setPromotionBanners(banners);
+          prefetchPersonalCareImages(banners.map(banner => banner.imageUrl));
+        }
+      })
+      .catch(error => console.warn('Optional promotion data unavailable:', error));
+
+    void listStorefrontCategoryTiles('personal-care')
+      .then(tiles => {
+        if (alive) {
+          setStorefrontCategoryTiles(tiles);
+          prefetchPersonalCareImages(tiles.map(tile => tile.imageUrl));
+        }
+      })
+      .catch(error => console.warn('Optional category images unavailable:', error));
+
+    void getStoreCatalog(storeId, areaId)
+      .then(full => {
+        if (!alive) return;
+        setCatalog(full);
+
+        prefetchPersonalCareImages(full.sections
+          .flatMap(section => getCatalogSectionProducts(section, true))
+          .slice(0, 12)
+          .map(getProductImage));
+      })
+      .catch(error => {
+        // Preserve the usable home with database category names. Missing lower
+        // promo product data must never turn a successful home into an error.
+        console.warn('Product catalog enrichment unavailable:', error);
+      });
+    return () => { alive = false; };
+  }, [homeQuery.data, savedServiceAreaId]);
 
   const categories = useMemo<
     CategoryDisplayItem[]
@@ -2395,6 +2295,7 @@ export default function PersonalCareScreen() {
           );
 
     const hasOffers =
+      homeQuery.data?.hasOffers === true ||
       catalog.sections.some(
         (section) =>
           section.products.some(
@@ -2777,7 +2678,7 @@ export default function PersonalCareScreen() {
               styles.generalPressed,
           ]}
           onPress={() => {
-            void loadPersonalCare();
+            void homeQuery.refetch();
           }}
         >
           <Text
