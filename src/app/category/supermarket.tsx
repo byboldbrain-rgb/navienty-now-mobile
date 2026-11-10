@@ -2469,8 +2469,10 @@ export default function SupermarketScreen() {
   // and the customer's accepted orders; category product lists stay lazy.
   const previewIds = useMemo(
     () => Array.from(new Set([
+      // Prioritize real previously ordered products if promo campaigns have
+      // many linked IDs; the bounded preview endpoint must not starve reorder.
+      ...reorderedProductIds.slice(0, 40),
       ...promotionBanners.flatMap((banner) => banner.productIds),
-      ...reorderedProductIds.slice(0, 60),
     ])).slice(0, 120),
     [promotionBanners, reorderedProductIds],
   );
