@@ -64,6 +64,9 @@ export type GlobalSearchResult =
       imageUrl: string | null;
       price: number;
       compareAtPrice: number | null;
+      unitLabelAr: string | null;
+      isAgeRestricted: boolean;
+      productType: string;
       storeName: string;
       categoryName: string;
     };
@@ -560,6 +563,12 @@ function createCatalogEntries(
               ),
             compareAtPrice:
               product.compareAtPrice,
+            unitLabelAr:
+              product.unitLabelAr,
+            isAgeRestricted:
+              product.isAgeRestricted,
+            productType:
+              product.productType,
             storeName:
               catalog.store.name,
             categoryName:
