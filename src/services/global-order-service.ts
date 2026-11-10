@@ -66,6 +66,8 @@ function fingerprintInput(
     customerPhone: input.customerPhone,
     stores: input.stores.map((store) => ({
       storeId: store.storeId,
+      voucherCode: store.voucherCode ?? null,
+      spinEventId: store.spinEventId ?? null,
       items: store.items.map((item) => ({
         productId: item.productId,
         variantId: item.variantId ?? null,
@@ -266,6 +268,8 @@ export async function createGlobalOrderGroup(
     notes: input.notes.trim(),
     stores: input.stores.map((store) => ({
       store_id: store.storeId,
+      voucher_code: store.voucherCode ?? null,
+      spin_event_id: store.spinEventId ?? null,
       items: store.items.map((item) => ({
         product_id: item.productId,
         variant_id: item.variantId ?? null,
