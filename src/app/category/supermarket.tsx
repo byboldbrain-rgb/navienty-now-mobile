@@ -2384,10 +2384,13 @@ export default function SupermarketScreen() {
         null,
       );
 
+      const technicalMessage =
+        error instanceof Error ? error.message : String(error);
+      console.warn('Supermarket load failed:', technicalMessage);
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'تعذر تحميل السوبر ماركت.',
+        /store_not_available_in_service_area|لا يوجد سوبر ماركت متاح/i.test(technicalMessage)
+          ? 'خدمة الماركت غير متاحة حاليًا للمنطقة المختارة.'
+          : 'حصلت مشكلة مؤقتة في تحميل بيانات الماركت. تأكد من اتصال الإنترنت واضغط إعادة المحاولة.',
       );
     } finally {
       setIsLoading(false);
@@ -2770,7 +2773,7 @@ export default function SupermarketScreen() {
             styles.stateTitle
           }
         >
-          السوبر ماركت غير متاح
+          تعذر تحميل السوبر ماركت
         </Text>
 
         <Text
