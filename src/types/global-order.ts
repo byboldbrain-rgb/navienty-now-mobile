@@ -20,6 +20,7 @@ export type CreateGlobalOrderGroupInput = {
   deliveryLatitude: number;
   deliveryLongitude: number;
   paymentMethodId: string;
+  driverTipAmount?: number;
   customerName: string;
   customerPhone: string;
   address: string;
