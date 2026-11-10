@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   compareVersions,
   isVersionBelowMinimum,
+  isBuildBelowMinimum,
 } from '../src/domain/app-version.ts';
 
 test('compareVersions handles equal and missing patch components', () => {
@@ -36,4 +37,14 @@ test('isVersionBelowMinimum only blocks genuinely older valid versions', () => {
   assert.equal(isVersionBelowMinimum('1.1.0', '1.0.9'), false);
   assert.equal(isVersionBelowMinimum(null, '1.0.0'), false);
   assert.equal(isVersionBelowMinimum('invalid', '1.0.0'), false);
+});
+
+test('isBuildBelowMinimum compares store build codes without lexical ordering', () => {
+  assert.equal(isBuildBelowMinimum('5', 6), true);
+  assert.equal(isBuildBelowMinimum('10', 6), false);
+  assert.equal(isBuildBelowMinimum(6, 6), false);
+  assert.equal(isBuildBelowMinimum(null, 6), false);
+  assert.equal(isBuildBelowMinimum('invalid', 6), false);
+  assert.equal(isBuildBelowMinimum('5.1', 6), false);
+  assert.equal(isBuildBelowMinimum('5', null), false);
 });
