@@ -604,11 +604,6 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
   },
 
-
-
-
-
-
   primaryButton: {
     alignItems: 'center',
     backgroundColor:
@@ -633,11 +628,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
 
-
   secondaryButtonPressed: {
     opacity: 0.72,
   },
-
 
   supportButton: {
     alignItems: 'center',
@@ -655,7 +648,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-
 
   buttonDisabled: {
     opacity: 0.6,
