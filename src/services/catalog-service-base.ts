@@ -114,6 +114,8 @@ export type StoreSummary = {
 
   deliveryTime: string;
   deliveryFee: number;
+  /** Whether the list-stores RPC explicitly supplied a valid fee. */
+  hasExplicitDeliveryFee?: boolean;
   minimumOrder: number;
 
   estimatedDeliveryMinutes:
@@ -844,6 +846,14 @@ function mapStoreSummary(
       toNumber(
         store.delivery_fee,
       ),
+
+    // A missing fee must not become a misleading free-delivery badge.
+    hasExplicitDeliveryFee:
+      store.delivery_fee !== null &&
+      store.delivery_fee !== undefined &&
+      String(store.delivery_fee).trim() !== '' &&
+      Number.isFinite(Number(store.delivery_fee)) &&
+      Number(store.delivery_fee) >= 0,
 
     minimumOrder:
       toNumber(
