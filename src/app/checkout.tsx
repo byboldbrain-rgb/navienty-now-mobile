@@ -38,6 +38,10 @@ import {
   getPaymentProcessingFeeLabelAr,
 } from '../domain/payment-method';
 import {
+  canApplyCheckoutSpin,
+  shouldAttachCheckoutSpinEvent,
+} from '../domain/spin-checkout-policy';
+import {
   supabase,
 } from '../lib/supabase';
 import {
@@ -781,17 +785,17 @@ function StoreCheckoutScreen() {
     !spinHasExpired &&
     nextOrderMinimumReached;
 
+  // Immediate rewards are store-scoped; activated next-order rewards are
+  // customer-wide and can be redeemed at a different store.
   const spinCanApplyToCurrentOrder =
     !!checkoutSpin &&
-    spinBelongsToCurrentStore &&
-    spinEventIsAvailable &&
-    (
-      (
-        spinIsImmediateReward &&
-        spinThresholdReached
-      ) ||
-      spinIsRedeemableNextOrder
-    );
+    canApplyCheckoutSpin({
+      eventIssued: spinEventIsAvailable,
+      sameStore: spinBelongsToCurrentStore,
+      immediateReward: spinIsImmediateReward,
+      unlockReached: spinThresholdReached,
+      eligibleNextOrderReward: spinIsRedeemableNextOrder,
+    });
 
   /**
    * One reward per order.
@@ -897,7 +901,6 @@ function StoreCheckoutScreen() {
 
   const hasFutureSpinReward =
     !!checkoutSpin &&
-    spinBelongsToCurrentStore &&
     checkoutSpin.eventStatus ===
       'issued' &&
     checkoutSpin.rewardType ===
@@ -1854,8 +1857,11 @@ function StoreCheckoutScreen() {
            */
           spinEventId:
             checkoutSpin &&
-            spinBelongsToCurrentStore &&
-            spinEventIsAvailable
+            shouldAttachCheckoutSpinEvent({
+              eventIssued: spinEventIsAvailable,
+              sameStore: spinBelongsToCurrentStore,
+              eligibleNextOrderReward: spinIsRedeemableNextOrder,
+            })
               ? checkoutSpin.eventId
               : null,
 
