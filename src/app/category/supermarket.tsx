@@ -2279,6 +2279,17 @@ function PromotionBannerProductRail({
           >
             <Text style={styles.promotionRailStatusText}>إعادة التحميل</Text>
           </Pressable>
+        ) : query.hasNextPage ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="عرض المزيد من منتجات العرض"
+            style={styles.promotionRailPageStatus}
+            onPress={() => {
+              if (!query.isFetching) void query.fetchNextPage();
+            }}
+          >
+            <Text style={styles.promotionRailStatusText}>عرض المزيد</Text>
+          </Pressable>
         ) : null
       }
       initialNumToRender={4}
