@@ -1395,7 +1395,7 @@ export default function StoreScreen({
               <Ionicons
                 name="search-outline"
                 size={20}
-                color="#18994D"
+                color="#242424"
               />
               <TextInput
                 autoFocus
@@ -1407,7 +1407,7 @@ export default function StoreScreen({
                 placeholder="بتدور على إيه؟"
                 placeholderTextColor="#999999"
                 returnKeyType="search"
-                selectionColor="#18994D"
+                selectionColor="#242424"
                 style={styles.searchInput}
                 textAlign="right"
               />
@@ -1784,7 +1784,7 @@ export default function StoreScreen({
           <Ionicons
             name="search-outline"
             size={21}
-            color="#17974A"
+            color="#242424"
           />
         </Pressable>
       )}
@@ -1834,7 +1834,7 @@ export default function StoreScreen({
               <Ionicons
                 name="search-outline"
                 size={21}
-                color="#17974A"
+                color="#242424"
               />
             </Pressable>
           </View>
@@ -2362,15 +2362,17 @@ const styles = StyleSheet.create({
   },
 
   stickySearchButton: {
-    backgroundColor: '#E9F9EE',
-    borderColor: '#CBEED5',
+    // Identical surface to the back button in the sticky header.
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
   },
 
   heroSearchButton: {
     right: NAVIENTY_NOW_LAYOUT.pageGutter,
     position: 'absolute',
-    backgroundColor: '#E9F9EE',
-    borderColor: '#CBEED5',
+    // Match the white back button without changing either button's size.
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E1E1E1',
     zIndex: 90,
     shadowColor: '#000000',
     shadowOffset: { height: 2, width: 0 },
@@ -2518,15 +2520,15 @@ const styles = StyleSheet.create({
   },
 
   restaurantSearchCancelText: {
-    color: '#18994D',
+    color: '#242424',
     fontSize: 14,
     fontWeight: '600',
   },
 
   searchInputContainer: {
     alignItems: 'center',
-    backgroundColor: '#F0FBF3',
-    borderColor: '#D0EED9',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DADADA',
     borderRadius: 14,
     borderWidth: 1,
     flex: 1,
