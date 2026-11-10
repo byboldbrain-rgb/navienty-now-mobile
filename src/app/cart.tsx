@@ -1307,9 +1307,28 @@ function StoreCartScreen() {
             )}
           </ScrollView>
 
-          
-
-          
+          <View style={styles.allStoresCheckoutFooter}>
+            <Text style={styles.allStoresCheckoutCaption}>
+              هنعرض منتجات وتوصيل كل مكان بشكل منفصل قبل التأكيد.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.allStoresCheckoutButton}
+              onPress={() => {
+                router.push({
+                  pathname: '/location-picker',
+                  params: {
+                    storeId: availableCarts[0].storeId,
+                    source: 'global-cart',
+                  },
+                });
+              }}
+            >
+              <Text style={styles.allStoresCheckoutButtonText}>
+                إتمام كل الطلبات ({availableCarts.length})
+              </Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </View>
     );
@@ -2088,6 +2107,32 @@ const styles = StyleSheet.create({
    * ============================================================
    */
 
+  allStoresCheckoutFooter: {
+    paddingTop: 12,
+    paddingBottom: 9,
+    gap: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#ECECEC',
+  },
+  allStoresCheckoutCaption: {
+    color: '#666666',
+    fontSize: 12,
+    lineHeight: 20,
+    textAlign: 'right',
+    writingDirection: 'rtl',
+  },
+  allStoresCheckoutButton: {
+    minHeight: 51,
+    borderRadius: 13,
+    backgroundColor: BRAND_GREEN,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  allStoresCheckoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
   cartPickerScreen: {
     backgroundColor:
       'rgba(0, 0, 0, 0.46)',
