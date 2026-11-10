@@ -157,6 +157,138 @@ function OfflineErrorScreen({
   );
 }
 
+/**
+ * Mandatory-update screen intentionally reuses every visual building block
+ * from the existing offline screen: dark green backdrop, elevated white card,
+ * floating circular icon, centered Arabic copy and full-width bottom CTA.
+ * The app's navigator is not mounted while the launch gate is blocking.
+ */
+function ForceUpdateScreen({
+  gate,
+  isRefreshing,
+  onRefresh,
+}: AppLaunchBlockScreenProps) {
+  const whatsappUrl = getWhatsappUrl(gate.supportWhatsapp);
+  const canOpenUpdate = Boolean(gate.updateUrl);
+
+  return (
+    <View style={styles.offlineScreen}>
+      <StatusBar style="light" />
+
+      <View style={styles.offlineCard}>
+        <View style={styles.offlineIconWrap}>
+          <Ionicons
+            name="arrow-up"
+            size={48}
+            color={NAVIENTY_NOW_COLORS.primary}
+          />
+        </View>
+
+        <View style={styles.offlineCardBody}>
+          <Text style={styles.offlineTitle}>
+            تحديث جديد متاح
+          </Text>
+
+          <Text style={styles.offlineMessage}>
+            {gate.messageAr ??
+              'نزلنا تحديث جديد لـ Navienty Now. لازم تحدّث التطبيق عشان تقدر تكمل استخدامه.'}
+          </Text>
+
+          {!canOpenUpdate ? (
+            <Text style={styles.updateHelperText}>
+              رابط التحديث مش متاح حاليًا. حاول تاني أو تواصل مع الدعم.
+            </Text>
+          ) : null}
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            canOpenUpdate ? 'تحديث التطبيق الآن' : 'إعادة التحقق'
+          }
+          disabled={!canOpenUpdate && isRefreshing}
+          style={({ pressed }) => [
+            styles.offlineRetryButton,
+            pressed &&
+              !isRefreshing &&
+              styles.offlineRetryButtonPressed,
+            !canOpenUpdate &&
+              isRefreshing &&
+              styles.offlineRetryButtonDisabled,
+          ]}
+          onPress={() => {
+            if (gate.updateUrl) {
+              void openUrl(gate.updateUrl);
+            } else {
+              onRefresh();
+            }
+          }}
+        >
+          {!canOpenUpdate && isRefreshing ? (
+            <>
+              <ActivityIndicator
+                size="small"
+                color={NAVIENTY_NOW_COLORS.white}
+              />
+              <Text style={styles.offlineRetryButtonText}>
+                جاري التحقق...
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.offlineRetryButtonText}>
+              {canOpenUpdate ? 'تحديث التطبيق الآن' : 'إعادة التحقق'}
+            </Text>
+          )}
+        </Pressable>
+      </View>
+
+      <View style={styles.updateFooterActions}>
+        {canOpenUpdate ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="إعادة التحقق من الإصدار"
+            disabled={isRefreshing}
+            style={({ pressed }) => [
+              styles.updateFooterButton,
+              pressed && styles.updateFooterButtonPressed,
+              isRefreshing && styles.offlineRetryButtonDisabled,
+            ]}
+            onPress={onRefresh}
+          >
+            {isRefreshing ? (
+              <ActivityIndicator
+                size="small"
+                color={NAVIENTY_NOW_COLORS.white}
+              />
+            ) : null}
+            <Text style={styles.updateFooterText}>
+              {isRefreshing ? 'جاري التحقق...' : 'إعادة التحقق'}
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {whatsappUrl ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="تواصل مع الدعم"
+            style={({ pressed }) => [
+              styles.updateFooterButton,
+              pressed && styles.updateFooterButtonPressed,
+            ]}
+            onPress={() => {
+              void openUrl(whatsappUrl);
+            }}
+          >
+            <Text style={styles.updateFooterText}>
+              تواصل مع الدعم
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function AppLaunchBlockScreen({
   gate,
   isRefreshing,
@@ -165,6 +297,16 @@ export default function AppLaunchBlockScreen({
   if (gate.status === 'error') {
     return (
       <OfflineErrorScreen
+        isRefreshing={isRefreshing}
+        onRefresh={onRefresh}
+      />
+    );
+  }
+
+  if (gate.status === 'force-update') {
+    return (
+      <ForceUpdateScreen
+        gate={gate}
         isRefreshing={isRefreshing}
         onRefresh={onRefresh}
       />
@@ -462,6 +604,38 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
     writingDirection: 'rtl',
+  },
+
+  updateHelperText: {
+    color: NAVIENTY_NOW_COLORS.textMuted,
+    fontSize: 12,
+    lineHeight: 20,
+    marginTop: 14,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  updateFooterActions: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+
+  updateFooterButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 12,
+  },
+
+  updateFooterButtonPressed: {
+    opacity: 0.72,
+  },
+
+  updateFooterText: {
+    color: NAVIENTY_NOW_COLORS.white,
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   screen: {
