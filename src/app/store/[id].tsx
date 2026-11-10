@@ -22,6 +22,7 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -218,6 +219,42 @@ function getProductDisplayPrice(
       (variant) => variant.price,
     ),
   );
+}
+
+function normalizeRestaurantSearch(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase('ar')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchesRestaurantSearch(
+  product: CatalogProduct,
+  terms: readonly string[],
+): boolean {
+  const searchText = normalizeRestaurantSearch(
+    [
+      product.name,
+      product.nameEn,
+      product.description,
+      product.descriptionEn,
+      product.sku,
+      product.barcode,
+      ...product.variants.flatMap((variant) => [
+        variant.name,
+        variant.nameEn,
+      ]),
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+
+  return terms.every((term) => searchText.includes(term));
 }
 
 type ProductRowProps = {
@@ -579,6 +616,20 @@ export default function StoreScreen() {
   const [isLoading, setIsLoading] =
     useState(true);
 
+  const [isSearchVisible, setIsSearchVisible] =
+    useState(false);
+  const [searchQuery, setSearchQuery] =
+    useState('');
+  const [debouncedSearch, setDebouncedSearch] =
+    useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 260);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const [
     errorMessage,
     setErrorMessage,
@@ -630,6 +681,14 @@ export default function StoreScreen() {
   const scrollHeaderVisibleRef =
     useRef(false);
 
+  useEffect(() => {
+    setIsSearchVisible(false);
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setIsScrollHeaderVisible(false);
+    scrollHeaderVisibleRef.current = false;
+  }, [rawId]);
+
   const [
     failedProductImages,
     setFailedProductImages,
@@ -673,16 +732,31 @@ export default function StoreScreen() {
   const currentStoreId =
     currentStoreForActions?.id ?? null;
 
-  const sectionListData = useMemo(
-    () =>
-      (catalogSections ?? []).map(
-        (section) => ({
-          ...section,
-          data: section.products,
-        }),
-      ),
-    [catalogSections],
+  const normalizedSearch = useMemo(
+    () => normalizeRestaurantSearch(debouncedSearch),
+    [debouncedSearch],
   );
+
+  const sectionListData = useMemo(() => {
+    const searchTerms =
+      isSearchVisible && normalizedSearch
+        ? normalizedSearch.split(' ').filter(Boolean)
+        : [];
+
+    return (catalogSections ?? [])
+      .map((section) => ({
+        ...section,
+        data:
+          searchTerms.length > 0
+            ? section.products.filter((product) =>
+                matchesRestaurantSearch(product, searchTerms),
+              )
+            : section.products,
+      }))
+      .filter((section) =>
+        searchTerms.length === 0 || section.data.length > 0,
+      );
+  }, [catalogSections, isSearchVisible, normalizedSearch]);
 
   const cartQuantityByProductId =
     useMemo(() => {
@@ -1236,6 +1310,22 @@ export default function StoreScreen() {
     });
   }
 
+  function openRestaurantSearch() {
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setIsSearchVisible(true);
+    scrollHeaderVisibleRef.current = false;
+    setIsScrollHeaderVisible(false);
+  }
+
+  function closeRestaurantSearch() {
+    setSearchQuery('');
+    setDebouncedSearch('');
+    setIsSearchVisible(false);
+    scrollHeaderVisibleRef.current = false;
+    setIsScrollHeaderVisible(false);
+  }
+
   function handleStoreScroll(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
@@ -1257,9 +1347,17 @@ export default function StoreScreen() {
   return (
     <View style={styles.screen}>
       <SectionList
+        key={isSearchVisible ? 'restaurant-search' : 'restaurant-catalog'}
         ref={scrollRef}
         sections={sectionListData}
         contentContainerStyle={[
+          isSearchVisible && {
+            paddingTop:
+              Math.max(
+                insets.top,
+                Platform.OS === 'android' ? 24 : 0,
+              ) + 56,
+          },
           styles.pageContent,
 
           cartItemCount > 0 &&
@@ -1283,7 +1381,8 @@ export default function StoreScreen() {
           product.id
         }
         ListHeaderComponent={
-          <>
+          !isSearchVisible ? (
+            <>
         <View style={styles.container}>
         {/* HERO */}
 
@@ -1358,6 +1457,30 @@ export default function StoreScreen() {
             onPress={() => router.back()}
           >
             <BackArrowIcon />
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="البحث في منتجات المطعم"
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.backButton,
+              styles.heroSearchButton,
+              {
+                top:
+                  Math.max(
+                    insets.top,
+                    Platform.OS === 'android' ? 24 : 12,
+                  ) + 10,
+              },
+              pressed && styles.headerButtonPressed,
+            ]}
+            onPress={openRestaurantSearch}
+          >
+            <Ionicons
+              name="search-outline"
+              size={19}
+              color="#202020"
+            />
           </Pressable>
 
           {storeRating !== null && (
@@ -1463,7 +1586,8 @@ export default function StoreScreen() {
         )}
 
         </View>
-          </>
+            </>
+          ) : null
         }
         ListEmptyComponent={
           <>
@@ -1481,7 +1605,11 @@ export default function StoreScreen() {
               }
             >
               <Ionicons
-                name="restaurant-outline"
+                name={
+                  isSearchVisible && normalizedSearch
+                    ? 'search-outline'
+                    : 'restaurant-outline'
+                }
                 size={28}
                 color={NAVIENTY_NOW_COLORS.primary}
               />
@@ -1492,7 +1620,9 @@ export default function StoreScreen() {
                 styles.emptyCatalogTitle
               }
             >
-              {'لا توجد منتجات متاحة'}
+              {isSearchVisible && normalizedSearch
+                ? 'لا توجد نتائج للبحث'
+                : 'لا توجد منتجات متاحة'}
             </Text>
 
             <Text
@@ -1500,7 +1630,9 @@ export default function StoreScreen() {
                 styles.emptyCatalogDescription
               }
             >
-              {'لم تتم إضافة منتجات مفعّلة لهذا المطعم بعد.'}
+              {isSearchVisible && normalizedSearch
+                ? 'جرّب اسم منتج آخر أو امسح البحث لعرض قائمة المطعم.'
+                : 'لم تتم إضافة منتجات مفعّلة لهذا المطعم بعد.'}
             </Text>
           </View>
         </View>
@@ -1563,33 +1695,88 @@ export default function StoreScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {isScrollHeaderVisible && (
+      {(isScrollHeaderVisible || isSearchVisible) && (
         <View
           style={[
             styles.scrollHeader,
             {
               paddingTop: Math.max(
                 insets.top,
-                Platform.OS === 'android'
-                  ? 24
-                  : 0,
+                Platform.OS === 'android' ? 24 : 0,
               ),
             },
           ]}
         >
           <View style={styles.scrollHeaderRow}>
-            <Pressable
-              accessibilityLabel="العودة"
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.backButton,
-                pressed &&
-                  styles.headerButtonPressed,
-              ]}
-              onPress={() => router.back()}
-            >
-              <BackArrowIcon />
-            </Pressable>
+            {isSearchVisible ? (
+              <View style={styles.searchInputContainer}>
+                <Ionicons
+                  name="search-outline"
+                  size={17}
+                  color="#222222"
+                />
+                <TextInput
+                  autoFocus
+                  accessibilityLabel="ابحث في منتجات المطعم"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="ابحث في منتجات المطعم"
+                  placeholderTextColor="#999999"
+                  returnKeyType="search"
+                  style={styles.searchInput}
+                  textAlign="right"
+                />
+                <Pressable
+                  accessibilityLabel="إغلاق البحث"
+                  accessibilityRole="button"
+                  hitSlop={12}
+                  onPress={closeRestaurantSearch}
+                >
+                  <Ionicons
+                    name="close"
+                    size={18}
+                    color="#222222"
+                  />
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Pressable
+                  accessibilityLabel="العودة"
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.backButton,
+                    pressed && styles.headerButtonPressed,
+                  ]}
+                  onPress={() => router.back()}
+                >
+                  <BackArrowIcon />
+                </Pressable>
+                <View style={styles.scrollHeaderTitleGroup}>
+                  <Text
+                    numberOfLines={1}
+                    style={styles.scrollHeaderTitle}
+                  >
+                    {currentStore.name}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="البحث في منتجات المطعم"
+                  accessibilityRole="button"
+                  style={({ pressed }) => [
+                    styles.backButton,
+                    pressed && styles.headerButtonPressed,
+                  ]}
+                  onPress={openRestaurantSearch}
+                >
+                  <Ionicons
+                    name="search-outline"
+                    size={19}
+                    color="#202020"
+                  />
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       )}
@@ -2114,6 +2301,17 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
+  heroSearchButton: {
+    right: NAVIENTY_NOW_LAYOUT.pageGutter,
+    position: 'absolute',
+    zIndex: 20,
+    shadowColor: '#000000',
+    shadowOffset: { height: 2, width: 0 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+
   headerButtonPressed: {
     backgroundColor: '#F7F7F7',
     transform: [
@@ -2192,6 +2390,42 @@ const styles = StyleSheet.create({
     height: 56,
     paddingHorizontal:
       NAVIENTY_NOW_LAYOUT.pageGutter,
+  },
+
+  scrollHeaderTitleGroup: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+
+  scrollHeaderTitle: {
+    color: '#171717',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    writingDirection: 'rtl',
+  },
+
+  searchInputContainer: {
+    alignItems: 'center',
+    backgroundColor: '#F6F6F6',
+    borderColor: '#EAEAEA',
+    borderRadius: 20,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 40,
+    paddingHorizontal: 13,
+  },
+
+  searchInput: {
+    color: '#202020',
+    flex: 1,
+    fontSize: 13,
+    minHeight: 38,
+    writingDirection: 'rtl',
   },
 
   container: {
