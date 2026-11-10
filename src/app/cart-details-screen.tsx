@@ -65,6 +65,7 @@ import {
 } from '../services/voucher-service';
 
 import ServicePackageCart from '../components/service/service-package-cart';
+import DriverTipCard from '../components/cart/driver-tip-card';
 import {
   type CartItem,
   isPrintJobCartItem,
@@ -1285,6 +1286,9 @@ function StoreCartScreen() {
     (state) => state.clearStoreCart,
   );
 
+  const driverTipAmount = useCartStore((state) => state.driverTipAmount);
+  const setDriverTipAmount = useCartStore((state) => state.setDriverTipAmount);
+
   const availableCarts = useMemo(
     () =>
       Object.values(carts).filter(
@@ -1923,7 +1927,8 @@ function StoreCartScreen() {
     Math.max(
       discountedSubtotal +
         discountedDeliveryFee +
-        paymentProcessingFee,
+        paymentProcessingFee +
+        driverTipAmount,
       0,
     );
 
@@ -4157,6 +4162,8 @@ function StoreCartScreen() {
           )}
         </View>
 
+        <DriverTipCard amount={driverTipAmount} onChange={setDriverTipAmount} />
+
         {/* PAYMENT SUMMARY — REFERENCE STYLE */}
 
         <View
@@ -4379,6 +4386,15 @@ function StoreCartScreen() {
                 {formatSummaryAmount(
                   spinReward.value,
                 )} ج.م
+              </Text>
+            </View>
+          ) : null}
+
+          {driverTipAmount > 0 ? (
+            <View style={styles.referenceSummaryRow}>
+              <Text style={styles.referenceSummaryLabel}>إكرامية السائق</Text>
+              <Text style={styles.referenceSummaryValue}>
+                {formatSummaryAmount(driverTipAmount)} ج.م
               </Text>
             </View>
           ) : null}
