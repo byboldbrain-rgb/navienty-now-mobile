@@ -12,6 +12,7 @@ import {
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   type ImageSourcePropType,
   Pressable,
@@ -31,11 +32,12 @@ import { ProductGridScreenSkeleton } from '../../components/ui/loading-skeleton'
 import {
   type CatalogProduct,
   type CatalogSection,
-  getCatalogSectionOffers,
-  getCatalogSectionProducts,
   type StoreCatalog,
 } from '../../services/catalog-service';
-import { useSupermarketCategoryQuery } from '../../hooks/use-supermarket-queries';
+import {
+  useSupermarketCategoryQuery,
+  useSupermarketCategoryProductsQuery,
+} from '../../hooks/use-supermarket-queries';
 import { getUserFacingCatalogError } from '../../lib/user-facing-error';
 import { useCartStore } from '../../store/cart-store';
 
@@ -392,151 +394,6 @@ function formatMoney(
   return `${value.toFixed(
     2,
   )} ${currencyLabel}`;
-}
-
-function deduplicateProducts(
-  products: CatalogProduct[],
-) {
-  const productsMap =
-    new Map<
-      string,
-      CatalogProduct
-    >();
-
-  for (const product of products) {
-    productsMap.set(
-      product.id,
-      product,
-    );
-  }
-
-  return Array.from(
-    productsMap.values(),
-  );
-}
-
-function getOfferPageRootCategories(
-  catalog: StoreCatalog,
-): CatalogSection[] {
-  /*
-   * Primary source:
-   * categoryTree contains the real root categories.
-   */
-  const treeRoots =
-    catalog.categoryTree.filter(
-      (section) =>
-        section.parentId === null ||
-        section.depth === 0,
-    );
-
-  /*
-   * Defensive fallback:
-   * لو categoryTree رجعت فاضية لأي سبب،
-   * نستخدم الـFlat sections ونجيب الـRoot categories.
-   */
-  const fallbackRoots =
-    catalog.sections.filter(
-      (section) =>
-        section.parentId === null,
-    );
-
-  const source =
-    treeRoots.length > 0
-      ? treeRoots
-      : fallbackRoots.length > 0
-        ? fallbackRoots
-        : catalog.sections.filter(
-            (section) =>
-              section.depth === 0,
-          );
-
-  const uniqueRoots =
-    new Map<
-      string,
-      CatalogSection
-    >();
-
-  for (const section of source) {
-    uniqueRoots.set(
-      section.id,
-      section,
-    );
-  }
-
-  return Array.from(
-    uniqueRoots.values(),
-  ).sort(
-    (
-      first,
-      second,
-    ) => {
-      if (
-        first.sortOrder !==
-        second.sortOrder
-      ) {
-        return (
-          first.sortOrder -
-          second.sortOrder
-        );
-      }
-
-      return first.name.localeCompare(
-        second.name,
-        'ar',
-      );
-    },
-  );
-}
-
-function getAllCatalogOffers(
-  catalog: StoreCatalog,
-) {
-  const products: CatalogProduct[] =
-    [];
-
-  for (
-    const rootCategory of
-    getOfferPageRootCategories(
-      catalog,
-    )
-  ) {
-    products.push(
-      ...getCatalogSectionOffers(
-        rootCategory,
-      ),
-    );
-  }
-
-  /*
-   * Final defensive fallback:
-   * لو hierarchy مش مكتملة، نجمع أي منتج عليه خصم
-   * من كل sections بدل ما صفحة العروض تظهر فاضية.
-   */
-  if (products.length === 0) {
-    for (
-      const section of
-      catalog.sections
-    ) {
-      for (
-        const product of
-        section.products
-      ) {
-        if (
-          isOfferProduct(
-            product,
-          )
-        ) {
-          products.push(
-            product,
-          );
-        }
-      }
-    }
-  }
-
-  return deduplicateProducts(
-    products,
-  );
 }
 
 /* ============================================================
@@ -1048,11 +905,6 @@ export default function SupermarketCategoryScreen() {
       params.categoryKey,
     );
 
-  const passedLabel =
-    getSingleParam(
-      params.label,
-    );
-
   const isOffersPage =
     normalizeSlug(sectionSlug) ===
     'offers';
@@ -1066,6 +918,11 @@ export default function SupermarketCategoryScreen() {
     useState<ProductFilterKey>('all');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 260);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const categoryQuery = useSupermarketCategoryQuery({
     serviceAreaId: savedServiceAreaId,
@@ -1079,6 +936,7 @@ export default function SupermarketCategoryScreen() {
   const currencyCode = categoryQuery.data?.currencyCode ?? 'EGP';
   const rootCategoryImageUrl = categoryQuery.data?.rootCategoryImageUrl ?? null;
   const categoryImageOverrides = categoryQuery.data?.categoryImageOverrides ?? EMPTY_CATEGORY_IMAGE_OVERRIDES;
+  const offerRootCategoryIds = categoryQuery.data?.offerRootCategoryIds ?? [];
   const isLoading = categoryQuery.isPending;
   const errorMessage = categoryQuery.error
     ? getUserFacingCatalogError(categoryQuery.error)
@@ -1125,6 +983,7 @@ export default function SupermarketCategoryScreen() {
 
   const loadCategory = () => {
     void categoryQuery.refetch();
+    void productsQuery.refetch();
   };
 
   useEffect(() => {
@@ -1304,15 +1163,11 @@ export default function SupermarketCategoryScreen() {
        * أي Category لا يوجد بداخلها منتج
        * compareAtPrice > price لن تظهر في شريط الفلاتر.
        */
-      return getOfferPageRootCategories(
-        catalog,
-      ).filter(
-        (category) =>
-          getCatalogSectionOffers(
-            category,
-          ).length > 0,
+      const offerRoots = new Set(offerRootCategoryIds);
+      return catalog.categoryTree.filter(
+        (category) => offerRoots.has(category.id),
       );
-    }, [catalog]);
+    }, [catalog, offerRootCategoryIds]);
 
   /*
    * Horizontal ScrollView + row-reverse ممكن يخلي العناصر
@@ -1334,140 +1189,30 @@ export default function SupermarketCategoryScreen() {
    * ==========================================================
    */
 
-  const filteredProducts =
-    useMemo(() => {
-      if (!catalog) {
-        return [];
-      }
+  const activeCategoryId = isOffersPage
+    ? (selectedFilterKey === 'all' ? null : selectedFilterKey)
+    : (selectedFilterKey === 'all'
+      ? (selectedSection?.id ?? null)
+      : selectedFilterKey);
 
-      let products:
-        CatalogProduct[] = [];
+  /**
+   * Metadata (including DB names) renders immediately. A separate query
+   * fetches products in bounded pages with the selected subcategory, offers
+   * filter and search applied on the server, never just to the first page.
+   */
+  const productsQuery = useSupermarketCategoryProductsQuery({
+    storeId: catalog?.store.id ?? null,
+    serviceAreaId: savedServiceAreaId,
+    categoryId: activeCategoryId,
+    offersOnly: isOffersPage,
+    search: debouncedSearch.trim(),
+    enabled: Boolean(catalog) && (isOffersPage || Boolean(selectedSection)),
+  });
 
-      /*
-       * =====================================
-       * OFFERS PAGE
-       * =====================================
-       */
-      if (isOffersPage) {
-        if (
-          selectedFilterKey ===
-          'all'
-        ) {
-          products =
-            getAllCatalogOffers(
-              catalog,
-            );
-        } else {
-          const selectedOfferCategory =
-            offerCategoryTabs.find(
-              (category) =>
-                category.id ===
-                selectedFilterKey,
-            );
-
-          if (
-            selectedOfferCategory
-          ) {
-            products =
-              getCatalogSectionOffers(
-                selectedOfferCategory,
-              );
-          }
-        }
-      }
-
-      /*
-       * =====================================
-       * NORMAL CATEGORY PAGE
-       * =====================================
-       */
-      else if (selectedSection) {
-        if (
-          selectedFilterKey ===
-          'all'
-        ) {
-          products =
-            getCatalogSectionProducts(
-              selectedSection,
-              true,
-            );
-        } else {
-          const selectedChild =
-            childCategories.find(
-              (category) =>
-                category.id ===
-                selectedFilterKey,
-            );
-
-          if (selectedChild) {
-            products =
-              getCatalogSectionProducts(
-                selectedChild,
-                true,
-              );
-          }
-        }
-      }
-
-      /*
-       * Search.
-       */
-      const normalizedQuery =
-        normalizeSearchText(
-          searchQuery,
-        );
-
-      if (normalizedQuery) {
-        products =
-          products.filter(
-            (product) => {
-              const searchableText =
-                [
-                  product.name,
-                  product.nameEn,
-                  product.description,
-                  product.descriptionEn,
-                  product.sku,
-                  product.barcode,
-                  product.unitLabelAr,
-                  product.unitLabelEn,
-                ]
-                  .filter(Boolean)
-                  .join(' ')
-                  .toLowerCase();
-
-              return searchableText.includes(
-                normalizedQuery,
-              );
-            },
-          );
-      }
-
-      /*
-       * Safety:
-       *
-       * صفحة العروض مستحيل تعرض
-       * منتج بدون خصم.
-       */
-      if (isOffersPage) {
-        products =
-          products.filter(
-            isOfferProduct,
-          );
-      }
-
-      return deduplicateProducts(
-        products,
-      );
-    }, [
-      catalog,
-      isOffersPage,
-      selectedFilterKey,
-      searchQuery,
-      selectedSection,
-      childCategories,
-      offerCategoryTabs,
-    ]);
+  const filteredProducts = useMemo(
+    () => productsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [productsQuery.data],
+  );
 
   /*
    * Warm the cache for the first visible rows only.
@@ -1690,12 +1435,20 @@ export default function SupermarketCategoryScreen() {
     selectedSection?.slug ??
     '';
 
-  const pageTitle =
-    isOffersPage
-      ? 'العروض'
-      : selectedSection?.name ||
-        passedLabel ||
-        '';
+  // Source of truth: the current category name in catalog_categories.name_ar.
+  // Route labels are display hints only, never the persistent header title.
+  const selectedChildTitle = selectedFilterKey !== 'all'
+    ? (isOffersPage
+      ? offerCategoryTabs.find((item) => item.id === selectedFilterKey)?.name
+      : childCategories.find((item) => item.id === selectedFilterKey)?.name)
+    : null;
+  const offersTile = categoryQuery.tiles.find(
+    (item) => item.kind === 'offers' || item.key === 'offers',
+  );
+  const pageTitle = selectedChildTitle ||
+    (isOffersPage
+      ? (offersTile?.labelAr || 'العروض')
+      : (selectedSection?.name || ''));
 
   const shouldShowNormalCartDock =
     currentStoreItemCount > 0;
@@ -2483,6 +2236,39 @@ export default function SupermarketCategoryScreen() {
             false
           }
           keyboardShouldPersistTaps="handled"
+          onEndReached={() => {
+            if (productsQuery.hasNextPage && !productsQuery.isFetching) {
+              void productsQuery.fetchNextPage();
+            }
+          }}
+          onEndReachedThreshold={0.65}
+          ListFooterComponent={
+            productsQuery.isFetchingNextPage ? (
+              <ActivityIndicator
+                size="small"
+                color={NAVIENTY_NOW_GREEN}
+                style={styles.productPaginationStatus}
+              />
+            ) : productsQuery.isFetchNextPageError ? (
+              <Pressable
+                accessibilityRole="button"
+                style={styles.productPaginationButton}
+                onPress={() => { void productsQuery.fetchNextPage(); }}
+              >
+                <Text style={styles.productPaginationText}>تعذر تحميل المزيد — إعادة المحاولة</Text>
+              </Pressable>
+            ) : productsQuery.hasNextPage ? (
+              <Pressable
+                accessibilityRole="button"
+                style={styles.productPaginationButton}
+                onPress={() => {
+                  if (!productsQuery.isFetching) void productsQuery.fetchNextPage();
+                }}
+              >
+                <Text style={styles.productPaginationText}>عرض المزيد من المنتجات</Text>
+              </Pressable>
+            ) : null
+          }
           ListHeaderComponent={
             <>
               {/* ===================================================
@@ -2521,6 +2307,22 @@ export default function SupermarketCategoryScreen() {
             </>
           }
           ListEmptyComponent={
+            productsQuery.isPending ? (
+              <ActivityIndicator
+                size="large"
+                color={NAVIENTY_NOW_GREEN}
+                style={styles.productPaginationStatus}
+              />
+            ) : productsQuery.isError ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => { void productsQuery.refetch(); }}
+                style={styles.emptyState}
+              >
+                <Text style={styles.emptyStateTitle}>تعذر تحميل المنتجات مؤقتًا</Text>
+                <Text style={styles.emptyStateDescription}>اضغط لإعادة المحاولة</Text>
+              </Pressable>
+            ) : (
             <View
               style={
                 styles.emptyState
@@ -2550,6 +2352,7 @@ export default function SupermarketCategoryScreen() {
                 {getEmptyMessage()}
               </Text>
             </View>
+            )
           }
         />
 
@@ -3089,6 +2892,26 @@ const styles =
       height: 12,
     },
 
+    productPaginationStatus: {
+      paddingVertical: 30,
+      alignSelf: 'center',
+    },
+    productPaginationButton: {
+      alignSelf: 'center',
+      backgroundColor: '#F2FAF5',
+      borderColor: '#D6EDDF',
+      borderWidth: 1,
+      borderRadius: 13,
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+      marginVertical: 16,
+    },
+    productPaginationText: {
+      color: '#007C3A',
+      textAlign: 'center',
+      fontSize: 13,
+      fontWeight: '700',
+    },
     productsListRow: {
       flexDirection:
         'row',
