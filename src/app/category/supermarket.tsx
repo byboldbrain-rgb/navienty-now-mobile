@@ -44,16 +44,15 @@ import {
 } from '../../hooks/use-supermarket-queries';
 import {
   getSupermarketBannerProductPage,
+  listSupermarketHomeBanners,
+  type SupermarketHomeBanner,
 } from '../../services/supermarket-home-service';
 import { getMyOrders } from '../../services/order-service';
 import {
   listStorefrontCategoryTiles,
   type StorefrontCategoryTile,
 } from '../../services/storefront-category-service';
-import {
-  listSupermarketPromotionBanners,
-  type SupermarketPromotionBanner,
-} from '../../services/supermarket-banner-service';
+
 import {
   listSupermarketBrandBanners,
   type SupermarketBrandBanner,
@@ -92,7 +91,7 @@ const PROMOTION_PRODUCT_HORIZONTAL_PADDING = 8;
 
 // Horizontal preview. "عرض الكل" opens a dedicated full-screen product grid.
 const REORDER_PREVIEW_COUNT = 8;
-const EMPTY_PROMOTIONS: SupermarketPromotionBanner[] = [];
+const EMPTY_PROMOTIONS: SupermarketHomeBanner[] = [];
 const EMPTY_MEDIA_CARDS: SupermarketMediaCard[] = [];
 const EMPTY_BRAND_BANNERS: SupermarketBrandBanner[] = [];
 
@@ -2173,7 +2172,7 @@ function PromotionBannerProductRail({
   onIncrease,
   onDecrease,
 }: {
-  banner: SupermarketPromotionBanner;
+  banner: SupermarketHomeBanner;
   storeId: string;
   serviceAreaId: string | null;
   shouldLoad: boolean;
@@ -2190,9 +2189,9 @@ function PromotionBannerProductRail({
   const query = useInfiniteQuery({
     queryKey: [
       'public', 'supermarket', 'banner-products-v3',
-      storeId, serviceAreaId ?? '*', banner.id, banner.productIds.length,
+      storeId, serviceAreaId ?? '*', banner.id,
     ],
-    enabled: shouldLoad && banner.productIds.length > 0 && Boolean(storeId),
+    enabled: shouldLoad && Boolean(storeId),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       getSupermarketBannerProductPage(
@@ -2215,7 +2214,7 @@ function PromotionBannerProductRail({
 
   // A banner may have no linked products (branding only), or every linked
   // product may have since become inactive. Neither case is a network error.
-  if (!shouldLoad || banner.productIds.length === 0) return null;
+  if (!shouldLoad) return null;
 
   if (query.isPending) {
     return (
@@ -2353,7 +2352,7 @@ export default function SupermarketScreen() {
 
   const promotionQuery = useQuery({
     queryKey: ['public', 'supermarket', 'home-promotions-v2', homeStoreId],
-    queryFn: () => listSupermarketPromotionBanners({ storeId: homeStoreId! }),
+    queryFn: () => listSupermarketHomeBanners(homeStoreId!),
     enabled: Boolean(homeStoreId),
     staleTime: 120_000,
     retry: 1,
