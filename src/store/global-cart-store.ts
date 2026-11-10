@@ -64,6 +64,8 @@ export type CartState = {
   /** Store groups inside one customer-facing global Cart. */
   carts: Record<string, StoreCart>;
   activeStoreId: string | null;
+  /** Optional rider gratuity for the ENTIRE cart, never per merchant. */
+  driverTipAmount: number;
 
   /** Compatibility snapshot for older screens. */
   storeId: string | null;
@@ -86,6 +88,7 @@ export type CartState = {
   removeStoreLine: (storeId: string, lineId: string) => void;
   clearStoreCart: (storeId: string) => void;
   clearAllCarts: () => void;
+  setDriverTipAmount: (amount: number) => void;
   applyCheckoutCartCorrections: (corrections: Array<{
     storeId: string;
     expectedItems: CartItem[];
@@ -94,7 +97,7 @@ export type CartState = {
   setHasHydrated: (hasHydrated: boolean) => void;
 };
 
-type Persisted = Pick<CartState, 'carts' | 'activeStoreId'>;
+type Persisted = Pick<CartState, 'carts' | 'activeStoreId' | 'driverTipAmount'>;
 
 type Legacy = Partial<Pick<
   CartState,
@@ -257,8 +260,15 @@ function compatibilitySnapshot(
   };
 }
 
+function normalizeDriverTipAmount(value: unknown): number {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount > 0
+    ? Math.min(1000, Math.round(amount * 100) / 100)
+    : 0;
+}
+
 function normalizePersisted(value: unknown): Persisted {
-  if (!value || typeof value !== 'object') return { carts: {}, activeStoreId: null };
+  if (!value || typeof value !== 'object') return { carts: {}, activeStoreId: null, driverTipAmount: 0 };
   const raw = value as Partial<Persisted & Legacy>;
   const carts: Record<string, StoreCart> = {};
 
@@ -283,6 +293,7 @@ function normalizePersisted(value: unknown): Persisted {
   return {
     carts,
     activeStoreId: requested && carts[requested] ? requested : firstStore(carts),
+    driverTipAmount: Object.keys(carts).length ? normalizeDriverTipAmount(raw.driverTipAmount) : 0,
   };
 }
 
@@ -306,6 +317,7 @@ function updateGroup(
   return {
     ...state,
     carts,
+    driverTipAmount: Object.keys(carts).length ? state.driverTipAmount : 0,
     ...compatibilitySnapshot(
       carts,
       state.activeStoreId === storeId && !items.length ? null : state.activeStoreId,
@@ -331,6 +343,7 @@ export const useCartStore = create<CartState>()(
     (set) => ({
       carts: {},
       activeStoreId: null,
+      driverTipAmount: 0,
       ...emptyLegacy,
       hasHydrated: false,
 
@@ -382,7 +395,7 @@ export const useCartStore = create<CartState>()(
         const id = state.activeStoreId ?? firstStore(state.carts);
         return id ? updateGroup(state, id, (items) => items.filter((item) => !sameCatalogLine(item, productId, variantId))) : state;
       }),
-      clearCart: () => set((state) => ({ ...state, carts: {}, activeStoreId: null, ...emptyLegacy })),
+      clearCart: () => set((state) => ({ ...state, carts: {}, activeStoreId: null, driverTipAmount: 0, ...emptyLegacy })),
       setActiveCart: (storeId) => set((state) => {
         const snapshot = compatibilitySnapshot(state.carts, storeId);
         if (
@@ -408,7 +421,11 @@ export const useCartStore = create<CartState>()(
         updateGroup(state, storeId, (items) => items.filter((item) => item.lineId !== lineId.trim()))),
       clearStoreCart: (storeId) => set((state) =>
         updateGroup(state, storeId, () => [])),
-      clearAllCarts: () => set((state) => ({ ...state, carts: {}, activeStoreId: null, ...emptyLegacy })),
+      clearAllCarts: () => set((state) => ({ ...state, carts: {}, activeStoreId: null, driverTipAmount: 0, ...emptyLegacy })),
+      setDriverTipAmount: (amount) => set((state) => ({
+        driverTipAmount: Object.values(state.carts).some((cart) => cart.items.length > 0)
+          ? normalizeDriverTipAmount(amount) : 0,
+      })),
       // Commit all store corrections atomically; don't overwrite a basket that
       // changed while the live catalog was being fetched.
       applyCheckoutCartCorrections: (corrections) => {
@@ -445,7 +462,7 @@ export const useCartStore = create<CartState>()(
           const activeId = state.activeStoreId && carts[state.activeStoreId]
             ? state.activeStoreId
             : firstStore(carts);
-          return { ...state, carts, ...compatibilitySnapshot(carts, activeId) };
+          return { ...state, carts, driverTipAmount: Object.keys(carts).length ? state.driverTipAmount : 0, ...compatibilitySnapshot(carts, activeId) };
         });
         return applied;
       },
@@ -454,8 +471,8 @@ export const useCartStore = create<CartState>()(
     {
       name: 'navienty-now-cart',
       storage: createJSONStorage(() => resilientAsyncStorage),
-      partialize: (state): Persisted => ({ carts: state.carts, activeStoreId: state.activeStoreId }),
-      version: 5,
+      partialize: (state): Persisted => ({ carts: state.carts, activeStoreId: state.activeStoreId, driverTipAmount: state.driverTipAmount }),
+      version: 6,
       migrate: (value) => normalizePersisted(value),
       merge: (persistedState, currentState) => {
         const persisted = normalizePersisted(persistedState);
@@ -505,7 +522,7 @@ export const selectCartTotal = (state: CartState) => {
   const previewFee = groupFees.length
     ? getSingleCheckoutDeliveryFee(groupFees.map((fee) => Math.max(0, Number.isFinite(fee) ? fee : 0)))
     : 0;
-  return count > 0 ? selectAllCartSubtotal(state) + previewFee : 0;
+  return count > 0 ? selectAllCartSubtotal(state) + previewFee + state.driverTipAmount : 0;
 };
 export const selectGlobalCartStoreCount = (state: CartState) =>
   Object.values(state.carts).filter((group) => group.items.length > 0).length;
