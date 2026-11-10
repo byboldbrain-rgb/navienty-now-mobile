@@ -14,14 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomActionSlot } from '../../components/cart/bottom-action-provider';
-import CategorySearchEntry from '../../components/search/category-search-entry';
 
 import { supabase } from '../../lib/supabase';
 import getAppBootstrap from '../../services/bootstrap-service';
-import {
-  getSupermarketProductBrand,
-  type SupermarketProductBrand,
-} from '../../services/supermarket-brand-service';
 import {
     getStoreCatalog,
     type CatalogProduct,
@@ -29,6 +24,10 @@ import {
     type StoreBusinessHour,
     type StoreCatalog,
 } from '../../services/catalog-service';
+import {
+    getSupermarketProductBrand,
+    type SupermarketProductBrand,
+} from '../../services/supermarket-brand-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
@@ -470,14 +469,6 @@ export default function SupermarketProductDetailScreen() {
     return () => { active = false; };
   }, [product?.id, storeId]);
 
-  // Share the supermarket search bar and its rotating category suggestions.
-  const searchSuggestions = useMemo(
-    () => catalog?.sections
-      .filter(section => section.depth === 0)
-      .map(section => section.name) ?? [],
-    [catalog],
-  );
-
   const images = useMemo(() => product ? imagesForProduct(product) : [], [product]);
   const selectedVariant: ProductVariant | null = useMemo(
     () => product?.variants.find(v => v.id === selectedVariantId) ?? null,
@@ -489,7 +480,6 @@ export default function SupermarketProductDetailScreen() {
   const discount = discountFor(price, compareAt);
   const disabled = !catalog || catalog.store.isManuallyClosed || !isOpenNow(catalog.businessHours);
   const cartItems = carts[storeId]?.items ?? [];
-  const storeCartCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const selectedTotal = price * selectedQuantity;
   const selectedOldTotal = discount !== null && compareAt !== null
     ? compareAt * selectedQuantity
@@ -604,17 +594,12 @@ export default function SupermarketProductDetailScreen() {
     });
   };
 
-  const openCart = () => {
-    setActiveCart(storeId);
-    router.push({ pathname: '/cart', params: { storeId } });
-  };
-
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.root}>
       <Stack.Screen options={{ headerShown: false, animation: 'slide_from_bottom', gestureEnabled: true }} />
       <StatusBar style="dark" />
       <View style={[styles.page, { width: pageWidth }]}>
-        {/* Same header structure, spacing, and shared search as category/supermarket.tsx. */}
+        {/* Minimal product header: back navigation only. */}
         <View style={styles.header}>
           <Pressable
             accessibilityRole="button"
@@ -631,11 +616,6 @@ export default function SupermarketProductDetailScreen() {
               size={20}
             />
           </Pressable>
-          <CategorySearchEntry
-            scope="supermarket"
-            suggestions={searchSuggestions}
-            style={styles.headerSearchEntry}
-          />
         </View>
         {loading ? (
           <View style={styles.loadingPanel}>
@@ -693,19 +673,6 @@ export default function SupermarketProductDetailScreen() {
                 ) : (
                   <Text style={styles.emoji}>{product.icon || '🛒'}</Text>
                 )}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`عرض السلة، ${storeCartCount} منتجات`}
-                  onPress={openCart}
-                  style={styles.heroCartButton}
-                >
-                  <Ionicons name="bag-handle-outline" size={22} color={GREEN} />
-                  {storeCartCount > 0 ? (
-                    <View style={styles.heroCartBadge}>
-                      <Text style={styles.heroCartBadgeText}>{storeCartCount > 99 ? '99+' : storeCartCount}</Text>
-                    </View>
-                  ) : null}
-                </Pressable>
                 {images.length > 1 && (
                   <View pointerEvents="none" style={styles.pagination}>
                     {images.slice(0, 7).map((uri, index) => (
@@ -895,12 +862,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     zIndex: 10,
   },
-  headerSearchEntry: {
-    flex: 1,
-    marginBottom: 0,
-    marginHorizontal: 0,
-    marginTop: 0,
-  },
   backButton: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -915,17 +876,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F7F7',
     transform: [{ scale: 0.97 }],
   },
-  heroCartButton: {
-    position: 'absolute', top: 20, left: 20, width: 46, height: 46,
-    borderRadius: 24, borderWidth: 1, borderColor: '#E9E9E9',
-    backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', zIndex: 4,
-  },
-  heroCartBadge: {
-    position: 'absolute', top: -5, right: -5, minWidth: 19, height: 19,
-    borderRadius: 10, backgroundColor: '#C7FF00', paddingHorizontal: 4,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  heroCartBadgeText: { fontSize: 10, fontWeight: '800', color: '#1A1A1A' },
   pagination: { flexDirection: 'row', position: 'absolute', bottom: 23, alignSelf: 'center', gap: 6, backgroundColor: 'rgba(40,40,40,0.18)', borderRadius: 30, paddingHorizontal: 10, paddingVertical: 8 },
   pageDot: { width: 6, height: 6, borderRadius: 6, backgroundColor: '#D1D1D1' },
   pageDotActive: { backgroundColor: '#FFFFFF', width: 9 },
