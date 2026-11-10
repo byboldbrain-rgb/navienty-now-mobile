@@ -1416,20 +1416,15 @@ export default function SupermarketCategoryScreen() {
     selectedSection?.slug ??
     '';
 
-  // Source of truth: the current category name in catalog_categories.name_ar.
-  // Route labels are display hints only, never the persistent header title.
-  const selectedChildTitle = selectedFilterKey !== 'all'
-    ? (isOffersPage
-      ? offerCategoryTabs.find((item) => item.id === selectedFilterKey)?.name
-      : childCategories.find((item) => item.id === selectedFilterKey)?.name)
-    : null;
+  // The Header identifies the opened category, not the selected product filter.
+  // selectedSection.name comes from the canonical catalog_categories.name_ar
+  // returned by the category metadata RPC; no hardcoded category titles.
   const offersTile = categoryQuery.tiles.find(
     (item) => item.kind === 'offers' || item.key === 'offers',
   );
-  const pageTitle = selectedChildTitle ||
-    (isOffersPage
-      ? (offersTile?.labelAr || 'العروض')
-      : (selectedSection?.name || ''));
+  const pageTitle = isOffersPage
+    ? (offersTile?.labelAr?.trim() || 'العروض')
+    : (selectedSection?.name?.trim() || '');
 
   const shouldShowNormalCartDock =
     currentStoreItemCount > 0;
