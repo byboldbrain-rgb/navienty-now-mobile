@@ -578,7 +578,6 @@ function StoreCheckoutScreen() {
   const locationLongitude = useCustomerStore((state) => state.locationLongitude);
   const {
     deliveryFee: groupDeliveryFee,
-    storeFees: individualStoreDeliveryFees,
     error: groupDeliveryError,
     isLoading: isResolvingGroupDelivery,
   } = useGlobalDeliveryFee(
@@ -728,9 +727,8 @@ function StoreCheckoutScreen() {
     ? (storeOrders.find((group) => group.storeId === storeId)?.items ?? [])
         .reduce((sum, item) => sum + item.price * item.quantity, 0)
     : subtotal;
-  const anchorStoreDeliveryFee = isMultiStoreCheckout
-    ? individualStoreDeliveryFees?.[storeId ?? ''] ?? 0
-    : deliveryFee;
+  // In a grouped checkout the single delivery fee belongs to the first order.
+  const anchorStoreDeliveryFee = deliveryFee;
 
   const paymentFeeMethod =
     bootstrap?.payment_methods.find(
@@ -2396,56 +2394,6 @@ function StoreCheckoutScreen() {
             )}
         </View>
 
-        {isMultiStoreCheckout && (
-          <View style={styles.multiOrderSection}>
-            <Text style={styles.orderSummaryTitle}>
-              تفاصيل الطلبات ({storeOrders.length})
-            </Text>
-            {storeOrders.map((group, index) => {
-              const storeSubtotal = group.items.reduce(
-                (sum, item) => sum + item.price * item.quantity, 0,
-              );
-              const storeFee = individualStoreDeliveryFees?.[group.storeId] ?? null;
-              return (
-                <View key={group.storeId} style={styles.multiOrderCard}>
-                  <View style={styles.multiOrderTitleRow}>
-                    <Text style={styles.multiOrderStoreName}>{group.storeName}</Text>
-                    <Text style={styles.multiOrderNumber}>الطلب {index + 1}</Text>
-                  </View>
-                  {group.items.map((item) => (
-                    <View key={item.lineId} style={styles.summaryRow}>
-                      <Text style={styles.multiOrderItemName}>
-                        {item.name} × {item.quantity}
-                        {item.variantName ? ' — ' + item.variantName : ''}
-                      </Text>
-                      <Text style={styles.summaryValue}>
-                        {formatPrice(item.price * item.quantity)}
-                      </Text>
-                    </View>
-                  ))}
-                  <View style={styles.multiOrderDivider} />
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>المنتجات</Text>
-                    <Text style={styles.summaryValue}>{formatPrice(storeSubtotal)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>توصيل المطعم / المتجر</Text>
-                    <Text style={styles.summaryValue}>
-                      {storeFee === null ? 'جارٍ الحساب' : storeFee === 0 ? 'مجاني' : formatPrice(storeFee)}
-                    </Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.multiOrderTotalLabel}>إجمالي الطلب قبل رسوم الدفع</Text>
-                    <Text style={styles.multiOrderTotalValue}>
-                      {storeFee === null ? '—' : formatPrice(storeSubtotal + storeFee)}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
         <View
           style={
             styles.orderSummarySection
@@ -2521,7 +2469,7 @@ function StoreCheckoutScreen() {
                 styles.summaryLabel
               }
             >
-              {isMultiStoreCheckout ? 'إجمالي توصيل المتاجر' : 'التوصيل'}
+              التوصيل
             </Text>
 
             <Text
@@ -3275,63 +3223,6 @@ const styles =
       writingDirection: 'rtl',
     },
 
-    multiOrderSection: {
-      backgroundColor: '#ffffff',
-      paddingHorizontal: 24,
-      paddingTop: 22,
-    },
-    multiOrderCard: {
-      backgroundColor: '#F8FBF9',
-      borderColor: '#E5EDE8',
-      borderRadius: 17,
-      borderWidth: 1,
-      marginBottom: 14,
-      padding: 15,
-    },
-    multiOrderTitleRow: {
-      alignItems: 'center',
-      flexDirection: 'row-reverse',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    multiOrderStoreName: {
-      color: '#242424',
-      flex: 1,
-      fontSize: 15,
-      fontWeight: '900',
-      textAlign: 'right',
-      writingDirection: 'rtl',
-    },
-    multiOrderNumber: {
-      color: '#008B43',
-      fontSize: 12,
-      fontWeight: '700',
-      marginLeft: 12,
-    },
-    multiOrderItemName: {
-      color: '#343434',
-      flex: 1,
-      fontSize: 12,
-      textAlign: 'right',
-      writingDirection: 'rtl',
-    },
-    multiOrderDivider: {
-      backgroundColor: '#DFE8E2',
-      height: StyleSheet.hairlineWidth,
-      marginVertical: 10,
-    },
-    multiOrderTotalLabel: {
-      color: '#242424',
-      fontSize: 12,
-      fontWeight: '800',
-      textAlign: 'right',
-      writingDirection: 'rtl',
-    },
-    multiOrderTotalValue: {
-      color: '#008B43',
-      fontSize: 13,
-      fontWeight: '900',
-    },
     orderSummarySection: {
       backgroundColor: '#ffffff',
       paddingBottom: 24,
