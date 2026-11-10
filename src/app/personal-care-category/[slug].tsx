@@ -3029,6 +3029,10 @@ export default function PersonalCareCategoryScreen() {
       PAGE_MAX_WIDTH,
     );
 
+  // Match supermarket-category/[slug]: three portrait subcategory cards per rail.
+  const subcategoryCardWidth = (pageWidth - 16 * 2 - 9 * 2) / 3;
+  const subcategoryCardHeight = subcategoryCardWidth * 4 / 3;
+
   const productCardWidth =
     (pageWidth -
       HORIZONTAL_PADDING * 2 -
@@ -3640,6 +3644,7 @@ export default function PersonalCareCategoryScreen() {
                       accessibilityRole="button"
                       style={({ pressed }) => [
                         styles.filterItem,
+                          { width: subcategoryCardWidth },
                         pressed &&
                           styles.pressed,
                       ]}
@@ -3652,6 +3657,7 @@ export default function PersonalCareCategoryScreen() {
                       <View
                         style={[
                           styles.filterImageCircle,
+                            { width: subcategoryCardWidth, height: subcategoryCardHeight },
 
                           isSelected &&
                             styles.filterImageCircleSelected,
@@ -4258,7 +4264,7 @@ const styles =
 
       shadowRadius: 3,
 
-      width: 76,
+
     },
 
     filterImageCircle: {
@@ -4273,7 +4279,7 @@ const styles =
       borderWidth:
         StyleSheet.hairlineWidth,
 
-      height: 108,
+
 
       overflow:
         'hidden',
@@ -4281,7 +4287,7 @@ const styles =
       position:
         'relative',
 
-      width: 76,
+
     },
 
     filterImageCircleSelected: {

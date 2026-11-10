@@ -3,7 +3,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import {
-  useCallback,
+
   useEffect,
   useMemo,
   useRef,
@@ -2154,9 +2154,6 @@ export default function PersonalCareScreen() {
 
   const categoryScrollRef =
     useRef<ScrollView | null>(null);
-
-  const loadRequestIdRef =
-    useRef(0);
 
   const [catalog, setCatalog] =
     useState<StoreCatalog | null>(null);
