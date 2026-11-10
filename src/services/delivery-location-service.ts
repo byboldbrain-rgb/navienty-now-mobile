@@ -1,6 +1,7 @@
 import {
   getGlobalCartStoreGroups,
 } from '../store/cart-store';
+import { sumStoreDeliveryFees } from '../domain/store-delivery-pricing';
 import * as legacy from './delivery-location-service-legacy';
 
 export * from './delivery-location-service-legacy';
@@ -9,8 +10,8 @@ export * from './delivery-location-service-legacy';
  * The RPC is authoritative for a particular store and destination. Never
  * replace a valid 0 delivery fee with a general cart or service-area fee.
  *
- * In a multi-store cart we charge one shared delivery fee: the highest of
- * the participating stores' individual fees, rather than a hard-coded fee.
+ * In a multi-store cart, each store's delivery is charged independently.
+ * The aggregate quote is the sum of all authoritative store-area fees.
  */
 export async function resolveDeliveryLocation(
   input: {
@@ -56,7 +57,7 @@ export async function resolveDeliveryLocation(
   const deliveryFee = fees.every(
     (fee): fee is number => fee !== null && Number.isFinite(fee) && fee >= 0,
   )
-    ? Math.max(...(fees as number[]))
+    ? sumStoreDeliveryFees(fees as number[])
     : null;
 
   return {
