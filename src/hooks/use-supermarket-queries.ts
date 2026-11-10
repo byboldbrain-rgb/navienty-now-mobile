@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import {
@@ -14,10 +14,12 @@ import {
 import {
   getSupermarketHomeSnapshot,
   getSupermarketHomePreviewProducts,
+  type SupermarketHomeSnapshot,
 } from '../services/supermarket-home-service';
 import {
   getFastSupermarketCategoryContext,
   getFastSupermarketCategoryPage,
+  normalizeSupermarketCategoryContext,
   SUPERMARKET_CATEGORY_PAGE_SIZE,
 } from '../services/supermarket-category-fast-service';
 
@@ -84,6 +86,7 @@ export function useSupermarketHomePreviewProductsQuery(
  * for thousands of products before opening.
  */
 export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: [
       'public', 'supermarket', 'category-context-v2',
@@ -92,6 +95,24 @@ export function useSupermarketCategoryQuery(options: CategoryQueryOptions) {
     queryFn: () => getFastSupermarketCategoryContext(
       options.serviceAreaId, options.requestedStoreId,
     ),
+    // Fast navigation: the home already fetched the same current DB category
+    // names. Render those immediately while refreshing store-specific
+    // context and offer root counts in the background.
+    placeholderData: () => {
+      const home = queryClient.getQueryData<SupermarketHomeSnapshot>([
+        'public', 'supermarket', 'home-shell-v2',
+        options.serviceAreaId ?? '*',
+      ]);
+      if (!home?.catalog?.store?.id) return undefined;
+      if (options.requestedStoreId && home.catalog.store.id !== options.requestedStoreId) {
+        return undefined;
+      }
+      return normalizeSupermarketCategoryContext({
+        catalog: home.catalog,
+        currencyCode: home.currencyCode,
+        offerRootCategoryIds: [],
+      });
+    },
     staleTime: 90_000,
     gcTime: 24 * 60 * 60 * 1000,
     retry: 1,
