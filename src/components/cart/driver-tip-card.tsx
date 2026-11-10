@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AnimatedDeliveryRider from './animated-delivery-rider';
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -12,7 +13,9 @@ import {
   View,
 } from 'react-native';
 
-const ACCENT = '#F27C42';
+const ACCENT = '#00B14F';
+const ACCENT_SOFT = '#EAF8F0';
+const ACCENT_DARK = '#008E40';
 const MAX_TIP_EGP = 1000;
 const SUGGESTED_TIPS = [
   { amount: 10, emoji: '🍦' },
@@ -75,9 +78,7 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
     <>
       <View style={styles.card}>
         <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarEmoji}>🛵</Text>
-          </View>
+          <AnimatedDeliveryRider />
           <View style={styles.headerCopy}>
             <View style={styles.titleRow}>
               <Text style={styles.title}>كافئ السائق بإكرامية</Text>
@@ -117,7 +118,7 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
             onPress={() => setCustomVisible(true)}
             style={[styles.chip, isCustom && styles.chipSelected]}
           >
-            <Ionicons name="pencil-outline" size={17} color={isCustom ? ACCENT : '#292929'} />
+            <Ionicons name="pencil-outline" size={17} color={isCustom ? ACCENT_DARK : '#292929'} />
             <Text style={[styles.chipText, isCustom && styles.chipTextSelected]}>
               {isCustom ? `${formatTip(amount)} ج.م` : 'مبلغ آخر'}
             </Text>
@@ -149,9 +150,7 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
           <Pressable style={styles.backdrop} onPress={() => setCustomVisible(false)} />
           <View style={styles.dialog}>
             <View style={styles.dialogHeader}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarEmoji}>🛵</Text>
-              </View>
+              <AnimatedDeliveryRider />
               <View style={styles.headerCopy}>
                 <Text style={styles.title}>كافئ السائق بإكرامية</Text>
                 <Text style={styles.subtitle}>يحتفظ السائق بمبلغ الإكرامية بالكامل</Text>
@@ -189,47 +188,38 @@ export default function DriverTipCard({ amount, onChange }: DriverTipCardProps) 
 
 const styles = StyleSheet.create({
   card: {
-    marginTop: 12,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 13,
     borderWidth: 1,
     borderColor: '#E4E4E4',
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
   },
-  header: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFF1E9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarEmoji: { fontSize: 29 },
+  header: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
   headerCopy: { flex: 1, alignItems: 'flex-end' },
-  titleRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7 },
-  title: { color: '#202020', fontSize: 17, fontWeight: '800', textAlign: 'right' },
-  subtitle: { marginTop: 5, fontSize: 12, color: '#858585', textAlign: 'right' },
-  optionsScroll: { marginTop: 20, flexGrow: 0 },
-  options: { flexDirection: 'row-reverse', alignItems: 'center', gap: 9, paddingVertical: 2 },
+  titleRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  title: { color: '#202020', fontSize: 16, fontWeight: '800', textAlign: 'right' },
+  subtitle: { marginTop: 3, fontSize: 11, color: '#858585', textAlign: 'right' },
+  optionsScroll: { marginTop: 12, flexGrow: 0 },
+  options: { flexDirection: 'row-reverse', alignItems: 'center', gap: 7, paddingVertical: 1 }, 
   chip: {
     borderWidth: 1,
     borderColor: '#E1E1E1',
-    paddingHorizontal: 15,
-    minHeight: 44,
-    borderRadius: 24,
+    paddingHorizontal: 12,
+    minHeight: 38,
+    borderRadius: 20,
     flexDirection: 'row-reverse',
-    gap: 7,
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipSelected: { borderColor: ACCENT, backgroundColor: '#FFF4ED' },
-  chipText: { color: '#292929', fontSize: 14, fontWeight: '700' },
-  chipTextSelected: { color: '#C95C2E' },
-  chipEmoji: { fontSize: 17 },
-  removeTip: { alignSelf: 'flex-end', marginTop: 12, paddingVertical: 5 },
-  removeTipText: { color: '#9A5750', fontSize: 12, textDecorationLine: 'underline' },
+  chipSelected: { borderColor: ACCENT, backgroundColor: ACCENT_SOFT },
+  chipText: { color: '#292929', fontSize: 13, fontWeight: '700' },
+  chipTextSelected: { color: ACCENT_DARK },
+  chipEmoji: { fontSize: 16 },
+  removeTip: { alignSelf: 'flex-end', marginTop: 5, paddingVertical: 3 },
+  removeTipText: { color: '#738378', fontSize: 11, textDecorationLine: 'underline' },
   overlay: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.48)' },
   dialog: {
@@ -239,7 +229,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E5E5',
   },
-  dialogHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 20 },
+  dialogHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 18 },
   customInput: {
     minHeight: 60,
     borderWidth: 1,
