@@ -819,9 +819,10 @@ export default function LocationPickerScreen() {
           storeId,
 
           source:
-            source ===
-            'checkout'
-              ? 'checkout'
+            source === 'checkout' ||
+            source === 'global-checkout' ||
+            source === 'global-cart'
+              ? source
               : 'cart',
         },
       });
