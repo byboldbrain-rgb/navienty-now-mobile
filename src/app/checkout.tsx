@@ -28,6 +28,7 @@ import {
   useExpirationStatus,
 } from '../hooks/use-expiration-status';
 import { useGlobalDeliveryFee } from '../hooks/use-global-delivery-fee';
+import { reconcileCheckoutCarts } from '../services/checkout-cart-reconciliation-service';
 import ServicePackageCheckout from '../components/service/service-package-checkout';
 import { CheckoutScreenSkeleton } from '../components/ui/loading-skeleton';
 import {
@@ -548,9 +549,12 @@ function StoreCheckoutScreen() {
         state.clearStoreCart,
     );
 
+  // If a legacy/removed anchor store disappeared during cart repair, keep
+  // showing the remaining real carts instead of treating checkout as empty.
   const checkoutStoreId =
-    requestedStoreId ??
-    activeStoreId;
+    requestedStoreId && carts[requestedStoreId]
+      ? requestedStoreId
+      : activeStoreId;
 
   const checkoutCart =
     checkoutStoreId
@@ -1773,30 +1777,6 @@ function StoreCheckoutScreen() {
     const activeBootstrap =
       bootstrap;
 
-    const uuidPattern =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-    const cartContainsLegacyIds =
-      !uuidPattern.test(
-        activeStoreId,
-      ) ||
-      items.some(
-        (item) =>
-          !uuidPattern.test(
-            item.id,
-          ),
-      );
-
-    if (
-      cartContainsLegacyIds
-    ) {
-      Alert.alert(
-        'السلة تحتاج إلى تحديث',
-        'هذه السلة أُنشئت قبل ربط الكتالوج بـSupabase. أفرغ السلة وأضف المنتجات من المتجر مرة أخرى.',
-      );
-      return;
-    }
-
     if (
       !activeBootstrap
         .settings
@@ -1828,6 +1808,88 @@ function StoreCheckoutScreen() {
       setIsSubmittingOrder(
         true,
       );
+
+      // Validate the real per-merchant carts before creating any order. The
+      // checkout facade aggregates lines and cannot establish ownership.
+      const cartSnapshot = Object.values(
+        useBaseCartStore.getState().carts,
+      ).filter((group) => group.items.length > 0);
+
+      let cartReview;
+      try {
+        cartReview = await reconcileCheckoutCarts(cartSnapshot);
+      } catch {
+        Alert.alert(
+          'تعذر تحديث السلة',
+          'تعذر التحقق من المنتجات حاليًا. احتفظنا بالسلة كما هي؛ حاول مرة أخرى.',
+        );
+        return;
+      }
+
+      if (cartReview.unavailable.length > 0) {
+        const names = cartReview.unavailable
+          .slice(0, 5)
+          .map((item) => '• ' + item.name + ' (' + item.storeName + ')')
+          .join('\n');
+        const extra = cartReview.unavailable.length > 5
+          ? '\nو' + (cartReview.unavailable.length - 5) + ' منتجات أخرى'
+          : '';
+
+        Alert.alert(
+          'منتجات تحتاج مراجعة',
+          'المنتجات التالية لم تعد متاحة أو تعذر مطابقتها في المتجر:\n' +
+            names + extra +
+            '\n\nيمكنك الاحتفاظ بالسلة أو إزالة هذه المنتجات فقط، دون حذف بقية الطلب.',
+          [
+            { text: 'الاحتفاظ بالسلة', style: 'cancel' },
+            {
+              text: 'إزالة غير المتاح',
+              style: 'destructive',
+              onPress: () => {
+                const applied = useBaseCartStore.getState()
+                  .applyCheckoutCartCorrections(cartReview.corrections);
+                Alert.alert(
+                  applied ? 'تم تحديث السلة' : 'السلة اتغيرت',
+                  applied
+                    ? 'راجع تفاصيل السلة والأسعار ثم اضغط متابعة مرة أخرى.'
+                    : 'تم تعديل السلة أثناء التحديث. حاول مرة أخرى.',
+                );
+              },
+            },
+          ],
+        );
+        return;
+      }
+
+      const correctionsApplied = useBaseCartStore.getState()
+        .applyCheckoutCartCorrections(cartReview.corrections);
+      if (!correctionsApplied) {
+        Alert.alert(
+          'السلة اتغيرت',
+          'تم تعديل السلة أثناء تحديث المنتجات. راجعها واضغط متابعة مرة أخرى.',
+        );
+        return;
+      }
+
+      if (cartReview.priceChanges.length > 0) {
+        const prices = cartReview.priceChanges.slice(0, 4)
+          .map((change) =>
+            '• ' + change.name + ': ' + change.before + ' ← ' + change.after + ' ج'
+          ).join('\n');
+        Alert.alert(
+          'تم تحديث أسعار السلة',
+          'فيه أسعار اتغيرت في المتجر:\n' + prices +
+            '\n\nراجع الإجمالي الجديد ثم اضغط متابعة مرة أخرى.',
+        );
+        return;
+      }
+
+      const validatedAnchorItems =
+        useBaseCartStore.getState().carts[activeStoreId]?.items ?? [];
+      if (validatedAnchorItems.length === 0) {
+        Alert.alert('السلة فارغة', 'أضف منتجات للسلة قبل إكمال الطلب.');
+        return;
+      }
 
       await ensureAppSession();
 
@@ -1893,7 +1955,7 @@ function StoreCheckoutScreen() {
               ? checkoutSpin.eventId
               : null,
 
-          items: items.map(
+          items: validatedAnchorItems.map(
             (item) => ({
               productId:
                 item.id,
