@@ -1154,6 +1154,12 @@ export default function RestaurantsScreen() {
                 store,
               );
 
+            // Match the fee for the customer's selected delivery area.
+            const hasFreeDelivery =
+              Boolean(savedServiceAreaId) &&
+              store.hasExplicitDeliveryFee === true &&
+              store.deliveryFee === 0;
+
             return (
               <View
                 style={
@@ -1271,7 +1277,14 @@ export default function RestaurantsScreen() {
                             New
                           </Text>
                         )}
-                      </View>
+
+                        {hasFreeDelivery && (
+                          <View style={styles.freeDeliveryBadge}>
+                            <Text style={styles.freeDeliveryBadgeText}>
+                              توصيل مجاني
+                            </Text>
+                          </View>
+                        )}                      </View>
                     ) : (
                       <View
                         style={
@@ -1309,7 +1322,14 @@ export default function RestaurantsScreen() {
                             New
                           </Text>
                         )}
-                      </View>
+
+                        {hasFreeDelivery && (
+                          <View style={styles.freeDeliveryBadge}>
+                            <Text style={styles.freeDeliveryBadgeText}>
+                              توصيل مجاني
+                            </Text>
+                          </View>
+                        )}                      </View>
                     )}
                   </View>
                 </Pressable>
@@ -2639,6 +2659,24 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     marginTop: 6,
     minHeight: 22,
+  },
+
+  freeDeliveryBadge: {
+    alignItems: 'center',
+    backgroundColor: '#E6F8E9',
+    borderRadius: 9,
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+
+  freeDeliveryBadgeText: {
+    color: '#167A3A',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'center',
+    writingDirection: 'rtl',
   },
 
   ratingStar: {
