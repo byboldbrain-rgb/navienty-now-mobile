@@ -1253,7 +1253,8 @@ function StoreCheckoutScreen() {
     if (
       !appliedVoucher ||
       !storeId ||
-      spinCanApplyToCurrentOrder
+      spinCanApplyToCurrentOrder ||
+      (isMultiStoreCheckout && (groupDeliveryFee === null || isResolvingGroupDelivery))
     ) {
       return;
     }
@@ -1268,7 +1269,7 @@ function StoreCheckoutScreen() {
       Math.abs(
         appliedVoucher
           .subtotalBeforeDiscount -
-          subtotal,
+          anchorStoreSubtotal,
       ) > 0.009;
 
     const deliveryChanged =
@@ -1338,11 +1339,13 @@ function StoreCheckoutScreen() {
     appliedVoucher,
     anchorStoreDeliveryFee,
     anchorStoreSubtotal,
+    groupDeliveryFee,
+    isMultiStoreCheckout,
+    isResolvingGroupDelivery,
     phoneNumber,
     setStoreVoucher,
     spinCanApplyToCurrentOrder,
     storeId,
-    subtotal,
   ]);
 
   /* -------------------------------- */
