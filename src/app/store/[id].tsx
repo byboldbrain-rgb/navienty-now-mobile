@@ -1826,6 +1826,7 @@ export default function StoreScreen({
               accessibilityRole="button"
               style={({ pressed }) => [
                 styles.backButton,
+                styles.stickySearchButton,
                 pressed && styles.headerButtonPressed,
               ]}
               onPress={openRestaurantSearch}
@@ -2358,6 +2359,11 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
 
     elevation: 5,
+  },
+
+  stickySearchButton: {
+    backgroundColor: '#E9F9EE',
+    borderColor: '#CBEED5',
   },
 
   heroSearchButton: {
