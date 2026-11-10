@@ -1284,7 +1284,8 @@ export default function RestaurantsScreen() {
                               توصيل مجاني
                             </Text>
                           </View>
-                        )}                      </View>
+                        )}
+                      </View>
                     ) : (
                       <View
                         style={
@@ -1329,7 +1330,8 @@ export default function RestaurantsScreen() {
                               توصيل مجاني
                             </Text>
                           </View>
-                        )}                      </View>
+                        )}
+                      </View>
                     )}
                   </View>
                 </Pressable>
