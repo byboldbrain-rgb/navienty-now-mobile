@@ -1,3 +1,4 @@
+import { sumStoreDeliveryFees } from '../domain/store-delivery-pricing';
 import {
   useCartStore as useBaseCartStore,
   type CartState,
@@ -32,13 +33,11 @@ function anchorGroup(
   );
 }
 
-/** Provisional-only fee for legacy Cart views. The checkout uses the live RPC quote. */
-function provisionalSharedDeliveryFee(groups: StoreCart[]): number {
-  return groups.length > 0
-    ? Math.max(0, ...groups.map((group) =>
-        Number.isFinite(group.deliveryFee) ? Math.max(0, group.deliveryFee) : 0,
-      ))
-    : 0;
+/** Provisional-only sum; Checkout still uses live store-area RPC quotes. */
+function provisionalStoreDeliveryFeeSum(groups: StoreCart[]): number {
+  return sumStoreDeliveryFees(groups.map((group) =>
+    Number.isFinite(group.deliveryFee) ? Math.max(0, group.deliveryFee) : 0,
+  ));
 }
 
 function aggregateCart(
@@ -53,7 +52,7 @@ function aggregateCart(
 
   return {
     ...anchor,
-    deliveryFee: provisionalSharedDeliveryFee(groups),
+    deliveryFee: provisionalStoreDeliveryFeeSum(groups),
     minimumOrder: 0,
     items: groups.flatMap(
       (group) => group.items,
