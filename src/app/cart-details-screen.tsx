@@ -2551,7 +2551,7 @@ function StoreCartScreen() {
       spinReward?.type ===
       'processing_fee_waiver'
     ) {
-      return 'خصمنا رسوم الخدمة من طلبك';
+      return 'خصمنا رسوم السحب من طلبك';
     }
 
     return `اتخصم ${formatSummaryAmount(
@@ -4312,7 +4312,7 @@ function StoreCartScreen() {
                   styles.referenceSummaryLabel
                 }
               >
-                رسوم الخدمة
+                رسوم السحب
               </Text>
 
               <Ionicons
@@ -4346,7 +4346,7 @@ function StoreCartScreen() {
               >
                 {spinReward?.type ===
                 'processing_fee_waiver'
-                  ? 'مكافأة Spin — رسوم الخدمة'
+                  ? 'مكافأة Spin — رسوم السحب'
                   : 'مكافأة Spin'}
               </Text>
 
