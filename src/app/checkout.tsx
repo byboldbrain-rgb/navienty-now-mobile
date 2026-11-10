@@ -314,6 +314,10 @@ function StoreCheckoutScreen() {
         state.setActiveCart,
     );
 
+  const updateStoreDeliveryTerms = useCartStore(
+    (state) => state.updateStoreDeliveryTerms,
+  );
+
   const clearCart =
     useCartStore(
       (state) =>
@@ -371,22 +375,6 @@ function StoreCheckoutScreen() {
           item.quantity,
       0,
     );
-
-  /*
-   * Delivery fee is resolved from the selected delivery pin + store.
-   * Until that RPC finishes, fall back to the cart snapshot.
-   */
-  const deliveryFee =
-    deliveryResolution?.deliveryFee ??
-    Number(checkoutCart?.deliveryFee ?? 0);
-
-  const paymentProcessingFee =
-    PAYMENT_PROCESSING_FEE;
-
-  const total =
-    Number(subtotal ?? 0) +
-    deliveryFee +
-    paymentProcessingFee;
 
   /* -------------------------------- */
   /* ORDERS                           */
@@ -455,6 +443,23 @@ function StoreCheckoutScreen() {
       (state) =>
         state.locationLongitude,
     );
+
+  // A cart snapshot can be outdated when merchant/zone prices change.
+  // Only the server quote for this exact store and pin is authoritative.
+  const deliveryQuoteIsCurrent =
+    deliveryResolution?.serviceable === true &&
+    deliveryResolution.storeAvailable === true &&
+    deliveryResolution.storeId === storeId &&
+    deliveryResolution.latitude === locationLatitude &&
+    deliveryResolution.longitude === locationLongitude &&
+    deliveryResolution.deliveryFee !== null;
+
+  const deliveryFee = deliveryQuoteIsCurrent
+    ? deliveryResolution!.deliveryFee
+    : null;
+  const paymentProcessingFee = PAYMENT_PROCESSING_FEE;
+  const total = Number(subtotal ?? 0) +
+    (deliveryFee ?? 0) + paymentProcessingFee;
 
   const landmark =
     useCustomerStore(
@@ -756,6 +761,18 @@ function StoreCheckoutScreen() {
         setDeliveryResolution(resolution);
 
         if (
+          resolution.serviceable &&
+          resolution.storeAvailable === true &&
+          resolution.deliveryFee !== null
+        ) {
+          updateStoreDeliveryTerms(
+            storeId,
+            resolution.deliveryFee,
+            resolution.minimumOrder ?? 0,
+          );
+        }
+
+        if (
           !resolution.serviceable ||
           resolution.storeAvailable === false
         ) {
@@ -793,6 +810,7 @@ function StoreCheckoutScreen() {
     hasDeliveryLocation,
     locationLatitude,
     locationLongitude,
+    updateStoreDeliveryTerms,
   ]);
 
   function editDeliveryLocation() {
@@ -847,7 +865,10 @@ function StoreCheckoutScreen() {
       validation,
     ).every(Boolean) &&
     deliveryIsAvailable &&
-    !isResolvingDelivery;
+    deliveryQuoteIsCurrent &&
+    deliveryFee !== null &&
+    !isResolvingDelivery &&
+    !deliveryResolutionError;
 
   /* -------------------------------- */
   /* EMPTY CART                       */
@@ -1469,9 +1490,7 @@ function StoreCheckoutScreen() {
                 ? 'منتج'
                 : 'منتجات'}{' '}
               •{' '}
-              {formatPrice(
-                total,
-              )}
+              {deliveryFee === null ? 'جارٍ حساب التوصيل...' : formatPrice(total)}
             </Text>
           </View>
         </View>
@@ -2165,9 +2184,9 @@ function StoreCheckoutScreen() {
                 styles.summaryValue
               }
             >
-              {formatPrice(
-                deliveryFee,
-              )}
+              {deliveryFee === null
+                ? deliveryResolutionError ? 'غير متاح' : 'جارٍ حساب التوصيل...'
+                : deliveryFee === 0 ? 'مجاني' : formatPrice(deliveryFee)}
             </Text>
           </View>
 
@@ -2223,7 +2242,7 @@ function StoreCheckoutScreen() {
                 styles.totalValue
               }
             >
-              {formatPrice(total)}
+              {deliveryFee === null ? 'جارٍ الحساب...' : formatPrice(total)}
             </Text>
           </View>
         </View>

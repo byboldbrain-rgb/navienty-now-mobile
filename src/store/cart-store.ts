@@ -147,6 +147,13 @@ type CartState = {
     storeId: string | null,
   ) => void;
 
+  /** Refresh persisted delivery terms from the server for one store. */
+  updateStoreDeliveryTerms: (
+    storeId: string,
+    deliveryFee: number,
+    minimumOrder: number,
+  ) => void;
+
   increaseStoreItem: (
     storeId: string,
     productId: string,
@@ -1115,6 +1122,52 @@ export const useCartStore = create<CartState>()(
             ...getLegacySnapshot(
               state.carts,
               storeId,
+            ),
+          };
+        });
+      },
+
+      updateStoreDeliveryTerms: (
+        storeId,
+        deliveryFee,
+        minimumOrder,
+      ) => {
+        if (
+          !Number.isFinite(deliveryFee) ||
+          deliveryFee < 0 ||
+          !Number.isFinite(minimumOrder) ||
+          minimumOrder < 0
+        ) {
+          return;
+        }
+
+        set((state) => {
+          const cart = state.carts[storeId];
+          if (!cart) return state;
+
+          // Avoid rerenders when the quote has not changed.
+          if (
+            cart.deliveryFee === deliveryFee &&
+            cart.minimumOrder === minimumOrder
+          ) {
+            return state;
+          }
+
+          const nextCarts = {
+            ...state.carts,
+            [storeId]: {
+              ...cart,
+              deliveryFee,
+              minimumOrder,
+            },
+          };
+
+          return {
+            ...state,
+            carts: nextCarts,
+            ...getLegacySnapshot(
+              nextCarts,
+              state.activeStoreId,
             ),
           };
         });
