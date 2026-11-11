@@ -1,0 +1,56 @@
+name: Try safe non-breaking release dependency audit fixes
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+    paths:
+      - .github/workflows/navienty-safe-dependency-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: contains(github.event.head_commit.message, 'Try safe release dependency repair')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/android-production-hardening
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install original exact lockfile
+        run: npm ci
+
+      - name: Apply npm-supported, non-forced security upgrades to lockfile
+        run: |
+          npm audit fix --package-lock-only --ignore-scripts --no-fund || true
+          npm ci
+
+      - name: Require approved production audit policy
+        run: npm run audit:prod
+
+      - name: Require unit and business-rule regression tests
+        run: npm test
+
+      - name: Require TypeScript
+        run: npx tsc --noEmit
+
+      - name: Commit updated lockfile only after all checks pass
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "No patch-level dependency changes needed."
+            exit 0
+          fi
+          git commit -m "fix(security): update safe vulnerable transitive package versions"
+          git push origin HEAD:codex/android-production-hardening
