@@ -26,6 +26,7 @@ import DatabaseFirstImage from '../../components/ui/database-first-image';
 import { getCategoryIcon } from '../../config/category-icons';
 import type { StoreSummary } from '../../services/catalog-service';
 import { getHomeStoreArtwork } from '../../services/home-store-artwork-service';
+import { getRecentOrderCategory } from './recent-order-routing';
 import type { Order } from '../../store/orders-store';
 import {
     NAVIENTY_NOW_COLORS,
@@ -1847,6 +1848,13 @@ export function RecentOrdersRail({
 
   const repeatableOrders =
     orders.filter((order) => {
+      const store =
+        stores.find((item) => item.id === order.storeId) ?? null;
+
+      if (getRecentOrderCategory(order, store) === 'request-anything') {
+        return false;
+      }
+
       const storeKey =
         order.storeId?.trim() ||
         order.storeName.trim();

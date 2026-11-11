@@ -43,6 +43,7 @@ import {
   trackBehaviorEvent,
 } from '../features/home/home-personalization-compat';
 import { styles } from '../features/home/home-screen.styles';
+import { getRecentOrderCategory } from '../features/home/recent-order-routing';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { useHomeCampaignPopup } from '../hooks/use-home-campaign-popup';
 import { useHomeForYou } from '../hooks/use-home-for-you';
@@ -154,11 +155,18 @@ export default function HomeScreen() {
     useMemo(
       () =>
         orders
-          .filter(
-            (order) =>
-              order.status ===
-              'delivered',
-          )
+          .filter((order) => {
+            if (order.status !== 'delivered') {
+              return false;
+            }
+
+            // Filter before .slice(0, 4), so the hidden "request anything"
+            // service does not take a slot from a valid repeat-order card.
+            const store =
+              stores.find((item) => item.id === order.storeId) ?? null;
+
+            return getRecentOrderCategory(order, store) !== 'request-anything';
+          })
           .sort(
             (
               firstOrder,
@@ -185,7 +193,7 @@ export default function HomeScreen() {
             },
           )
           .slice(0, 4),
-      [orders],
+      [orders, stores],
     );
 
   const storesById = useMemo(
@@ -552,6 +560,19 @@ export default function HomeScreen() {
     const orderStore =
       storesById.get(order.storeId) ??
       null;
+
+    const category = getRecentOrderCategory(order, orderStore);
+
+    if (category === 'request-anything') {
+      return;
+    }
+
+    // These are category-managed storefronts, not normal /store/[id] pages.
+    // Navigate just like the matching Home category tile.
+    if (category) {
+      openCategory(category);
+      return;
+    }
 
     if (orderStore?.isManuallyClosed) {
       showClosedStoreAlert(
