@@ -63,6 +63,8 @@ import {
 } from '../../services/supermarket-campaign-service';
 import { useCartStore } from '../../store/cart-store';
 import { useCustomerStore } from '../../store/customer-store';
+import { useServiceCategoryImages } from '../../hooks/use-service-category-images';
+import { getServiceCategoryImageUrl } from '../../services/service-category-image-service';
 import { NAVIENTY_NOW_COLORS } from '../../theme/navienty-now-theme';
 
 // Match the card dimensions in supermarket-category/[slug].tsx.
@@ -2351,6 +2353,20 @@ export default function SupermarketScreen() {
    * Critical path: ~45 KB cached metadata (not a 4.5 MB product catalog).
    * Optional widgets render independently and never gate the whole screen.
    */
+  // The Home tile deliberately uses placement='home', while this screen
+  // resolves its own variant first and the database 'default' otherwise.
+  const categoryArtwork = useServiceCategoryImages('category/supermarket');
+  const supermarketImageUrl = getServiceCategoryImageUrl(
+    categoryArtwork,
+    'supermarket',
+    'category/supermarket',
+  );
+  const [failedSupermarketImageUrl, setFailedSupermarketImageUrl] =
+    useState<string | null>(null);
+  const showSupermarketImage =
+    Boolean(supermarketImageUrl) &&
+    failedSupermarketImageUrl !== supermarketImageUrl;
+
   const homeQuery = useSupermarketHomeQuery(savedServiceAreaId);
   const catalog = homeQuery.data?.catalog ?? null;
   const currencyCode = homeQuery.data?.currencyCode ?? 'EGP';
@@ -3258,13 +3274,20 @@ export default function SupermarketScreen() {
               styles.categoriesSection
             }
           >
-            <Text
-              style={
-                styles.categoriesTitle
-              }
-            >
-              تسوق حسب الفئة
-            </Text>
+            <View style={styles.categoriesTitleRow}>
+              {showSupermarketImage && supermarketImageUrl ? (
+                <Image
+                  accessibilityLabel="صورة ماركت نافينتي"
+                  source={{ uri: supermarketImageUrl }}
+                  resizeMode="contain"
+                  style={styles.categoriesBrandArtwork}
+                  onError={() => setFailedSupermarketImageUrl(supermarketImageUrl)}
+                />
+              ) : null}
+              <Text style={styles.categoriesTitleInRow}>
+                تسوق حسب الفئة
+              </Text>
+            </View>
 
             <Animated.ScrollView
               key="supermarket-categories-three-rows"
@@ -3708,6 +3731,26 @@ const styles =
         '#FFFFFF',
 
       paddingTop: 1,
+    },
+    categoriesTitleRow: {
+      alignItems: 'center',
+      flexDirection: 'row-reverse',
+      gap: 9,
+      marginBottom: 14,
+      paddingHorizontal: 16,
+    },
+    categoriesBrandArtwork: {
+      width: 38,
+      height: 38,
+      borderRadius: 8,
+    },
+    categoriesTitleInRow: {
+      color: '#202020',
+      fontSize: 21,
+      fontWeight: '800',
+      letterSpacing: -0.45,
+      textAlign: 'right',
+      writingDirection: 'rtl',
     },
 
     categoriesTitle: {
