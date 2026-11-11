@@ -48,11 +48,13 @@ import { useHomeCampaignPopup } from '../hooks/use-home-campaign-popup';
 import { useHomeForYou } from '../hooks/use-home-for-you';
 import { useHomeOrdersSync } from '../hooks/use-home-orders-sync';
 import { useHomeScreenData } from '../hooks/use-home-screen-data';
+import { useServiceCategoryImages } from '../hooks/use-service-category-images';
 import { useCustomerStore } from '../store/customer-store';
 import {
   type Order,
   useOrdersStore,
 } from '../store/orders-store';
+import { getServiceCategoryImageUrl } from '../services/service-category-image-service';
 import { NAVIENTY_NOW_LAYOUT } from '../theme/navienty-now-theme';
 
 export default function HomeScreen() {
@@ -293,14 +295,28 @@ export default function HomeScreen() {
   const isSignedIn =
     authState.status === 'signedIn';
 
+  // Each category can display a different database image on Home.
+  // The existing storefront tile/local artwork stays as the fallback.
+  const categoryImages = useServiceCategoryImages('home');
+
   const categories = useMemo(
     () =>
       buildHomeCategories(
         (bootstrap?.store_categories ??
           []) as BootstrapCategory[],
         homeCategoryTiles,
-      ),
-    [bootstrap, homeCategoryTiles],
+      ).map((category) => {
+        const homeImageUrl = getServiceCategoryImageUrl(
+          categoryImages,
+          category.slug,
+          'home',
+        );
+
+        return homeImageUrl
+          ? { ...category, image_url: homeImageUrl }
+          : category;
+      }),
+    [bootstrap, homeCategoryTiles, categoryImages],
   );
 
   const discoveryContext = useMemo(
