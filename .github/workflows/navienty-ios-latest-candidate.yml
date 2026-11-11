@@ -49,6 +49,19 @@ jobs:
           node scripts/validate-app-store-account-controls.mjs
           node scripts/validate-social-auth-parity.mjs
           node scripts/validate-notification-lifecycle.mjs
+      - name: Verify final iOS Info.plist after config plugins
+        shell: bash
+        run: |
+          npx expo config --type introspect --json > "$RUNNER_TEMP/navienty-ios-introspect.json"
+          node --input-type=module - "$RUNNER_TEMP/navienty-ios-introspect.json" <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const cfg = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          const value = cfg._internal?.modResults?.ios?.infoPlist?.NSMotionUsageDescription;
+          if (typeof value !== 'string' || value.trim().length < 20) {
+            throw new Error('NSMotionUsageDescription is missing from the final generated iOS Info.plist. Refusing to upload another ITMS-90683 build.');
+          }
+          console.log('Verified iOS Info.plist includes NSMotionUsageDescription after expo-location plugin evaluation.');
+          NODE
       - name: Verify regressions and types
         run: |
           npm test

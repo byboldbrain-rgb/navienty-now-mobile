@@ -76,7 +76,6 @@ const locationOptions = Array.isArray(locationPlugin)
 for (const option of [
   'locationAlwaysAndWhenInUsePermission',
   'locationAlwaysPermission',
-  'motionUsagePermission',
   'isIosBackgroundLocationEnabled',
 ]) {
   if (locationOptions?.[option] !== false) {
@@ -84,6 +83,22 @@ for (const option of [
       `expo-location.${option} must remain disabled for the release.`,
     );
   }
+}
+
+// expo-location SDK 57 retains CoreMotion symbols even when
+// motionUsagePermission is false. Passing false deletes the plist purpose
+// string during prebuild and causes Apple ITMS-90683 rejections.
+// Require the config plugin to preserve the declared purpose string.
+const motionPurpose = expo.ios?.infoPlist?.NSMotionUsageDescription;
+if (
+  typeof motionPurpose !== 'string' ||
+  motionPurpose.trim().length < 20 ||
+  locationOptions?.motionUsagePermission !== motionPurpose
+) {
+  throw new Error(
+    'expo-location.motionUsagePermission must match the nonempty ' +
+    'ios.infoPlist.NSMotionUsageDescription purpose string for iOS App Store builds.',
+  );
 }
 
 const notificationsPlugin = findPlugin(
