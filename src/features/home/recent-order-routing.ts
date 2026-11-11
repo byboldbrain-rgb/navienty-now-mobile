@@ -103,3 +103,32 @@ export function getRecentOrderCategory(
 
   return null;
 }
+
+/**
+ * Identifies the top-level service category used to choose an image.
+ *
+ * This differs from navigation: restaurant cards still open their original
+ * store pages, but their category image can be configured independently.
+ */
+export type OrderArtworkCategory =
+  | Exclude<RecentOrderCategory, null>
+  | 'restaurants';
+
+export function getOrderArtworkCategory(
+  order: Pick<Order, 'storeName'>,
+  store: RepeatOrderStore | null,
+): OrderArtworkCategory | null {
+  const serviceCategory = getRecentOrderCategory(order, store);
+  if (serviceCategory) return serviceCategory;
+
+  const storeCategory = normalizeSlug(store?.categorySlug ?? '');
+  if (
+    storeCategory === 'restaurants' ||
+    storeCategory === 'restaurant' ||
+    storeCategory === 'food'
+  ) {
+    return 'restaurants';
+  }
+
+  return null;
+}

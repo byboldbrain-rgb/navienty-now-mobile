@@ -26,7 +26,11 @@ import DatabaseFirstImage from '../../components/ui/database-first-image';
 import { getCategoryIcon } from '../../config/category-icons';
 import type { StoreSummary } from '../../services/catalog-service';
 import { getHomeStoreArtwork } from '../../services/home-store-artwork-service';
-import { getRecentOrderCategory } from './recent-order-routing';
+import {
+  getOrderArtworkCategory,
+  getRecentOrderCategory,
+  type OrderArtworkCategory,
+} from './recent-order-routing';
 import type { Order } from '../../store/orders-store';
 import {
     NAVIENTY_NOW_COLORS,
@@ -1526,23 +1530,6 @@ type HomeOrderArtworkState = {
   categorySlug: string;
 };
 
-/** Only replace Navienty Market thumbnails, never other supermarkets. */
-function isNavientyMarketStoreName(value: string): boolean {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[أإآ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/ڤ/g, 'ف')
-    .replace(/\s+/g, ' ');
-
-  return (
-    (normalized.includes('ماركت') && normalized.includes('نافينتي')) ||
-    (normalized.includes('market') && normalized.includes('navienty'))
-  );
-}
-
 function RecentOrderArtwork({
   order,
   store,
@@ -1824,13 +1811,13 @@ export function RecentOrdersRail({
   orders,
   stores,
   cardWidth,
-  marketImageUrl,
+  categoryImageUrls,
   onPressStore,
 }: {
   orders: readonly Order[];
   stores: readonly StoreSummary[];
   cardWidth: number;
-  marketImageUrl?: string | null;
+  categoryImageUrls?: Partial<Record<OrderArtworkCategory, string | null>>;
   onPressStore: (
     order: Order,
   ) => void;
@@ -1919,12 +1906,10 @@ export function RecentOrdersRail({
                   order.storeId,
               ) ?? null;
 
-            const isNavientyMarket =
-              isNavientyMarketStoreName(order.storeName) ||
-              (
-                orderStore?.categorySlug === 'supermarket' &&
-                isNavientyMarketStoreName(orderStore.name)
-              );
+            const imageCategory = getOrderArtworkCategory(
+              order,
+              orderStore,
+            );
 
             return (
               <RecentOrderCard
@@ -1938,7 +1923,9 @@ export function RecentOrdersRail({
                 order={order}
                 store={orderStore}
                 overrideImageUrl={
-                  isNavientyMarket ? marketImageUrl : null
+                  imageCategory
+                    ? categoryImageUrls?.[imageCategory] ?? null
+                    : null
                 }
                 onPressStore={() => {
                   onPressStore(order);

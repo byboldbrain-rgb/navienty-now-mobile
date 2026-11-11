@@ -43,6 +43,7 @@ import {
   trackBehaviorEvent,
 } from '../features/home/home-personalization-compat';
 import { styles } from '../features/home/home-screen.styles';
+import type { OrderArtworkCategory } from '../features/home/recent-order-routing';
 import { getRecentOrderCategory } from '../features/home/recent-order-routing';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { useHomeCampaignPopup } from '../hooks/use-home-campaign-popup';
@@ -310,11 +311,25 @@ export default function HomeScreen() {
   // Repeat-order cards have independent artwork. The main category rail
   // continues to use placement='home' (its existing image is unchanged).
   const reorderCategoryImages = useServiceCategoryImages('home/reorder');
-  const marketReorderImageUrl = getServiceCategoryImageUrl(
-    reorderCategoryImages,
-    'supermarket',
-    'home/reorder',
-  );
+  const reorderCategoryImageUrls = useMemo<
+    Record<OrderArtworkCategory, string | null>
+  >(() => ({
+    restaurants: getServiceCategoryImageUrl(
+      reorderCategoryImages, 'restaurants', 'home/reorder',
+    ),
+    supermarket: getServiceCategoryImageUrl(
+      reorderCategoryImages, 'supermarket', 'home/reorder',
+    ),
+    bookstore: getServiceCategoryImageUrl(
+      reorderCategoryImages, 'bookstore', 'home/reorder',
+    ),
+    'personal-care': getServiceCategoryImageUrl(
+      reorderCategoryImages, 'personal-care', 'home/reorder',
+    ),
+    'request-anything': getServiceCategoryImageUrl(
+      reorderCategoryImages, 'request-anything', 'home/reorder',
+    ),
+  }), [reorderCategoryImages]);
 
   const categories = useMemo(
     () =>
@@ -731,7 +746,7 @@ export default function HomeScreen() {
               cardWidth={compactCardWidth}
               orders={recentDeliveredOrders}
               stores={stores}
-              marketImageUrl={marketReorderImageUrl}
+              categoryImageUrls={reorderCategoryImageUrls}
               onPressStore={
                 openRecentOrderStore
               }

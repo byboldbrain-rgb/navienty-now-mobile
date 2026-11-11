@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
+import { getOrderArtworkCategory } from '../features/home/recent-order-routing';
 import { useAuthSession } from '../hooks/use-auth-session';
 import { useServiceCategoryImages } from '../hooks/use-service-category-images';
 import {
@@ -66,6 +67,11 @@ type ExtendedOrder = Order & {
 type StoreImageMap = Record<
   string,
   string | null
+>;
+
+type StoreIdentityMap = Record<
+  string,
+  { name: string; categorySlug: string }
 >;
 
 const BRAND_GREEN = '#00B85C';
@@ -269,18 +275,6 @@ function normalizeStoreName(
     .replace(/\s+/g, ' ');
 }
 
-/** Matches only Navienty Market, not third-party supermarket merchants. */
-function isNavientyMarketName(value: string): boolean {
-  const name = normalizeStoreName(value)
-    .toLowerCase()
-    .replace(/ڤ/g, 'ف');
-
-  return (
-    (name.includes('نافينتي') && name.includes('ماركت')) ||
-    (name.includes('navienty') && name.includes('market'))
-  );
-}
-
 function getLocalStoreImageSource(
   storeName: string,
 ): ImageSourcePropType | null {
@@ -439,11 +433,11 @@ function OrdersLoadingSplash() {
 function StoreImage({
   order,
   storeImageUrl,
-  useCategoryArtwork = false,
+  categoryArtworkUrl,
 }: {
   order: Order;
   storeImageUrl?: string | null;
-  useCategoryArtwork?: boolean;
+  categoryArtworkUrl?: string | null;
 }) {
   const localStoreImage =
     getLocalStoreImageSource(
@@ -455,27 +449,27 @@ function StoreImage({
       order,
     );
 
-  const imageUrl =
-    storeImageUrl ??
-    embeddedImageUrl;
+  // A configured per-screen category image takes precedence over both
+  // store logos and packaged service icons. On load failure, fall back
+  // to the original artwork rather than showing an empty thumbnail.
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
 
-  const [
-    hasImageError,
-    setHasImageError,
-  ] = useState(false);
+  const configuredUrl = categoryArtworkUrl?.trim() || null;
+  const originalUrl = storeImageUrl ?? embeddedImageUrl;
+  const activeConfiguredUrl =
+    configuredUrl && configuredUrl !== failedImageUrl
+      ? configuredUrl
+      : null;
+  const imageUrl =
+    activeConfiguredUrl ??
+    (originalUrl !== failedImageUrl ? originalUrl : null);
 
   useEffect(() => {
-    setHasImageError(
-      false,
-    );
-  }, [
-    imageUrl,
-    order.storeName,
-  ]);
+    setFailedImageUrl(null);
+  }, [categoryArtworkUrl, storeImageUrl, embeddedImageUrl, order.storeName]);
 
-  const shouldShowRemoteImage =
-    Boolean(imageUrl) &&
-    !hasImageError;
+  const shouldShowRemoteImage = Boolean(imageUrl);
+  const shouldShowLocalImage = Boolean(localStoreImage) && !activeConfiguredUrl;
 
   return (
     <View
@@ -483,7 +477,7 @@ function StoreImage({
         styles.storeImageContainer
       }
     >
-      {localStoreImage ? (
+      {shouldShowLocalImage && localStoreImage ? (
         <Image
           source={
             localStoreImage
@@ -498,15 +492,19 @@ function StoreImage({
           source={{
             uri: imageUrl!,
           }}
-          resizeMode={useCategoryArtwork ? 'contain' : 'cover'}
+          resizeMode={activeConfiguredUrl ? 'contain' : 'cover'}
           style={
             styles.storeImage
           }
           onError={() => {
-            setHasImageError(
-              true,
-            );
+            setFailedImageUrl(imageUrl);
           }}
+        />
+      ) : localStoreImage ? (
+        <Image
+          source={localStoreImage}
+          resizeMode="contain"
+          style={styles.storeImage}
         />
       ) : (
         <View
@@ -814,13 +812,13 @@ function OrderRatingFooter({
 function OrderCard({
   order,
   storeImageUrl,
-  useCategoryArtwork = false,
+  categoryArtworkUrl,
   onPress,
   onReorder,
 }: {
   order: Order;
   storeImageUrl?: string | null;
-  useCategoryArtwork?: boolean;
+  categoryArtworkUrl?: string | null;
   onPress: () => void;
   onReorder?: () => void;
 }) {
@@ -926,7 +924,7 @@ function OrderCard({
               storeImageUrl={
                 storeImageUrl
               }
-              useCategoryArtwork={useCategoryArtwork}
+              categoryArtworkUrl={categoryArtworkUrl}
             />
 
             <View
@@ -1059,13 +1057,9 @@ export default function OrdersScreen() {
   const authState =
     useAuthSession();
 
-  // Only Orders reads the market bag image. Home keeps its 'home' variant.
+  // All top-level service categories can have independent Orders artwork.
+  // Home's main category tiles continue to use their own 'home' images.
   const categoryImages = useServiceCategoryImages('orders');
-  const marketOrdersArtworkUrl = getServiceCategoryImageUrl(
-    categoryImages,
-    'supermarket',
-    'orders',
-  );
 
   const orders =
     useOrdersStore(
@@ -1118,9 +1112,9 @@ export default function OrdersScreen() {
       {},
     );
   const [
-    navientyMarketStoreIds,
-    setNavientyMarketStoreIds,
-  ] = useState<ReadonlySet<string>>(() => new Set());
+    storeIdentities,
+    setStoreIdentities,
+  ] = useState<StoreIdentityMap>({});
 
   const currentUserId =
     authState.status ===
@@ -1268,7 +1262,7 @@ export default function OrdersScreen() {
           const nextStoreImages:
             StoreImageMap =
               {};
-          const nextMarketStoreIds = new Set<string>();
+          const nextStoreIdentities: StoreIdentityMap = {};
 
           for (
             const store
@@ -1283,18 +1277,16 @@ export default function OrdersScreen() {
               store.id
             ] = imageUrl;
 
-            if (
-              store.categorySlug === 'supermarket' &&
-              isNavientyMarketName(store.name)
-            ) {
-              nextMarketStoreIds.add(store.id);
-            }
+            nextStoreIdentities[store.id] = {
+              name: store.name,
+              categorySlug: store.categorySlug,
+            };
           }
 
           setStoreImages(
             nextStoreImages,
           );
-          setNavientyMarketStoreIds(nextMarketStoreIds);
+          setStoreIdentities(nextStoreIdentities);
         } catch (
           error
         ) {
@@ -1709,11 +1701,17 @@ export default function OrdersScreen() {
                         null
                       : null;
 
-                  const isMarketOrder =
-                    isNavientyMarketName(order.storeName) ||
-                    Boolean(storeId && navientyMarketStoreIds.has(storeId));
-                  const useMarketArtwork =
-                    isMarketOrder && Boolean(marketOrdersArtworkUrl);
+                  const imageCategory = getOrderArtworkCategory(
+                    order,
+                    storeId ? storeIdentities[storeId] ?? null : null,
+                  );
+                  const categoryArtworkUrl = imageCategory
+                    ? getServiceCategoryImageUrl(
+                        categoryImages,
+                        imageCategory,
+                        'orders',
+                      )
+                    : null;
 
                   return (
                     <OrderCard
@@ -1723,10 +1721,8 @@ export default function OrdersScreen() {
                       order={
                         order
                       }
-                      storeImageUrl={
-                        useMarketArtwork ? marketOrdersArtworkUrl : storeImageUrl
-                      }
-                      useCategoryArtwork={useMarketArtwork}
+                      storeImageUrl={storeImageUrl}
+                      categoryArtworkUrl={categoryArtworkUrl}
                       onPress={() =>
                         openOrderDetails(
                           order.id,
