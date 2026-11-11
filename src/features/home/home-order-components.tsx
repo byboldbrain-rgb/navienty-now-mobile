@@ -17,6 +17,9 @@ import {
 } from 'react-native';
 
 import { getCategoryIcon } from '../../config/category-icons';
+import { getOrderArtworkCategory } from './recent-order-routing';
+import { useServiceCategoryImages } from '../../hooks/use-service-category-images';
+import { getServiceCategoryImageUrl } from '../../services/service-category-image-service';
 import type { StoreSummary } from '../../services/catalog-service';
 import { getHomeStoreArtwork } from '../../services/home-store-artwork-service';
 import {
@@ -205,6 +208,12 @@ function ActiveOrderStoreArtwork({
   order: Order;
   store: StoreSummary | null;
 }) {
+  const statusImages = useServiceCategoryImages('order-status');
+  const imageCategory = getOrderArtworkCategory(order, store);
+  const categoryStatusImageUrl = imageCategory
+    ? getServiceCategoryImageUrl(statusImages, imageCategory, 'order-status')
+    : null;
+
   const initialLogoUrl =
     store?.logoUrl?.trim() ?? '';
 
@@ -257,6 +266,14 @@ function ActiveOrderStoreArtwork({
     let cancelled = false;
 
     setImageFailed(false);
+
+    // Use the status-specific image without waiting for catalog RPC.
+    if (categoryStatusImageUrl) {
+      setIsResolvingArtwork(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     if (
       initialLogoUrl ||
@@ -342,6 +359,7 @@ function ActiveOrderStoreArtwork({
     initialCoverImageUrl,
     initialLogoUrl,
     order.storeId,
+    categoryStatusImageUrl,
   ]);
 
   const logoUrl =
@@ -359,6 +377,7 @@ function ActiveOrderStoreArtwork({
     );
 
   const remoteImageUrl =
+    categoryStatusImageUrl ||
     remoteStoreImageUrl ||
     orderItemImageUrl;
 
@@ -384,11 +403,7 @@ function ActiveOrderStoreArtwork({
             `صورة ${order.storeName}`
           }
           cachePolicy="memory-disk"
-          contentFit={
-            logoUrl
-              ? 'contain'
-              : 'cover'
-          }
+          contentFit="cover"
           source={{
             uri: remoteImageUrl,
           }}
@@ -406,7 +421,7 @@ function ActiveOrderStoreArtwork({
           accessibilityLabel={
             `صورة ${order.storeName}`
           }
-          resizeMode="contain"
+          resizeMode="cover"
           source={localImageSource}
           style={
             trackingStyles.storeImage

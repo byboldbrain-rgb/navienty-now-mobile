@@ -21,8 +21,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { OrderDetailsScreenSkeleton } from '../../components/ui/loading-skeleton';
+import { getOrderArtworkCategory } from '../../features/home/recent-order-routing';
+import { useServiceCategoryImages } from '../../hooks/use-service-category-images';
 import { getStoreCatalog } from '../../services/catalog-service';
 import { getOrderByToken } from '../../services/order-service';
+import { getServiceCategoryImageUrl } from '../../services/service-category-image-service';
 import {
   type Order,
   useOrdersStore,
@@ -220,6 +223,8 @@ function getBestStoreImageUrl(
 export default function OrderDetailsScreen() {
   const router = useRouter();
 
+  const orderStatusImages = useServiceCategoryImages('order-status');
+
   const insets =
     useSafeAreaInsets();
 
@@ -241,6 +246,8 @@ export default function OrderDetailsScreen() {
   ] = useState<string | null>(
     null,
   );
+
+  const [storeCategorySlug, setStoreCategorySlug] = useState('');
 
   const [
     isLoadingStoreImage,
@@ -384,6 +391,7 @@ export default function OrderDetailsScreen() {
         !order?.storeId
       ) {
         setStoreImageUrl(null);
+        setStoreCategorySlug('');
         return;
       }
 
@@ -412,6 +420,7 @@ export default function OrderDetailsScreen() {
         setStoreImageUrl(
           imageUrl,
         );
+        setStoreCategorySlug(catalog.store.categorySlug);
       } catch {
         if (isCancelled) {
           return;
@@ -420,6 +429,7 @@ export default function OrderDetailsScreen() {
         setStoreImageUrl(
           null,
         );
+        setStoreCategorySlug('');
       } finally {
         if (!isCancelled) {
           setIsLoadingStoreImage(
@@ -617,8 +627,16 @@ export default function OrderDetailsScreen() {
       Boolean(value),
   );
 
+  const imageCategory = getOrderArtworkCategory(order, {
+    name: order.storeName,
+    categorySlug: storeCategorySlug,
+  });
+  const statusImageUrl = imageCategory
+    ? getServiceCategoryImageUrl(orderStatusImages, imageCategory, 'order-status')
+    : null;
+  const effectiveStoreImageUrl = statusImageUrl || storeImageUrl;
   const shouldShowStoreImage =
-    Boolean(storeImageUrl) &&
+    Boolean(effectiveStoreImageUrl) &&
     !storeImageFailed;
 
   return (
@@ -722,7 +740,7 @@ export default function OrderDetailsScreen() {
                 <Image
                   source={{
                     uri:
-                      storeImageUrl ??
+                      effectiveStoreImageUrl ??
                       undefined,
                   }}
                   style={
