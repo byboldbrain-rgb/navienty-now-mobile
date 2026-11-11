@@ -47,6 +47,8 @@ jobs:
           node scripts/validate-release-config.mjs
           node scripts/validate-checkout-handoff.mjs
           node scripts/validate-app-store-account-controls.mjs
+          node scripts/validate-social-auth-parity.mjs
+          node scripts/validate-notification-lifecycle.mjs
       - name: Verify regressions and types
         run: |
           npm test
