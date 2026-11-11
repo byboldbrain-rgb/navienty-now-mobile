@@ -1,0 +1,69 @@
+name: Navienty 1.0.2 latest iOS candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/android-production-hardening
+    paths:
+      - .github/workflows/navienty-ios-latest-candidate.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: navienty-latest-ios-candidate
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, 'Build latest Navienty iOS candidate')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require Expo credentials
+        shell: bash
+        run: test -n "$EXPO_TOKEN"
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install
+        run: npm ci
+      - name: Validate assets and release setup
+        run: |
+          node scripts/validate-image-assets.mjs
+          npm run validate:v1-scope
+          node scripts/validate-release-config.mjs
+          node scripts/validate-checkout-handoff.mjs
+          node scripts/validate-app-store-account-controls.mjs
+      - name: Verify regressions and types
+        run: |
+          npm test
+          npx tsc --noEmit
+      - name: Verify Expo
+        run: |
+          eas whoami
+          eas config --platform ios --profile production --json --non-interactive > /dev/null
+      - name: Build latest code and upload to TestFlight
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "SOURCE_COMMIT=$GITHUB_SHA"
+          eas build --platform ios --profile production \
+            --auto-submit --non-interactive --wait \
+            --message "Navienty Now 1.0.2 latest source $GITHUB_SHA" \
+            --json | tee ios-candidate.json
+      - name: Display build reference
+        run: |
+          jq -r 'if type=="array" then .[] else . end | "BUILD_ID=\(.id) APP_VERSION=\(.appVersion) BUILD_NUMBER=\(.appBuildVersion)"' ios-candidate.json

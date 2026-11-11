@@ -1,0 +1,65 @@
+name: Navienty Google Play public production release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: navienty-google-play-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require Expo authentication
+        shell: bash
+        run: test -n "$EXPO_TOKEN"
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install
+        run: npm ci
+      - name: Verify release gates
+        run: |
+          node scripts/validate-image-assets.mjs
+          node scripts/validate-release-config.mjs
+          node scripts/validate-checkout-handoff.mjs
+          node scripts/validate-app-store-account-controls.mjs
+          npm test
+          npx tsc --noEmit
+          npm run audit:prod
+      - name: Require actual Android Firebase configuration
+        shell: bash
+        run: |
+          if ! eas env:get production --variable-name GOOGLE_SERVICES_JSON \
+               --scope project --format short --non-interactive > /dev/null 2>&1; then
+            echo "::error::Configure GOOGLE_SERVICES_JSON as a secure file in EAS production before submitting to Google Play."
+            exit 1
+          fi
+      - name: Verify Google Play production submission config
+        run: |
+          eas whoami
+          eas config --platform android --profile production --json --non-interactive > /dev/null
+      - name: Build signed AAB
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "SOURCE_COMMIT=$GITHUB_SHA"
+          eas build --platform android --profile production \
+            --non-interactive --wait --json | tee android-production.json
+      - name: Upload to Google Play production track
+        shell: bash
+        run: eas submit --platform android --profile production --latest --non-interactive --wait
