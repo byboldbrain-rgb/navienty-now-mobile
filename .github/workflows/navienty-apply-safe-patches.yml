@@ -1,0 +1,70 @@
+name: Apply safe dependency patches for 1.0.2
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+    paths:
+      - .github/workflows/navienty-apply-safe-patches.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, 'Apply safe Navienty dependency patches')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/android-production-hardening
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Baseline installation
+        run: npm ci
+      - name: Update vulnerable packages within existing compatible semver ranges
+        shell: bash
+        run: |
+          npm audit fix --package-lock-only --ignore-scripts --no-fund || true
+          npm ci
+      - name: Guard remaining high severity advisories
+        shell: bash
+        run: |
+          npm audit --omit=dev --json > audit-after.json || true
+          node --input-type=module - <<'EOF'
+          import fs from 'node:fs';
+          const a=JSON.parse(fs.readFileSync('audit-after.json','utf8'));
+          if(a.error) throw Error('npm audit failed: '+JSON.stringify(a.error));
+          const high=Object.entries(a.vulnerabilities??{}).filter(([,v])=>['critical','high'].includes(v.severity)).map(([k])=>k).sort();
+          // Do not approve or silence this vulnerability. Keep the standard
+          // production policy failing until its Expo Router chain is resolved.
+          const expected=['decode-uri-component','expo-router','query-string'];
+          if(high.some(k=>!expected.includes(k))) throw Error('Unexpected high/critical advisories remain: '+high.join(', '));
+          console.log('Safe patches removed all previously observed high/critical advisories except the unresolved Expo Router query-string decoder chain: '+high.join(', '));
+          EOF
+      - name: Verify app code and runtime bundle after lockfile changes
+        run: |
+          node scripts/validate-image-assets.mjs
+          node scripts/validate-release-config.mjs
+          node scripts/validate-checkout-handoff.mjs
+          node scripts/validate-app-store-account-controls.mjs
+          npm test
+          npx tsc --noEmit
+          npx expo export --platform android --output-dir /tmp/navienty-android-patched
+      - name: Commit safe package-lock changes
+        shell: bash
+        run: |
+          rm -f audit-after.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "No secure compatible lockfile changes."
+            exit 0
+          fi
+          git commit -m "fix(deps): patch compatible vulnerable transitive packages"
+          git push origin HEAD:codex/android-production-hardening
