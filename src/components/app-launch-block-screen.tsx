@@ -303,6 +303,11 @@ export default function AppLaunchBlockScreen({
     );
   }
 
+  // Determine this before the early return: after it, TypeScript correctly
+  // narrows gate.status to statuses other than 'force-update'.
+  const isForceUpdate =
+    gate.status === 'force-update';
+
   if (gate.status === 'force-update') {
     return (
       <ForceUpdateScreen
@@ -320,9 +325,6 @@ export default function AppLaunchBlockScreen({
     getWhatsappUrl(
       gate.supportWhatsapp,
     );
-
-  const isForceUpdate =
-    gate.status === 'force-update';
 
   const canOpenUpdate =
     isForceUpdate &&

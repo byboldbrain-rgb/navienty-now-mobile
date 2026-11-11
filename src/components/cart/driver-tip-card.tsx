@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
   removeTip: { alignSelf: 'flex-end', marginTop: 5, paddingVertical: 3 },
   removeTipText: { color: '#738378', fontSize: 11, textDecorationLine: 'underline' },
   overlay: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.48)' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.48)' },
   dialog: {
     borderRadius: 22,
     padding: 22,
