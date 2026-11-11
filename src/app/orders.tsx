@@ -24,12 +24,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AppBottomNavigation from '../category/app-bottom-navigation';
 import { useAuthSession } from '../hooks/use-auth-session';
+import { useServiceCategoryImages } from '../hooks/use-service-category-images';
 import {
   listStores,
 } from '../services/catalog-service';
 import {
   getMyOrders,
 } from '../services/order-service';
+import { getServiceCategoryImageUrl } from '../services/service-category-image-service';
 import {
   getOrderRating,
   submitOrderRating,
@@ -267,6 +269,18 @@ function normalizeStoreName(
     .replace(/\s+/g, ' ');
 }
 
+/** Matches only Navienty Market, not third-party supermarket merchants. */
+function isNavientyMarketName(value: string): boolean {
+  const name = normalizeStoreName(value)
+    .toLowerCase()
+    .replace(/ڤ/g, 'ف');
+
+  return (
+    (name.includes('نافينتي') && name.includes('ماركت')) ||
+    (name.includes('navienty') && name.includes('market'))
+  );
+}
+
 function getLocalStoreImageSource(
   storeName: string,
 ): ImageSourcePropType | null {
@@ -425,9 +439,11 @@ function OrdersLoadingSplash() {
 function StoreImage({
   order,
   storeImageUrl,
+  useCategoryArtwork = false,
 }: {
   order: Order;
   storeImageUrl?: string | null;
+  useCategoryArtwork?: boolean;
 }) {
   const localStoreImage =
     getLocalStoreImageSource(
@@ -482,7 +498,7 @@ function StoreImage({
           source={{
             uri: imageUrl!,
           }}
-          resizeMode="cover"
+          resizeMode={useCategoryArtwork ? 'contain' : 'cover'}
           style={
             styles.storeImage
           }
@@ -798,11 +814,13 @@ function OrderRatingFooter({
 function OrderCard({
   order,
   storeImageUrl,
+  useCategoryArtwork = false,
   onPress,
   onReorder,
 }: {
   order: Order;
   storeImageUrl?: string | null;
+  useCategoryArtwork?: boolean;
   onPress: () => void;
   onReorder?: () => void;
 }) {
@@ -908,6 +926,7 @@ function OrderCard({
               storeImageUrl={
                 storeImageUrl
               }
+              useCategoryArtwork={useCategoryArtwork}
             />
 
             <View
@@ -1040,6 +1059,14 @@ export default function OrdersScreen() {
   const authState =
     useAuthSession();
 
+  // Only Orders reads the market bag image. Home keeps its 'home' variant.
+  const categoryImages = useServiceCategoryImages('orders');
+  const marketOrdersArtworkUrl = getServiceCategoryImageUrl(
+    categoryImages,
+    'supermarket',
+    'orders',
+  );
+
   const orders =
     useOrdersStore(
       (state) =>
@@ -1090,6 +1117,10 @@ export default function OrdersScreen() {
     useState<StoreImageMap>(
       {},
     );
+  const [
+    navientyMarketStoreIds,
+    setNavientyMarketStoreIds,
+  ] = useState<ReadonlySet<string>>(() => new Set());
 
   const currentUserId =
     authState.status ===
@@ -1237,6 +1268,7 @@ export default function OrdersScreen() {
           const nextStoreImages:
             StoreImageMap =
               {};
+          const nextMarketStoreIds = new Set<string>();
 
           for (
             const store
@@ -1250,11 +1282,19 @@ export default function OrdersScreen() {
             nextStoreImages[
               store.id
             ] = imageUrl;
+
+            if (
+              store.categorySlug === 'supermarket' &&
+              isNavientyMarketName(store.name)
+            ) {
+              nextMarketStoreIds.add(store.id);
+            }
           }
 
           setStoreImages(
             nextStoreImages,
           );
+          setNavientyMarketStoreIds(nextMarketStoreIds);
         } catch (
           error
         ) {
@@ -1669,6 +1709,12 @@ export default function OrdersScreen() {
                         null
                       : null;
 
+                  const isMarketOrder =
+                    isNavientyMarketName(order.storeName) ||
+                    Boolean(storeId && navientyMarketStoreIds.has(storeId));
+                  const useMarketArtwork =
+                    isMarketOrder && Boolean(marketOrdersArtworkUrl);
+
                   return (
                     <OrderCard
                       key={
@@ -1678,8 +1724,9 @@ export default function OrdersScreen() {
                         order
                       }
                       storeImageUrl={
-                        storeImageUrl
+                        useMarketArtwork ? marketOrdersArtworkUrl : storeImageUrl
                       }
+                      useCategoryArtwork={useMarketArtwork}
                       onPress={() =>
                         openOrderDetails(
                           order.id,

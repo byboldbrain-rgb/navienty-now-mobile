@@ -18,7 +18,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { StoreListScreenSkeleton } from '../../components/ui/loading-skeleton';
-import { useServiceCategoryImages } from '../../hooks/use-service-category-images';
 import {
   isV1PublicCategorySlug,
   V1_UNAVAILABLE_CATEGORY_MESSAGE,
@@ -31,7 +30,6 @@ import {
   type StoreCategorySlug,
   type StoreSummary,
 } from '../../services/catalog-service';
-import { getServiceCategoryImageUrl } from '../../services/service-category-image-service';
 import { useCustomerStore } from '../../store/customer-store';
 import BookstoreScreen from './bookstore';
 import LaundryScreen from './laundry';
@@ -141,10 +139,6 @@ function CategoryHeaderArtwork({
   const [imageFailed, setImageFailed] =
     useState(false);
 
-  useEffect(() => {
-    setImageFailed(false);
-  }, [category.image_url]);
-
   const imageUrl =
     category.image_url?.trim() || null;
 
@@ -191,8 +185,6 @@ function GenericCategoryScreen({
       (state) =>
         state.locationServiceAreaId,
     );
-
-  const categoryImages = useServiceCategoryImages('category');
 
   const [category, setCategory] =
     useState<BootstrapCategory | null>(null);
@@ -349,15 +341,7 @@ function GenericCategoryScreen({
 
           <View style={styles.headerContent}>
             <CategoryHeaderArtwork
-              category={{
-                ...category,
-                image_url:
-                  getServiceCategoryImageUrl(
-                    categoryImages,
-                    category.slug,
-                    'category',
-                  ) ?? category.image_url,
-              }}
+              category={category}
             />
 
             <Text style={styles.title}>
