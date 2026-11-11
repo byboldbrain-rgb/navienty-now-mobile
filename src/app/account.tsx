@@ -669,9 +669,155 @@ export default function AccountScreen() {
           {/* PRIVACY AND TERMS                       */}
           {/* ======================================= */}
 
+          <View style={styles.legalCard}>
+            <View style={styles.legalHeadingRow}>
+              <View style={styles.legalIcon}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={23}
+                  color={NAVIENTY_NOW_COLORS.primary}
+                />
+              </View>
+              <View style={styles.legalHeadingCopy}>
+                <Text style={styles.legalTitle}>الخصوصية والشروط</Text>
+                <Text style={styles.legalDescription}>
+                  اقرأ سياسة الخصوصية وشروط استخدام Navienty Now.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.legalLinks}>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="سياسة الخصوصية"
+                style={({ pressed }) => [
+                  styles.legalLink,
+                  pressed && styles.legalLinkPressed,
+                ]}
+                onPress={() => {
+                  void openLegalDocument('سياسة الخصوصية', privacyUrl);
+                }}
+              >
+                <Ionicons
+                  name="open-outline"
+                  size={16}
+                  color={NAVIENTY_NOW_COLORS.textSecondary}
+                />
+                <Text style={styles.legalLinkText}>سياسة الخصوصية</Text>
+              </Pressable>
+
+              <View style={styles.legalLinkDivider} />
+
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="شروط الاستخدام"
+                style={({ pressed }) => [
+                  styles.legalLink,
+                  pressed && styles.legalLinkPressed,
+                ]}
+                onPress={() => {
+                  void openLegalDocument('شروط الاستخدام', termsUrl);
+                }}
+              >
+                <Ionicons
+                  name="open-outline"
+                  size={16}
+                  color={NAVIENTY_NOW_COLORS.textSecondary}
+                />
+                <Text style={styles.legalLinkText}>شروط الاستخدام</Text>
+              </Pressable>
+            </View>
+          </View>
+
           {/* ======================================= */}
           {/* ACCOUNT DELETION                        */}
           {/* ======================================= */}
+
+          {hasCustomerSession ? (
+            <View style={styles.deletionCard}>
+              <View style={styles.deletionHeadingRow}>
+                <View style={styles.deletionIcon}>
+                  <Ionicons
+                    name="trash-outline"
+                    size={21}
+                    color={NAVIENTY_NOW_COLORS.error}
+                  />
+                </View>
+                <View style={styles.deletionHeadingCopy}>
+                  <Text style={styles.deletionTitle}>حذف الحساب والبيانات</Text>
+                  <Text style={styles.deletionDescription}>
+                    تقدر تطلب حذف حسابك وبياناتك الشخصية من داخل التطبيق.
+                  </Text>
+                </View>
+              </View>
+
+              {authState.status === 'anonymous' ? (
+                <View style={styles.anonymousDeletionNote}>
+                  <Ionicons name="information-circle-outline" size={17} color="#806724" />
+                  <Text style={styles.anonymousDeletionNoteText}>
+                    طلب الحذف متاح لحساب الضيف الحالي كمان.
+                  </Text>
+                </View>
+              ) : null}
+
+              {isLoadingDeletionRequest ? (
+                <View style={styles.deletionLoadingRow}>
+                  <ActivityIndicator
+                    size="small"
+                    color={NAVIENTY_NOW_COLORS.error}
+                  />
+                  <Text style={styles.deletionLoadingText}>
+                    جاري تحميل حالة طلب الحذف...
+                  </Text>
+                </View>
+              ) : hasActiveDeletionRequest ? (
+                <View style={styles.deletionStatusBox}>
+                  <Text style={styles.deletionStatusTitle}>
+                    {deletionRequest?.status === 'processing'
+                      ? 'طلب حذف الحساب قيد التنفيذ'
+                      : 'تم تسجيل طلب حذف الحساب'}
+                  </Text>
+                  <Text style={styles.deletionStatusText}>
+                    {deletionRequest?.targetCompletionAt
+                      ? `موعد الإكمال المستهدف: ${formatDeletionDate(deletionRequest.targetCompletionAt)}.`
+                      : 'يمكنك متابعة حالة الطلب من هنا.'}
+                  </Text>
+                  {deletionRequest?.status === 'pending' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={isCancellingDeletionRequest}
+                      style={({ pressed }) => [
+                        styles.cancelDeletionButton,
+                        pressed && styles.deleteAccountButtonPressed,
+                        isCancellingDeletionRequest && styles.deletionButtonDisabled,
+                      ]}
+                      onPress={confirmCancelDeletionRequest}
+                    >
+                      <Text style={styles.cancelDeletionButtonText}>
+                        {isCancellingDeletionRequest ? 'جاري إلغاء الطلب...' : 'إلغاء طلب الحذف'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="طلب حذف الحساب"
+                  disabled={isSubmittingDeletionRequest || isLoadingDeletionRequest}
+                  style={({ pressed }) => [
+                    styles.deleteAccountButton,
+                    pressed && styles.deleteAccountButtonPressed,
+                    isSubmittingDeletionRequest && styles.deletionButtonDisabled,
+                  ]}
+                  onPress={confirmAccountDeletionRequest}
+                >
+                  <Text style={styles.deleteAccountButtonText}>
+                    {isSubmittingDeletionRequest ? 'جاري تسجيل طلب الحذف...' : 'طلب حذف الحساب'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
 
           {/* ======================================= */}
           {/* ERROR                                   */}
