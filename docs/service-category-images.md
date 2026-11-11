@@ -22,11 +22,14 @@ The two order-related views also read their own independent variants:
 - orders: the store thumbnail in src/app/orders.tsx
 - home/reorder: the "اطلب تاني" thumbnail in src/features/home/home-components.tsx
   (configured by src/app/index.tsx)
+- order-status: the store thumbnail in src/app/order-success.tsx
+  (and the order detail / active-order tracking views)
 
 All five top-level category keys have independent database rows for home,
-orders, and home/reorder. The initial orders/home-reorder rows reuse the Home
-artwork until explicitly changed in the database; Navienty Market retains its
-custom delivery-bag artwork on those two placements. The request-anything
+orders, home/reorder, and order-status. The initial orders/home-reorder rows reuse the Home
+artwork until explicitly changed in the database. The initial order-status
+rows reuse the Orders imagery, then can be edited independently. Navienty
+Market retains its custom delivery-bag artwork in orders and home/reorder. The request-anything
 category is intentionally excluded from the "اطلب تاني" rail, but its
 home/reorder configuration is available if that business decision changes.
 
@@ -73,3 +76,7 @@ ORDER BY category_key, placement, slot, sort_order, id;
 Images may live in the existing public now-media Supabase Storage bucket.
 Only trusted admins/service_role can write table records; anon and
 authenticated clients can SELECT active entries via RLS.
+
+The three order-related thumbnail contexts (orders, home/reorder, order-status)
+use cover / 100% image bounds, filling the entire frame and cropping image
+edges where aspect ratios differ. The main Home category tile is unchanged.

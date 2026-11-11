@@ -1720,11 +1720,7 @@ function RecentOrderArtwork({
           accessibilityLabel={
             `شعار ${order.storeName}`
           }
-          contentFit={
-            overrideImageUrl || logoUrl
-              ? 'contain'
-              : 'cover'
-          }
+          contentFit="cover"
           source={{
             uri: remoteImageUrl,
           }}
@@ -1742,7 +1738,7 @@ function RecentOrderArtwork({
           accessibilityLabel={
             `صورة ${order.storeName}`
           }
-          resizeMode="contain"
+          resizeMode="cover"
           source={localImageSource}
           style={
             styles.recentOrderArtworkImage

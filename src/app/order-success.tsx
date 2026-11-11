@@ -26,11 +26,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getCategoryIcon } from '../config/category-icons';
+import { getOrderArtworkCategory } from '../features/home/recent-order-routing';
+import { useServiceCategoryImages } from '../hooks/use-service-category-images';
 import { publicSupabase } from '../lib/supabase';
 import {
   getMyOrders,
   getOrderByToken,
 } from '../services/order-service';
+import { getServiceCategoryImageUrl } from '../services/service-category-image-service';
 
 import ServiceBookingSuccess from '../components/service/service-booking-success';
 import { OrderDetailsScreenSkeleton } from '../components/ui/loading-skeleton';
@@ -406,6 +409,8 @@ export default function OrderSuccessScreen() {
 function StoreOrderSuccessScreen() {
   const router =
     useRouter();
+
+  const orderStatusImages = useServiceCategoryImages('order-status');
 
   const insets =
     useSafeAreaInsets();
@@ -1048,6 +1053,16 @@ function StoreOrderSuccessScreen() {
     !isCancelled &&
     !isDelivered;
 
+  // A dedicated image for the status/tracking screen. This does not
+  // change 'orders', 'home/reorder' or the Home category image.
+  const imageCategory = getOrderArtworkCategory(order, {
+    name: order.storeName,
+    categorySlug: resolvedStoreArtwork.categorySlug,
+  });
+  const orderStatusImageUrl = imageCategory
+    ? getServiceCategoryImageUrl(orderStatusImages, imageCategory, 'order-status')
+    : null;
+
   const storeLogoUrl =
     resolvedStoreArtwork
       .logoUrl;
@@ -1071,6 +1086,7 @@ function StoreOrderSuccessScreen() {
       ) ?? '';
 
   const remoteStoreImageUrl =
+    orderStatusImageUrl ||
     storeLogoUrl ||
     storeCoverImageUrl ||
     orderItemImageUrl;
@@ -1091,13 +1107,7 @@ function StoreOrderSuccessScreen() {
     localStoreArtwork !==
       null;
 
-  const storeImageResizeMode:
-    'contain' | 'cover' =
-    storeLogoUrl
-      ? 'contain'
-      : storeCoverImageUrl
-        ? 'cover'
-        : 'contain';
+  const storeImageResizeMode: 'cover' = 'cover';
 
   return (
     <View
@@ -1239,7 +1249,7 @@ function StoreOrderSuccessScreen() {
                     source={
                       localStoreArtwork!
                     }
-                    resizeMode="contain"
+                    resizeMode="cover"
                     style={
                       styles.storeLogoImage
                     }
@@ -2024,8 +2034,8 @@ const styles =
     },
 
     storeLogoImage: {
-      height: '88%',
-      width: '88%',
+      height: '100%',
+      width: '100%',
     },
 
     storeLogoLoading: {
@@ -2036,10 +2046,10 @@ const styles =
         12,
 
       height:
-        '88%',
+        '100%',
 
       width:
-        '88%',
+        '100%',
     },
 
     storeLogoText: {

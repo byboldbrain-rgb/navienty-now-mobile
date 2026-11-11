@@ -482,7 +482,7 @@ function StoreImage({
           source={
             localStoreImage
           }
-          resizeMode="contain"
+          resizeMode="cover"
           style={
             styles.storeImage
           }
@@ -492,7 +492,7 @@ function StoreImage({
           source={{
             uri: imageUrl!,
           }}
-          resizeMode={activeConfiguredUrl ? 'contain' : 'cover'}
+          resizeMode="cover"
           style={
             styles.storeImage
           }
@@ -503,7 +503,7 @@ function StoreImage({
       ) : localStoreImage ? (
         <Image
           source={localStoreImage}
-          resizeMode="contain"
+          resizeMode="cover"
           style={styles.storeImage}
         />
       ) : (
