@@ -2,7 +2,7 @@
   "expo": {
     "name": "Navienty Now",
     "slug": "navienty-now",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "navientynow",
@@ -65,7 +65,7 @@
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
           "locationWhenInUsePermission": "يستخدم Navienty Now موقعك فقط عند اختيار «استخدام موقعي الحالي» لتحديد نقطة التوصيل تلقائيًا. ويمكنك تحديدها يدويًا بدون مشاركة موقعك.",
-          "motionUsagePermission": "يستخدم Navienty Now بيانات الحركة لتحسين دقة تحديد موقعك أثناء اختيار عنوان التوصيل.",
+          "motionUsagePermission": false,
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
