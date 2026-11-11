@@ -17,9 +17,27 @@ page (primary, hero, icon, etc.). sort_order determines the display order.
 The Home cards in src/app/index.tsx use placement = home and slot = primary.
 The lowest sort_order active URL is displayed. If no home image exists,
 the app tries the default placement and then the current legacy/tile artwork.
+The two order-related views also read their own independent variants:
+
+- orders: the store thumbnail in src/app/orders.tsx
+- home/reorder: the "اطلب تاني" thumbnail in src/features/home/home-components.tsx
+  (configured by src/app/index.tsx)
+
+All five top-level category keys have independent database rows for home,
+orders, and home/reorder. The initial orders/home-reorder rows reuse the Home
+artwork until explicitly changed in the database; Navienty Market retains its
+custom delivery-bag artwork on those two placements. The request-anything
+category is intentionally excluded from the "اطلب تاني" rail, but its
+home/reorder configuration is available if that business decision changes.
+
+The order-thumbnail override takes precedence over a store logo when an
+active image exists. If an image cannot load, the UI falls back to the
+existing store/legacy artwork. Restaurant order details and navigation stay
+unchanged.
+
 Other screens can opt in through the useServiceCategoryImages hook and the
-getServiceCategoryImageUrl(s) helpers with their own placement/slot.
-They are not automatically modified by the Home integration.
+getServiceCategoryImageUrl(s) helpers using their own placement and slot.
+For single-image tiles, the first active image ordered by sort_order wins.
 
 Admin-only examples for the Supabase SQL Editor:
 
