@@ -87,9 +87,6 @@ import {
 import {
   toPrintJobOrderPayload,
 } from '../types/printing';
-import {
-  openOrderInWhatsApp,
-} from '../utils/order-whatsapp';
 
 /* ---------------------------------- */
 /* BRAND                              */
@@ -2069,19 +2066,6 @@ function StoreCheckoutScreen() {
         },
       });
 
-      try {
-        await openOrderInWhatsApp(
-          orderForWhatsApp,
-        );
-      } catch {
-        Alert.alert(
-          'تعذر فتح واتساب',
-          hasPrintJob
-            ? printJob?.uiCopy
-                .whatsappOpenErrorBody
-            : 'تم إنشاء طلبك بنجاح. افتح واتساب وأرسل «أكد الاوردر بتاعي» إلى رقم ناڤينتي ناو.',
-        );
-      }
     } catch (error) {
       if (createdOrder) {
         try {
