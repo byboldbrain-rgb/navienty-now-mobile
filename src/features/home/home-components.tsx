@@ -1525,12 +1525,31 @@ type HomeOrderArtworkState = {
   categorySlug: string;
 };
 
+/** Only replace Navienty Market thumbnails, never other supermarkets. */
+function isNavientyMarketStoreName(value: string): boolean {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/ڤ/g, 'ف')
+    .replace(/\s+/g, ' ');
+
+  return (
+    (normalized.includes('ماركت') && normalized.includes('نافينتي')) ||
+    (normalized.includes('market') && normalized.includes('navienty'))
+  );
+}
+
 function RecentOrderArtwork({
   order,
   store,
+  overrideImageUrl,
 }: {
   order: Order;
   store: StoreSummary | null;
+  overrideImageUrl?: string | null;
 }) {
   const initialLogoUrl =
     store?.logoUrl?.trim() ?? '';
@@ -1580,6 +1599,15 @@ function RecentOrderArtwork({
     let cancelled = false;
 
     setImageFailed(false);
+
+    // A configured placement overrides the store logo without another
+    // catalog lookup. If removed, normal store artwork resumes.
+    if (overrideImageUrl) {
+      setIsResolvingArtwork(false);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     if (
       initialLogoUrl ||
@@ -1659,6 +1687,7 @@ function RecentOrderArtwork({
     initialCoverImageUrl,
     initialLogoUrl,
     order.storeId,
+    overrideImageUrl,
   ]);
 
   const logoUrl =
@@ -1677,6 +1706,7 @@ function RecentOrderArtwork({
     );
 
   const remoteImageUrl =
+    overrideImageUrl?.trim() ||
     remoteStoreImageUrl ||
     orderItemImageUrl;
 
@@ -1703,7 +1733,7 @@ function RecentOrderArtwork({
             `شعار ${order.storeName}`
           }
           contentFit={
-            logoUrl
+            overrideImageUrl || logoUrl
               ? 'contain'
               : 'cover'
           }
@@ -1753,11 +1783,13 @@ function RecentOrderCard({
   order,
   store,
   cardWidth,
+  overrideImageUrl,
   onPressStore,
 }: {
   order: Order;
   store: StoreSummary | null;
   cardWidth: number;
+  overrideImageUrl?: string | null;
   onPressStore: () => void;
 }) {
   return (
@@ -1781,6 +1813,7 @@ function RecentOrderCard({
       <RecentOrderArtwork
         order={order}
         store={store}
+        overrideImageUrl={overrideImageUrl}
       />
     </Pressable>
   );
@@ -1790,11 +1823,13 @@ export function RecentOrdersRail({
   orders,
   stores,
   cardWidth,
+  marketImageUrl,
   onPressStore,
 }: {
   orders: readonly Order[];
   stores: readonly StoreSummary[];
   cardWidth: number;
+  marketImageUrl?: string | null;
   onPressStore: (
     order: Order,
   ) => void;
@@ -1876,6 +1911,13 @@ export function RecentOrdersRail({
                   order.storeId,
               ) ?? null;
 
+            const isNavientyMarket =
+              isNavientyMarketStoreName(order.storeName) ||
+              (
+                orderStore?.categorySlug === 'supermarket' &&
+                isNavientyMarketStoreName(orderStore.name)
+              );
+
             return (
               <RecentOrderCard
                 key={
@@ -1887,6 +1929,9 @@ export function RecentOrdersRail({
                 }
                 order={order}
                 store={orderStore}
+                overrideImageUrl={
+                  isNavientyMarket ? marketImageUrl : null
+                }
                 onPressStore={() => {
                   onPressStore(order);
                 }}

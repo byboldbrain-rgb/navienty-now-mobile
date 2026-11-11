@@ -299,6 +299,15 @@ export default function HomeScreen() {
   // The existing storefront tile/local artwork stays as the fallback.
   const categoryImages = useServiceCategoryImages('home');
 
+  // Repeat-order cards have independent artwork. The main category rail
+  // continues to use placement='home' (its existing image is unchanged).
+  const reorderCategoryImages = useServiceCategoryImages('home/reorder');
+  const marketReorderImageUrl = getServiceCategoryImageUrl(
+    reorderCategoryImages,
+    'supermarket',
+    'home/reorder',
+  );
+
   const categories = useMemo(
     () =>
       buildHomeCategories(
@@ -701,6 +710,7 @@ export default function HomeScreen() {
               cardWidth={compactCardWidth}
               orders={recentDeliveredOrders}
               stores={stores}
+              marketImageUrl={marketReorderImageUrl}
               onPressStore={
                 openRecentOrderStore
               }
