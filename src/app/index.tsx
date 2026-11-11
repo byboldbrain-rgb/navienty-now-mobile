@@ -29,6 +29,10 @@ import {
 } from '../features/home/home-components';
 import { showClosedStoreAlert } from '../features/home/home-feedback';
 import {
+  getManagedCategoryRoute,
+  getManagedDiscoveryRoute,
+} from '../features/home/home-managed-category-routing';
+import {
   type BootstrapCategory,
   type HomeDiscoveryItem,
   type RecentlyViewedItem,
@@ -502,6 +506,12 @@ export default function HomeScreen() {
     item: HomeDiscoveryItem,
   ) {
     const destination = item.destination;
+    const managedRoute = getManagedDiscoveryRoute(destination.type);
+
+    if (managedRoute) {
+      router.push(managedRoute);
+      return;
+    }
 
     switch (destination.type) {
       case 'restaurant-cuisine': {
@@ -516,47 +526,6 @@ export default function HomeScreen() {
         return;
       }
 
-      case 'supermarket-category': {
-        router.push({
-          pathname:
-            '/supermarket-category/[slug]',
-          params: {
-            slug: destination.slug,
-            categoryKey:
-              destination.slug,
-            label: item.label,
-          },
-        });
-        return;
-      }
-
-      case 'bookstore-category': {
-        router.push({
-          pathname:
-            '/bookstore-category/[slug]',
-          params: {
-            slug: destination.slug,
-            categoryKey:
-              destination.slug,
-            label: item.label,
-          },
-        });
-        return;
-      }
-
-      case 'personal-care-category': {
-        router.push({
-          pathname:
-            '/personal-care-category/[slug]',
-          params: {
-            slug: destination.slug,
-            categoryKey:
-              destination.slug,
-            label: item.label,
-          },
-        });
-        return;
-      }
     }
   }
 
@@ -582,8 +551,14 @@ export default function HomeScreen() {
       return;
     }
 
-    // These are category-managed storefronts, not normal /store/[id] pages.
-    // Navigate just like the matching Home category tile.
+    // The three Navienty-managed storefronts must open their top-level
+    // categories, not the legacy /store/[id] or nested subcategory routes.
+    const managedRoute = getManagedCategoryRoute(category);
+    if (managedRoute) {
+      router.push(managedRoute);
+      return;
+    }
+
     if (category) {
       openCategory(category);
       return;
