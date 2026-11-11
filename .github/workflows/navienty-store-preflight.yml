@@ -1,0 +1,97 @@
+name: Navienty App Store and Play release preflight
+
+on:
+  push:
+    branches:
+      - codex/android-production-hardening
+    paths:
+      - .github/workflows/navienty-store-preflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    if: contains(github.event.head_commit.message, 'Run Navienty store preflight')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: '1'
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout Navienty release source
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify Expo authentication is configured
+        shell: bash
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::EXPO_TOKEN missing; connect Expo before building for stores."
+            exit 1
+          fi
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Validate bundled image formats
+        run: node scripts/validate-image-assets.mjs
+
+      - name: Run regression tests
+        run: npm test
+
+      - name: Verify TypeScript
+        run: npx tsc --noEmit
+
+      - name: Verify linked Expo account and project
+        shell: bash
+        run: |
+          eas whoami
+          eas project:info
+
+      - name: Validate both production build profiles
+        shell: bash
+        run: |
+          eas config --platform android --profile production --json --non-interactive >/dev/null
+          eas config --platform ios --profile production --json --non-interactive >/dev/null
+          echo "Both EAS production profiles resolve."
+
+      - name: Check environment variable names without displaying secret values
+        shell: bash
+        run: |
+          for key in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY GOOGLE_MAPS_ANDROID_API_KEY GOOGLE_MAPS_IOS_API_KEY GOOGLE_SERVICES_JSON; do
+            if eas env:get production --variable-name "$key" --scope project --format short --non-interactive > /dev/null 2>&1; then
+              echo "$key: configured"
+            else
+              echo "::warning::$key: not found in EAS project production environment"
+            fi
+          done
+
+      - name: Inspect last production build and submission records
+        shell: bash
+        run: |
+          for platform in ios android; do
+            echo "---- $platform recent builds ----"
+            if eas build:list --platform "$platform" --limit 5 --json --non-interactive > "recent-$platform.json"; then
+              jq -r '.[] | [.id, .status, (.appVersion // "?"), (.appBuildVersion // "?"), (.buildProfile // "?")] | @tsv' "recent-$platform.json"
+            else
+              echo "::warning::Unable to inspect $platform builds"
+            fi
+            echo "---- $platform recent submissions ----"
+            if eas submit:list --platform "$platform" --limit 5 --json --non-interactive > "submissions-$platform.json"; then
+              jq -r '.[] | [.id, .status] | @tsv' "submissions-$platform.json"
+            else
+              echo "::warning::Unable to inspect $platform submissions"
+            fi
+          done
