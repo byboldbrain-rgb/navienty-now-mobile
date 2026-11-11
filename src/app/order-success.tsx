@@ -503,10 +503,10 @@ function StoreOrderSuccessScreen() {
     categorySlug: '',
   });
 
-  const [
-    storeImageFailed,
-    setStoreImageFailed,
-  ] = useState(false);
+  // Track individual image failures so a failed configured image falls
+  // back to the store logo/cover instead of hiding the entire thumbnail.
+  const [failedStoreImageUrls, setFailedStoreImageUrls] =
+    useState<string[]>([]);
 
   const [
     isResolvingStoreArtwork,
@@ -516,7 +516,7 @@ function StoreOrderSuccessScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    setStoreImageFailed(false);
+    setFailedStoreImageUrls([]);
 
     setResolvedStoreArtwork({
       logoUrl: '',
@@ -1085,11 +1085,12 @@ function StoreOrderSuccessScreen() {
           0,
       ) ?? '';
 
-  const remoteStoreImageUrl =
-    orderStatusImageUrl ||
-    storeLogoUrl ||
-    storeCoverImageUrl ||
-    orderItemImageUrl;
+  const remoteStoreImageUrl = [
+    orderStatusImageUrl,
+    storeLogoUrl,
+    storeCoverImageUrl,
+    orderItemImageUrl,
+  ].find((url) => Boolean(url && !failedStoreImageUrls.includes(url))) ?? '';
 
   const localStoreArtwork =
     getOrderStoreCategoryArtwork(
@@ -1098,9 +1099,7 @@ function StoreOrderSuccessScreen() {
     );
 
   const showRemoteStoreImage =
-    remoteStoreImageUrl.length >
-      0 &&
-    !storeImageFailed;
+    remoteStoreImageUrl.length > 0;
 
   const showLocalStoreArtwork =
     !showRemoteStoreImage &&
@@ -1237,8 +1236,10 @@ function StoreOrderSuccessScreen() {
                       styles.storeLogoImage
                     }
                     onError={() => {
-                      setStoreImageFailed(
-                        true,
+                      setFailedStoreImageUrls((current) =>
+                        current.includes(remoteStoreImageUrl)
+                          ? current
+                          : [...current, remoteStoreImageUrl],
                       );
                     }}
                   />

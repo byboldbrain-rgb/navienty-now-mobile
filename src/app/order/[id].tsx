@@ -254,10 +254,8 @@ export default function OrderDetailsScreen() {
     setIsLoadingStoreImage,
   ] = useState(false);
 
-  const [
-    storeImageFailed,
-    setStoreImageFailed,
-  ] = useState(false);
+  const [failedStoreImageUrls, setFailedStoreImageUrls] =
+    useState<string[]>([]);
 
   const params =
     useLocalSearchParams<{
@@ -397,7 +395,7 @@ export default function OrderDetailsScreen() {
 
       try {
         setIsLoadingStoreImage(true);
-        setStoreImageFailed(false);
+        setFailedStoreImageUrls([]);
 
         const catalog =
           await getStoreCatalog(
@@ -634,10 +632,9 @@ export default function OrderDetailsScreen() {
   const statusImageUrl = imageCategory
     ? getServiceCategoryImageUrl(orderStatusImages, imageCategory, 'order-status')
     : null;
-  const effectiveStoreImageUrl = statusImageUrl || storeImageUrl;
-  const shouldShowStoreImage =
-    Boolean(effectiveStoreImageUrl) &&
-    !storeImageFailed;
+  const effectiveStoreImageUrl = [statusImageUrl, storeImageUrl]
+    .find((url) => Boolean(url && !failedStoreImageUrls.includes(url))) ?? null;
+  const shouldShowStoreImage = Boolean(effectiveStoreImageUrl);
 
   return (
     <View
@@ -749,9 +746,13 @@ export default function OrderDetailsScreen() {
                   resizeMode="cover"
                   fadeDuration={150}
                   onError={() => {
-                    setStoreImageFailed(
-                      true,
-                    );
+                    if (effectiveStoreImageUrl) {
+                      setFailedStoreImageUrls((current) =>
+                        current.includes(effectiveStoreImageUrl)
+                          ? current
+                          : [...current, effectiveStoreImageUrl],
+                      );
+                    }
                   }}
                 />
               ) : (
