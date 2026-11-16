@@ -17,7 +17,11 @@ function getRawErrorMessage(error: unknown): string {
 }
 
 export function isRetryablePublicQueryError(error: unknown): boolean {
-  return TRANSIENT_ERROR.test(getRawErrorMessage(error));
+  const message = getRawErrorMessage(error);
+  // PostgreSQL 57014 signals a costly query was cancelled. Retrying it
+  // automatically during database pressure amplifies the outage.
+  if (/statement timeout|\b57014\b/i.test(message)) return false;
+  return TRANSIENT_ERROR.test(message);
 }
 
 export function getUserFacingCatalogError(error: unknown): string {
