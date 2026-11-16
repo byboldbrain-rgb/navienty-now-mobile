@@ -1719,6 +1719,10 @@ export function getCatalogSectionOffers(
 const PUBLIC_CATALOG_CACHE_TTL_MS =
   60 * 1000;
 
+// Catalogs are large and rarely change minute-to-minute; store lists stay fresher.
+const STORE_CATALOG_CACHE_TTL_MS =
+  2 * 60 * 1000;
+
 type TimedCacheEntry<T> = {
   value: T;
   expiresAt: number;
@@ -1776,12 +1780,11 @@ function writeTimedCache<T>(
   >,
   key: string,
   value: T,
+  ttlMs = PUBLIC_CATALOG_CACHE_TTL_MS,
 ) {
   cache.set(key, {
     value,
-    expiresAt:
-      Date.now() +
-      PUBLIC_CATALOG_CACHE_TTL_MS,
+    expiresAt: Date.now() + ttlMs,
   });
 }
 
@@ -2204,8 +2207,8 @@ function isTransientCatalogRpcError(
   error: { code?: string; message?: string },
 ): boolean {
   return (
-    error.code === '57014' ||
-    /statement timeout|timed out|network request failed|fetch failed|gateway timeout|service unavailable|connection reset/i.test(
+    error.code !== '57014' &&
+    /timed out|network request failed|fetch failed|gateway timeout|service unavailable|connection reset/i.test(
       error.message ?? '',
     )
   );
@@ -2380,6 +2383,7 @@ export async function getStoreCatalog(
         storeCatalogCache,
         cacheKey,
         catalog,
+        STORE_CATALOG_CACHE_TTL_MS,
       );
 
       return catalog;
