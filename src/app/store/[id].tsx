@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 
 import getAppBootstrap from '../../services/bootstrap-service';
-import { supabase } from '../../lib/supabase';
 import {
   type CatalogProduct,
   type StoreCatalog,
@@ -30,7 +29,6 @@ import {
 
 import { StoreScreenSkeleton } from '../../components/ui/loading-skeleton';
 import {
-  type CartStoreInformation,
   isRestaurantCartCategory,
   useCartStore,
 } from '../../store/cart-store';
@@ -113,15 +111,6 @@ function BackArrowIcon() {
     </View>
   );
 }
-
-const CLASH_STORE_ID = '865c40a6-c02f-4b15-a6f9-05af408ad2fa';
-
-type StoreAddon = {
-  id: string;
-  name_ar: string;
-  price: number;
-  sort_order: number;
-};
 
 export default function StoreScreen() {
   const router = useRouter();
@@ -208,10 +197,6 @@ export default function StoreScreen() {
     setSelectedProductQuantity,
   ] = useState(1);
 
-  const [storeAddons, setStoreAddons] = useState<StoreAddon[]>([]);
-  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
-  const [pendingAddonIds, setPendingAddonIds] = useState<string[]>([]);
-
   const [
     activeSectionId,
     setActiveSectionId,
@@ -283,34 +268,6 @@ export default function StoreScreen() {
         );
 
       setCatalog(loadedCatalog);
-
-      if (loadedCatalog.store.id === CLASH_STORE_ID) {
-        try {
-          const { data, error: addonError } = await supabase.rpc(
-            'get_store_addons',
-            { p_store_id: loadedCatalog.store.id },
-          );
-          if (addonError) throw addonError;
-          const addons: StoreAddon[] = (Array.isArray(data) ? data : [])
-            .map((addon: Record<string, unknown>) => ({
-              id: String(addon.id ?? ''),
-              name_ar: String(addon.name_ar ?? ''),
-              price: Number(addon.price ?? 0),
-              sort_order: Number(addon.sort_order ?? 0),
-            }))
-            .filter((addon: StoreAddon) =>
-              Boolean(addon.id && addon.name_ar) &&
-              Number.isFinite(addon.price) && addon.price >= 0,
-            )
-            .sort((a: StoreAddon, b: StoreAddon) => a.sort_order - b.sort_order);
-          setStoreAddons(addons);
-        } catch (addonError) {
-          console.warn('CLASH add-ons could not be loaded', addonError);
-          setStoreAddons([]);
-        }
-      } else {
-        setStoreAddons([]);
-      }
 
       setCurrencySymbol(
         loadedBootstrap.settings
@@ -486,12 +443,6 @@ export default function StoreScreen() {
         selectedVariantId,
     ) ?? null;
 
-  const selectedAddonTotal = storeAddons.reduce(
-    (sum, addon) => sum +
-      (selectedAddonIds.includes(addon.id) ? addon.price : 0),
-    0,
-  );
-
   const pendingVariant =
     pendingProduct?.variants.find(
       (variant) =>
@@ -563,7 +514,6 @@ export default function StoreScreen() {
 
     setSelectedProduct(product);
     setSelectedProductQuantity(1);
-    setSelectedAddonIds([]);
 
     if (product.variants.length === 1) {
       setSelectedVariantId(
@@ -578,14 +528,12 @@ export default function StoreScreen() {
     setSelectedProduct(null);
     setSelectedVariantId(null);
     setSelectedProductQuantity(1);
-    setSelectedAddonIds([]);
   }
 
   function clearPendingCartRequest() {
     setPendingProduct(null);
     setPendingVariantId(null);
     setPendingQuantity(1);
-    setPendingAddonIds([]);
   }
 
   function buildCartProduct(
@@ -652,28 +600,6 @@ export default function StoreScreen() {
     }
   }
 
-  function addSelectedStoreAddons(
-    addonIds: string[],
-    quantity: number,
-    storeInformation: CartStoreInformation,
-  ) {
-    for (const addonId of addonIds) {
-      const addon = storeAddons.find((entry) => entry.id === addonId);
-      if (!addon) continue;
-      for (let index = 0; index < quantity; index += 1) {
-        addItem(storeInformation, {
-          id: addon.id,
-          name: `إضافة: ${addon.name_ar}`,
-          description: '',
-          price: addon.price,
-          icon: '🍟',
-          variantId: null,
-          variantName: null,
-        });
-      }
-    }
-  }
-
   function addConfiguredProductToCart() {
     if (
       !selectedProduct ||
@@ -719,7 +645,6 @@ export default function StoreScreen() {
       setPendingQuantity(
         selectedProductQuantity,
       );
-      setPendingAddonIds([...selectedAddonIds]);
 
       closeProductDetails();
 
@@ -737,12 +662,6 @@ export default function StoreScreen() {
         cartProduct,
       );
     }
-
-    addSelectedStoreAddons(
-      selectedAddonIds,
-      selectedProductQuantity,
-      storeInformation,
-    );
 
     closeProductDetails();
   }
@@ -835,7 +754,6 @@ export default function StoreScreen() {
           cartProduct,
         );
       }
-      addSelectedStoreAddons(pendingAddonIds, pendingQuantity, storeInformation);
     }
 
     clearPendingCartRequest();
@@ -1684,7 +1602,7 @@ export default function StoreScreen() {
                   )}
 
                   {selectedProduct.variants
-                    .length > 1 && (
+                    .length > 0 && (
                     <View
                       style={
                         styles.variantSection
@@ -1701,7 +1619,7 @@ export default function StoreScreen() {
                               styles.variantSectionTitle
                             }
                           >
-                            اختر اختيارك:
+                            اختر الحجم:
                           </Text>
 
                           <Text
@@ -1812,40 +1730,6 @@ export default function StoreScreen() {
                           },
                         )}
                       </ScrollView>
-                    </View>
-                  )}
-
-                  {currentStore.id === CLASH_STORE_ID &&
-                    storeAddons.length > 0 && (
-                    <View style={styles.clashAddonSection}>
-                      <Text style={styles.variantSectionTitle}>إضافات اختيارية</Text>
-                      <Text style={styles.variantSectionSubtitle}>
-                        اختار أي عدد من الإضافات
-                      </Text>
-                      {storeAddons.map((addon) => {
-                        const checked = selectedAddonIds.includes(addon.id);
-                        return (
-                          <Pressable
-                            key={addon.id}
-                            onPress={() => setSelectedAddonIds((ids) =>
-                              ids.includes(addon.id)
-                                ? ids.filter((id) => id !== addon.id)
-                                : [...ids, addon.id],
-                            )}
-                            style={styles.clashAddonRow}
-                          >
-                            <Ionicons
-                              name={checked ? 'checkbox' : 'square-outline'}
-                              size={24}
-                              color={checked ? NAVIENTY_NOW_COLORS.primary : '#999999'}
-                            />
-                            <Text style={styles.clashAddonName}>{addon.name_ar}</Text>
-                            <Text style={styles.clashAddonPrice}>
-                              +{formatPrice(addon.price)}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
                     </View>
                   )}
                 </View>
@@ -1973,7 +1857,7 @@ export default function StoreScreen() {
                     >
                       {selectedVariant
                         ? `أضف للسلة • ${formatPrice(
-                            (selectedVariant.price + selectedAddonTotal) *
+                            selectedVariant.price *
                               selectedProductQuantity,
                           )}`
                         : 'أضف للسلة'}
@@ -2844,34 +2728,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
     textAlign: 'right',
-  },
-
-  clashAddonSection: {
-    borderTopColor: '#eeeeee',
-    borderTopWidth: 1,
-    marginTop: 26,
-    paddingTop: 20,
-  },
-  clashAddonRow: {
-    alignItems: 'center',
-    borderBottomColor: '#f1f1f1',
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 53,
-    paddingVertical: 11,
-  },
-  clashAddonName: {
-    color: '#292929',
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'left',
-  },
-  clashAddonPrice: {
-    color: '#333333',
-    fontSize: 13,
-    fontWeight: '700',
   },
 
   productModalBottomBar: {
